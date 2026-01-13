@@ -574,13 +574,6 @@ E11y.configure do |config|
       max_per_series 10
       sample_rate 0.01  # 1% of events
     end
-    
-    # Hash-based bucketing
-    hash_bucketing do
-      enabled false  # Enable if needed
-      bucket_count 100
-      fields [:user_id, :session_id]
-    end
   end
   
   # ============================================================================

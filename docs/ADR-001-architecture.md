@@ -1,0 +1,1987 @@
+# ADR-001: E11y Gem Architecture & Implementation Design
+
+**Status:** Draft  
+**Date:** January 12, 2026  
+**Decision Makers:** Core Team  
+**Technical Level:** Implementation
+
+---
+
+## 📋 Table of Contents
+
+1. [Context & Goals](#1-context--goals)
+2. [Architecture Overview](#2-architecture-overview)
+   - 2.0. C4 Diagrams (Context, Container, Component, Code)
+   - 2.1. High-Level Architecture
+   - 2.2. Layered Architecture
+   - 2.6. Component Interaction Diagram
+   - 2.7. Memory Layout Diagram
+   - 2.8. Thread Model Diagram
+   - 2.9. Configuration Lifecycle
+3. [Core Components](#3-core-components)
+   - 3.1. Event Class (Zero-Allocation)
+   - 3.2. Pipeline (Middleware Chain)
+   - 3.3. Ring Buffer Implementation
+   - 3.4. Request-Scoped Buffer
+   - 3.5. Adapter Base Class
+   - 3.7. Request-Scoped Debug Buffer Flow
+   - 3.8. DLQ & Retry Flow
+   - 3.9. Adaptive Sampling Decision Tree
+   - 3.10. Cardinality Protection Flow
+4. [Processing Pipeline](#4-processing-pipeline)
+   - 4.1. Middleware Execution Order ⚠️ CRITICAL
+5. [Memory Optimization Strategy](#5-memory-optimization-strategy)
+6. [Thread Safety & Concurrency](#6-thread-safety--concurrency)
+7. [Extension Points](#7-extension-points)
+8. [Performance Requirements](#8-performance-requirements)
+9. [Testing Strategy](#9-testing-strategy)
+10. [Dependencies](#10-dependencies)
+    - 10.4. Deployment View
+    - 10.5. Multi-Environment Configuration
+11. [Deployment & Versioning](#11-deployment--versioning)
+12. [Trade-offs & Decisions](#12-trade-offs--decisions)
+
+---
+
+## 1. Context & Goals
+
+### 1.1. Problem Statement
+
+Modern Rails applications need:
+- Structured business event tracking
+- Debug-on-error capabilities
+- Built-in metrics & SLO tracking
+- Multi-adapter routing (Loki, Sentry, etc.)
+- GDPR-compliant PII filtering
+- High performance (<1ms p99, <100MB memory)
+
+### 1.2. Goals
+
+**Primary Goals:**
+- ✅ 22 use cases as unified system
+- ✅ Zero-allocation event tracking (class methods only)
+- ✅ <1ms p99 latency @ 1000 events/sec
+- ✅ <100MB memory footprint
+- ✅ Rails 8.0+ exclusive
+- ✅ Open-source extensibility
+
+**Non-Goals:**
+- ❌ Plain Ruby support (Rails only)
+- ❌ Backwards compatibility with Rails 7.x
+- ❌ Hot configuration reload
+- ❌ Distributed tracing coordination (only propagation)
+
+### 1.3. Success Metrics
+
+| Metric | Target | Critical? |
+|--------|--------|-----------|
+| **p99 Latency** | <1ms | ✅ Yes |
+| **Memory** | <100MB @ steady state | ✅ Yes |
+| **Throughput** | 1000 events/sec | ✅ Yes |
+| **Test Coverage** | >90% | ✅ Yes |
+| **Documentation** | All APIs documented | ⚠️ Important |
+| **Adoption** | Community feedback | 🟡 Nice-to-have |
+
+---
+
+## 2. Architecture Overview
+
+### 2.0. C4 Diagrams
+
+#### Level 1: System Context
+
+```mermaid
+C4Context
+    title System Context - E11y Gem
+
+    Person(developer, "Developer", "Rails developer tracking business events")
+    
+    System(e11y, "E11y Gem", "Event tracking & observability library")
+    
+    System_Ext(loki, "Loki", "Log aggregation")
+    System_Ext(elasticsearch, "Elasticsearch", "Search & analytics")
+    System_Ext(sentry, "Sentry", "Error tracking")
+    System_Ext(prometheus, "Prometheus", "Metrics storage")
+    System_Ext(redis, "Redis", "Rate limiting")
+    
+    Rel(developer, e11y, "Tracks events via", "Events::OrderPaid.track(...)")
+    Rel(e11y, loki, "Sends logs to", "HTTP/JSON")
+    Rel(e11y, elasticsearch, "Sends events to", "HTTP/JSON")
+    Rel(e11y, sentry, "Sends errors to", "Sentry SDK")
+    Rel(e11y, prometheus, "Exposes metrics to", "Yabeda")
+    Rel(e11y, redis, "Uses for rate limiting", "Redis client")
+```
+
+#### Level 2: Container Diagram
+
+```mermaid
+C4Container
+    title Container Diagram - E11y Gem Architecture
+
+    Person(developer, "Developer", "Tracks business events")
+    
+    Container_Boundary(e11y, "E11y Gem") {
+        Container(api, "Public API", "Ruby Classes", "Event classes with DSL")
+        Container(pipeline, "Pipeline", "Middleware Chain", "Validation, PII filtering, rate limiting")
+        Container(buffers, "Buffers", "Ring Buffer + Thread-local", "Request-scoped & main buffers")
+        Container(adapters, "Adapters", "Adapter Registry", "Loki, Sentry, File, etc.")
+        Container(config, "Configuration", "Dry::Configurable", "Global configuration")
+    }
+    
+    System_Ext(loki, "Loki", "Log aggregation")
+    System_Ext(sentry, "Sentry", "Error tracking")
+    System_Ext(redis, "Redis", "Rate limiting")
+    
+    Rel(developer, api, "Calls", "Events::OrderPaid.track(...)")
+    Rel(api, pipeline, "Passes event data to", "Hash")
+    Rel(pipeline, buffers, "Routes to", "Ring buffer or thread-local")
+    Rel(buffers, adapters, "Flushes batches to", "Array of events")
+    Rel(adapters, loki, "Writes to", "HTTP/JSON")
+    Rel(adapters, sentry, "Writes to", "Sentry SDK")
+    Rel(pipeline, redis, "Checks rate limits", "Redis commands")
+    Rel(api, config, "Reads from", "Frozen config")
+```
+
+#### Level 3: Component Diagram - Pipeline
+
+```mermaid
+C4Component
+    title Component Diagram - Pipeline Processing
+
+    Container_Boundary(pipeline, "Pipeline") {
+        Component(middleware_chain, "Middleware Chain", "Builder Pattern", "Composable processing steps")
+        Component(validation, "Validation Middleware", "Dry::Schema", "Schema validation")
+        Component(enrichment, "Enrichment Middleware", "Context Injector", "Add trace_id, user_id")
+        Component(pii_filter, "PII Filter Middleware", "Pattern Matcher", "Mask sensitive data")
+        Component(rate_limiter, "Rate Limit Middleware", "Token Bucket", "Rate limiting")
+        Component(sampler, "Sampling Middleware", "Adaptive Sampler", "Dynamic sampling")
+        Component(router, "Routing Middleware", "Router", "Buffer selection")
+    }
+    
+    Container_Ext(buffers, "Buffers", "Ring Buffer + Thread-local")
+    Container_Ext(config, "Configuration", "Frozen config")
+    Container_Ext(redis, "Redis", "Rate limit storage")
+    
+    Rel(middleware_chain, validation, "Calls", "event_data")
+    Rel(validation, enrichment, "Calls next", "event_data")
+    Rel(enrichment, pii_filter, "Calls next", "event_data")
+    Rel(pii_filter, rate_limiter, "Calls next", "event_data")
+    Rel(rate_limiter, sampler, "Calls next", "event_data")
+    Rel(sampler, router, "Calls next", "event_data")
+    Rel(router, buffers, "Routes to", "Buffer write")
+    
+    Rel(validation, config, "Reads schema", "Event class config")
+    Rel(pii_filter, config, "Reads rules", "PII config")
+    Rel(rate_limiter, redis, "Check/increment", "Redis commands")
+    Rel(sampler, config, "Reads rules", "Sampling config")
+```
+
+#### Level 4: Code Diagram - Event Tracking Flow
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant Event as Events::OrderPaid
+    participant Pipeline as Pipeline
+    participant Middleware as Middlewares
+    participant Buffer as Ring Buffer
+    participant Worker as Flush Worker
+    participant Adapter as Loki Adapter
+    participant Loki as Loki
+
+    App->>Event: .track(order_id: '123', amount: 99.99)
+    Event->>Event: Build event_data hash (no instance!)
+    Event->>Pipeline: .process(event_data)
+    
+    Pipeline->>Middleware: ValidationMiddleware.call(event_data)
+    Middleware->>Middleware: Validate schema
+    Middleware->>Middleware: EnrichmentMiddleware (add trace_id)
+    Middleware->>Middleware: PiiFilterMiddleware (mask fields)
+    Middleware->>Middleware: RateLimitMiddleware (check Redis)
+    Middleware->>Middleware: SamplingMiddleware (decide)
+    Middleware->>Middleware: RoutingMiddleware (route to buffer)
+    
+    Middleware->>Buffer: .push(event_data)
+    Buffer->>Buffer: Write to ring buffer (lock-free)
+    
+    Note over Worker: Every 200ms
+    Worker->>Buffer: .pop(batch_size: 100)
+    Buffer-->>Worker: [event1, event2, ...]
+    
+    Worker->>Worker: Deduplication
+    Worker->>Worker: Batching
+    Worker->>Worker: Compression (gzip)
+    
+    Worker->>Adapter: .write_batch(events)
+    Adapter->>Adapter: Serialize to JSON
+    Adapter->>Loki: HTTP POST /loki/api/v1/push
+    Loki-->>Adapter: 204 No Content
+    Adapter-->>Worker: Success
+```
+
+### 2.1. High-Level Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Application Layer                                                │
+│                                                                  │
+│  Events::OrderPaid.track(order_id: '123', amount: 99.99)        │
+│                                                                  │
+└────────────────────────────┬────────────────────────────────────┘
+                             ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ E11y::Pipeline (Middleware Chain)                               │
+│                                                                  │
+│  1. TraceContextMiddleware  ← Add trace_id, span_id, timestamp  │
+│  2. ValidationMiddleware    ← Schema validation (original class)│
+│  3. PiiFilterMiddleware     ← PII filtering (original class)    │
+│  4. RateLimitMiddleware     ← Rate limiting (original class)    │
+│  5. SamplingMiddleware      ← Adaptive sampling (original class)│
+│  6. VersioningMiddleware    ← Normalize event_name (LAST!)      │
+│  7. RoutingMiddleware       ← Buffer routing (debug vs main)    │
+│                                                                  │
+└────────────────────────────┬────────────────────────────────────┘
+                             ↓
+                    ┌────────┴────────┐
+                    │                 │
+         ┌──────────▼─────┐   ┌──────▼──────────┐
+         │ Request Buffer │   │  Main Buffer    │
+         │ (Thread-local) │   │  (Ring Buffer)  │
+         │                │   │                  │
+         │ :debug only    │   │ :info+ events   │
+         │ Flush on error │   │ Flush 200ms     │
+         └──────────┬─────┘   └──────┬──────────┘
+                    │                │
+                    └────────┬───────┘
+                             ↓
+         ┌───────────────────────────────────────┐
+         │ Flush Worker (Concurrent::TimerTask)  │
+         │                                        │
+         │  - Deduplication                      │
+         │  - Batching                           │
+         │  - Payload minimization               │
+         │  - Compression                        │
+         └───────────────────┬───────────────────┘
+                             ↓
+         ┌───────────────────────────────────────┐
+         │ Adapter Registry                      │
+         │                                        │
+         │  - Circuit breakers                   │
+         │  - Retry policy                       │
+         │  - Dead letter queue                  │
+         └───────────────────┬───────────────────┘
+                             ↓
+         ┌────────────────────────────────────────┐
+         │ Adapters (fan-out)                     │
+         │                                         │
+         │  → Loki Adapter                        │
+         │  → Sentry Adapter                      │
+         │  → File Adapter                        │
+         │  → Custom Adapters                     │
+         └─────────────────────────────────────────┘
+```
+
+### 2.2. Layered Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Layer 1: Public API                                             │
+│  - Event classes (DSL)                                          │
+│  - Configuration (E11y.configure)                               │
+│  - Helper methods (E11y.with_context)                           │
+└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ Layer 2: Pipeline Processing                                    │
+│  - Middleware chain                                             │
+│  - Validation, PII filtering, rate limiting                     │
+│  - Context enrichment                                           │
+└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ Layer 3: Buffering & Batching                                   │
+│  - Request-scoped buffer (thread-local)                         │
+│  - Main ring buffer (concurrent)                                │
+│  - Flush worker (timer task)                                    │
+└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ Layer 4: Adapter Layer                                          │
+│  - Adapter registry                                             │
+│  - Circuit breakers, retry logic                                │
+│  - Dead letter queue                                            │
+└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ Layer 5: External Systems                                       │
+│  - Loki, Elasticsearch, Sentry                                  │
+│  - File system, S3                                              │
+│  - Custom destinations                                          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 2.6. Component Interaction Diagram - Buffers & Workers
+
+```mermaid
+graph TB
+    subgraph "Event Sources"
+        API[Application Code]
+        Debug[Debug Events]
+        Info[Info+ Events]
+    end
+    
+    subgraph "Pipeline"
+        MW1[Validation]
+        MW2[PII Filter]
+        MW3[Rate Limit]
+        MW4[Sampling]
+        MW5[Router]
+    end
+    
+    subgraph "Buffers"
+        RB[Request Buffer<br/>Thread-local<br/>:debug only]
+        MB[Main Buffer<br/>Ring Buffer 100k<br/>:info+ events]
+    end
+    
+    subgraph "Flush Workers"
+        RBF[Request Flush<br/>On error/end]
+        MBF[Main Flush<br/>Every 200ms]
+    end
+    
+    subgraph "Post-Processing"
+        DD[Deduplication]
+        Batch[Batching]
+        Comp[Compression]
+    end
+    
+    subgraph "Adapters"
+        A1[Loki]
+        A2[Sentry]
+        A3[File]
+    end
+    
+    API --> MW1
+    MW1 --> MW2
+    MW2 --> MW3
+    MW3 --> MW4
+    MW4 --> MW5
+    
+    MW5 -->|severity=debug| RB
+    MW5 -->|severity=info+| MB
+    
+    RB -->|on error| RBF
+    RB -->|on success| Discard[Discard]
+    MB -->|timer 200ms| MBF
+    
+    RBF --> DD
+    MBF --> DD
+    DD --> Batch
+    Batch --> Comp
+    
+    Comp --> A1
+    Comp --> A2
+    Comp --> A3
+    
+    style RB fill:#fff3cd
+    style MB fill:#d1ecf1
+    style DD fill:#d4edda
+    style Discard fill:#f8d7da
+```
+
+### 2.7. Memory Layout Diagram
+
+```mermaid
+graph TB
+    subgraph "Heap Memory < 100MB Total"
+        direction TB
+        
+        subgraph RingBuf["Ring Buffer: 50MB"]
+            RB1["Slot 0: event_data<br/>~500 bytes"]
+            RB2["Slot 1: event_data<br/>~500 bytes"]
+            RB3["..."]
+            RB4["Slot 99999: event_data<br/>~500 bytes"]
+        end
+        
+        subgraph ReqBuf["Request Buffers: 0.5MB"]
+            T1["Thread 1<br/>debug events"]
+            T2["Thread 2<br/>debug events"]
+            T3["Thread N<br/>debug events"]
+        end
+        
+        subgraph Registry["Event Registry: 1MB"]
+            E1["OrderPaid<br/>class config"]
+            E2["UserSignup<br/>class config"]
+            E3["100 classes<br/>~10KB each"]
+        end
+        
+        subgraph Adapters["Adapters: 10MB"]
+            AD1["Loki Adapter<br/>connections"]
+            AD2["Sentry Adapter<br/>SDK state"]
+            AD3["File Adapter<br/>handles"]
+        end
+        
+        subgraph VM["Ruby VM: 35MB"]
+            VMCore["Rails + Gems<br/>base overhead"]
+        end
+    end
+    
+    RB1 -.->|capacity| RB2
+    RB2 -.-> RB3
+    RB3 -.-> RB4
+    
+    T1 -.->|per-thread| T2
+    T2 -.-> T3
+    
+    E1 -.->|frozen| E2
+    E2 -.-> E3
+    
+    style RingBuf fill:#d1ecf1
+    style ReqBuf fill:#fff3cd
+    style Registry fill:#d4edda
+    style Adapters fill:#e2e3e5
+    style VM fill:#f8d7da
+```
+
+### 2.8. Thread Model Diagram
+
+```mermaid
+graph TB
+    subgraph "Web Server Threads (Puma)"
+        WT1[Worker Thread 1<br/>Request 1]
+        WT2[Worker Thread 2<br/>Request 2]
+        WT3[Worker Thread N<br/>Request N]
+    end
+    
+    subgraph "Thread-Local Storage"
+        TL1[Current.trace_id<br/>Current.request_buffer]
+        TL2[Current.trace_id<br/>Current.request_buffer]
+        TL3[Current.trace_id<br/>Current.request_buffer]
+    end
+    
+    subgraph "Shared Resources"
+        RB[Ring Buffer<br/>Concurrent::AtomicFixnum]
+        Config[Configuration<br/>Frozen/Immutable]
+        Registry[Event Registry<br/>Frozen/Immutable]
+    end
+    
+    subgraph "E11y Workers"
+        FW[Flush Worker<br/>Concurrent::TimerTask<br/>Single Thread]
+    end
+    
+    WT1 -.->|thread-local| TL1
+    WT2 -.->|thread-local| TL2
+    WT3 -.->|thread-local| TL3
+    
+    WT1 -->|write| RB
+    WT2 -->|write| RB
+    WT3 -->|write| RB
+    
+    WT1 -->|read| Config
+    WT2 -->|read| Config
+    WT3 -->|read| Config
+    
+    WT1 -->|read| Registry
+    WT2 -->|read| Registry
+    WT3 -->|read| Registry
+    
+    FW -->|pop| RB
+    FW -->|read| Config
+    
+    style TL1 fill:#fff3cd
+    style TL2 fill:#fff3cd
+    style TL3 fill:#fff3cd
+    style RB fill:#d1ecf1
+    style Config fill:#d4edda
+    style Registry fill:#d4edda
+```
+
+### 2.9. Configuration Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Uninitialized
+    Uninitialized --> Configuring: E11y.configure
+    
+    state Configuring {
+        [*] --> RegisterAdapters
+        RegisterAdapters --> SetupMiddleware
+        SetupMiddleware --> ConfigureBuffers
+        ConfigureBuffers --> SetupPII
+        SetupPII --> ConfigureMetrics
+        ConfigureMetrics --> [*]
+    }
+    
+    Configuring --> Freezing: config.freeze!
+    Freezing --> Frozen
+    Frozen --> Running: Rails.application.initialize!
+    
+    state Running {
+        [*] --> EagerLoad
+        EagerLoad --> FreezeRegistry
+        FreezeRegistry --> StartWorkers
+        StartWorkers --> Ready
+        Ready --> Processing: Events.track(...)
+        Processing --> Ready
+    }
+    
+    Running --> Shutdown: Rails.application.shutdown
+    Shutdown --> [*]
+    
+    note right of Frozen
+        Config immutable
+        Thread-safe reads
+    end note
+    
+    note right of Ready
+        Accept events
+        Workers running
+    end note
+```
+
+---
+
+## 3. Core Components
+
+### 3.1. Event Class (Zero-Allocation)
+
+**Design Decision:** No instance creation, class methods only.
+
+```ruby
+module E11y
+  class Event
+    class Base
+      class << self
+        # Class-level configuration storage
+        attr_reader :_config
+        
+        def inherited(subclass)
+          super
+          subclass.instance_variable_set(:@_config, {
+            adapters: [],
+            schema: nil,
+            metrics: [],
+            version: 1,
+            pii_rules: {},
+            retry_policy: {}
+          })
+          
+          # Auto-register in registry
+          Registry.register(subclass)
+        end
+        
+        # DSL methods (store config in @_config)
+        def adapters(list = nil)
+          return @_config[:adapters] if list.nil?
+          @_config[:adapters] = list
+        end
+        
+        def schema(&block)
+          return @_config[:schema] if block.nil?
+          @_config[:schema] = Dry::Schema.define(&block)
+        end
+        
+        def version(v = nil)
+          return @_config[:version] if v.nil?
+          @_config[:version] = v
+        end
+        
+        # Main tracking method (NO INSTANCE CREATED!)
+        def track(**payload)
+          # Create event hash (not object)
+          event_data = {
+            event_class: self,
+            event_name: event_name,
+            event_version: @_config[:version],
+            payload: payload,
+            timestamp: Time.now.utc,
+            context: current_context
+          }
+          
+          # Pass through pipeline (hash-based)
+          Pipeline.process(event_data)
+        end
+        
+        def event_name
+          @event_name ||= name.demodulize.underscore.gsub('_v', '.v')
+          # Events::OrderPaid → 'order.paid'
+          # Events::OrderPaidV2 → 'order.paid.v2'
+        end
+        
+        private
+        
+        def current_context
+          {
+            trace_id: Current.trace_id,
+            user_id: Current.user_id,
+            request_id: Current.request_id
+            # ... other context
+          }
+        end
+      end
+    end
+  end
+end
+```
+
+**Key Points:**
+- ✅ No `new` calls → zero allocation
+- ✅ All data in Hash (not object)
+- ✅ Class methods only
+- ✅ Thread-safe (@_config frozen after definition)
+
+---
+
+### 3.2. Pipeline (Middleware Chain)
+
+**Design Decision:** Middleware chain (Rails-familiar, extensible).
+
+```ruby
+module E11y
+  class Pipeline
+    class << self
+      attr_accessor :middlewares
+      
+      def use(middleware_class, *args, **options)
+        @middlewares ||= []
+        @middlewares << [middleware_class, args, options]
+      end
+      
+      def process(event_data)
+        # Build middleware chain
+        chain = build_chain
+        
+        # Execute chain
+        chain.call(event_data)
+      rescue => error
+        handle_pipeline_error(error, event_data)
+      end
+      
+      private
+      
+      def build_chain
+        # Reverse to build chain from inside out
+        @middlewares.reverse.reduce(final_handler) do |next_middleware, (klass, args, options)|
+          klass.new(next_middleware, *args, **options)
+        end
+      end
+      
+      def final_handler
+        ->(event_data) { Router.route(event_data) }
+      end
+      
+      def handle_pipeline_error(error, event_data)
+        case Config.on_error
+        when :raise
+          raise error
+        when :log
+          Rails.logger.error("E11y pipeline error", error: error, event: event_data)
+        when :ignore
+          # Silent
+        end
+        
+        # Call custom error handler
+        Config.error_handler&.call(error, event_data) if Config.error_handler
+      end
+    end
+  end
+  
+  # Middleware base class
+  class Middleware
+    def initialize(app)
+      @app = app
+    end
+    
+    def call(event_data)
+      # Subclass implements logic
+      @app.call(event_data)
+    end
+  end
+end
+```
+
+**Built-in Middlewares (in execution order):**
+
+```ruby
+# 1. Trace Context Middleware (Enrichment)
+class TraceContextMiddleware < E11y::Middleware
+  def call(event_data)
+    event_data[:trace_id] ||= E11y::Current.trace_id || SecureRandom.uuid
+    event_data[:span_id] ||= SecureRandom.hex(8)
+    event_data[:timestamp] ||= Time.now.utc.iso8601(3)
+    
+    @app.call(event_data)
+  end
+end
+
+# 2. Validation Middleware
+class ValidationMiddleware < E11y::Middleware
+  def call(event_data)
+    schema = event_data[:event_class]._config[:schema]
+    
+    if schema
+      result = schema.call(event_data[:payload])
+      
+      if result.failure?
+        raise E11y::ValidationError, result.errors.to_h
+      end
+    end
+    
+    @app.call(event_data)
+  end
+end
+
+# 3. PII Filter Middleware
+class PiiFilterMiddleware < E11y::Middleware
+  def call(event_data)
+    # Get PII rules for event class (uses ORIGINAL class name!)
+    pii_rules = event_data[:event_class]._config[:pii_rules]
+    
+    # Apply filtering
+    event_data[:payload] = PiiFilter.filter(
+      event_data[:payload],
+      rules: pii_rules
+    )
+    
+    @app.call(event_data)
+  end
+end
+
+# 4. Rate Limit Middleware
+class RateLimitMiddleware < E11y::Middleware
+  def call(event_data)
+    # Check limit for ORIGINAL class name (V1 vs V2 may differ!)
+    unless RateLimiter.allowed?(event_data)
+      # Drop event
+      Metrics.increment('e11y.events.rate_limited')
+      return :rate_limited
+    end
+    
+    @app.call(event_data)
+  end
+end
+
+# 5. Sampling Middleware
+class SamplingMiddleware < E11y::Middleware
+  def call(event_data)
+    unless Sampler.should_sample?(event_data)
+      Metrics.increment('e11y.events.sampled')
+      return :sampled
+    end
+    
+    @app.call(event_data)
+  end
+end
+
+# 6. Versioning Middleware (LAST! Normalize for adapters)
+class VersioningMiddleware < E11y::Middleware
+  def call(event_data)
+    # Extract version from class name (Events::OrderPaidV2 → 2)
+    class_name = event_data[:event_name]
+    version = extract_version(class_name)
+    
+    # Normalize event_name (Events::OrderPaidV2 → Events::OrderPaid)
+    event_data[:event_name] = extract_base_name(class_name)
+    
+    # Add v: field only if version > 1
+    event_data[:payload][:v] = version if version > 1
+    
+    @app.call(event_data)
+  end
+  
+  private
+  
+  def extract_version(class_name)
+    class_name =~ /V(\d+)$/ ? $1.to_i : 1
+  end
+  
+  def extract_base_name(class_name)
+    class_name.sub(/V\d+$/, '')  # Remove V2, V3, etc.
+  end
+end
+
+# 7. Routing Middleware (final)
+class RoutingMiddleware < E11y::Middleware
+  def call(event_data)
+    severity = event_data[:payload][:severity] || :info
+    
+    if severity == :debug
+      # Route to request-scoped buffer
+      RequestBuffer.add(event_data)
+    else
+      # Route to main buffer
+      MainBuffer.add(event_data)
+    end
+  end
+end
+```
+
+---
+
+### 3.3. Ring Buffer Implementation
+
+**Design Decision:** Lock-free SPSC ring buffer for main buffer.
+
+```ruby
+module E11y
+  class RingBuffer
+    def initialize(capacity = 100_000)
+      @capacity = capacity
+      @buffer = Array.new(capacity)
+      @write_index = Concurrent::AtomicFixnum.new(0)
+      @read_index = Concurrent::AtomicFixnum.new(0)
+      @size = Concurrent::AtomicFixnum.new(0)
+    end
+    
+    # Producer (single thread)
+    def push(item)
+      current_size = @size.value
+      
+      if current_size >= @capacity
+        # Buffer full - handle backpressure
+        handle_backpressure(item)
+        return false
+      end
+      
+      # Write to buffer
+      write_pos = @write_index.value % @capacity
+      @buffer[write_pos] = item
+      
+      # Increment write index and size
+      @write_index.increment
+      @size.increment
+      
+      true
+    end
+    
+    # Consumer (single thread)
+    def pop(batch_size = 100)
+      items = []
+      current_size = @size.value
+      
+      batch_size = [batch_size, current_size].min
+      
+      batch_size.times do
+        read_pos = @read_index.value % @capacity
+        item = @buffer[read_pos]
+        
+        items << item if item
+        
+        @buffer[read_pos] = nil  # Clear slot
+        @read_index.increment
+        @size.decrement
+      end
+      
+      items
+    end
+    
+    def size
+      @size.value
+    end
+    
+    def empty?
+      @size.value.zero?
+    end
+    
+    def full?
+      @size.value >= @capacity
+    end
+    
+    private
+    
+    def handle_backpressure(item)
+      case Config.backpressure_strategy
+      when :drop_oldest
+        pop(1)  # Drop one old event
+        push(item)  # Retry push
+      when :drop_new
+        # Drop current item
+        Metrics.increment('e11y.buffer.overflow')
+      when :block
+        # Wait until space available (risky!)
+        sleep 0.001 until !full?
+        push(item)
+      end
+    end
+  end
+  
+  # Main buffer (singleton)
+  class MainBuffer
+    class << self
+      def buffer
+        @buffer ||= RingBuffer.new(Config.buffer_capacity)
+      end
+      
+      def add(event_data)
+        buffer.push(event_data)
+      end
+      
+      def flush
+        buffer.pop(Config.batch_size)
+      end
+    end
+  end
+end
+```
+
+---
+
+### 3.4. Request-Scoped Buffer
+
+**Design Decision:** Thread-local storage using ActiveSupport::CurrentAttributes.
+
+```ruby
+module E11y
+  class Current < ActiveSupport::CurrentAttributes
+    # Thread-local attributes
+    attribute :trace_id
+    attribute :user_id
+    attribute :request_id
+    attribute :request_buffer  # Debug events buffer
+    attribute :sampled  # Sampling decision
+    
+    def request_buffer
+      attributes[:request_buffer] ||= []
+    end
+    
+    def add_debug_event(event_data)
+      request_buffer << event_data if request_buffer.size < Config.request_buffer_limit
+    end
+    
+    def flush_debug_events
+      events = request_buffer.dup
+      request_buffer.clear
+      events
+    end
+  end
+  
+  # Request-scoped buffer manager
+  class RequestBuffer
+    class << self
+      def add(event_data)
+        Current.add_debug_event(event_data)
+      end
+      
+      def flush
+        Current.flush_debug_events
+      end
+      
+      def setup_rails_integration
+        # Hook into Rails request cycle
+        ActiveSupport::Notifications.subscribe('process_action.action_controller') do |*args|
+          event = ActiveSupport::Notifications::Event.new(*args)
+          
+          # Flush on error
+          if event.payload[:exception]
+            flush_to_adapters
+          else
+            # Discard on success
+            flush
+          end
+        end
+      end
+      
+      private
+      
+      def flush_to_adapters
+        events = flush
+        
+        # Send debug events to adapters
+        events.each do |event_data|
+          MainBuffer.add(event_data)
+        end
+      end
+    end
+  end
+end
+```
+
+---
+
+### 3.5. Adapter Base Class
+
+**Design Decision:** Abstract base class with contract tests.
+
+```ruby
+module E11y
+  module Adapters
+    class Base
+      # Required interface methods
+      def write_batch(events)
+        raise NotImplementedError, "#{self.class}#write_batch not implemented"
+      end
+      
+      def close
+        # Optional: cleanup connections
+      end
+      
+      # Contract validation (for tests)
+      def self.validate_contract!
+        raise "Adapter must respond to :write_batch" unless instance_methods.include?(:write_batch)
+      end
+      
+      protected
+      
+      # Helper for serialization
+      def serialize(events)
+        events.map { |e| serialize_event(e) }
+      end
+      
+      def serialize_event(event_data)
+        {
+          '@timestamp' => event_data[:timestamp].iso8601,
+          'event.name' => event_data[:event_name],
+          'event.version' => event_data[:event_version],
+          'trace.id' => event_data[:context][:trace_id],
+          'user.id' => event_data[:context][:user_id],
+          **event_data[:payload]
+        }
+      end
+    end
+    
+    # Example: Loki Adapter
+    class LokiAdapter < Base
+      def initialize(url:, labels: {}, **options)
+        @url = url
+        @labels = labels
+        @http = Faraday.new(url: url) do |f|
+          f.request :json
+          f.response :raise_error
+          f.adapter Faraday.default_adapter
+        end
+      end
+      
+      def write_batch(events)
+        payload = {
+          streams: [{
+            stream: @labels,
+            values: events.map { |e|
+              [
+                (e[:timestamp].to_f * 1_000_000_000).to_i.to_s,  # Nanoseconds
+                serialize_event(e).to_json
+              ]
+            }
+          }]
+        }
+        
+        @http.post('/loki/api/v1/push', payload)
+      rescue => error
+        raise E11y::AdapterError, "Loki write failed: #{error.message}"
+      end
+    end
+  end
+end
+```
+
+---
+
+### 3.7. Request-Scoped Debug Buffer Flow
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant E11y as E11y::Pipeline
+    participant RB as Request Buffer
+    participant MB as Main Buffer
+    participant Rails as Rails
+    
+    Note over App,Rails: HTTP Request Starts
+    
+    App->>E11y: Events::Debug.track(sql: 'SELECT...')
+    E11y->>RB: Add to thread-local buffer
+    Note over RB: Event buffered (not flushed)
+    
+    App->>E11y: Events::Debug.track(cache_miss: true)
+    E11y->>RB: Add to thread-local buffer
+    Note over RB: 2 events buffered
+    
+    App->>E11y: Events::Info.track(api_call: '...')
+    E11y->>MB: Add to main buffer
+    Note over MB: Info event → immediate flush
+    
+    alt Request Succeeds
+        Rails->>Rails: process_action.action_controller (success)
+        Rails->>RB: Discard debug events
+        Note over RB: Debug events dropped ✅
+    else Request Fails (Error)
+        Rails->>Rails: process_action.action_controller (exception)
+        Rails->>RB: Flush debug events
+        RB->>MB: Transfer all debug events to main buffer
+        Note over MB: Debug events preserved for debugging 🔍
+    end
+```
+
+### 3.8. DLQ & Retry Flow
+
+```mermaid
+sequenceDiagram
+    participant Buffer as Main Buffer
+    participant Worker as Flush Worker
+    participant Adapter as Loki Adapter
+    participant Retry as Retry Policy
+    participant DLQ as Dead Letter Queue
+    participant Loki as Loki
+    
+    Buffer->>Worker: pop(100 events)
+    Worker->>Worker: Deduplication
+    Worker->>Worker: Batching
+    Worker->>Worker: Compression
+    
+    Worker->>Adapter: write_batch(events)
+    Adapter->>Loki: HTTP POST
+    Loki-->>Adapter: ❌ 503 Service Unavailable
+    
+    Adapter->>Retry: Handle error
+    
+    Note over Retry: Retry #1 (100ms)
+    Retry->>Loki: HTTP POST
+    Loki-->>Retry: ❌ Timeout
+    
+    Note over Retry: Retry #2 (200ms)
+    Retry->>Loki: HTTP POST
+    Loki-->>Retry: ❌ Timeout
+    
+    Note over Retry: Retry #3 (400ms)
+    Retry->>Loki: HTTP POST
+    Loki-->>Retry: ❌ Timeout
+    
+    Retry->>DLQ: Max retries exceeded
+    
+    alt DLQ Filter: should_save?
+        DLQ->>DLQ: Check filter rules
+        DLQ->>DLQ: Save events to DLQ file
+        Note over DLQ: Events preserved ✅
+    else DLQ Filter: never_save
+        DLQ->>DLQ: Drop events
+        DLQ->>DLQ: Log to dropped_events.jsonl
+        Note over DLQ: Events dropped but logged 📝
+    end
+    
+    Note over DLQ: Later: E11y::DeadLetterQueue.replay_all
+    DLQ->>Loki: Replay when Loki is back
+    Loki-->>DLQ: ✅ 204 Success
+```
+
+### 3.9. Adaptive Sampling Decision Tree
+
+```mermaid
+graph TD
+    Start[Event arrives] --> Severity{Severity?}
+    
+    Severity -->|error/fatal| AlwaysSample[Always sample ✅]
+    Severity -->|warn/info/debug| CheckPattern{Pattern match?}
+    
+    CheckPattern -->|payment.*| AlwaysSample
+    CheckPattern -->|audit.*| AlwaysSample
+    CheckPattern -->|other| CheckLoad{System load?}
+    
+    CheckLoad -->|<50%| HighRate[Sample 100% ✅]
+    CheckLoad -->|50-80%| MediumRate{Error rate?}
+    CheckLoad -->|>80%| LowRate[Sample 10% ⚠️]
+    
+    MediumRate -->|<1%| Sample50[Sample 50%]
+    MediumRate -->|>1%| Sample75[Sample 75%]
+    
+    Sample50 --> Decision{Random < 0.5?}
+    Sample75 --> Decision2{Random < 0.75?}
+    LowRate --> Decision3{Random < 0.1?}
+    
+    Decision -->|Yes| Sample[Sample ✅]
+    Decision -->|No| Drop[Drop 🗑️]
+    Decision2 -->|Yes| Sample
+    Decision2 -->|No| Drop
+    Decision3 -->|Yes| Sample
+    Decision3 -->|No| Drop
+    
+    AlwaysSample --> Pipeline[Continue pipeline]
+    HighRate --> Pipeline
+    Sample --> Pipeline
+    Drop --> Metrics[Increment sampled metric]
+    
+    style AlwaysSample fill:#d4edda
+    style Sample fill:#d4edda
+    style Drop fill:#f8d7da
+    style LowRate fill:#fff3cd
+```
+
+### 3.10. Cardinality Protection Flow
+
+```mermaid
+graph LR
+    Event[Event with labels] --> Check1{In denylist?}
+    
+    Check1 -->|Yes| Drop1[Drop label ❌]
+    Check1 -->|No| Check2{In allowlist?}
+    
+    Check2 -->|Yes| Keep[Keep label ✅]
+    Check2 -->|No| Check3{Cardinality<br/>< limit?}
+    
+    Check3 -->|Yes| Keep
+    Check3 -->|No| Action{Protection<br/>action?}
+    
+    Action -->|drop| Drop2[Drop label ❌]
+    Action -->|alert| Alert[Alert + Drop ⚠️]
+    
+    Drop1 --> Metric1[Log denylist hit]
+    Drop2 --> Metric2[Log cardinality exceeded]
+    Keep --> Export[Export metric]
+    Alert --> PagerDuty[PagerDuty alert 🚨]
+    
+    style Drop1 fill:#f8d7da
+    style Drop2 fill:#f8d7da
+    style Keep fill:#d4edda
+    style Alert fill:#fff3cd
+    style Agg fill:#fff3cd
+    style PagerDuty fill:#f8d7da
+```
+
+---
+
+## 4. Processing Pipeline
+
+> ⚠️ **CRITICAL:** Middleware execution order is critical for correct operation!  
+> 📖 **See:** [ADR-015: Middleware Order](ADR-015-middleware-order.md) for detailed reference guide
+
+### 4.1. Middleware Execution Order (CRITICAL!)
+
+```ruby
+# config/initializers/e11y.rb
+E11y.configure do |config|
+  # Pipeline order (CRITICAL: Versioning MUST be last!)
+  config.pipeline.use TraceContextMiddleware    # 1. Add trace_id, timestamp
+  config.pipeline.use ValidationMiddleware      # 2. Fail fast (uses original class)
+  config.pipeline.use PiiFilterMiddleware       # 3. Security first (uses original class)
+  config.pipeline.use RateLimitMiddleware       # 4. System protection (uses original class)
+  config.pipeline.use SamplingMiddleware        # 5. Cost optimization (uses original class)
+  config.pipeline.use VersioningMiddleware      # 6. Normalize event_name (LAST!)
+  config.pipeline.use RoutingMiddleware         # 7. Buffer routing (final)
+end
+```
+
+### 4.2. Pipeline Execution Flow
+
+```
+Event.track(payload)
+  ↓
+Pipeline.process(event_data)
+  ↓
+1. TraceContextMiddleware
+   ├─ Add trace_id (from Current or generate)
+   ├─ Add span_id
+   ├─ Add timestamp
+   └─ next
+  ↓
+2. ValidationMiddleware (uses ORIGINAL class: Events::OrderPaidV2)
+   ├─ Schema validation
+   ├─ FAIL → raise ValidationError
+   └─ PASS → next
+  ↓
+3. PiiFilterMiddleware (uses ORIGINAL class: Events::OrderPaidV2)
+   ├─ Get PII rules (class-level, may differ V1 vs V2!)
+   ├─ Apply filtering (per-adapter if configured)
+   └─ next
+  ↓
+4. RateLimitMiddleware (uses ORIGINAL class: Events::OrderPaidV2)
+   ├─ Check rate limit (Redis or local, may differ V1 vs V2!)
+   ├─ EXCEEDED → return :rate_limited
+   └─ ALLOWED → next
+  ↓
+5. SamplingMiddleware (uses ORIGINAL class: Events::OrderPaidV2)
+   ├─ Check sampling rules (adaptive, trace-consistent)
+   ├─ NOT SAMPLED → return :sampled
+   └─ SAMPLED → next
+  ↓
+6. VersioningMiddleware (LAST! Normalize for adapters)
+   ├─ Extract version from class name (V2 → 2)
+   ├─ Normalize event_name (Events::OrderPaidV2 → Events::OrderPaid)
+   ├─ Add v: 2 to payload (only if > 1)
+   └─ next
+  ↓
+7. RoutingMiddleware
+   ├─ severity == :debug? → RequestBuffer
+   └─ severity == :info+? → MainBuffer
+  ↓
+Buffer → Adapters (receive normalized event_name)
+```
+
+---
+
+### 4.3. Why Middleware Order Matters
+
+**Key Rule:** All business logic (validation, PII filtering, rate limiting, sampling) MUST use the **ORIGINAL class name** (e.g., `Events::OrderPaidV2`), not the normalized one.
+
+**Why?**
+- V2 may have different schema than V1
+- V2 may have different PII rules than V1
+- V2 may have different rate limits than V1
+- V2 may have different sample rates than V1
+
+**Versioning Middleware** is purely cosmetic normalization for external systems (adapters, Loki, Grafana). It MUST be the last middleware before routing.
+
+**📖 For detailed explanation, examples, and troubleshooting, see:**
+- **[ADR-015: Middleware Order](ADR-015-middleware-order.md)** - Complete reference guide
+- **[ADR-012: Event Evolution](ADR-012-event-evolution.md)** - Versioning design
+
+---
+
+## 5. Memory Optimization Strategy
+
+### 5.1. Zero-Allocation Pattern
+
+**Key Principle:** No object instances, only hashes.
+
+```ruby
+# ❌ BAD (creates instance):
+class OrderPaid < E11y::Event::Base
+  def self.track(**payload)
+    instance = new(payload)  # ← Creates object!
+    instance.process
+  end
+end
+
+# ✅ GOOD (zero allocation):
+class OrderPaid < E11y::Event::Base
+  def self.track(**payload)
+    event_data = {  # ← Just a hash!
+      event_class: self,
+      payload: payload,
+      timestamp: Time.now.utc
+    }
+    
+    Pipeline.process(event_data)  # ← Pass hash through
+  end
+end
+```
+
+### 5.2. Memory Budget Breakdown
+
+**Target: <100MB @ steady state (1000 events/sec)**
+
+```
+Component Breakdown:
+
+1. Ring Buffer (main):
+   - Capacity: 100k events
+   - Size per event: ~500 bytes (hash)
+   - Total: 100k × 500 = 50MB
+
+2. Request Buffers (threads):
+   - Threads: 10 concurrent requests
+   - Events per request: 100 debug events
+   - Size per event: ~500 bytes
+   - Total: 10 × 100 × 500 = 500KB
+
+3. Event Classes (registry):
+   - Classes: 100 event types
+   - Size per class: ~10KB (metadata)
+   - Total: 100 × 10KB = 1MB
+
+4. Adapters (connections):
+   - Adapters: 5 (Loki, File, Sentry, etc.)
+   - Connection overhead: ~2MB each
+   - Total: 5 × 2MB = 10MB
+
+5. Ruby VM overhead:
+   - Base Rails app: ~30MB
+   - E11y gem code: ~5MB
+   - Total: 35MB
+
+TOTAL: 50 + 0.5 + 1 + 10 + 35 = 96.5MB
+```
+
+✅ **Within budget: <100MB**
+
+### 5.3. GC Optimization
+
+```ruby
+# Minimize GC pressure
+module E11y
+  class Pipeline
+    # Reuse hash instead of creating new
+    SHARED_CONTEXT = {}
+    
+    def self.process(event_data)
+      # Don't merge! Mutate instead (if safe)
+      event_data[:processed_at] = Time.now.utc
+      
+      # ...
+    end
+  end
+end
+
+# Pool objects where possible
+module E11y
+  class StringPool
+    @pool = {}
+    
+    def self.intern(string)
+      @pool[string] ||= string.freeze
+    end
+  end
+end
+```
+
+---
+
+## 6. Thread Safety & Concurrency
+
+### 6.1. Concurrency Model
+
+**Components:**
+
+1. **Thread-local (no sync needed):**
+   - Request-scoped buffer (Current.request_buffer)
+   - Context (Current.trace_id, etc.)
+
+2. **Concurrent (thread-safe):**
+   - Main ring buffer (Concurrent::AtomicFixnum)
+   - Adapter registry (frozen after boot)
+
+3. **Single-threaded (no contention):**
+   - Flush worker (one timer task)
+   - Event registry (immutable)
+
+### 6.2. Thread Safety Guarantees
+
+```ruby
+module E11y
+  class Config
+    def self.configure
+      raise "Already configured" if @configured
+      
+      yield configuration
+      
+      # Freeze after configuration
+      configuration.freeze!
+      @configured = true
+    end
+    
+    class Configuration
+      def freeze!
+        @adapters.freeze
+        @middlewares.freeze
+        @pii_rules.freeze
+        # ... freeze all config
+      end
+    end
+  end
+  
+  class Registry
+    def self.register(event_class)
+      @mutex.synchronize do
+        @events[event_class.event_name] ||= {}
+        @events[event_class.event_name][event_class.version] = event_class
+      end
+    end
+    
+    def self.freeze!
+      @events.freeze
+      @mutex = nil  # No more registration
+    end
+  end
+end
+
+# After Rails boot:
+Rails.application.config.after_initialize do
+  E11y::Registry.freeze!
+end
+```
+
+---
+
+## 7. Extension Points
+
+### 7.1. Custom Middleware
+
+```ruby
+# Developers can add custom middleware
+class CustomMiddleware < E11y::Middleware
+  def call(event_data)
+    # Custom logic
+    if event_data[:payload][:user_role] == 'admin'
+      event_data[:payload][:priority] = 'high'
+    end
+    
+    @app.call(event_data)
+  end
+end
+
+# Register
+E11y.configure do |config|
+  config.pipeline.use CustomMiddleware
+end
+```
+
+### 7.2. Custom Adapters
+
+```ruby
+# Developers can write custom adapters
+class MyCustomAdapter < E11y::Adapters::Base
+  def initialize(**options)
+    @options = options
+  end
+  
+  def write_batch(events)
+    # Custom logic
+    events.each do |event_data|
+      puts serialize_event(event_data).to_json
+    end
+  end
+end
+
+# Register
+E11y.configure do |config|
+  config.adapters.register :my_custom, MyCustomAdapter.new(...)
+end
+```
+
+### 7.3. Custom Event Fields
+
+```ruby
+# Developers can add custom fields to events
+class OrderPaid < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:string)
+    required(:amount).filled(:decimal)
+    
+    # Custom field
+    optional(:internal_metadata).hash
+  end
+  
+  # Custom class method
+  def self.track_with_metadata(**payload)
+    track(**payload.merge(
+      internal_metadata: {
+        source: 'api',
+        version: 'v2'
+      }
+    ))
+  end
+end
+```
+
+---
+
+## 8. Performance Requirements
+
+### 8.1. Latency Targets
+
+| Operation | p50 | p95 | p99 | Max |
+|-----------|-----|-----|-----|-----|
+| **Event.track()** | <0.1ms | <0.5ms | <1ms | <5ms |
+| **Pipeline processing** | <0.05ms | <0.2ms | <0.5ms | <2ms |
+| **Buffer write** | <0.01ms | <0.05ms | <0.1ms | <1ms |
+| **Adapter write (batch)** | <10ms | <50ms | <100ms | <500ms |
+
+### 8.2. Throughput Targets
+
+- **Sustained:** 1000 events/sec
+- **Burst:** 5000 events/sec (5 seconds)
+- **Peak:** 10000 events/sec (1 second)
+
+### 8.3. Resource Limits
+
+- **Memory:** <100MB @ steady state
+- **CPU:** <5% @ 1000 events/sec
+- **GC time:** <10ms per minor GC
+- **Threads:** <5 (1 main + 4 workers)
+
+---
+
+## 9. Testing Strategy
+
+### 9.1. Test Pyramid
+
+```
+       ┌─────────────┐
+       │   Manual    │  1% - Exploratory
+       │   Testing   │
+       ├─────────────┤
+       │     E2E     │  4% - Full pipeline
+       ├─────────────┤
+       │ Integration │  15% - Multi-component
+       ├─────────────┤
+       │    Unit     │  80% - Individual components
+       └─────────────┘
+```
+
+### 9.2. Test Coverage Requirements
+
+| Component | Coverage | Critical? |
+|-----------|----------|-----------|
+| **Pipeline** | 95% | ✅ Yes |
+| **Buffers** | 90% | ✅ Yes |
+| **Adapters** | 85% | ✅ Yes |
+| **Middlewares** | 90% | ✅ Yes |
+| **Event DSL** | 95% | ✅ Yes |
+| **Configuration** | 80% | ⚠️ Important |
+
+### 9.3. Adapter Contract Tests
+
+```ruby
+# Shared contract tests for all adapters
+RSpec.shared_examples 'adapter contract' do
+  describe '#write_batch' do
+    it 'accepts array of event hashes' do
+      events = [{ event_name: 'test', payload: {} }]
+      expect { adapter.write_batch(events) }.not_to raise_error
+    end
+    
+    it 'returns success result' do
+      events = [{ event_name: 'test', payload: {} }]
+      result = adapter.write_batch(events)
+      expect(result).to be_success
+    end
+    
+    it 'handles empty array' do
+      expect { adapter.write_batch([]) }.not_to raise_error
+    end
+    
+    it 'raises AdapterError on failure' do
+      allow(adapter).to receive(:http).and_raise(StandardError)
+      events = [{ event_name: 'test', payload: {} }]
+      expect { adapter.write_batch(events) }.to raise_error(E11y::AdapterError)
+    end
+  end
+end
+
+# Usage in adapter specs
+RSpec.describe E11y::Adapters::LokiAdapter do
+  it_behaves_like 'adapter contract'
+  
+  # Adapter-specific tests
+end
+```
+
+### 9.4. Performance Benchmarks
+
+```ruby
+# spec/performance/event_tracking_spec.rb
+RSpec.describe 'Event tracking performance' do
+  it 'tracks 1000 events in <1 second' do
+    elapsed = Benchmark.realtime do
+      1000.times do |i|
+        Events::OrderPaid.track(order_id: i, amount: 99.99)
+      end
+    end
+    
+    expect(elapsed).to be < 1.0
+  end
+  
+  it 'has <1ms p99 latency' do
+    latencies = []
+    
+    1000.times do
+      latency = Benchmark.realtime do
+        Events::OrderPaid.track(order_id: '123', amount: 99.99)
+      end
+      latencies << latency
+    end
+    
+    p99 = latencies.sort[990]
+    expect(p99).to be < 0.001  # <1ms
+  end
+  
+  it 'uses <100MB memory @ steady state' do
+    GC.start
+    before = GC.stat(:heap_live_slots) * GC::INTERNAL_CONSTANTS[:RVALUE_SIZE]
+    
+    10_000.times do
+      Events::OrderPaid.track(order_id: '123', amount: 99.99)
+    end
+    
+    GC.start
+    after = GC.stat(:heap_live_slots) * GC::INTERNAL_CONSTANTS[:RVALUE_SIZE]
+    
+    memory_increase = (after - before) / 1024 / 1024  # MB
+    expect(memory_increase).to be < 100
+  end
+end
+```
+
+---
+
+## 10. Dependencies
+
+### 10.1. Required Dependencies
+
+```ruby
+# e11y.gemspec
+Gem::Specification.new do |spec|
+  spec.name = 'e11y'
+  spec.version = E11y::VERSION
+  spec.required_ruby_version = '>= 3.3.0'
+  
+  # Required
+  spec.add_dependency 'rails', '>= 8.0.0'
+  spec.add_dependency 'dry-schema', '~> 1.13'
+  spec.add_dependency 'dry-configurable', '~> 1.1'
+  spec.add_dependency 'concurrent-ruby', '~> 1.2'
+  
+  # Development
+  spec.add_development_dependency 'rspec', '~> 3.12'
+  spec.add_development_dependency 'rspec-rails', '~> 6.0'
+  spec.add_development_dependency 'benchmark-ips', '~> 2.12'
+end
+```
+
+### 10.2. Optional Dependencies (Features)
+
+```ruby
+# Gemfile
+group :e11y_optional do
+  gem 'yabeda', '~> 0.12'  # Metrics (UC-003)
+  gem 'sentry-ruby', '~> 5.0'  # Sentry adapter (UC-005)
+  gem 'faraday', '~> 2.0'  # HTTP adapters
+  gem 'redis', '~> 5.0'  # Rate limiting (UC-011)
+end
+```
+
+### 10.3. Dependency Validation
+
+```ruby
+# Check dry-configurable version
+dry_configurable_version = Gem.loaded_specs['dry-configurable'].version
+if dry_configurable_version < Gem::Version.new('1.0.0')
+  raise 'dry-configurable >= 1.0 required'
+end
+
+# Verify actively maintained
+# Last release: 2024-01-15 (✅ active)
+```
+
+---
+
+### 10.4. Deployment View
+
+```mermaid
+graph TB
+    subgraph "Rails Application Pod"
+        subgraph "Rails Process"
+            App[Rails App<br/>Puma Workers]
+            E11y[E11y Gem<br/>Embedded]
+            
+            App -->|calls| E11y
+        end
+        
+        subgraph "E11y Workers"
+            FW[Flush Worker<br/>Timer 200ms]
+            RB[Request Buffers<br/>Per-thread]
+            MB[Main Buffer<br/>Ring 100k]
+        end
+        
+        E11y --> RB
+        E11y --> MB
+        MB --> FW
+    end
+    
+    subgraph "External Services"
+        Loki[Grafana Loki<br/>Log Aggregation]
+        ES[Elasticsearch<br/>Analytics]
+        Sentry[Sentry<br/>Error Tracking]
+        Redis[Redis<br/>Rate Limiting]
+    end
+    
+    subgraph "Storage"
+        S3[S3 Bucket<br/>DLQ + Archive]
+        Local[Local Disk<br/>DLQ Fallback]
+    end
+    
+    FW -->|HTTP/JSON| Loki
+    FW -->|HTTP/JSON| ES
+    FW -->|Sentry SDK| Sentry
+    E11y -->|Rate checks| Redis
+    FW -->|DLQ events| S3
+    FW -->|DLQ fallback| Local
+    
+    style App fill:#d1ecf1
+    style E11y fill:#d4edda
+    style FW fill:#fff3cd
+```
+
+### 10.5. Multi-Environment Configuration
+
+```mermaid
+graph TB
+    subgraph "Development"
+        Dev[Rails Dev Server]
+        DevConfig[Config:<br/>- Console adapter<br/>- File adapter<br/>- No rate limits<br/>- Debug level]
+        Dev --> DevConfig
+    end
+    
+    subgraph "Test/CI"
+        Test[RSpec Tests]
+        TestConfig[Config:<br/>- Memory adapter<br/>- Strict validation<br/>- No external calls<br/>- Fast flush]
+        Test --> TestConfig
+    end
+    
+    subgraph "Staging"
+        Stage[Rails Staging]
+        StageConfig[Config:<br/>- Loki + File<br/>- Relaxed rate limits<br/>- 100% sampling<br/>- Info level]
+        Stage --> StageConfig
+    end
+    
+    subgraph "Production"
+        Prod[Rails Production]
+        ProdConfig[Config:<br/>- Loki + ES + Sentry<br/>- Strict rate limits<br/>- Adaptive sampling<br/>- Warn level<br/>- DLQ enabled]
+        Prod --> ProdConfig
+    end
+    
+    style Dev fill:#d1ecf1
+    style Test fill:#fff3cd
+    style Stage fill:#ffe5b4
+    style Prod fill:#d4edda
+```
+
+---
+
+## 11. Deployment & Versioning
+
+### 11.1. Semantic Versioning
+
+```
+Version Format: MAJOR.MINOR.PATCH
+
+Examples:
+- 1.0.0 - Initial release (all 22 use cases)
+- 1.1.0 - New adapter (backward compatible)
+- 1.0.1 - Bug fix
+- 2.0.0 - Breaking change (API change, Rails 9 support)
+```
+
+### 11.2. Breaking Change Policy
+
+**Breaking changes only in MAJOR versions:**
+
+- ✅ Allowed in MAJOR:
+  - Change public API
+  - Remove deprecated features
+  - Change configuration format
+  - Drop Rails version support
+
+- ❌ Not allowed in MINOR/PATCH:
+  - Remove public methods
+  - Change method signatures
+  - Remove configuration options
+
+### 11.3. Deprecation Policy
+
+```ruby
+# Deprecate in v1.x, remove in v2.0
+class OrderPaid < E11y::Event::Base
+  def self.track_legacy(**payload)
+    warn '[DEPRECATED] Use .track instead. Will be removed in v2.0'
+    track(**payload)
+  end
+end
+```
+
+---
+
+## 12. Trade-offs & Decisions
+
+### 12.1. Key Trade-offs
+
+| Decision | Pro | Con | Rationale |
+|----------|-----|-----|-----------|
+| **Rails-only** | Simpler code, use Rails features | Smaller audience | Target Rails devs |
+| **Zero-allocation** | Low memory, fast | More complex code | Performance critical |
+| **Ring buffer** | Lock-free, fast | Fixed size, complex | Throughput matters |
+| **Middleware chain** | Extensible, familiar | Slower than direct | Extensibility > speed |
+| **Strict validation** | Fail fast | Less forgiving | Correctness matters |
+| **No hot reload** | Simpler, safer | Requires restart | Config changes rare |
+
+### 12.2. Alternative Architectures Considered
+
+**A) Actor Model (Concurrent::Actor)**
+- ✅ Pro: Cleaner concurrency
+- ❌ Con: More complex, unfamiliar
+- ❌ **Rejected:** Too complex for Ruby devs
+
+**B) Evented I/O (EventMachine)**
+- ✅ Pro: High throughput
+- ❌ Con: Blocking calls problematic
+- ❌ **Rejected:** EventMachine unmaintained
+
+**C) Simple Queue (Array + Mutex)**
+- ✅ Pro: Simple
+- ❌ Con: Lock contention @ high load
+- ❌ **Rejected:** Performance target not met
+
+**D) Sidekiq Jobs**
+- ✅ Pro: Battle-tested
+- ❌ Con: Redis dependency, latency
+- ❌ **Rejected:** <1ms p99 impossible
+
+### 12.3. Future Considerations
+
+**v1.x (stable):**
+- All 22 use cases
+- Performance targets met
+- Documentation complete
+
+**v2.x (enhancements):**
+- Rails 9 support
+- Additional adapters (DataDog, New Relic)
+- OpenTelemetry full integration
+
+**v3.x (possible breaking changes):**
+- Plain Ruby support (non-Rails)
+- Different buffer strategies
+- Distributed tracing coordination
+
+---
+
+## 13. Next Steps
+
+### 13.1. Implementation Plan
+
+**Phase 1: Core (Weeks 1-2)**
+- [ ] Event::Base class (zero-allocation)
+- [ ] Pipeline & middleware chain
+- [ ] Ring buffer implementation
+- [ ] Request-scoped buffer
+
+**Phase 2: Features (Weeks 3-6)**
+- [ ] All 22 use cases
+- [ ] Adapters (Loki, File, Sentry, Stdout)
+- [ ] Configuration (dry-configurable)
+- [ ] Error handling
+
+**Phase 3: Polish (Weeks 7-8)**
+- [ ] Performance optimization
+- [ ] Documentation
+- [ ] Testing (>90% coverage)
+- [ ] Example Rails app
+
+### 13.2. Success Criteria
+
+- ✅ All 22 use cases working
+- ✅ <1ms p99 latency @ 1000 events/sec
+- ✅ <100MB memory
+- ✅ >90% test coverage
+- ✅ All APIs documented
+- ✅ Example app demonstrating features
+
+---
+
+## 📚 Related Documents
+
+**Architecture & Design:**
+- **[ADR-015: Middleware Order](ADR-015-middleware-order.md)** ⚠️ CRITICAL - Middleware execution order reference
+- **[ADR-012: Event Evolution](ADR-012-event-evolution.md)** - Event versioning & schema evolution
+- **[ADR-002: Metrics & Yabeda](ADR-002-metrics-yabeda.md)** - Metrics integration
+- **[ADR-004: Adapter Architecture](ADR-004-adapter-architecture.md)** - Adapter design
+- **[ADR-006: Security & Compliance](ADR-006-security-compliance.md)** - PII filtering, rate limiting
+- **[ADR-011: Testing Strategy](ADR-011-testing-strategy.md)** - Testing approach
+
+**Configuration:**
+- **[COMPREHENSIVE-CONFIGURATION.md](COMPREHENSIVE-CONFIGURATION.md)** - Complete configuration examples
+- **[CONFLICT-ANALYSIS.md](CONFLICT-ANALYSIS.md)** - Feature conflict resolutions
+
+**Use Cases:**
+- **[docs/use_cases/](use_cases/)** - All 22 use cases documented
+
+---
+
+**Status:** ✅ ADR Complete  
+**Ready for:** Implementation  
+**Estimated Effort:** 8 weeks (1 developer)
+

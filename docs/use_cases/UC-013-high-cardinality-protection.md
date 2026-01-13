@@ -209,10 +209,8 @@ end
 
 | Strategy | Behavior | Use Case |
 |----------|----------|----------|
-| `:aggregate` | Group extras into `_other` label | Default (preserves signal) |
-| `:drop` | Discard overflow events | Non-critical metrics |
-| `:sample` | Probabilistic sampling | High-volume metrics |
-| `:hash_bucket` | Hash to N buckets | Distributed tracing |
+| `:drop` | Discard overflow events | Default, simplest |
+| `:alert` | Alert ops team + drop | Critical metrics |
 
 ---
 
@@ -365,32 +363,7 @@ counter_for pattern: 'order.paid',
 
 ---
 
-### 4. Hash-Based Bucketing
-
-**Distribute high-cardinality values into fixed buckets:**
-
-```ruby
-counter_for pattern: 'user.action',
-            tags: [:user_bucket, :action_type],
-            tag_extractors: {
-              # 1M users → 100 buckets
-              user_bucket: ->(event) {
-                user_id = event.payload[:user_id]
-                bucket = Digest::MD5.hexdigest(user_id.to_s).to_i(16) % 100
-                "bucket_#{bucket}"
-              }
-            }
-
-# Result:
-# - 100 buckets × 10 action types = 1,000 series (vs 1M without bucketing)
-# - 99.9% reduction
-# - Can still analyze per-bucket trends
-# - Useful for distributed tracing (consistent hashing)
-```
-
----
-
-### 5. Streaming Aggregation
+### 4. Streaming Aggregation
 
 **Aggregate BEFORE sending to metrics backend:**
 
@@ -426,7 +399,7 @@ end
 
 ---
 
-### 6. Tiered Retention
+### 5. Tiered Retention
 
 **Different retention for different cardinality:**
 

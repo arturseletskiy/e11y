@@ -8,10 +8,10 @@ Production-ready Ruby gem для структурированных бизнес
 
 ## 🚀 Quick Links
 
-- **[Quick Start Guide](./quick-start.md)** - 5-minute setup
-- **[Installation](./installation.md)** - Detailed installation steps
-- **[Configuration Reference](./configuration/README.md)** - All config options
-- **[API Reference](./api/README.md)** - Complete API documentation
+- **[Quick Start Guide](./QUICK-START.md)** - 5-minute setup
+- **[SLO Implementation Guide](./SLO-IMPLEMENTATION-GUIDE.md)** ⭐ NEW - Quick navigation for SLO setup
+- **[Configuration Reference](./COMPREHENSIVE-CONFIGURATION.md)** - All config options
+- **[ADR Coverage Check](./ADR-COVERAGE-CHECK.md)** - Architecture decisions
 
 ---
 
@@ -77,10 +77,28 @@ Production-ready Ruby gem для структурированных бизнес
 - **[Debugging Guide](./guides/debugging.md)** - Troubleshooting
 - **[Performance Tuning](./guides/performance-tuning.md)** - Optimization tips
 
-### 9. Architecture
-- **[Architecture Overview](./architecture/README.md)** - C4 diagrams
-- **[ADR Template](./architecture/adr-template.md)** - For future decisions
-- **[Design Patterns](./architecture/patterns.md)** - TRIZ, patterns used
+### 9. Architecture Decision Records (ADRs)
+
+**Complete ADRs:**
+- **[ADR-001: Architecture](./ADR-001-architecture.md)** - Core architecture, components, processing pipeline
+- **[ADR-002: Metrics & Yabeda](./ADR-002-metrics-yabeda.md)** - Pattern-based metrics, cardinality protection
+- **[ADR-003: SLO & Observability](./ADR-003-slo-observability.md)** - HTTP/Job SLO, per-endpoint config, burn rate alerts
+- **[ADR-004: Adapter Architecture](./ADR-004-adapter-architecture.md)** - Pluggable backends, retry, circuit breaker
+- **[ADR-005: Tracing & Context](./ADR-005-tracing-context.md)** - W3C Trace Context, propagation
+- **[ADR-006: Security & Compliance](./ADR-006-security-compliance.md)** - PII filtering, rate limiting, audit trail
+- **[ADR-007: OpenTelemetry Integration](./ADR-007-opentelemetry-integration.md)** - OTLP, semantic conventions
+- **[ADR-008: Rails Integration](./ADR-008-rails-integration.md)** - Railtie, Rack, Sidekiq, ActiveJob
+- **[ADR-009: Cost Optimization](./ADR-009-cost-optimization.md)** - Sampling, deduplication, compression
+- **[ADR-010: Developer Experience](./ADR-010-developer-experience.md)** - Console, Web UI, debug tools
+- **[ADR-011: Testing Strategy](./ADR-011-testing-strategy.md)** - RSpec matchers, test adapters
+- **[ADR-012: Event Evolution](./ADR-012-event-evolution.md)** - Versioning, schema changes, DLQ replay
+- **[ADR-013: Reliability & Error Handling](./ADR-013-reliability-error-handling.md)** - Retry, DLQ, circuit breaker
+- **[ADR-014: Event-Driven SLO](./ADR-014-event-driven-slo.md)** - Custom SLO for business logic
+- **[ADR-015: Middleware Order](./ADR-015-middleware-order.md)** - Processing pipeline execution order
+
+**Integration & Analysis:**
+- **[ADR-003-014 Integration](./ADR-003-014-INTEGRATION.md)** - How HTTP SLO and Event SLO work together
+- **[ADR Coverage Check](./ADR-COVERAGE-CHECK.md)** - ADR completeness matrix
 
 ### 10. Implementation Plan
 - **[Phase 1: MVP Core](./implementation/phase-1-mvp.md)** - Weeks 1-8
@@ -167,7 +185,7 @@ Production-ready Ruby gem для структурированных бизнес
 → [UC-001: Request-Scoped Debug Buffering](./use_cases/UC-001-request-scoped-debug-buffering.md)
 
 **"I need SLO monitoring"**
-→ [UC-004: Zero-Config SLO Tracking](./use_cases/UC-004-zero-config-slo-tracking.md)
+→ [SLO Implementation Guide](./SLO-IMPLEMENTATION-GUIDE.md) ⭐ or [UC-004: Zero-Config SLO](./use_cases/UC-004-zero-config-slo-tracking.md)
 
 **"I need to filter PII"**
 → [UC-005: PII Filtering](./use_cases/UC-005-pii-filtering.md)

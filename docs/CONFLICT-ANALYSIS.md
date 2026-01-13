@@ -60,19 +60,25 @@ Event.track(...)
 ```ruby
 # Order of operations (pipeline):
 def track_event(event)
-  # 1. Validation (fail fast)
+  # 1. Trace Context (add trace_id, timestamp)
+  enrich_with_context!(event)
+  
+  # 2. Validation (fail fast, uses original class name)
   validate!(event)
   
-  # 2. PII Filtering (security first)
+  # 3. PII Filtering (security first, uses original class name)
   event = pii_filter.filter(event)
   
-  # 3. Rate Limiting (protect system)
+  # 4. Rate Limiting (protect system, uses original class name)
   return :rate_limited unless rate_limiter.allowed?(event)
   
-  # 4. Adaptive Sampling (cost optimization)
+  # 5. Adaptive Sampling (cost optimization, uses original class name)
   return :sampled unless sampler.should_sample?(event)
   
-  # 5. Route to buffer
+  # 6. Versioning (LAST! Normalize event_name for adapters)
+  normalize_version!(event)
+  
+  # 7. Route to buffer (adapters receive normalized name)
   route_to_buffer(event)
 end
 ```
@@ -86,9 +92,10 @@ end
 **Configuration Implications:**
 ```ruby
 config.pipeline_order = [
+  :trace_context,
   :validation,
   :pii_filtering,
-  :rate_limiting,   # ← First
+  :rate_limiting,   # ← After PII filtering
   :adaptive_sampling # ← Second
 ]
 ```
