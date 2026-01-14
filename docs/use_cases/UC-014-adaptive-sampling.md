@@ -85,6 +85,8 @@ end
 
 ## 🎯 Adaptive Sampling Strategies
 
+> **Implementation:** See [ADR-009 Section 3: Adaptive Sampling](../ADR-009-cost-optimization.md#3-adaptive-sampling) for complete architecture, including error-based, load-based, value-based, and content-based strategies with cost reduction analysis.
+
 ### Strategy 1: Error-Based Sampling
 
 **Increase sampling during error spikes:**

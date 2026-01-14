@@ -183,6 +183,8 @@ E11y::DeadLetterQueue.size  # => 1 (only payment)
 
 ## 🏗️ Architecture
 
+> **Implementation:** See [ADR-013: Reliability & Error Handling](../ADR-013-reliability-error-handling.md) for complete error handling architecture, including retry policy with exponential backoff and jitter, circuit breaker pattern, Dead Letter Queue (DLQ) storage strategies, and self-monitoring metrics.
+
 ### Retry Pipeline
 
 ```

@@ -77,9 +77,154 @@ end
 
 ## 🎯 The 4-Layer Defense System
 
+### Layer Processing Flow
+
+> **Implementation:** See [ADR-002 Section 4.1: Four-Layer Defense](../ADR-002-metrics-yabeda.md#41-four-layer-defense) for detailed architecture.
+
+**🔑 Critical: Layers execute SEQUENTIALLY (not simultaneously).**
+
+Each label is processed through all 4 layers **in order**. Once a layer makes a decision (DROP/KEEP), subsequent layers may be skipped:
+
+```
+┌────────────────────────────────────────────────────────┐
+│ Incoming Event: { user_id: 123, status: 'paid' }      │
+└────────────────────────────────────────────────────────┘
+                        ↓
+         ┌──────────────────────────────┐
+         │ For EACH label in event:     │
+         └──────────────────────────────┘
+                        ↓
+    ╔═══════════════════════════════════════╗
+    ║ Layer 1: Universal Denylist           ║
+    ║ Q: Is label in FORBIDDEN_LABELS?      ║
+    ╚═══════════════════════════════════════╝
+                        ↓
+           ┌───────────┴───────────┐
+           │ YES                   │ NO
+           ↓                       ↓
+      ❌ DROP                 Continue
+      (stop here)                  ↓
+                        ╔═══════════════════════════════════════╗
+                        ║ Layer 2: Safe Allowlist               ║
+                        ║ Q: Is label in SAFE_LABELS?           ║
+                        ╚═══════════════════════════════════════╝
+                                    ↓
+                       ┌───────────┴───────────┐
+                       │ YES                   │ NO
+                       ↓                       ↓
+                  ✅ KEEP                 Continue
+            (skip Layer 3-4)                   ↓
+                                    ╔═══════════════════════════════════════╗
+                                    ║ Layer 3: Per-Metric Cardinality Limit ║
+                                    ║ Q: Is cardinality < limit?             ║
+                                    ╚═══════════════════════════════════════╝
+                                                ↓
+                                   ┌───────────┴───────────┐
+                                   │ YES                   │ NO
+                                   ↓                       ↓
+                              ✅ KEEP                 Continue
+                                                           ↓
+                                                ╔═══════════════════════════════════════╗
+                                                ║ Layer 4: Dynamic Action                ║
+                                                ║ Execute: drop/alert/sample             ║
+                                                ╚═══════════════════════════════════════╝
+                                                           ↓
+                                                  ❌ DROP (or alert)
+```
+
+**Example: Processing 3 labels**
+
+```ruby
+# Incoming event
+Events::OrderPlaced.track(
+  user_id: 'user_12345',        # ← Label 1
+  status: 'paid',               # ← Label 2
+  custom_field: 'special_123'   # ← Label 3
+)
+
+# Processing:
+
+# user_id:
+#   → Layer 1: in FORBIDDEN_LABELS? ✅ YES → ❌ DROP (stop, skip Layer 2-4)
+#   Result: user_id not included in metric
+
+# status:
+#   → Layer 1: in FORBIDDEN_LABELS? ❌ NO → continue
+#   → Layer 2: in SAFE_LABELS? ✅ YES → ✅ KEEP (skip Layer 3-4)
+#   Result: status='paid' included in metric
+
+# custom_field:
+#   → Layer 1: in FORBIDDEN_LABELS? ❌ NO → continue
+#   → Layer 2: in SAFE_LABELS? ❌ NO → continue
+#   → Layer 3: cardinality < limit? ❌ NO (150 > 100) → continue
+#   → Layer 4: action = :drop → ❌ DROP
+#   Result: custom_field not included in metric
+
+# Final metric:
+# order_placed_total{status="paid"} 1
+```
+
+**Key Properties:**
+
+1. **Early Exit Optimization:** If Layer 1 drops a label, Layers 2-4 never execute (performance optimization).
+2. **Safe Labels Fast Path:** Layer 2 approval skips expensive cardinality tracking (Layers 3-4).
+3. **Fallback to Dynamic Action:** Only labels that pass Layer 1-2 but fail Layer 3 reach Layer 4.
+4. **Order Matters:** Changing layer order breaks the protection model (e.g., Layer 3 before Layer 1 = wrong).
+
+**Performance Impact:**
+
+| Scenario | Layers Executed | Time | Example |
+|---|---|---|---|
+| Forbidden label | Layer 1 only | ~0.001ms | `user_id` |
+| Safe label | Layer 1-2 | ~0.002ms | `status`, `method` |
+| New label (under limit) | Layer 1-3 | ~0.01ms | `custom_field` (90th unique value) |
+| Overflow label | Layer 1-4 | ~0.02ms | `custom_field` (101st unique value) |
+
+**Why Sequential?**
+
+```ruby
+# ❌ WRONG: Parallel layer execution
+# Problem: All layers execute simultaneously, wasting CPU on labels already dropped
+
+# ✅ CORRECT: Sequential execution
+# Benefit: Early exit saves 75% CPU for forbidden labels
+```
+
+---
+
 ### Layer 1: Denylist (Hard Block)
 
-**Universal denylist - NEVER use these as labels:**
+> **⚠️ CRITICAL: Adapter-Specific Filtering**  
+> **Implementation:** See [ADR-002 Section 4.2: Layer 1 - Universal Denylist](../ADR-002-metrics-yabeda.md#42-layer-1-universal-denylist) for detailed architecture.
+>
+> **Cardinality protection (denylist/allowlist) applies ONLY to metrics adapters (Yabeda/Prometheus), NOT to other adapters:**
+>
+> | Adapter Type | Denylist Applied? | Why? |
+> |---|---|---|
+> | **Metrics (Yabeda/Prometheus)** | ✅ YES | High-cardinality labels cause memory explosion in time-series databases (1M labels = 1GB RAM). |
+> | **Logs (Loki)** | ❌ NO | Loki is designed for high-cardinality labels and uses different indexing strategy. Full payload preserved. |
+> | **Errors (Sentry)** | ❌ NO | Sentry needs full context for debugging. High cardinality is acceptable for error tracking. |
+> | **Audit (File/PostgreSQL)** | ❌ NO | Audit trails require complete, unfiltered data for compliance. |
+>
+> **Example:**
+> ```ruby
+> # Event with user_id (forbidden for metrics)
+> Events::UserAction.track(user_id: "12345", action: "login")
+>
+> # What happens:
+> # ✅ Prometheus: { action="login" }                    ← user_id DROPPED
+> # ✅ Loki:       { user_id="12345", action="login" }   ← user_id PRESERVED
+> # ✅ Sentry:     { user_id="12345", action="login" }   ← user_id PRESERVED
+> # ✅ Audit:      { user_id="12345", action="login" }   ← user_id PRESERVED
+> ```
+>
+> **Why This Matters:**
+> - ✅ **Metrics stay safe:** Prometheus won't OOM due to cardinality explosion
+> - ✅ **Debugging stays rich:** Loki/Sentry get full context for troubleshooting
+> - ✅ **Compliance stays intact:** Audit logs remain complete and unfiltered
+> - ✅ **Best of both worlds:** Safety for metrics + completeness for logs/errors
+
+**Universal denylist - NEVER use these as labels (for metrics adapters):**
 
 ```ruby
 E11y.configure do |config|
@@ -179,7 +324,7 @@ E11y.configure do |config|
     # === PER-METRIC LIMITS ===
     cardinality_limit_for 'http.requests' do
       max_cardinality 2_000           # Higher limit for this metric
-      overflow_strategy :aggregate    # → Aggregate to "_other" bucket
+      overflow_strategy :drop         # → Drop overflow events
       overflow_sample_rate 0.1        # Sample 10% of overflow events
     end
     
@@ -191,8 +336,7 @@ E11y.configure do |config|
     
     cardinality_limit_for 'orders.paid' do
       max_cardinality 100
-      overflow_strategy :aggregate
-      aggregate_label '_other'        # Custom aggregate label
+      overflow_strategy :alert        # Alert ops team + drop
     end
   end
 end
@@ -200,9 +344,12 @@ end
 # How it works:
 # 1. Track unique label combinations per metric
 # 2. If exceeds limit:
-#    - :aggregate → Group extras into "_other" label
-#    - :drop → Discard event (increment drop counter)
-#    - :sample → Probabilistic sampling
+#    - :drop → Discard overflow events (increment drop counter)
+#    - :alert → Alert ops team + drop
+# 
+# NOTE: For aggregation/relabeling (e.g., user_id → user_segment),
+#       use tag_extractors (see "Aggregation" section below), 
+#       NOT overflow_strategy.
 ```
 
 **Overflow strategies:**
@@ -211,6 +358,114 @@ end
 |----------|----------|----------|
 | `:drop` | Discard overflow events | Default, simplest |
 | `:alert` | Alert ops team + drop | Critical metrics |
+
+#### Thread Safety
+
+> **Implementation:** See [ADR-002 Section 4.4: Layer 3 - Per-Metric Cardinality Limits](../ADR-002-metrics-yabeda.md#44-layer-3-per-metric-cardinality-limits) for detailed architecture.
+> 
+> **Sources:**
+> - [Ruby Hash thread safety - Stack Overflow](https://stackoverflow.com/questions/22674498/thread-safety-for-hashes-in-ruby)
+> - [Mutex performance overhead - Stack Overflow](https://stackoverflow.com/questions/9761899/why-does-this-code-run-slower-with-multiple-threads-even-on-a-multi-core-mach)
+> - [Thread Safety with Mutexes - GoRails](https://gorails.com/episodes/thread-safety-with-mutexes-in-ruby)
+> - [Understanding Ruby Threads and Concurrency - Better Stack](https://betterstack.com/community/guides/scaling-ruby/threads-and-concurrency/)
+
+**🔒 Critical: CardinalityTracker is thread-safe by design.**
+
+E11y applications typically handle hundreds of concurrent requests, each potentially emitting events with labels. The `CardinalityTracker` uses a **mutex** to ensure thread-safe tracking of unique label values across concurrent requests.
+
+**Why Thread Safety Matters:**
+
+```ruby
+# Scenario: 3 concurrent requests tracking same metric
+Thread 1: track('orders_total', status: 'paid')     # ← Same time
+Thread 2: track('orders_total', status: 'pending')  # ← Same time
+Thread 3: track('orders_total', status: 'paid')     # ← Same time
+
+# Without mutex:
+# - Race condition: both Thread 1 & 3 might think 'paid' is new
+# - Tracker corruption: @trackers hash modified by 3 threads simultaneously
+# - Lost updates: Thread 2's 'pending' might be overwritten
+# - RESULT: Incorrect cardinality counts, potential memory leaks
+
+# With mutex (actual E11y implementation):
+# - Thread 1 acquires lock → adds 'paid' → releases (1/limit)
+# - Thread 2 acquires lock → adds 'pending' → releases (2/limit)
+# - Thread 3 acquires lock → sees 'paid' exists → releases (2/limit)
+# - RESULT: Correct cardinality = 2
+```
+
+**Implementation:**
+
+```ruby
+# From ADR-002 Section 4.4
+class CardinalityTracker
+  def initialize(limit: 100)
+    @limit = limit
+    @trackers = {}  # { metric_name: { label_name: Set[values] } }
+    @mutex = Mutex.new  # ← Thread safety
+  end
+  
+  def check_and_track(metric_name, label_name, value)
+    @mutex.synchronize do  # ← Only 1 thread executes this block at a time
+      @trackers[metric_name] ||= {}
+      @trackers[metric_name][label_name] ||= Set.new
+      
+      tracker = @trackers[metric_name][label_name]
+      
+      if tracker.include?(value)
+        true  # Already seen
+      elsif tracker.size < @limit
+        tracker.add(value)
+        true  # Added, under limit
+      else
+        false  # Rejected, over limit
+      end
+    end
+  end
+end
+```
+
+**Performance Impact:**
+
+⚠️ **Reality Check:** Mutex synchronization has measurable overhead, especially under high concurrency:
+
+- **Single-threaded baseline:** Hash lookup + Set operation ~0.001ms (1 microsecond)
+- **With Mutex (low contention):** ~0.005-0.01ms (5-10 microseconds) - 5-10x slower
+- **With Mutex (high contention):** Can degrade significantly due to cache coherency overhead
+
+**Why slower?** Each `@mutex.synchronize` call forces CPU to:
+1. Acquire lock (coordinate with other cores)
+2. Access shared state from RAM (not L1/L2 cache) - ~100x slower than cache
+3. Release lock (notify waiting threads)
+
+**Mitigation:** E11y minimizes overhead by:
+- Keeping critical section **extremely short** (hash lookup + set add only)
+- Using simple data structures (Hash + Set, not complex objects)
+- Avoiding I/O or heavy computation inside `synchronize` block
+
+**Real-world impact:** For most applications (100-1000 concurrent requests), mutex overhead is acceptable compared to the catastrophic cost of NOT having thread safety (corrupted cardinality counts, memory leaks, incorrect metrics)
+
+**Monitoring Thread Contention:**
+
+If you suspect mutex contention is becoming a bottleneck, monitor these indicators:
+
+```ruby
+# Built-in E11y metrics (no extra config needed)
+e11y_cardinality_checks_total          # Total cardinality checks
+e11y_cardinality_checks_duration_seconds  # Duration histogram
+
+# Prometheus query to detect contention:
+# If p99 latency >> p50, likely contention
+histogram_quantile(0.99, rate(e11y_cardinality_checks_duration_seconds_bucket[5m]))
+  /
+histogram_quantile(0.50, rate(e11y_cardinality_checks_duration_seconds_bucket[5m]))
+# Ratio > 10 = high contention
+```
+
+**If contention becomes critical:**
+- Consider using `Concurrent::Map` from concurrent-ruby gem (lock-free for reads)
+- Shard cardinality trackers by metric name (separate mutex per metric)
+- Profile with `ruby-prof` to identify exact bottleneck
 
 ---
 
@@ -255,11 +510,155 @@ E11y.configure do |config|
 end
 ```
 
+#### Action Selection Guide
+
+> **Implementation:** See [ADR-002 Section 4.5: Layer 4 - Dynamic Actions](../ADR-002-metrics-yabeda.md#45-layer-4-dynamic-actions) for detailed architecture.
+
+**🎯 When cardinality limit is exceeded, which action should you choose?**
+
+Use this decision tree to select the right strategy:
+
+```
+┌─────────────────────────────────────┐
+│ Cardinality Limit Exceeded          │
+└─────────────────────────────────────┘
+                 ↓
+        ┌────────────────┐
+        │ Critical to    │ ← Question 1
+        │ investigate?   │
+        └────────────────┘
+         ↙            ↘
+       YES             NO
+        ↓               ↓
+   ┌─────────┐   ┌──────────────┐
+   │ ALERT   │   │ Can group    │ ← Question 2
+   │         │   │ values into  │
+   │ + Drop  │   │ categories?  │
+   └─────────┘   └──────────────┘
+        ↓          ↙          ↘
+        │        YES           NO
+        │         ↓             ↓
+        │    ┌─────────┐   ┌───────┐
+        │    │ RELABEL │   │ DROP  │
+        │    └─────────┘   └───────┘
+        ↓         ↓             ↓
+   PagerDuty   Reduced      Silent
+   Alert      Cardinality   Removal
+```
+
+**Decision Matrix:**
+
+| Action | When to Use | Signal Preserved | Cardinality | Example |
+|--------|-------------|------------------|-------------|---------|
+| **DROP** | Label not important for analysis | ❌ None (label removed entirely) | 1 (label dropped) | Drop `request_id`, `trace_id` from metrics (keep in logs) |
+| **RELABEL** | Clear categories exist (e.g., status codes, paths) | ✅✅✅ High (grouped into buckets) | 5-10 (category count) | `http_status: 200` → `status_class: 2xx` |
+| **ALERT** | Unexpected high cardinality, needs investigation | ❌ None + 🚨 (label dropped + ops alerted) | 1 (label dropped) | Sudden spike in unique `customer_id` values |
+
+**Practical Examples:**
+
+**1. DROP - Default for non-critical labels**
+```ruby
+# ❌ BAD: request_id creates 1M unique metrics
+counter_for pattern: 'api.request',
+            tags: [:request_id, :endpoint]  # request_id = high cardinality!
+
+# ✅ GOOD: Drop request_id from metrics
+counter_for pattern: 'api.request',
+            tags: [:endpoint]  # Only low-cardinality tags
+
+cardinality_limit_for 'api.request' do
+  max_cardinality 100
+  overflow_strategy :drop  # Silent drop if exceeded
+end
+
+# Result: request_id still in logs/traces, just not in metrics
+```
+
+**2. RELABEL - Best for known categories**
+```ruby
+# ❌ BAD: 200 unique HTTP status codes
+counter_for pattern: 'http.response',
+            tags: [:http_status]  # 200, 201, 204, 400, 401, 403, ...
+
+# ✅ GOOD: Relabel to status classes (5 categories)
+counter_for pattern: 'http.response',
+            tags: [:status_class],
+            tag_extractors: {
+              status_class: ->(event) {
+                status = event.payload[:http_status].to_i
+                case status
+                when 100..199 then '1xx'
+                when 200..299 then '2xx'
+                when 300..399 then '3xx'
+                when 400..499 then '4xx'
+                when 500..599 then '5xx'
+                else 'unknown'
+                end
+              }
+            }
+
+# Result: 200 values → 5 categories (99% cardinality reduction)
+```
+
+**3. ALERT - For unexpected cardinality spikes**
+```ruby
+# Payment events should have stable cardinality
+cardinality_limit_for 'payments.processed' do
+  max_cardinality 50  # Expect ~10 payment methods
+  overflow_strategy :alert  # Alert if exceeded
+  overflow_sample_rate 0.1  # Sample 10% of overflow events
+end
+
+# Scenario: Suddenly 1000 unique payment_method values
+# → Alert sent to PagerDuty
+# → Label dropped from metrics
+# → Ops investigates (possible bug, data corruption, attack)
+```
+
+**When NOT to use each action:**
+
+| Action | DON'T Use When | Why |
+|--------|---------------|-----|
+| DROP | Label is critical for debugging | You lose all visibility into this dimension |
+| RELABEL | No clear categories exist | Arbitrary bucketing (e.g., hash-based) loses signal |
+| ALERT | High cardinality is expected | Alert fatigue, ops team overwhelmed |
+
+**Common Patterns:**
+
+```ruby
+# Pattern 1: DROP non-critical identifiers
+# request_id, session_id, trace_id → DROP (keep in logs)
+overflow_strategy :drop
+
+# Pattern 2: RELABEL known enums
+# http_status, country_code, user_tier → RELABEL (aggregate)
+tag_extractors: { status_class: ->(e) { ... } }
+
+# Pattern 3: ALERT on unexpected cardinality
+# payment_method, product_sku → ALERT (should be stable)
+overflow_strategy :alert
+```
+
+**Monitoring Your Decisions:**
+
+```ruby
+# Track how often each action triggers
+Yabeda.e11y_internal.cardinality_actions_total.values
+# => { action: 'drop', metric: 'api.requests' } => 42
+# => { action: 'alert', metric: 'payments.processed' } => 1
+
+# Prometheus query:
+rate(e11y_cardinality_actions_total{action="alert"}[5m])
+# → If >0, investigate what's causing unexpected cardinality
+```
+
 ---
 
 ## 💻 Advanced Techniques
 
 ### 1. Aggregation (Best ROI - 99% Reduction)
+
+> **Note:** This section describes **relabeling/normalization** (e.g., `user_id` → `user_segment`) via `tag_extractors`, which is different from `overflow_strategy`. Aggregation reduces cardinality **before** metrics are created, while overflow handling (`drop`/`alert`) deals with exceeding limits **after** creation. See [ADR-002 Section 4.5](../ADR-002-metrics-yabeda.md#45-cardinality-protection) for implementation details.
 
 **Problem:** 1M users = 1M metric series
 
@@ -607,11 +1006,11 @@ RSpec.describe 'E11y Cardinality Protection' do
   end
   
   describe 'cardinality limits' do
-    it 'aggregates overflow to _other' do
+    it 'drops overflow events' do
       E11y.configure do |config|
         config.metrics do
           cardinality_limit_for 'test_metric', max: 3
-          overflow_strategy :aggregate
+          overflow_strategy :drop
         end
       end
       
@@ -621,9 +1020,11 @@ RSpec.describe 'E11y Cardinality Protection' do
       end
       
       metric = Yabeda.test_metric
-      # Expect 3 unique + 1 "_other"
-      expect(metric.values.keys.size).to eq(4)
-      expect(metric.values.keys).to include({ category: '_other' })
+      # Expect only 3 unique (2 dropped)
+      expect(metric.values.keys.size).to eq(3)
+      
+      # Verify drop counter incremented
+      expect(Yabeda.e11y_internal.metric_overflow_events_total).to be > 0
     end
   end
   
@@ -745,6 +1146,255 @@ after = calculate_cardinality_cost(
 )
 # => 30k series, $2k/month ✅
 # SAVINGS: $3.4M - $2k = $3.398M/month (99.94% reduction!)
+```
+
+---
+
+## ❓ Frequently Asked Questions
+
+> **Technical Details:** See [ADR-002 Section 11: FAQ & Critical Clarifications](../ADR-002-metrics-yabeda.md#11-faq--critical-clarifications) for architectural rationale.
+
+### Q1: Does cardinality protection apply to all my logs and metrics?
+
+**A: No, only to metrics (Prometheus/Yabeda). Logs keep full data.**
+
+This is a common source of confusion. Let's clarify:
+
+```ruby
+# Same event, different treatment:
+Events::OrderCreated.track(
+  user_id: '123',      # High-cardinality
+  status: 'paid',      # Low-cardinality
+  amount: 99.99
+)
+```
+
+**What happens:**
+
+| Adapter | `user_id` | `status` | `amount` | Why |
+|---------|-----------|----------|----------|-----|
+| **Prometheus** | ❌ Dropped (denylist) | ✅ Kept | ❌ Dropped (value, not label) | Cardinality protection active |
+| **Loki (logs)** | ✅ Kept | ✅ Kept | ✅ Kept | No cardinality limits |
+| **Sentry** | ✅ Kept | ✅ Kept | ✅ Kept | Full context needed for debugging |
+| **Audit** | ✅ Kept | ✅ Kept | ✅ Kept | Compliance requires full data |
+
+**Why this design?**
+
+- **Metrics (Prometheus):** Cardinality explosions are catastrophic (cost, performance, query failures)
+- **Logs (Loki):** High-cardinality fields are fine (indexed differently, stored cheaper)
+- **Error tracking (Sentry):** Need full context to debug issues
+- **Audit trails:** Regulatory compliance requires complete data
+
+**Practical implication:**
+
+```ruby
+# ✅ This is SAFE and RECOMMENDED:
+Events::ApiRequest.track(
+  request_id: SecureRandom.uuid,  # High-cardinality, but OK!
+  endpoint: '/api/users',
+  user_id: current_user.id
+)
+
+# Result:
+# - Metrics: only endpoint tracked (request_id/user_id dropped)
+# - Logs: full payload with request_id for debugging
+# - Best of both worlds!
+```
+
+---
+
+### Q2: Are the 4 layers checked simultaneously or one-by-one?
+
+**A: One-by-one (sequential waterfall), not simultaneously.**
+
+This is critical to understand for debugging and configuration:
+
+```
+Processing order for each label:
+
+┌─────────────────────────────────────────┐
+│ 1. Layer 1: Denylist Check              │
+│    ↓ In denylist? → DROP, stop here     │
+│    ↓ Not in denylist? → Continue to L2  │
+└─────────────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────┐
+│ 2. Layer 2: Allowlist Check             │
+│    ↓ In allowlist? → KEEP, stop here    │
+│    ↓ Not in allowlist? → Continue to L3 │
+└─────────────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────┐
+│ 3. Layer 3: Cardinality Limit           │
+│    ↓ Under limit? → KEEP, stop here     │
+│    ↓ Over limit? → Continue to L4       │
+└─────────────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────┐
+│ 4. Layer 4: Dynamic Action              │
+│    ↓ Apply configured action:           │
+│      drop / alert / relabel              │
+└─────────────────────────────────────────┘
+```
+
+**Example trace through all layers:**
+
+```ruby
+# Event: { user_id: '123', status: 'paid', tier: 'premium' }
+
+# Label: user_id
+#   Layer 1: ✅ in FORBIDDEN_LABELS → ❌ DROP (stop here, never reaches L2-L4)
+
+# Label: status
+#   Layer 1: ✅ not in FORBIDDEN_LABELS → continue to L2
+#   Layer 2: ✅ in SAFE_LABELS → ✅ KEEP (stop here, skip L3-L4)
+
+# Label: tier
+#   Layer 1: ✅ not in FORBIDDEN_LABELS → continue to L2
+#   Layer 2: ✅ not in SAFE_LABELS → continue to L3
+#   Layer 3: ❌ cardinality 150 > limit 100 → continue to L4
+#   Layer 4: ✅ action=drop → ❌ DROP
+
+# Final metric:
+# orders_total{status="paid"} 1
+# (user_id and tier dropped)
+```
+
+**Why sequential (not simultaneous)?**
+
+- **Performance:** Early exit on denylist (L1) avoids expensive cardinality checks (L3)
+- **Predictability:** Clear precedence (denylist > allowlist > cardinality > action)
+- **Debuggability:** Easy to trace which layer made the decision
+
+---
+
+### Q3: What should I do when I hit a cardinality limit?
+
+**A: Use relabeling if possible, otherwise drop the label.**
+
+Use this decision process:
+
+**Step 1: Can you group values into clear categories?**
+
+```ruby
+# ✅ YES - Use relabeling (best signal preservation):
+
+# Example 1: HTTP status codes (200, 201, 204...) → status classes (2xx, 3xx...)
+tag_extractors: {
+  status_class: ->(event) {
+    case event.payload[:http_status].to_i
+    when 200..299 then '2xx'
+    when 400..499 then '4xx'
+    when 500..599 then '5xx'
+    end
+  }
+}
+# Result: 50 values → 5 categories (90% reduction)
+
+# Example 2: Paths (/users/123, /users/456...) → endpoint patterns (/users/:id)
+tag_extractors: {
+  endpoint: ->(event) {
+    event.payload[:path].gsub(/\d+/, ':id')
+  }
+}
+# Result: Infinite values → ~100 endpoints
+```
+
+**Step 2: Is this label critical for alerts/dashboards?**
+
+```ruby
+# ❌ NO - Just drop it (keep in logs):
+cardinality_limit_for 'api.requests' do
+  max_cardinality 100
+  overflow_strategy :drop  # Silent drop
+end
+
+# Result: request_id removed from metrics, but still in logs for debugging
+```
+
+**Step 3: Is this an unexpected cardinality spike?**
+
+```ruby
+# ✅ YES - Alert ops team:
+cardinality_limit_for 'payments.processed' do
+  max_cardinality 50
+  overflow_strategy :alert  # Alert + drop
+end
+
+# Scenario: Suddenly 1000 unique payment_method values
+# → Alert sent to PagerDuty/Slack
+# → Ops investigates (possible bug, attack, data corruption)
+```
+
+**Common patterns:**
+
+| Your Situation | Recommended Action | Example |
+|----------------|-------------------|---------|
+| Label not needed for analysis | **DROP** | `request_id`, `trace_id` → keep in logs only |
+| Clear categories exist | **RELABEL** | `http_status: 200` → `status_class: 2xx` |
+| Cardinality should be stable | **ALERT** | Payment methods suddenly spike to 1000 values |
+| Need debugging context | **Keep in logs** | Drop from metrics, query logs when debugging |
+
+**Anti-pattern to avoid:**
+
+```ruby
+# ❌ DON'T: Keep high-cardinality labels in metrics
+counter_for pattern: 'api.request',
+            tags: [:endpoint, :user_id]  # user_id = millions of values!
+
+# ✅ DO: Drop from metrics, keep in logs
+counter_for pattern: 'api.request',
+            tags: [:endpoint]  # Only low-cardinality tags
+
+# user_id still available in Loki logs for debugging:
+# 2024-01-15 10:23:45 | api.request | endpoint=/api/users user_id=123 status=200
+```
+
+---
+
+### Q4: How do I debug which layer dropped my label?
+
+**A: Check E11y's built-in cardinality metrics:**
+
+```ruby
+# See which labels are being dropped:
+Yabeda.e11y_internal.cardinality_dropped_labels_total.values
+# => { metric: 'api_requests_total', label: 'user_id', reason: 'denylist' } => 1523
+# => { metric: 'api_requests_total', label: 'session_id', reason: 'limit_exceeded' } => 42
+
+# See which layer made the decision:
+# - reason: 'denylist' → Layer 1
+# - reason: 'not_in_allowlist' → Layer 2 (if allowlist configured)
+# - reason: 'limit_exceeded' → Layer 3
+```
+
+**Prometheus queries for debugging:**
+
+```promql
+# Which metrics are dropping labels most frequently?
+topk(10, rate(e11y_cardinality_dropped_labels_total[5m]))
+
+# Which labels are being dropped?
+sum by (label, reason) (e11y_cardinality_dropped_labels_total)
+
+# Alert on unexpected drops:
+rate(e11y_cardinality_dropped_labels_total{reason="limit_exceeded"}[5m]) > 10
+```
+
+**Development/staging debugging:**
+
+```ruby
+# Temporarily log all cardinality decisions:
+E11y.configure do |config|
+  config.metrics.cardinality_protection do
+    debug_mode true  # Logs every decision (verbose!)
+  end
+end
+
+# Output:
+# [E11y] Cardinality: KEEP label 'status' (Layer 2: allowlist)
+# [E11y] Cardinality: DROP label 'user_id' (Layer 1: denylist)
+# [E11y] Cardinality: DROP label 'tier' (Layer 3: limit 150/100, action=drop)
 ```
 
 ---

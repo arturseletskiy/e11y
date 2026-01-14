@@ -60,6 +60,8 @@ Events::OrderShipping.track(order_id: '789', tracking: 'TRACK123')
 
 ## 🎯 Features
 
+> **Implementation:** See [ADR-005: Tracing Context](../ADR-005-tracing-context.md) for complete architecture, including [Section 5: W3C Trace Context](../ADR-005-tracing-context.md#5-w3c-trace-context), [Section 6.1: HTTP Propagator](../ADR-005-tracing-context.md#61-http-propagator-outgoing-requests), and [Section 8: Context Inheritance](../ADR-005-tracing-context.md#8-context-inheritance-thread-fiber-support).
+
 ### 1. Automatic W3C Trace Context Propagation
 
 **Zero-config HTTP header propagation:**
@@ -204,6 +206,8 @@ end
 
 ### 3. Background Job Trace Propagation
 
+> **Implementation:** See [ADR-005 Section 6.2: Job Propagator](../ADR-005-tracing-context.md#62-job-propagator-sidekiqactivejob) for automatic trace propagation to Sidekiq/ActiveJob.
+
 **Preserve trace_id in async jobs:**
 ```ruby
 # Service A: API Gateway
@@ -297,6 +301,8 @@ Events::PaymentReceived.track(
 ---
 
 ### 5. Service Mesh Integration
+
+> **Implementation:** See [ADR-005 Section 5.3: HTTP Header Extraction](../ADR-005-tracing-context.md#53-http-header-extraction-w3c-legacy-headers) for W3C standard header support enabling service mesh compatibility.
 
 **Automatic integration with Istio/Linkerd:**
 ```ruby

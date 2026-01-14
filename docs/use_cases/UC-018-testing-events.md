@@ -52,6 +52,8 @@ end
 
 ## 🎯 Features
 
+> **Implementation:** See [ADR-011: Testing Strategy](../ADR-011-testing-strategy.md) for complete testing architecture, including [Section 3: RSpec Matchers](../ADR-011-testing-strategy.md#3-rspec-matchers), [Section 4: Test Adapters](../ADR-011-testing-strategy.md#4-test-adapters), [Section 6: Snapshot Testing](../ADR-011-testing-strategy.md#6-snapshot-testing), and [Section 8: Integration Testing](../ADR-011-testing-strategy.md#8-integration-testing).
+
 ### 1. RSpec Matchers
 
 **Built-in custom matchers:**

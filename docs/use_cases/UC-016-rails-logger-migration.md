@@ -67,6 +67,8 @@ config.mirror_to_rails_logger = false
 
 ## 🎯 Migration Strategy
 
+> **Implementation:** See [ADR-008 Section 7: Rails Logger Bridge](../ADR-008-rails-integration.md#7-rails-logger-bridge) for Logger::Bridge architecture, dual logging, and 3-phase migration strategy (shadow → conversion → full).
+
 ### Phase 1: Shadow Mode (Week 1-2)
 
 **E11y runs alongside Rails.logger, doesn't break anything:**

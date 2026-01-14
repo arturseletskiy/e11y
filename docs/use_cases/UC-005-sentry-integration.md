@@ -63,6 +63,8 @@ end
 
 ### 1. Automatic Exception Capture
 
+> **Implementation:** See [ADR-004 Section 4.4: Sentry Adapter](../ADR-004-adapter-architecture.md#44-sentry-adapter) for technical details.
+
 **Configuration:**
 ```ruby
 # config/initializers/e11y.rb
@@ -166,6 +168,8 @@ Events::PaymentFailed.track(
 
 ### 4. Custom Fingerprinting
 
+> **Implementation:** See [ADR-004 Section 4.4: Sentry Adapter](../ADR-004-adapter-architecture.md#44-sentry-adapter) for technical details.
+
 **Group similar errors in Sentry:**
 ```ruby
 E11y.configure do |config|
@@ -196,6 +200,8 @@ end
 ---
 
 ### 5. Sampling Control
+
+> **Implementation:** See [ADR-004 Section 4.4: Sentry Adapter](../ADR-004-adapter-architecture.md#44-sentry-adapter) for technical details.
 
 **Avoid Sentry quota exhaustion:**
 ```ruby

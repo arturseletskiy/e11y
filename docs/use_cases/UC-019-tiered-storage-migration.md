@@ -128,6 +128,8 @@ Events::PageView.track(...)
 
 ## 🏗️ Architecture
 
+> **Implementation:** See [ADR-009 Section 6: Tiered Storage](../ADR-009-cost-optimization.md#6-tiered-storage-retention_until-tagging) for retention tagger architecture, retention tiers configuration, and downstream integration (Elasticsearch ILM, S3 Lifecycle).
+
 ### E11y's Simple Role: Just Add Expiry Date!
 
 ```

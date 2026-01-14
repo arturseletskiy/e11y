@@ -72,6 +72,8 @@ end
 
 ## 🎯 Features
 
+> **Implementation:** See [ADR-008: Rails Integration](../ADR-008-rails-integration.md) for complete architecture, including [Section 5: Sidekiq Integration](../ADR-008-rails-integration.md#5-sidekiq-integration), [Section 6: ActiveJob Integration](../ADR-008-rails-integration.md#6-activejob-integration), and [Section 5.3: Job-Scoped Buffer](../ADR-008-rails-integration.md#53-job-scoped-buffer).
+
 ### 1. Automatic Instrumentation
 
 **Zero-config for Sidekiq & ActiveJob:**
@@ -201,6 +203,8 @@ end
 ---
 
 ### 5. Job-Specific Events
+
+> **Note:** E11y supports **job-scoped buffering** similar to [UC-001: Request-Scoped Debug Buffering](./UC-001-request-scoped-debug-buffering.md). Debug events within a job are buffered and only flushed if the job fails. See [ADR-001 Section 3.4: Request-Scoped Buffer](../ADR-001-architecture.md#34-request-scoped-buffer) for implementation details (same architecture applies to jobs).
 
 **Emit custom events within jobs:**
 ```ruby

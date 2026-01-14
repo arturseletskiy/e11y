@@ -213,6 +213,28 @@ end
 
 **That's it!** Rails middleware auto-installed by generator.
 
+> ⚠️ **CRITICAL: Middleware Order**  
+> Request-scoped buffer middleware MUST be positioned correctly in the E11y pipeline. **If you use custom middleware**, ensure buffer routing happens **after** all business logic (validation, PII filtering, rate limiting, sampling) but **before** adapter delivery.  
+> 
+> **Why:** Buffer routing needs access to fully processed events (with trace context, validated, filtered). If positioned too early, events may be buffered before PII filtering, creating compliance risks.  
+> 
+> **Consequences of wrong order:**
+> - ❌ Buffered debug events may contain unfiltered PII → GDPR violation
+> - ❌ Rate-limited events may still be buffered → memory waste
+> - ❌ Invalid events may be buffered → validation bypassed
+> 
+> **Correct order:**  
+> ```ruby
+> config.pipeline.use TraceContextMiddleware    # 1. Enrich first
+> config.pipeline.use ValidationMiddleware      # 2. Fail fast
+> config.pipeline.use PiiFilterMiddleware       # 3. Security (BEFORE buffer)
+> config.pipeline.use RateLimitMiddleware       # 4. Protection
+> config.pipeline.use SamplingMiddleware        # 5. Cost optimization
+> config.pipeline.use RoutingMiddleware         # 6. Buffer routing (LAST!)
+> ```
+> 
+> **See:** [ADR-001 Section 4.1: Middleware Execution Order](../ADR-001-architecture.md#41-middleware-execution-order-critical) and [ADR-015: Middleware Order Reference](../ADR-015-middleware-order.md) for detailed explanation.
+
 ---
 
 ### Advanced Configuration
@@ -381,6 +403,61 @@ end
 ---
 
 ## 📈 Performance Impact
+
+> **Implementation:** See [ADR-001 Section 8.3: Resource Limits](../ADR-001-architecture.md#83-resource-limits) for architectural details and [ADR-002 Section 6: Self-Monitoring](../ADR-002-metrics-yabeda.md#6-self-monitoring) for metrics implementation.
+
+### Buffer Metrics
+
+**E11y automatically tracks request buffer performance:**
+
+```ruby
+# Exposed via Yabeda (auto-configured)
+Yabeda.e11y_request_buffer_size  # Gauge: current buffer size per request
+Yabeda.e11y_request_buffer_flushes_total  # Counter: buffer flushes by trigger
+
+# Accessible via Prometheus metrics endpoint
+# Example queries:
+
+# 1. Average buffer size
+avg(e11y_request_buffer_size)
+
+# 2. Buffer flush rate by trigger
+rate(e11y_request_buffer_flushes_total{trigger="error"}[5m])
+
+# 3. Buffer overflow alerts
+e11y_request_buffer_size >= 100  # Alert if buffer limit reached
+```
+
+**Monitoring Examples:**
+
+```ruby
+# Grafana dashboard panels:
+
+# Panel 1: Buffer Size Distribution
+histogram_quantile(0.99, 
+  sum(rate(e11y_request_buffer_size[5m])) by (le)
+)
+# Shows p99 buffer size
+
+# Panel 2: Flush Triggers Breakdown
+sum by (trigger) (
+  rate(e11y_request_buffer_flushes_total[5m])
+)
+# Shows why buffers flush (error vs. slow_request vs. custom)
+
+# Panel 3: Memory Impact Estimate
+avg(e11y_request_buffer_size) * 500  # bytes per event
+# Estimates per-request memory usage
+```
+
+**What to Monitor:**
+
+| Metric | Normal | Warning | Alert |
+|--------|--------|---------|-------|
+| **Buffer Size (p99)** | <20 events | 50-80 events | >80 events |
+| **Flush Rate (error)** | <1% of requests | 1-5% | >5% |
+| **Flush Rate (slow)** | <5% of requests | 5-10% | >10% |
+| **Buffer Overflows** | 0 | >0 | >10/min |
 
 ### Memory
 

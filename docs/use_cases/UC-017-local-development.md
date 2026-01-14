@@ -68,6 +68,8 @@ end
 
 ## 🎯 Features
 
+> **Implementation:** See [ADR-010: Developer Experience](../ADR-010-developer-experience.md) for complete architecture, including [Section 3: Console Output](../ADR-010-developer-experience.md#3-console-output), [Section 4: Web UI](../ADR-010-developer-experience.md#4-web-ui), [Section 5: Event Registry](../ADR-010-developer-experience.md#5-event-registry), and [Section 6: Debug Helpers](../ADR-010-developer-experience.md#6-debug-helpers).
+
 ### 1. Console Adapter (Pretty Output)
 
 **Beautiful colored terminal output:**

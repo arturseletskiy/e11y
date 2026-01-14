@@ -65,6 +65,8 @@ end
 
 ## 🎯 Features
 
+> **Implementation:** See [ADR-007: OpenTelemetry Integration](../ADR-007-opentelemetry-integration.md) for complete architecture, including [Section 3: OTel Collector Adapter](../ADR-007-opentelemetry-integration.md#3-otel-collector-adapter), [Section 4: Semantic Conventions](../ADR-007-opentelemetry-integration.md#4-semantic-conventions), and [Section 5: Logs Signal Export](../ADR-007-opentelemetry-integration.md#5-logs-signal-export).
+
 ### 1. OpenTelemetry Collector Adapter
 
 **Route events to OTel Collector:**
@@ -107,6 +109,8 @@ end
 ---
 
 ### 2. Semantic Conventions Mapping
+
+> **Implementation:** See [ADR-007 Section 4: Semantic Conventions](../ADR-007-opentelemetry-integration.md#4-semantic-conventions) for automatic field mapping across HTTP, DB, RPC, Messaging, and Exception patterns.
 
 **Automatic field mapping to OTel standards:**
 ```ruby
@@ -167,6 +171,8 @@ Events::HttpRequest.track(
 
 ### 3. Automatic Span Creation
 
+> **Implementation:** See [ADR-007 Section 6: Traces Signal Export](../ADR-007-opentelemetry-integration.md#6-traces-signal-export) for automatic span creation rules and parent-child relationships.
+
 **Create spans from E11y events:**
 ```ruby
 # config/initializers/e11y.rb
@@ -201,6 +207,8 @@ Events::OrderProcessingStarted.track(
 
 ### 4. W3C Trace Context Integration
 
+> **Implementation:** See [ADR-007 Section 8: Trace Context Integration](../ADR-007-opentelemetry-integration.md#8-trace-context-integration) for OTel SDK as primary trace context source.
+
 **Automatic trace context from OpenTelemetry SDK:**
 ```ruby
 # E11y automatically uses OTel trace context
@@ -231,6 +239,8 @@ Events::OrderCreated.track(order_id: '123')
 ---
 
 ### 5. OTel Logs Signal Export
+
+> **Implementation:** See [ADR-007 Section 5: Logs Signal Export](../ADR-007-opentelemetry-integration.md#5-logs-signal-export) for OTLP JSON format and trace correlation details.
 
 **Export E11y events as OpenTelemetry Logs:**
 ```ruby

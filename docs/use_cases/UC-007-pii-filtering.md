@@ -491,6 +491,1380 @@ end
 
 ---
 
+## 🔐 Explicit PII Declaration
+
+> **Implementation:** See [ADR-006 Section 3.0.3: Explicit PII Declaration](../ADR-006-security-compliance.md#303-explicit-pii-declaration) for detailed architecture.
+
+**Critical Design Principle:** Event classes MUST explicitly declare whether they contain PII. This enables E11y to apply the appropriate filtering tier (see Performance Tiers below) and allows linter validation.
+
+### Why Explicit Declaration?
+
+**Problem:** Implicit filtering leads to:
+- ❌ Performance waste (filtering events that contain no PII)
+- ❌ Security gaps (missing PII that should be filtered)
+- ❌ No compile-time validation (typos, missing fields)
+
+**Solution:** Explicit opt-in declaration at event class level.
+
+---
+
+### Declaration Syntax: `contains_pii`
+
+**Option 1: No PII (Tier 1 - Skip Filtering)**
+
+```ruby
+class Events::HealthCheck < E11y::Event::Base
+  schema do
+    required(:status).filled(:string)
+    required(:uptime_ms).filled(:integer)
+  end
+  
+  # ✅ Explicit: This event contains NO PII
+  contains_pii false
+  
+  # Result:
+  # - Tier 1 filtering (0ms overhead)
+  # - All fields logged as-is
+  # - No pattern scanning
+end
+```
+
+**Option 2: Default (Tier 2 - Rails Filters Only)**
+
+```ruby
+class Events::OrderCreated < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:string)
+    required(:amount).filled(:float)
+    optional(:api_key).filled(:string)  # Rails will filter this
+  end
+  
+  # No declaration → Tier 2 (Rails filters applied)
+  # Keys like :password, :token, :api_key automatically filtered
+end
+```
+
+**Option 3: Explicit PII (Tier 3 - Deep Filtering)**
+
+```ruby
+class Events::UserRegistered < E11y::Event::Base
+  schema do
+    required(:email).filled(:string)
+    required(:password).filled(:string)
+    required(:address).filled(:hash)
+    required(:user_id).filled(:string)
+  end
+  
+  # ✅ Explicit: This event contains PII
+  contains_pii true
+  
+  # MANDATORY: Declare strategy for EVERY schema field
+  pii_filtering do
+    field :email do
+      strategy :hash  # Pseudonymize (searchable)
+    end
+    
+    field :password do
+      strategy :mask  # Complete masking
+    end
+    
+    field :address do
+      strategy :mask  # Mask nested data
+    end
+    
+    field :user_id do
+      strategy :allow  # ID is OK to log
+    end
+  end
+end
+```
+
+---
+
+### Per-Field Filtering Strategies
+
+When `contains_pii true` is declared, you MUST specify a strategy for each field in the schema:
+
+| Strategy | Behavior | Use Case | Example Output |
+|----------|----------|----------|----------------|
+| `:mask` | Replace with `[FILTERED]` | Sensitive data (passwords, SSNs) | `[FILTERED]` |
+| `:hash` | SHA256 hash (one-way) | Searchable identifiers (emails) | `hashed_a1b2c3d4` |
+| `:allow` | No filtering | Non-PII (IDs, amounts) | Original value |
+| `:partial` | Show partial (first/last chars) | Debugging (emails) | `em***@ex***` |
+
+**Example: Payment Event with Multiple Strategies**
+
+```ruby
+class Events::PaymentProcessed < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:string)
+    required(:amount).filled(:float)
+    required(:card_number).filled(:string)
+    required(:card_holder).filled(:string)
+    required(:user_email).filled(:string)
+    required(:ip_address).filled(:string)
+  end
+  
+  contains_pii true
+  
+  pii_filtering do
+    # Non-PII: allow
+    field :order_id do
+      strategy :allow  # ID is safe to log
+    end
+    
+    field :amount do
+      strategy :allow  # Amount is not PII
+    end
+    
+    # Sensitive: mask completely
+    field :card_number do
+      strategy :mask  # Never log credit cards
+    end
+    
+    field :card_holder do
+      strategy :mask  # Cardholder name is PII
+    end
+    
+    # Searchable: hash
+    field :user_email do
+      strategy :hash  # Pseudonymize for correlation
+    end
+    
+    # Debugging: partial
+    field :ip_address do
+      strategy :partial  # Show '192.168.1.x'
+    end
+  end
+end
+
+# Track event:
+Events::PaymentProcessed.track(
+  order_id: 'o123',
+  amount: 99.99,
+  card_number: '4111-1111-1111-1111',
+  card_holder: 'John Doe',
+  user_email: 'john@example.com',
+  ip_address: '192.168.1.100'
+)
+
+# Logged as:
+# {
+#   order_id: 'o123',                      # ← Allowed (ID)
+#   amount: 99.99,                         # ← Allowed (not PII)
+#   card_number: '[FILTERED]',             # ← Masked
+#   card_holder: '[FILTERED]',             # ← Masked
+#   user_email: 'hashed_7a8b9c',           # ← Hashed
+#   ip_address: '192.168.1.x'              # ← Partial
+# }
+```
+
+---
+
+### Per-Adapter Overrides
+
+Different adapters may have different PII requirements (e.g., audit trail needs full data for compliance):
+
+```ruby
+class Events::SensitiveUserAction < E11y::Event::Base
+  schema do
+    required(:user_email).filled(:string)
+    required(:action).filled(:string)
+  end
+  
+  contains_pii true
+  
+  pii_filtering do
+    field :user_email do
+      # Default: hash for most adapters
+      strategy :hash
+      
+      # Override per adapter
+      exclude_adapters [:file_audit]  # Audit needs original (GDPR Art. 6(1)(c))
+    end
+    
+    field :action do
+      strategy :allow  # Action type is not PII
+    end
+  end
+end
+
+# Result:
+# - audit_file adapter:  { user_email: 'john@example.com' }  (original)
+# - elasticsearch:       { user_email: 'hashed_a1b2c3' }     (hashed)
+# - loki:                { user_email: 'hashed_a1b2c3' }     (hashed)
+# - sentry:              { user_email: 'hashed_a1b2c3' }     (hashed)
+```
+
+---
+
+### Linter Validation
+
+When `contains_pii true` is declared, E11y linter validates:
+
+1. ✅ **Every schema field has a filtering strategy** (no missing fields)
+2. ✅ **No extra fields** (typos in field names)
+3. ✅ **Valid strategies** (`:mask`, `:hash`, `:allow`, `:partial` only)
+
+**Example: Linter catches missing field**
+
+```ruby
+class Events::UserLogin < E11y::Event::Base
+  schema do
+    required(:email).filled(:string)
+    required(:password).filled(:string)
+    required(:ip_address).filled(:string)  # ← MISSING in pii_filtering!
+  end
+  
+  contains_pii true
+  
+  pii_filtering do
+    field :email do
+      strategy :hash
+    end
+    
+    field :password do
+      strategy :mask
+    end
+    
+    # ❌ LINTER ERROR: Field :ip_address declared in schema but missing in pii_filtering!
+  end
+end
+
+# Fix:
+pii_filtering do
+  field :email do
+    strategy :hash
+  end
+  
+  field :password do
+    strategy :mask
+  end
+  
+  field :ip_address do  # ✅ Added
+    strategy :partial
+  end
+end
+```
+
+---
+
+### Default Behavior (No Declaration)
+
+If `contains_pii` is not specified, E11y defaults to **Tier 2** (Rails filters only):
+
+```ruby
+class Events::OrderPaid < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:string)
+    required(:amount).filled(:float)
+  end
+  
+  # No contains_pii declaration
+  # → Tier 2: Rails filters applied automatically
+  # → Keys like :password, :token, :api_key filtered
+  # → No linter validation
+end
+```
+
+**Recommended for:** Standard business events where Rails filters provide sufficient coverage (90% of use cases).
+
+---
+
+### Migration Guide
+
+**If you have existing events without explicit declaration:**
+
+**Step 1: Audit events**
+```bash
+# List events without PII declaration
+bundle exec rake e11y:audit:pii_declarations
+
+# Output:
+# ⚠️  Events without PII declaration (using Tier 2 default):
+# - Events::OrderCreated
+# - Events::PaymentProcessed
+# - Events::UserLogin
+# 
+# ✅ Events with PII declaration:
+# - Events::HealthCheck (contains_pii false)
+# - Events::UserRegistered (contains_pii true)
+```
+
+**Step 2: Add declarations**
+```ruby
+# For events with NO user data:
+class Events::HealthCheck < E11y::Event::Base
+  contains_pii false  # ✅ Explicit
+end
+
+# For events with PII:
+class Events::UserLogin < E11y::Event::Base
+  contains_pii true  # ✅ Explicit
+  
+  pii_filtering do
+    # ... declare strategies for ALL fields
+  end
+end
+
+# For standard events (keep default):
+class Events::OrderCreated < E11y::Event::Base
+  # No declaration (Tier 2 default is fine)
+end
+```
+
+**Step 3: Enable linter in CI**
+```ruby
+# config/environments/test.rb
+config.after_initialize do
+  E11y::Linters::PiiDeclarationLinter.validate_all!
+end
+```
+
+---
+
+## ⚡ DSL Shortcuts (Rails-Style)
+
+> **Implementation:** See [ADR-006 Section 3.4.4: Configuration API (Rails-Style DSL)](../ADR-006-security-compliance.md#344-configuration-api-rails-style-dsl) for detailed architecture.
+
+E11y provides **Rails-style DSL shortcuts** to simplify PII declarations. Instead of verbose `field` blocks, use one-liner shortcuts like `masks`, `hashes`, `skips` – similar to Rails validations.
+
+### Why DSL Shortcuts?
+
+**Problem:** Verbose declarations for simple cases:
+
+```ruby
+# ❌ Verbose: 15 lines for 3 fields
+pii_filtering do
+  field :password do
+    strategy :mask
+  end
+  
+  field :token do
+    strategy :mask
+  end
+  
+  field :secret_key do
+    strategy :mask
+  end
+end
+```
+
+**Solution:** Rails-style shortcuts (like `validates :name, presence: true`):
+
+```ruby
+# ✅ Concise: 3 lines for 3 fields
+pii_filtering do
+  masks :password, :token, :secret_key
+end
+```
+
+---
+
+### Basic Shortcuts
+
+**`masks(*fields)`** - Complete masking (replace with `[FILTERED]`)
+
+```ruby
+class Events::UserLogin < E11y::Event::Base
+  schema do
+    required(:password).filled(:string)
+    required(:token).filled(:string)
+    required(:api_key).filled(:string)
+  end
+  
+  contains_pii true
+  
+  pii_filtering do
+    # Mask multiple fields at once
+    masks :password, :token, :api_key
+  end
+end
+
+# Equivalent to:
+# field :password do; strategy :mask; end
+# field :token do; strategy :mask; end
+# field :api_key do; strategy :mask; end
+```
+
+**`hashes(*fields)`** - Pseudonymization (SHA256 hash)
+
+```ruby
+class Events::UserRegistered < E11y::Event::Base
+  schema do
+    required(:email).filled(:string)
+    required(:phone).filled(:string)
+    required(:ip_address).filled(:string)
+  end
+  
+  contains_pii true
+  
+  pii_filtering do
+    # Hash for searchability
+    hashes :email, :phone, :ip_address
+  end
+end
+
+# Result:
+# {
+#   email: 'hashed_a1b2c3d4...',  # SHA256 of 'user@example.com'
+#   phone: 'hashed_xyz789...',    # SHA256 of '+1-555-1234'
+#   ip_address: 'hashed_abc...'   # SHA256 of '192.168.1.100'
+# }
+```
+
+**`allows(*fields)`** - No filtering (explicitly safe)
+
+```ruby
+class Events::OrderPaid < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:string)
+    required(:amount).filled(:float)
+    required(:currency).filled(:string)
+  end
+  
+  contains_pii true  # Event has PII elsewhere
+  
+  pii_filtering do
+    # Explicitly mark as non-PII
+    allows :order_id, :amount, :currency
+  end
+end
+```
+
+**`partials(*fields)`** - Partial masking (show first/last chars)
+
+```ruby
+class Events::SupportTicket < E11y::Event::Base
+  schema do
+    required(:email).filled(:string)
+    required(:phone).filled(:string)
+  end
+  
+  contains_pii true
+  
+  pii_filtering do
+    # Show partial for debugging
+    partials :email, :phone
+  end
+end
+
+# Result:
+# {
+#   email: 'em***@ex***',      # user@example.com → em***@ex***
+#   phone: '+1-***-***-4567'   # +1-555-123-4567 → +1-***-***-4567
+# }
+```
+
+---
+
+### Combined Example: Payment Processing
+
+```ruby
+class Events::PaymentProcessed < E11y::Event::Base
+  schema do
+    # PII fields
+    required(:card_number).filled(:string)
+    required(:card_holder).filled(:string)
+    required(:user_email).filled(:string)
+    required(:billing_address).filled(:hash)
+    
+    # Non-PII fields
+    required(:order_id).filled(:string)
+    required(:amount).filled(:float)
+    required(:currency).filled(:string)
+  end
+  
+  contains_pii true
+  
+  pii_filtering do
+    # Sensitive: complete masking
+    masks :card_number, :card_holder, :billing_address
+    
+    # Searchable: hashing
+    hashes :user_email
+    
+    # Non-PII: explicitly allowed
+    allows :order_id, :amount, :currency
+  end
+end
+
+# Compare to verbose version (15+ lines):
+# pii_filtering do
+#   field :card_number do; strategy :mask; end
+#   field :card_holder do; strategy :mask; end
+#   field :billing_address do; strategy :mask; end
+#   field :user_email do; strategy :hash; end
+#   field :order_id do; strategy :allow; end
+#   field :amount do; strategy :allow; end
+#   field :currency do; strategy :allow; end
+# end
+```
+
+---
+
+### Advanced Shortcuts
+
+**Per-Adapter Exclusions**
+
+```ruby
+class Events::SensitiveAction < E11y::Event::Base
+  schema do
+    required(:user_email).filled(:string)
+    required(:action).filled(:string)
+  end
+  
+  contains_pii true
+  
+  pii_filtering do
+    # Hash email, but keep original in audit
+    hashes :user_email, exclude_adapters: [:file_audit]
+    
+    # Action is not PII
+    allows :action
+  end
+end
+
+# Result:
+# audit_file:     { user_email: 'john@example.com' }  (original)
+# elasticsearch:  { user_email: 'hashed_a1b2c3' }     (hashed)
+# loki:           { user_email: 'hashed_a1b2c3' }     (hashed)
+```
+
+**Conditional Filtering (Rails-style)**
+
+```ruby
+class Events::UserAction < E11y::Event::Base
+  schema do
+    required(:email).filled(:string)
+    required(:admin_flag).filled(:bool)
+  end
+  
+  contains_pii true
+  
+  pii_filtering do
+    # Only mask in production
+    masks_if -> { Rails.env.production? }, :email
+    
+    # Admin flag is not PII
+    allows :admin_flag
+  end
+end
+```
+
+**Grouping with `with_strategy`**
+
+```ruby
+class Events::UserProfile < E11y::Event::Base
+  schema do
+    required(:password).filled(:string)
+    required(:token).filled(:string)
+    required(:secret_key).filled(:string)
+    required(:email).filled(:string)
+    required(:phone).filled(:string)
+  end
+  
+  contains_pii true
+  
+  pii_filtering do
+    # Group fields by strategy
+    with_strategy :mask do
+      field :password
+      field :token
+      field :secret_key
+    end
+    
+    with_strategy :hash do
+      field :email
+      field :phone
+    end
+  end
+end
+
+# Equivalent to:
+# masks :password, :token, :secret_key
+# hashes :email, :phone
+```
+
+**Bulk Operations**
+
+```ruby
+class Events::ComplexEvent < E11y::Event::Base
+  schema do
+    required(:password).filled(:string)
+    required(:token).filled(:string)
+    required(:email).filled(:string)
+    required(:phone).filled(:string)
+    required(:order_id).filled(:string)
+    required(:amount).filled(:float)
+  end
+  
+  contains_pii true
+  
+  pii_filtering do
+    # Mask everything EXCEPT safe fields
+    masks_all_except :order_id, :amount
+  end
+end
+
+# Result: password, token, email, phone → masked
+#         order_id, amount → allowed
+```
+
+---
+
+### Cheat Sheet: Shortcuts vs. Strategies
+
+| Shortcut | Strategy | Output Example | Use Case |
+|----------|----------|----------------|----------|
+| `masks` | `:mask` | `[FILTERED]` | Passwords, secrets, credit cards |
+| `hashes` | `:hash` | `hashed_a1b2c3` | Emails, phones (searchable) |
+| `allows` | `:allow` | Original value | IDs, amounts (non-PII) |
+| `partials` | `:partial` | `em***@ex***` | Debugging (show partial) |
+
+---
+
+### When to Use Shortcuts vs. Verbose DSL
+
+**Use Shortcuts:**
+```ruby
+# ✅ GOOD: Simple cases with same strategy
+pii_filtering do
+  masks :password, :token, :api_key
+  hashes :email, :phone
+  allows :order_id, :amount
+end
+```
+
+**Use Verbose DSL:**
+```ruby
+# ✅ GOOD: Complex per-field configuration
+pii_filtering do
+  field :email do
+    strategy :hash
+    hash_algorithm :sha256
+    hash_salt ENV['PII_SALT']
+    exclude_adapters [:file_audit]
+  end
+  
+  field :ip_address do
+    strategy :partial
+    custom_for_adapter :loki do
+      ->(value) { value.split('.')[0..2].join('.') + '.x' }
+    end
+  end
+end
+```
+
+---
+
+### Migration: Verbose → Shortcuts
+
+**Before (Verbose):**
+```ruby
+class Events::UserLogin < E11y::Event::Base
+  contains_pii true
+  
+  pii_filtering do
+    field :password do
+      strategy :mask
+    end
+    
+    field :email do
+      strategy :hash
+    end
+    
+    field :user_id do
+      strategy :allow
+    end
+  end
+end
+```
+
+**After (Shortcuts):**
+```ruby
+class Events::UserLogin < E11y::Event::Base
+  contains_pii true
+  
+  pii_filtering do
+    masks :password
+    hashes :email
+    allows :user_id
+  end
+end
+
+# Or even shorter:
+# pii_filtering do
+#   masks :password
+#   hashes :email
+#   allows :user_id
+# end
+```
+
+---
+
+### Best Practices
+
+**1. Use shortcuts for simple cases**
+```ruby
+# ✅ GOOD: Clear and concise
+masks :password, :token
+hashes :email, :phone
+```
+
+**2. Group related fields**
+```ruby
+# ✅ GOOD: Grouped by purpose
+pii_filtering do
+  # Credentials: mask completely
+  masks :password, :token, :api_key
+  
+  # Identifiers: hash for searchability
+  hashes :email, :phone, :user_id
+  
+  # Business data: allow
+  allows :order_id, :amount, :currency
+end
+```
+
+**3. Use verbose DSL for complex config**
+```ruby
+# ✅ GOOD: Complex per-adapter rules need verbose syntax
+field :email do
+  strategy :hash
+  exclude_adapters [:file_audit]
+  custom_for_adapter :loki do
+    ->(value) { mask_domain(value) }
+  end
+end
+```
+
+**4. Don't mix shortcuts and verbose for same strategy**
+```ruby
+# ❌ BAD: Mixing shortcuts and verbose
+masks :password
+field :token do; strategy :mask; end  # ← Should use shortcut
+
+# ✅ GOOD: Consistent style
+masks :password, :token
+```
+
+---
+
+## 🔍 Linter Enforcement
+
+> **Implementation:** See [ADR-006 Section 3.0.5: PII Declaration Linter](../ADR-006-security-compliance.md#305-pii-declaration-linter) for detailed architecture.
+
+E11y includes a **PII Declaration Linter** that validates PII handling at boot time and in CI. This catches missing declarations, typos, and incomplete coverage BEFORE code reaches production.
+
+### Why Linter Enforcement?
+
+**Problem:** Manual PII declaration is error-prone:
+- ❌ Forget to declare a field → PII leaks to logs
+- ❌ Typo in field name → Declaration doesn't apply
+- ❌ Add new field, forget PII strategy → Security gap
+
+**Solution:** Linter validates at boot time (development/test) and in CI.
+
+---
+
+### What the Linter Checks
+
+When `contains_pii true` is declared, the linter enforces:
+
+1. ✅ **Every schema field has a filtering strategy** (completeness)
+2. ✅ **No extra fields in pii_filtering** (no typos)
+3. ✅ **Valid strategies only** (`:mask`, `:hash`, `:allow`, `:partial`)
+4. ✅ **Adapter exclusions are valid** (adapter exists)
+
+**Example: Linter Catches Missing Field**
+
+```ruby
+class Events::UserLogin < E11y::Event::Base
+  schema do
+    required(:email).filled(:string)
+    required(:password).filled(:string)
+    required(:ip_address).filled(:string)  # ← Missing in pii_filtering!
+  end
+  
+  contains_pii true
+  
+  pii_filtering do
+    field :email do
+      strategy :hash
+    end
+    
+    field :password do
+      strategy :mask
+    end
+    
+    # ❌ Missing: :ip_address
+  end
+end
+
+# Boot output:
+# ❌ E11y::Linters::PiiDeclarationError:
+#    Missing PII declaration for Events::UserLogin
+#    
+#    Schema fields:   [:email, :password, :ip_address]
+#    Declared fields: [:email, :password]
+#    Missing:         [:ip_address]
+#    
+#    Fix: Add pii_filtering for :ip_address
+```
+
+**Example: Linter Catches Typo**
+
+```ruby
+class Events::PaymentProcessed < E11y::Event::Base
+  schema do
+    required(:card_number).filled(:string)
+    required(:amount).filled(:float)
+  end
+  
+  contains_pii true
+  
+  pii_filtering do
+    field :card_numbre do  # ← Typo: numbre instead of number
+      strategy :mask
+    end
+    
+    field :amount do
+      strategy :allow
+    end
+  end
+end
+
+# Boot output:
+# ❌ E11y::Linters::PiiDeclarationError:
+#    Invalid PII declarations for Events::PaymentProcessed
+#    
+#    Schema fields:   [:card_number, :amount]
+#    Declared fields: [:card_numbre, :amount]
+#    Extra:           [:card_numbre]  # ← Not in schema (typo?)
+#    Missing:         [:card_number]  # ← Not declared
+#    
+#    Fix: Check field names match schema exactly
+```
+
+---
+
+### Running the Linter
+
+**Option 1: Boot-Time Validation (Development/Test)**
+
+```ruby
+# config/initializers/e11y.rb
+E11y.configure do |config|
+  # ... other config ...
+  
+  # Validate PII declarations at boot
+  if Rails.env.development? || Rails.env.test?
+    config.after_initialize do
+      E11y::Linters::PiiDeclarationLinter.validate_all!
+    end
+  end
+end
+
+# Result: App won't boot if PII declarations invalid
+# $ rails server
+# => Booting Puma
+# => Rails 7.1.2 application starting in development
+# => Run `bin/rails server --help` for more startup options
+# ❌ E11y::Linters::PiiDeclarationError: Missing PII declaration for Events::UserLogin
+# ... (detailed error message) ...
+```
+
+**Option 2: Rake Task (CI/Manual)**
+
+```bash
+# Run PII linter manually
+bundle exec rake e11y:lint:pii
+
+# Output:
+# Checking PII declarations...
+# ================================================================================
+# ✅ Events::UserRegistered - All 4 fields declared
+# ✅ Events::PaymentProcessed - All 6 fields declared
+# ⚪ Events::HealthCheck - No PII (skipped)
+# ⚪ Events::OrderCreated - No PII declaration (Tier 2 default)
+# ❌ Events::UserLogin - Missing declarations
+# ================================================================================
+# 
+# ❌ ERRORS:
+# 
+# Missing PII declaration for Events::UserLogin
+# Schema fields:   [:email, :password, :ip_address]
+# Declared fields: [:email, :password]
+# Missing:         [:ip_address]
+# 
+# Fix: Add pii_filtering for :ip_address
+# 
+# Exit code: 1 (fails CI build)
+```
+
+**Option 3: RSpec Matcher (Unit Tests)**
+
+```ruby
+# spec/support/e11y_pii_matchers.rb
+RSpec::Matchers.define :have_complete_pii_declaration do
+  match do |event_class|
+    return true unless event_class.contains_pii?
+    
+    E11y::Linters::PiiDeclarationLinter.validate!(event_class)
+    true
+  rescue E11y::Linters::PiiDeclarationError => e
+    @error_message = e.message
+    false
+  end
+  
+  failure_message do |event_class|
+    "Expected #{event_class.name} to have complete PII declaration, but:\n#{@error_message}"
+  end
+end
+
+# spec/events/user_login_spec.rb
+RSpec.describe Events::UserLogin do
+  it { is_expected.to have_complete_pii_declaration }
+end
+
+# Test output if declaration incomplete:
+# ❌ Expected Events::UserLogin to have complete PII declaration, but:
+#    Missing PII declaration for Events::UserLogin
+#    Schema fields:   [:email, :password, :ip_address]
+#    Declared fields: [:email, :password]
+#    Missing:         [:ip_address]
+```
+
+---
+
+### Linter Configuration
+
+**Enable/Disable Linter**
+
+```ruby
+E11y.configure do |config|
+  config.pii_linter do
+    # Enable in development/test (default: true)
+    enabled Rails.env.development? || Rails.env.test?
+    
+    # Fail on errors (default: true)
+    fail_on_error true
+    
+    # Log warnings for default (Tier 2) events (default: false)
+    warn_on_default_tier false
+  end
+end
+```
+
+**Custom Linter Rules**
+
+```ruby
+E11y.configure do |config|
+  config.pii_linter do
+    # Enforce explicit declaration for ALL events (even Tier 2)
+    require_explicit_declaration true  # Default: false
+    
+    # Allowed strategies (customize if needed)
+    allowed_strategies [:mask, :hash, :allow, :partial]
+    
+    # Forbidden strategies (never allow)
+    forbidden_strategies [:skip]  # Force explicit :allow instead
+  end
+end
+```
+
+---
+
+### CI Integration
+
+**GitHub Actions Example**
+
+```yaml
+# .github/workflows/ci.yml
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.2
+          bundler-cache: true
+      
+      # Run PII linter BEFORE tests
+      - name: Validate PII Declarations
+        run: bundle exec rake e11y:lint:pii
+      
+      # Run tests only if linter passes
+      - name: Run tests
+        run: bundle exec rspec
+```
+
+**GitLab CI Example**
+
+```yaml
+# .gitlab-ci.yml
+test:
+  stage: test
+  script:
+    # Fail fast if PII declarations invalid
+    - bundle exec rake e11y:lint:pii
+    - bundle exec rspec
+```
+
+---
+
+### Audit Report
+
+Generate a report of all PII declarations:
+
+```bash
+# Generate PII audit report
+bundle exec rake e11y:audit:pii_declarations
+
+# Output:
+# E11y PII Declaration Audit Report
+# ================================================================================
+# Generated: 2026-01-14 10:30:00 UTC
+# Total Events: 42
+# 
+# 📊 SUMMARY:
+# - contains_pii true:  8 events (19%)
+# - contains_pii false: 5 events (12%)
+# - No declaration:    29 events (69%, using Tier 2 default)
+# 
+# 📋 TIER 3 EVENTS (contains_pii true):
+# 
+# ✅ Events::UserRegistered
+#    Fields: [:email, :password, :address, :user_id]
+#    Strategies: hash(1), mask(2), allow(1)
+#    Adapters excluded: [:file_audit] for [:email, :address]
+# 
+# ✅ Events::PaymentProcessed
+#    Fields: [:card_number, :amount, :user_email]
+#    Strategies: mask(1), allow(1), hash(1)
+#    Adapters excluded: none
+# 
+# ... (more events) ...
+# 
+# 📋 TIER 1 EVENTS (contains_pii false):
+# 
+# ⚪ Events::HealthCheck
+#    Fields: [:status, :uptime_ms]
+#    PII filtering: SKIPPED (performance optimized)
+# 
+# ... (more events) ...
+# 
+# ⚠️  TIER 2 EVENTS (no declaration, default filtering):
+# 
+# 🔵 Events::OrderCreated
+#    Fields: [:order_id, :amount, :api_key]
+#    PII filtering: Rails filters only (Tier 2 default)
+#    Recommendation: Keep default (sufficient for standard events)
+# 
+# ... (more events) ...
+# 
+# ================================================================================
+# 
+# 💡 RECOMMENDATIONS:
+# - 29 events use Tier 2 default (Rails filters)
+# - Consider adding contains_pii false to high-frequency events (health checks)
+# - All Tier 3 events have complete declarations ✅
+```
+
+---
+
+### Best Practices
+
+**1. Enable linter in development/test**
+```ruby
+# ✅ GOOD: Catch errors early
+config.after_initialize do
+  E11y::Linters::PiiDeclarationLinter.validate_all!
+end
+```
+
+**2. Run linter in CI before tests**
+```bash
+# ✅ GOOD: Fail fast
+bundle exec rake e11y:lint:pii && bundle exec rspec
+```
+
+**3. Use RSpec matchers for new events**
+```ruby
+# ✅ GOOD: Test-driven PII declarations
+RSpec.describe Events::NewEvent do
+  it { is_expected.to have_complete_pii_declaration }
+end
+```
+
+**4. Review audit report periodically**
+```bash
+# ✅ GOOD: Ensure no PII leaks over time
+bundle exec rake e11y:audit:pii_declarations > pii_audit_$(date +%Y%m%d).txt
+```
+
+**5. Don't disable linter in production**
+```ruby
+# ❌ BAD: Linter should not run in production (performance)
+# Boot-time validation is for dev/test only
+
+# ✅ GOOD: Enable only in non-production
+if Rails.env.development? || Rails.env.test?
+  E11y::Linters::PiiDeclarationLinter.validate_all!
+end
+```
+
+---
+
+## ⚡ Performance Tiers
+
+> **Implementation:** See [ADR-006 Section 3.0: PII Filtering Strategy](../ADR-006-security-compliance.md#30-pii-filtering-strategy) for detailed architecture.
+
+E11y uses a **3-tier filtering strategy** to balance security and performance. Filtering ALL events by default would create massive overhead (1M events × 0.2ms = 200 seconds CPU/day). Instead, events are categorized into 3 tiers based on PII content.
+
+### Overview: 3-Tier Strategy
+
+| Tier | Strategy | Overhead | Use Case | Events/sec |
+|------|----------|----------|----------|------------|
+| **Tier 1** | Skip filtering | 0ms | Health checks, metrics, internal events | 500 |
+| **Tier 2** | Rails filters only | ~0.05ms | Standard events (known PII keys) | 400 |
+| **Tier 3** | Deep filtering | ~0.2ms | User data, payments, complex nested | 100 |
+
+**Performance Budget:**
+```
+500 events/sec × 0ms     = 0ms CPU/sec      (Tier 1)
+400 events/sec × 0.05ms  = 20ms CPU/sec     (Tier 2)
+100 events/sec × 0.2ms   = 20ms CPU/sec     (Tier 3)
+----
+Total: 40ms CPU/sec = 4% CPU on single core ✅
+```
+
+---
+
+### Tier 1: No PII (Skip Filtering)
+
+**Use when:** Event contains NO personal data (health checks, metrics, system events).
+
+**How to declare:**
+```ruby
+class Events::HealthCheck < E11y::Event::Base
+  schema do
+    required(:status).filled(:string)
+    required(:uptime_ms).filled(:integer)
+  end
+  
+  # ✅ Explicit: This event contains NO PII
+  contains_pii false  # Skip all PII filtering
+end
+
+# Result: 0ms overhead per event
+```
+
+**Performance:**
+```ruby
+# Benchmark: 1000 events
+Benchmark.ips do |x|
+  x.report('Tier 1 - No PII') do
+    Events::HealthCheck.track(status: 'ok', uptime_ms: 12345)
+  end
+end
+
+# Results:
+# Tier 1 - No PII: 10,000 i/s (100μs per event)
+# Overhead: 0ms (no filtering)
+```
+
+**When to use:**
+- ✅ Health checks
+- ✅ Performance metrics
+- ✅ System heartbeats
+- ✅ Resource usage events
+- ❌ Anything with user data
+
+---
+
+### Tier 2: Rails Filters Only (Default)
+
+**Use when:** Event has simple PII (passwords, tokens, API keys) already in `Rails.filter_parameters`.
+
+**How to declare:**
+```ruby
+class Events::OrderCreated < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:string)
+    required(:amount).filled(:float)
+    optional(:api_key).filled(:string)
+  end
+  
+  # No declaration → Rails filters applied automatically (Tier 2)
+  # Filters keys like: password, token, secret, api_key
+end
+
+# Result: ~0.05ms overhead per event
+```
+
+**How it works:**
+```ruby
+# Rails config (single source of truth)
+Rails.application.config.filter_parameters += [:password, :email, :token]
+
+# E11y automatically applies these filters
+Events::OrderCreated.track(
+  order_id: 'o123',
+  amount: 99.99,
+  api_key: 'sk_live_xxx'  # ← Filtered by Rails config
+)
+
+# Logged as:
+# {
+#   order_id: 'o123',
+#   amount: 99.99,
+#   api_key: '[FILTERED]'  # ← Rails filter applied
+# }
+```
+
+**Performance:**
+```ruby
+# Benchmark: 1000 events
+Benchmark.ips do |x|
+  x.report('Tier 2 - Rails filters') do
+    Events::OrderCreated.track(order_id: 'o123', api_key: 'secret')
+  end
+end
+
+# Results:
+# Tier 2 - Rails filters: 8,000 i/s (125μs per event)
+# Overhead: ~0.05ms (simple key matching)
+```
+
+**When to use:**
+- ✅ Standard business events (orders, payments)
+- ✅ Simple PII (known keys: password, token, email)
+- ✅ Most application events (90% of use cases)
+- ❌ Complex nested data with PII in content
+
+---
+
+### Tier 3: Deep Filtering (Explicit PII)
+
+**Use when:** Event contains complex PII (nested data, emails in content, credit cards).
+
+**How to declare:**
+```ruby
+class Events::UserRegistered < E11y::Event::Base
+  schema do
+    required(:email).filled(:string)
+    required(:password).filled(:string)
+    required(:address).filled(:hash)
+    required(:user_id).filled(:string)
+  end
+  
+  # ✅ Explicit: This event contains PII
+  contains_pii true  # Tier 3: Deep filtering + content scanning
+  
+  pii_filtering do
+    field :email do
+      strategy :hash  # Pseudonymize for searchability
+    end
+    
+    field :password do
+      strategy :mask  # Complete masking
+    end
+    
+    field :address do
+      strategy :mask  # Mask nested hash
+    end
+    
+    field :user_id do
+      strategy :allow  # ID is OK to log
+    end
+  end
+end
+
+# Result: ~0.2ms overhead per event
+```
+
+**What Deep Filtering does:**
+1. **Key-based filtering:** Filters fields by name (like Tier 2)
+2. **Pattern scanning:** Scans string content for emails, credit cards, SSNs
+3. **Nested traversal:** Recursively filters hashes and arrays
+4. **Custom filters:** Applies per-field strategies (mask/hash/allow)
+
+**Performance:**
+```ruby
+# Benchmark: 1000 events with nested data
+Benchmark.ips do |x|
+  x.report('Tier 3 - Deep filtering') do
+    Events::UserRegistered.track(
+      email: 'user@example.com',
+      password: 'secret123',
+      address: { street: '123 Main', city: 'NYC' }
+    )
+  end
+end
+
+# Results:
+# Tier 3 - Deep filtering: 5,000 i/s (200μs per event)
+# Overhead: ~0.2ms (deep traversal + pattern matching)
+```
+
+**When to use:**
+- ✅ User registration/profile updates
+- ✅ Payment processing (credit cards)
+- ✅ Support tickets (PII in content)
+- ✅ Complex nested data structures
+- ⚠️ Use sparingly (higher overhead)
+
+---
+
+### Choosing the Right Tier
+
+**Decision Tree:**
+
+```
+Does event contain ANY user data?
+├─ NO → Tier 1 (contains_pii false)
+│   └─ Examples: health checks, metrics, system events
+│
+└─ YES → Does data have nested structures or PII in content?
+    ├─ NO → Tier 2 (default, no declaration)
+    │   └─ Examples: orders, standard business events
+    │
+    └─ YES → Tier 3 (contains_pii true)
+        └─ Examples: user profiles, payments, support tickets
+```
+
+**Performance Comparison:**
+
+```ruby
+# Tracking 1000 events of each tier:
+
+# Tier 1: 100ms (no filtering)
+1000.times { Events::HealthCheck.track(status: 'ok') }
+
+# Tier 2: 150ms (+50ms overhead from Rails filters)
+1000.times { Events::OrderCreated.track(order_id: 'o1', api_key: 'secret') }
+
+# Tier 3: 300ms (+200ms overhead from deep filtering)
+1000.times { Events::UserRegistered.track(email: 'u@x.com', address: {...}) }
+```
+
+**Best Practices:**
+
+1. ✅ **Default to Tier 2:** Most events don't need deep filtering
+2. ✅ **Use Tier 1 for high-frequency events:** Health checks, metrics (avoid overhead)
+3. ✅ **Reserve Tier 3 for true PII events:** User data, payments, support tickets
+4. ⚠️ **Monitor performance impact:** Use self-monitoring metrics (see below)
+
+---
+
 ## 📊 Monitoring
 
 ### Self-Monitoring Metrics

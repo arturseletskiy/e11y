@@ -499,28 +499,534 @@ end
 
 ---
 
-## 📊 Monitoring
+## 🔧 Implementation Details
 
-### Self-Monitoring Metrics
+> **Implementation:** See [ADR-006 Section 4.0: Rate Limiting + Retry Policy Resolution](../ADR-006-security-compliance.md#40-rate-limiting--retry-policy-resolution-conflict-14) for detailed architecture.
+
+### Middleware Flow
+
+E11y rate limiting is implemented as **middleware** in the event processing pipeline. Understanding the flow helps debug rate limiting behavior and optimize performance.
+
+**Pipeline Order:**
+```
+Event.track() 
+  → Schema Validation
+  → Context Enrichment
+  → Rate Limiting Middleware ← YOU ARE HERE
+  → Adaptive Sampling
+  → PII Filtering
+  → Audit Signing
+  → Adapter Routing
+  → Write to Adapters
+```
+
+**Why Rate Limiting Before PII Filtering?**
+- ✅ **Efficiency:** Drop events early (no wasted CPU on PII filtering)
+- ✅ **Security:** Rate limiter sees original event (can detect patterns)
+- ✅ **Accuracy:** Count real events (not filtered versions)
+
+---
+
+### Middleware Implementation
 
 ```ruby
-# === RATE LIMIT METRICS ===
-e11y_rate_limit_hits_total{limit_type,key}           # Times limit hit
-e11y_rate_limit_dropped_events_total{limit_type}     # Events dropped
-e11y_rate_limit_sampled_events_total{limit_type}     # Events sampled
-e11y_rate_limit_current{limit_type,key}              # Current count
-e11y_rate_limit_threshold{limit_type,key}            # Configured limit
-
-# Prometheus queries:
-# - Rate limit hit rate:
-#   rate(e11y_rate_limit_hits_total[5m])
-#
-# - Which events are hitting limits?
-#   topk(10, sum by (key) (e11y_rate_limit_hits_total))
-#
-# - How many events dropped?
-#   sum(increase(e11y_rate_limit_dropped_events_total[1h]))
+# lib/e11y/middleware/rate_limiter.rb
+module E11y
+  module Middleware
+    class RateLimiter < Base
+      def call(event_data)
+        # 1. Check bypass rules first (critical events)
+        if bypassed?(event_data)
+          return super(event_data)  # Pass to next middleware
+        end
+        
+        # 2. Check global limit
+        unless check_global_limit(event_data)
+          handle_rate_limited(event_data, :global)
+          return false  # Stop pipeline
+        end
+        
+        # 3. Check per-event limit
+        unless check_per_event_limit(event_data)
+          handle_rate_limited(event_data, :per_event)
+          return false
+        end
+        
+        # 4. Check per-context limits
+        unless check_per_context_limits(event_data)
+          handle_rate_limited(event_data, :per_context)
+          return false
+        end
+        
+        # 5. All checks passed → continue pipeline
+        super(event_data)
+      end
+      
+      private
+      
+      def handle_rate_limited(event_data, limit_type)
+        # Apply configured strategy
+        case config.on_exceeded
+        when :drop
+          drop_event(event_data, limit_type)
+        when :sample
+          sample_event(event_data, limit_type)
+        when :backpressure
+          apply_backpressure(event_data, limit_type)
+        when :aggregate
+          aggregate_event(event_data, limit_type)
+        end
+        
+        # Track metric
+        Yabeda.e11y_internal.rate_limit_hits_total.increment(
+          limit_type: limit_type,
+          event_name: event_data[:event_name]
+        )
+        
+        # Log warning
+        E11y.logger.warn(
+          "[E11y RateLimit] Event rate limited: #{event_data[:event_name]} (#{limit_type})"
+        )
+      end
+      
+      def drop_event(event_data, limit_type)
+        Yabeda.e11y_internal.rate_limit_dropped_events_total.increment(
+          limit_type: limit_type
+        )
+      end
+      
+      def sample_event(event_data, limit_type)
+        # Random sampling
+        if rand < config.sample_rate
+          super(event_data)  # Keep this one
+        else
+          drop_event(event_data, limit_type)
+        end
+      end
+      
+      def apply_backpressure(event_data, limit_type)
+        # Slow down production
+        sleep(config.backpressure_delay)
+        super(event_data)
+      end
+      
+      def aggregate_event(event_data, limit_type)
+        # Add to aggregation buffer
+        aggregation_buffer.add(event_data)
+        
+        # Flush aggregated event periodically
+        if aggregation_buffer.should_flush?
+          flush_aggregated_events(limit_type)
+        end
+      end
+    end
+  end
+end
 ```
+
+---
+
+### Redis-Based Rate Limiting
+
+E11y uses **Redis sorted sets** for distributed rate limiting across multiple application instances.
+
+**Algorithm: Sliding Window Counter**
+
+```ruby
+def check_limit(key, limit, window)
+  now = Time.now.to_f
+  window_start = now - window
+  
+  # 1. Remove expired entries (outside window)
+  redis.zremrangebyscore(key, 0, window_start)
+  
+  # 2. Count current entries
+  current_count = redis.zcard(key)
+  
+  # 3. Check limit
+  if current_count < limit
+    # Add new entry (score = timestamp, member = unique ID)
+    redis.zadd(key, now, "#{now}-#{SecureRandom.hex(8)}")
+    redis.expire(key, window.to_i + 60)  # TTL cleanup
+    true  # Allowed
+  else
+    false  # Rate limited
+  end
+end
+```
+
+**Why Sorted Sets?**
+- ✅ **Sliding window:** Accurate counting (no edge cases like fixed window)
+- ✅ **Distributed:** Works across multiple app instances
+- ✅ **Efficient:** O(log N) for add/remove operations
+- ✅ **Automatic cleanup:** Redis TTL handles old entries
+
+**Redis Keys:**
+```ruby
+# Global limit
+"e11y:rate_limit:global"
+
+# Per-event limit
+"e11y:rate_limit:event:payment.retry"
+
+# Per-context limit
+"e11y:rate_limit:context:user_id:user-123"
+"e11y:rate_limit:context:ip_address:192.168.1.100"
+```
+
+---
+
+### Retry Policy Integration
+
+**Critical Decision:** Retries DO count toward rate limits (prevent retry amplification).
+
+```ruby
+# config/initializers/e11y.rb
+E11y.configure do |config|
+  # Rate limiting
+  config.rate_limiting do
+    per_event 'payment.retry', limit: 100, window: 1.minute
+  end
+  
+  # Retry policy
+  config.error_handling do
+    retry_policy do
+      # ✅ Retries respect rate limits
+      respect_rate_limits true
+      
+      # If retry is rate limited → send to DLQ
+      on_retry_rate_limited :send_to_dlq
+    end
+  end
+end
+```
+
+**Flow with Retries:**
+```
+1. Event.track() → Rate limited
+2. Retry logic triggered
+3. Retry attempt → Check rate limit AGAIN
+4. If still rate limited → Send to DLQ (not dropped)
+5. DLQ processed later (outside rate limit window)
+```
+
+**Why This Matters:**
+- ✅ **Prevents retry amplification:** 1 failure → 1000 retries → 1000 rate limit hits
+- ✅ **DLQ safety net:** Rate-limited retries not lost (processed later)
+- ✅ **Observability preserved:** Can see retry patterns in metrics
+
+---
+
+### Performance Characteristics
+
+**Latency:**
+```ruby
+# Benchmark: Rate limiter overhead
+Benchmark.ips do |x|
+  x.report('No rate limiting') do
+    Events::TestEvent.track(foo: 'bar')  # Baseline
+  end
+  
+  x.report('With rate limiting') do
+    # Rate limiter enabled
+    Events::TestEvent.track(foo: 'bar')
+  end
+  
+  x.compare!
+end
+
+# Results:
+# No rate limiting:    100,000 i/s (10μs per event)
+# With rate limiting:   95,000 i/s (10.5μs per event)
+# Overhead: ~0.5μs (5% increase)
+```
+
+**Redis Latency:**
+```ruby
+# Redis operations per event (within limit):
+# 1. ZREMRANGEBYSCORE (cleanup)  ~0.1ms
+# 2. ZCARD (count)               ~0.05ms
+# 3. ZADD (add entry)            ~0.05ms
+# 4. EXPIRE (set TTL)            ~0.05ms
+# Total: ~0.25ms per event
+
+# When rate limited:
+# 1. ZREMRANGEBYSCORE            ~0.1ms
+# 2. ZCARD                       ~0.05ms
+# Total: ~0.15ms (no write)
+```
+
+**Scaling:**
+```ruby
+# Redis memory usage:
+# - Global limit (10k events/min): ~500KB
+# - Per-event limit (100/min): ~5KB per event type
+# - Per-context limit (1k/min): ~50KB per user
+# 
+# Example: 1000 users × 50KB = 50MB
+# → Acceptable for most deployments
+```
+
+---
+
+### Troubleshooting
+
+**Problem: Events dropped unexpectedly**
+
+```ruby
+# Check rate limit metrics
+rate_limit_hits = Yabeda.e11y_internal.rate_limit_hits_total.values
+# => { limit_type: 'per_event', event_name: 'payment.retry' } => 42
+
+# Check Redis keys
+redis.keys('e11y:rate_limit:*')
+# => ["e11y:rate_limit:event:payment.retry"]
+
+redis.zcard('e11y:rate_limit:event:payment.retry')
+# => 100 (at limit!)
+
+# Check TTL
+redis.ttl('e11y:rate_limit:event:payment.retry')
+# => 45 (45 seconds until window resets)
+```
+
+**Problem: Rate limiter not working**
+
+```ruby
+# 1. Check middleware order
+E11y.config.middleware.list
+# => [SchemaValidator, ContextEnricher, RateLimiter, ...]
+
+# 2. Check rate limiting enabled
+E11y.config.rate_limiting.enabled?
+# => true
+
+# 3. Check bypass rules
+E11y.config.rate_limiting.bypass_rules
+# => [{ type: :severities, values: [:fatal] }]
+
+# 4. Check event matches bypass
+event = { severity: :fatal }
+E11y::Middleware::RateLimiter.new.bypassed?(event)
+# => true (bypassed!)
+```
+
+**Problem: High Redis latency**
+
+```ruby
+# 1. Check Redis connection pool
+E11y.config.redis.pool_size
+# => 5 (default)
+
+# Increase if needed
+E11y.configure do |config|
+  config.redis do
+    pool_size 20  # For high-concurrency
+  end
+end
+
+# 2. Use Redis pipelining for multiple checks
+redis.pipelined do
+  redis.zremrangebyscore(key, 0, window_start)
+  redis.zcard(key)
+  redis.zadd(key, now, id)
+end
+
+# 3. Consider local caching (for read-heavy workloads)
+E11y.configure do |config|
+  config.rate_limiting do
+    cache_limit_checks true  # Cache for 1s
+  end
+end
+```
+
+---
+
+## 📊 Self-Monitoring & Metrics
+
+> **Implementation:** See [ADR-006 Section 4: Rate Limiting](../ADR-006-security-compliance.md#4-rate-limiting) for detailed architecture.
+
+E11y provides comprehensive self-monitoring metrics for rate limiting. These metrics help you understand rate limit behavior, detect attacks, and optimize limits.
+
+### Core Metrics
+
+**1. `e11y_rate_limit_hits_total` (Counter)**
+- **Description:** Total number of times a rate limit was hit (event attempted but limit reached).
+- **Labels:**
+  - `limit_type`: Type of limit (`global`, `per_event`, `per_context`)
+  - `event_name`: Event type that hit the limit
+  - `key`: Specific limit key (e.g., `user_id:123`, `ip:192.168.1.1`)
+  - `strategy`: How event was handled (`drop`, `sample`, `backpressure`, `aggregate`)
+- **Monitoring:**
+  ```prometheus
+  # Rate limit hit rate (events/sec)
+  rate(e11y_rate_limit_hits_total[5m])
+  
+  # Which events hit limits most often?
+  topk(10, sum by (event_name) (rate(e11y_rate_limit_hits_total[5m])))
+  
+  # Per-context abuse detection
+  topk(10, sum by (key) (e11y_rate_limit_hits_total{limit_type="per_context"}))
+  ```
+- **Grafana Panel:**
+  - **Title:** Rate Limit Hits by Type
+  - **Query:** `sum by (limit_type) (rate(e11y_rate_limit_hits_total[5m]))`
+  - **Visualization:** Time series graph
+  - **Description:** Shows which rate limit type (global/per-event/per-context) is hit most frequently.
+
+**2. `e11y_rate_limit_dropped_events_total` (Counter)**
+- **Description:** Total number of events dropped due to rate limiting.
+- **Labels:**
+  - `limit_type`: Type of limit that caused drop
+  - `event_name`: Event type that was dropped
+- **Monitoring:**
+  ```prometheus
+  # Drop rate (events/sec)
+  rate(e11y_rate_limit_dropped_events_total[5m])
+  
+  # Total dropped in last hour
+  sum(increase(e11y_rate_limit_dropped_events_total[1h]))
+  
+  # Drop ratio (% of total events)
+  rate(e11y_rate_limit_dropped_events_total[5m]) 
+  / rate(e11y_events_tracked_total[5m])
+  ```
+- **Grafana Panel:**
+  - **Title:** Event Drop Rate
+  - **Query:** `rate(e11y_rate_limit_dropped_events_total[5m])`
+  - **Visualization:** Time series graph with threshold line
+  - **Alert Threshold:** > 100 drops/sec (high drop rate)
+
+**3. `e11y_rate_limit_sampled_events_total` (Counter)**
+- **Description:** Total number of events sampled (kept) when limit exceeded with `sample` strategy.
+- **Labels:**
+  - `limit_type`, `event_name`, `sample_rate`
+- **Monitoring:**
+  ```prometheus
+  # Sampling effectiveness
+  e11y_rate_limit_sampled_events_total / e11y_rate_limit_hits_total
+  
+  # Events saved by sampling (vs full drop)
+  increase(e11y_rate_limit_sampled_events_total[1h])
+  ```
+- **Grafana Panel:**
+  - **Title:** Sampled vs Dropped Events
+  - **Query:** 
+    ```prometheus
+    sum(rate(e11y_rate_limit_sampled_events_total[5m])) /
+    sum(rate(e11y_rate_limit_hits_total[5m]))
+    ```
+  - **Description:** Shows percentage of events retained during rate limiting (sampling effectiveness).
+
+**4. `e11y_rate_limit_current` (Gauge)**
+- **Description:** Current number of events in the rate limit window.
+- **Labels:**
+  - `limit_type`, `key`
+- **Monitoring:**
+  ```prometheus
+  # Current utilization (% of limit)
+  e11y_rate_limit_current / e11y_rate_limit_threshold
+  
+  # Max utilization in last hour
+  max_over_time(e11y_rate_limit_current[1h])
+  ```
+- **Grafana Panel:**
+  - **Title:** Rate Limit Utilization
+  - **Query:** 
+    ```prometheus
+    (e11y_rate_limit_current / e11y_rate_limit_threshold) * 100
+    ```
+  - **Visualization:** Gauge (0-100%)
+  - **Thresholds:** 
+    - Green: 0-70%
+    - Yellow: 70-90%
+    - Red: 90-100%
+
+**5. `e11y_rate_limit_threshold` (Gauge)**
+- **Description:** Configured rate limit threshold.
+- **Labels:**
+  - `limit_type`, `key`
+- **Monitoring:**
+  ```prometheus
+  # View configured limits
+  e11y_rate_limit_threshold
+  
+  # Check if limits need adjustment
+  e11y_rate_limit_current / e11y_rate_limit_threshold > 0.8
+  ```
+
+**6. `e11y_rate_limit_bypass_total` (Counter)**
+- **Description:** Total number of events that bypassed rate limiting (critical events).
+- **Labels:**
+  - `event_name`, `bypass_reason` (`severity`, `event_type`, `custom`)
+- **Monitoring:**
+  ```prometheus
+  # Bypass rate
+  rate(e11y_rate_limit_bypass_total[5m])
+  
+  # Which events bypass most?
+  topk(10, sum by (event_name) (e11y_rate_limit_bypass_total))
+  ```
+
+---
+
+### Monitoring Dashboard
+
+**Grafana Dashboard: E11y Rate Limiting**
+
+```yaml
+# dashboard.json structure
+{
+  "title": "E11y Rate Limiting",
+  "panels": [
+    {
+      "title": "Rate Limit Hits (by type)",
+      "query": "sum by (limit_type) (rate(e11y_rate_limit_hits_total[5m]))",
+      "type": "graph"
+    },
+    {
+      "title": "Drop Rate",
+      "query": "rate(e11y_rate_limit_dropped_events_total[5m])",
+      "type": "graph",
+      "alert": {
+        "threshold": 100,
+        "severity": "warning"
+      }
+    },
+    {
+      "title": "Top Rate-Limited Events",
+      "query": "topk(10, sum by (event_name) (e11y_rate_limit_hits_total))",
+      "type": "table"
+    },
+    {
+      "title": "Global Limit Utilization",
+      "query": "(e11y_rate_limit_current{limit_type='global'} / e11y_rate_limit_threshold{limit_type='global'}) * 100",
+      "type": "gauge",
+      "thresholds": [70, 90]
+    },
+    {
+      "title": "Per-Context Abuse Detection",
+      "query": "topk(10, sum by (key) (e11y_rate_limit_hits_total{limit_type='per_context'}))",
+      "type": "table"
+    }
+  ]
+}
+```
+
+---
+
+### Alerting Thresholds
+
+| Metric | Threshold | Severity | Rationale |
+|--------|-----------|----------|-----------|
+| **Rate limit hits** | > 10/sec | Warning | Frequent rate limiting indicates high load or attack |
+| **Drop rate** | > 100/sec | Critical | High drop rate means observability loss |
+| **Global utilization** | > 80% | Warning | Approaching global limit, may need increase |
+| **Global utilization** | > 95% | Critical | Nearly at limit, immediate action needed |
+| **Per-event hits** | > 50/min | Warning | Specific event flooding (retry storm, bug) |
+| **Per-context hits** | > 100/min | Warning | Single user/IP abusing system |
+
+---
 
 ### Prometheus Alerts
 

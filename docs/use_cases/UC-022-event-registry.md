@@ -249,6 +249,8 @@ end
 
 ## 📝 Registry API
 
+> **Implementation:** See [ADR-010 Section 5: Event Registry](../ADR-010-developer-experience.md#5-event-registry) for full registry architecture, including event discovery API, introspection, version tracking, and dynamic dispatch.
+
 ### Query Events
 
 ```ruby

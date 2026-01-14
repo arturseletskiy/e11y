@@ -34,6 +34,8 @@ E11y.configure { |config| config.slo_tracking = true }
 
 ## 🎯 Configuration
 
+> **Implementation:** See [ADR-003 Section 3: Multi-Level SLO Strategy](../ADR-003-slo-observability.md#3-multi-level-slo-strategy) and [Section 4: Per-Endpoint SLO Configuration](../ADR-003-slo-observability.md#4-per-endpoint-slo-configuration) for detailed architecture.
+
 ### Minimal Setup (5 seconds)
 
 ```ruby
@@ -89,6 +91,8 @@ end
 
 ## 📊 Auto-Generated Metrics
 
+> **Implementation:** See [ADR-003 Section 3.1: Application-Wide SLO](../ADR-003-slo-observability.md#31-level-1-application-wide-slo-zero-config) for automatic metric generation architecture.
+
 ### HTTP Metrics
 
 ```promql
@@ -120,6 +124,8 @@ yabeda_slo_sidekiq_job_duration_seconds{class="ProcessOrderJob"}
 
 ## 🎨 Auto-Generated Dashboards
 
+> **Implementation:** See [ADR-003 Section 8.1: Per-Endpoint Grafana Dashboard](../ADR-003-slo-observability.md#81-per-endpoint-grafana-dashboard) for dashboard architecture and templates.
+
 ### Generate Grafana Dashboard
 
 ```bash
@@ -150,6 +156,8 @@ resource "grafana_dashboard" "e11y_slo" {
 ---
 
 ## 🚨 Auto-Generated Alerts
+
+> **Implementation:** See [ADR-003 Section 5: Multi-Window Multi-Burn Rate Alerts](../ADR-003-slo-observability.md#5-multi-window-multi-burn-rate-alerts) for Google SRE best practice alert architecture.
 
 ### Generate Prometheus Alerts
 
@@ -185,6 +193,133 @@ groups:
         for: 5m
         annotations:
           summary: "HTTP p95 latency >200ms"
+```
+
+---
+
+## 🎯 Error Budget Management
+
+> **Implementation:** See [ADR-003 Section 7: Error Budget Management](../ADR-003-slo-observability.md#7-error-budget-management) for detailed architecture and deployment gates.
+
+**Track your SLO error budget in real-time:**
+
+```ruby
+# Query error budget for any endpoint
+budget = E11y::SLO::ErrorBudget.new('OrdersController', 'create', slo_config)
+
+budget.total             # => 0.001 (0.1% for 99.9% target)
+budget.consumed          # => 0.0005 (50% of budget used)
+budget.remaining         # => 0.0005 (50% of budget left)
+budget.percent_consumed  # => 50.0
+budget.exhausted?        # => false
+budget.time_until_exhaustion  # => 14.5 days (at current burn rate)
+```
+
+### Deployment Gate (Optional)
+
+**Prevent deployments when error budget is exhausted:**
+
+```ruby
+# config/initializers/e11y.rb
+E11y.configure do |config|
+  config.slo do
+    error_budget do
+      # Block deployments if <20% budget remaining
+      deployment_gate enabled: true, minimum_budget_percent: 20
+    end
+  end
+end
+```
+
+**CI/CD integration:**
+
+```bash
+# Before deployment, check error budget
+rails e11y:slo:check_budget
+
+# Exit code 0: ✅ Budget available, deploy
+# Exit code 1: ❌ Budget exhausted, block deploy
+```
+
+**Example output:**
+
+```
+Checking SLO Error Budget...
+
+OrdersController#create:
+  ✅ Budget: 75% remaining (Target: 99.9%, Actual: 99.925%)
+  
+PaymentsController#process:
+  ❌ Budget: 5% remaining (Target: 99.95%, Actual: 99.902%)
+  ⚠️  DEPLOYMENT BLOCKED: Error budget below 20% threshold
+  
+Overall: ❌ FAILED
+Cannot deploy: 1 endpoint(s) below minimum error budget
+```
+
+---
+
+## 🔍 SLO Config Validation
+
+> **Implementation:** See [ADR-003 Section 6: SLO Config Validation & Linting](../ADR-003-slo-observability.md#6-slo-config-validation--linting) for validator architecture and edge cases.
+
+**Validate your SLO configuration before deployment:**
+
+```bash
+# Validate slo.yml file
+rails e11y:slo:validate
+
+# Output:
+# ✅ Version: 1 (valid)
+# ✅ Schema structure: valid
+# ✅ All endpoints exist in routes (12 endpoints checked)
+# ✅ All jobs exist in Sidekiq (3 jobs checked)
+# ✅ SLO targets: valid (99.9%, 200ms p95)
+# ⚠️  Warning: OrdersController#show has no latency target (using default 200ms)
+# 
+# Validation: PASSED (0 errors, 1 warning)
+```
+
+### CI/CD Integration
+
+**Catch configuration errors before deploy:**
+
+```yaml
+# .github/workflows/ci.yml
+name: CI
+on: [push]
+jobs:
+  slo-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Validate SLO Config
+        run: bundle exec rails e11y:slo:validate --strict
+        # --strict flag: warnings become errors
+```
+
+### Common Validation Errors
+
+```ruby
+# ❌ ERROR: Endpoint doesn't exist in routes
+endpoint 'OrdersController', action: 'destroy' do
+  latency_target_p95 200
+end
+# Fix: Ensure route exists or remove from slo.yml
+
+# ❌ ERROR: Invalid SLO target (must be 0.0-1.0)
+availability_target 99.9  # ❌ Should be 0.999, not 99.9
+availability_target 0.999  # ✅ Correct
+
+# ❌ ERROR: Job class doesn't exist
+job 'NonExistentJob' do
+  success_rate_target 0.99
+end
+# Fix: Ensure job class is loaded or remove from config
+
+# ⚠️  WARNING: Conflicting latency targets
+# Global: 200ms, Endpoint: 300ms
+# Resolution: Endpoint-specific target (300ms) takes precedence
 ```
 
 ---
