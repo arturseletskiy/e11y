@@ -18,6 +18,10 @@
 7. [Payload Minimization](#7-payload-minimization)
 8. [Cost Metrics](#8-cost-metrics)
 9. [Trade-offs](#9-trade-offs)
+10. [Complete Configuration Example](#10-complete-configuration-example)
+11. [Backlog (Future Enhancements)](#11-backlog-future-enhancements)
+    - [11.1. Quick Start Presets](#111-quick-start-presets)
+    - [11.2. Sampling Budget](#112-sampling-budget)
 
 ---
 
@@ -402,53 +406,143 @@ module E11y
 end
 ```
 
-### 3.5. Configuration
+### 3.5. Simplified Configuration
+
+**Philosophy:** Simple, declarative sampling rules. No complex strategies.
 
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.cost_optimization.adaptive_sampling do
-    # Error-based sampling
-    error_based do
-      enabled true
-      error_window 60.seconds
-      error_threshold 0.01  # 1% error rate triggers full sampling
-    end
+  config.sampling do
+    # ===================================================================
+    # SIMPLE APPROACH: Per-severity defaults
+    # ===================================================================
     
-    # Load-based sampling
-    load_based do
-      enabled true
-      max_events_per_sec 10_000
-      buffer_threshold 0.8
-    end
+    # Default sample rates by severity
+    default_rate :debug, 0.01    # 1% of debug events
+    default_rate :info, 0.1      # 10% of info events
+    default_rate :success, 0.5   # 50% of success events
+    default_rate :warn, 1.0      # 100% of warnings
+    default_rate :error, 1.0     # 100% of errors (always)
+    default_rate :fatal, 1.0     # 100% of fatal (always)
     
-    # Value-based sampling
-    value_based do
+    # ===================================================================
+    # PER-EVENT OVERRIDES (optional)
+    # ===================================================================
+    
+    # High-value events: always sample
+    always_sample 'Events::OrderPaid'
+    always_sample 'Events::PaymentProcessed'
+    always_sample /^Events::Critical/  # Regex pattern
+    
+    # Low-value events: aggressive sampling
+    sample 'Events::HealthCheck', rate: 0.001  # 0.1%
+    sample 'Events::CacheHit', rate: 0.01      # 1%
+    sample /^Events::Debug/, rate: 0.01        # 1%
+    
+    # ===================================================================
+    # LOAD-BASED AUTO-ADJUSTMENT (optional)
+    # ===================================================================
+    
+    # Automatically reduce sample rates when system overloaded
+    auto_adjust_on_load do
       enabled true
       
-      # Always sample high-value events
-      high_value_patterns [
-        /^payment\./,
-        /^order\./,
-        'Events::CriticalEvent'
-      ]
+      # Trigger: buffer >80% full
+      trigger_buffer_percent 80
       
-      # Aggressively sample low-value events
-      low_value_patterns [
-        /^health_check/,
-        /^debug\./,
-        'Events::CacheHit'
-      ]
-    end
-    
-    # Content-based sampling (sample unique payloads)
-    content_based do
-      enabled true
-      sample_rate 0.1  # 10% for debug events
+      # Action: multiply all rates by 0.1 (10x reduction)
+      rate_multiplier 0.1
+      
+      # Recovery: restore rates when buffer <50% full
+      recovery_buffer_percent 50
     end
   end
 end
 ```
+
+**Simplified Implementation:**
+
+```ruby
+# lib/e11y/sampling/simple_sampler.rb
+module E11y
+  module Sampling
+    class SimpleSampler
+      def initialize(config)
+        @severity_rates = config.severity_rates || default_severity_rates
+        @event_rates = config.event_rates || {}
+        @auto_adjust = config.auto_adjust || {}
+      end
+      
+      def should_sample?(event_data)
+        # Step 1: Get base rate (severity or event-specific)
+        base_rate = get_base_rate(event_data)
+        
+        # Step 2: Apply load-based adjustment (if enabled)
+        final_rate = apply_load_adjustment(base_rate)
+        
+        # Step 3: Random decision
+        rand < final_rate
+      end
+      
+      private
+      
+      def get_base_rate(event_data)
+        event_name = event_data[:event_name]
+        severity = event_data[:severity]
+        
+        # Priority 1: Event-specific rate
+        @event_rates.each do |pattern, rate|
+          case pattern
+          when String
+            return rate if event_name == pattern
+          when Regexp
+            return rate if event_name =~ pattern
+          end
+        end
+        
+        # Priority 2: Severity default
+        @severity_rates[severity] || 1.0
+      end
+      
+      def apply_load_adjustment(base_rate)
+        return base_rate unless @auto_adjust[:enabled]
+        
+        buffer_percent = E11y::Buffer.utilization_percent
+        
+        if buffer_percent > @auto_adjust[:trigger_buffer_percent]
+          # System overloaded → reduce rate
+          base_rate * @auto_adjust[:rate_multiplier]
+        else
+          # Normal operation
+          base_rate
+        end
+      end
+      
+      def default_severity_rates
+        {
+          debug: 0.01,
+          info: 0.1,
+          success: 0.5,
+          warn: 1.0,
+          error: 1.0,
+          fatal: 1.0
+        }
+      end
+    end
+  end
+end
+```
+
+**Why Simplified?**
+
+| Old Approach | New Approach | Benefit |
+|--------------|--------------|---------|
+| 4 strategies (Error, Load, Value, Content) | 1 simple sampler | Easy to understand |
+| Complex rate calculation | Lookup table | Fast (<0.01ms) |
+| Multiple config blocks | Single `sampling` block | Less code |
+| Hard to predict | Deterministic | Debuggable |
+| 300+ LOC | 50 LOC | Maintainable |
 
 ---
 
@@ -941,7 +1035,6 @@ end
 | **retention_until tagging** | Simple, flexible | Downstream dependency | Clean separation |
 | **Smart routing** | 50% cost savings | Complex rules | Worth complexity |
 | **Payload minimization** | 20-30% size reduction | Data truncation | Configurable limits |
-| **No deduplication** | Simple, no data confusion | Duplicates stored | Better for debugging |
 
 ### 9.2. Alternatives Considered
 
@@ -1038,6 +1131,14 @@ E11y.configure do |config|
   end
 end
 ```
+
+---
+
+## 11. Future Enhancements
+
+See [Backlog](use_cases/backlog.md) for future enhancement ideas including:
+- Quick Start Presets (v1.1)
+- Sampling Budget (v1.2+)
 
 ---
 

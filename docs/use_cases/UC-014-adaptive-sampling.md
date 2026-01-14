@@ -230,31 +230,9 @@ E11y.configure do |config|
         'debug.*',         # Debug events in production
         'heartbeat.*'      # Heartbeat noise
       ]
-      
-      # Smart sampling for repeated events
-      deduplication do
-        enabled true
-        window 1.minute
-        
-        # If same event repeats >10 times/min → sample 10%
-        threshold 10
-        sample_rate 0.1
-        
-        # Dedupe by these fields
-        dedupe_keys [:event_name, :user_id, :error_code]
-      end
     end
   end
 end
-
-# Example:
-# Event: user.login.failed (user_id: 123, error: invalid_password)
-# 1st occurrence: Tracked (100%)
-# 2nd occurrence: Tracked (100%)
-# ...
-# 10th occurrence: Tracked (100%)
-# 11th occurrence: Tracked (10% chance - deduped!)
-# 12th-100th: Tracked (10% chance)
 ```
 
 ---
@@ -341,6 +319,227 @@ end
 # - Slow requests on weekends → High importance
 # - Normal events at 3 AM → Low importance
 ```
+
+---
+
+### Strategy 7: Trace-Consistent Sampling
+
+**Problem:** Inconsistent sampling breaks distributed traces
+
+```ruby
+# ❌ PROBLEM: Inconsistent sampling creates incomplete traces
+# 
+# HTTP request (trace_id: abc-123):
+# → Sample rate: 10% → NOT sampled (90% case)
+# 
+# Background job (trace_id: abc-123):
+# → Sample rate: 10% → MAYBE sampled
+# 
+# RESULT: Job event exists in Loki, but NO parent HTTP event!
+# → Trace is INCOMPLETE (orphaned events, can't understand context)
+```
+
+**Solution:** Sample decision propagated across trace boundaries
+
+```ruby
+E11y.configure do |config|
+  config.adaptive_sampling do
+    # ✅ Trace-consistent sampling: All or nothing
+    trace_consistent do
+      enabled true
+      
+      # Sample entire trace if ANY event is error/fatal
+      sample_on_error true
+      
+      # Propagate sample decision to jobs/services
+      propagate_decision true
+      sample_decision_key 'e11y_sampled'
+    end
+  end
+end
+
+# How it works:
+# 1. HTTP request arrives (trace_id: abc-123)
+# 2. Sample decision made: rand < 0.1 → false (NOT sampled)
+# 3. Decision stored in Current.sampled = false
+# 4. Job enqueued with metadata: { e11y_sampled: false }
+# 5. Job executes → reads e11y_sampled → skips tracking
+# 
+# RESULT: Both HTTP and Job NOT sampled → Trace consistent!
+```
+
+**Trace lifecycle example:**
+
+```ruby
+# === REQUEST (trace_id: abc-123) ===
+class OrdersController < ApplicationController
+  def create
+    # 1. Sample decision made at entry point
+    # → rand < 0.1 = 0.05 → SAMPLED!
+    # → Current.sampled = true
+    
+    Events::OrderCreated.track(order_id: '123')
+    # → Tracked (sampled = true)
+    
+    # 2. Enqueue job (sample decision propagated)
+    SendEmailJob.perform_later(
+      order_id: '123'
+      # E11y automatically adds: e11y_sampled: true
+    )
+    
+    Events::OrderCompleted.track(order_id: '123')
+    # → Tracked (sampled = true)
+  end
+end
+
+# === BACKGROUND JOB (trace_id: abc-123, e11y_sampled: true) ===
+class SendEmailJob < ApplicationJob
+  def perform(order_id)
+    # 3. Sample decision restored from job metadata
+    # → Current.sampled = true (from metadata)
+    
+    Events::EmailSending.track(order_id: order_id)
+    # → Tracked (sampled = true, consistent with parent!)
+    
+    send_email(order_id)
+    
+    Events::EmailSent.track(order_id: order_id)
+    # → Tracked (sampled = true)
+  end
+end
+
+# RESULT: Complete trace in Loki!
+# [abc-123] order.created (HTTP)
+# [abc-123] order.completed (HTTP)
+# [abc-123] email.sending (Job)
+# [abc-123] email.sent (Job)
+# → All events present, trace is COMPLETE!
+```
+
+**Exception handling:**
+
+```ruby
+E11y.configure do |config|
+  config.adaptive_sampling do
+    trace_consistent do
+      enabled true
+      
+      # If error occurs, sample ENTIRE trace retroactively
+      sample_on_error true
+      
+      # This requires buffering (see UC-001: Request-Scoped Debug Buffering)
+      # If trace was NOT sampled initially, but error occurs:
+      # → Flush buffer (contains all events)
+      # → Sample decision overridden to true
+      # → Complete trace available for debugging!
+    end
+    
+    # Always sample specific patterns (override trace decision)
+    always_sample event_patterns: ['payment.*', 'security.*'],
+                  severities: [:error, :fatal]
+  end
+end
+
+# Example:
+# 1. HTTP request: sample decision = false (NOT sampled)
+# 2. Order created: NOT tracked (buffer only)
+# 3. Payment fails: ERROR!
+# 4. sample_on_error = true → Override decision to true
+# 5. Flush buffer → All events sent (including buffered ones)
+# 6. Job executes with e11y_sampled: true → Tracked
+# 
+# RESULT: Complete trace available BECAUSE of error!
+```
+
+**Cross-service propagation:**
+
+```ruby
+# Service A: API Gateway (trace_id: abc-123, sampled: true)
+class OrdersController < ApplicationController
+  def create
+    Events::OrderReceived.track(order_id: '123')
+    # → Tracked (sampled = true)
+    
+    # Call Payment Service (propagate sample decision in header)
+    response = HTTP
+      .headers(
+        'X-Trace-ID' => E11y::Current.trace_id,
+        'X-E11y-Sampled' => E11y::Current.sampled.to_s  # ← Propagate!
+      )
+      .post('http://payment-service/charge', json: { order_id: '123' })
+    
+    Events::OrderCreated.track(order_id: '123')
+    # → Tracked
+  end
+end
+
+# Service B: Payment Service (trace_id: abc-123, sampled: true from header)
+class PaymentsController < ApplicationController
+  def charge
+    # Sample decision extracted from X-E11y-Sampled header
+    # → Current.sampled = true
+    
+    Events::PaymentProcessing.track(order_id: params[:order_id])
+    # → Tracked (consistent with Service A!)
+    
+    process_payment
+    
+    Events::PaymentSucceeded.track(order_id: params[:order_id])
+    # → Tracked
+  end
+end
+
+# RESULT: Complete distributed trace!
+# [Service A, abc-123] order.received
+# [Service A, abc-123] order.created
+# [Service B, abc-123] payment.processing
+# [Service B, abc-123] payment.succeeded
+```
+
+**Configuration for different scenarios:**
+
+```ruby
+E11y.configure do |config|
+  config.adaptive_sampling do
+    # Strategy 1: Strict trace consistency (default)
+    trace_consistent do
+      enabled true
+      propagate_decision true
+      sample_on_error true
+    end
+    
+    # Strategy 2: Independent sampling (simpler, but incomplete traces)
+    # trace_consistent do
+    #   enabled false  # Each service/job samples independently
+    # end
+    
+    # Strategy 3: Always sample background jobs (practical compromise)
+    always_sample event_patterns: ['background_jobs.*']
+    # → Jobs always tracked, HTTP sampled independently
+    # → Cost: jobs 100%, HTTP 10%
+    # → Benefit: Never lose job events, acceptable overhead
+    
+    # Strategy 4: Orphaned job handling
+    # Jobs WITHOUT parent trace (cron jobs, manual triggers)
+    orphaned_job_sampling do
+      sample_rate 1.0  # Always sample orphaned jobs
+    end
+  end
+end
+```
+
+**Why trace-consistent sampling matters:**
+
+| Scenario | Without Trace-Consistency | With Trace-Consistency | Winner |
+|----------|---------------------------|------------------------|--------|
+| **Normal request** (sampled) | HTTP tracked, Job 10% chance | HTTP tracked, Job tracked | ✅ Same |
+| **Normal request** (not sampled) | HTTP dropped, Job 10% chance → orphaned! | HTTP dropped, Job dropped | ✅ Consistent |
+| **Error request** (initially not sampled) | HTTP buffered only, Job 10% chance | HTTP flushed + Job tracked (sample_on_error) | ✅ Complete |
+| **Distributed trace** | Service A sampled, Service B 10% chance → broken! | Service A sampled → Service B sampled | ✅ Complete |
+
+**See also:**
+- **[UC-006: Trace Context Management](./UC-006-trace-context-management.md)** - Implementation details for trace propagation
+- **[UC-001: Request-Scoped Debug Buffering](./UC-001-request-scoped-debug-buffering.md)** - How `sample_on_error` works with buffering
 
 ---
 
@@ -681,6 +880,8 @@ base_sample_rate 0.1  # 10%, adjust based on data
 
 ## 📚 Related Use Cases
 
+- **[UC-006: Trace Context Management](./UC-006-trace-context-management.md)** - Trace-consistent sampling requires trace propagation
+- **[UC-001: Request-Scoped Debug Buffering](./UC-001-request-scoped-debug-buffering.md)** - `sample_on_error` works with buffering
 - **[UC-011: Rate Limiting](./UC-011-rate-limiting.md)** - Complementary with sampling
 - **[UC-015: Cost Optimization](./UC-015-cost-optimization.md)** - Sampling reduces costs
 

@@ -721,7 +721,7 @@ end
 ## 🔗 Related Use Cases
 
 - **[UC-011: Rate Limiting](./UC-011-rate-limiting.md)** - Protect system from overload
-- **[UC-015: Cost Optimization](./UC-015-cost-optimization.md)** - Deduplication prevents duplicate retries
+- **[UC-015: Cost Optimization](./UC-015-cost-optimization.md)** - Sampling and compression for cost reduction
 - **[CONFLICT-ANALYSIS](../CONFLICT-ANALYSIS.md)** - Circuit Breaker interaction
 
 ---

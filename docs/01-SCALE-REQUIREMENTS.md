@@ -495,11 +495,6 @@ E11y.configure do |config|
   end
   
   config.cost_optimization do
-    deduplication do
-      enabled true
-      window 1.second
-    end
-    
     minimize_payload do
       drop_fields_larger_than 10.kilobytes
     end
@@ -824,7 +819,7 @@ end
 1. Increase buffer: 50k → 100k
 2. Add workers: 2 → 4
 3. Aggressive sampling: target 1,000/sec, min 1%
-4. Enable cost optimization: deduplication, payload minimization
+4. Enable cost optimization: compression, payload minimization
 5. Consider tail-based sampling for critical events
 
 ---

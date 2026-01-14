@@ -17,7 +17,6 @@
 # Current setup:
 # - 50 services × 2k events/sec = 100k events/sec
 # - All events at full payload size (~2KB each)
-# - No deduplication
 # - No compression
 # - No intelligent sampling
 # - 100% sent to Datadog + Loki
@@ -46,11 +45,7 @@ E11y.configure do |config|
     adaptive_sampling enabled: true,
                      base_rate: 0.1  # 10% of normal events
     
-    # 2. Deduplication (80% reduction in retries)
-    deduplication enabled: true,
-                  window: 1.minute
-    
-    # 3. Compression (70% size reduction)
+    # 2. Compression (70% size reduction)
     compression enabled: true,
                 algorithm: :zstd,  # Better than gzip
                 level: 3
@@ -83,7 +78,7 @@ end
 
 # Result:
 # - 100k events/sec → 10k events/sec (adaptive sampling)
-# - 2KB/event → 0.6KB/event (dedup + compression + minimization)
+# - 2KB/event → 0.6KB/event (compression + minimization)
 # - 30 days hot storage → 7 days hot + 23 days warm (tiered)
 # - Datadog: Only errors (3k/sec instead of 100k/sec)
 #
@@ -152,48 +147,7 @@ end
 
 ---
 
-### Strategy 2: Deduplication
-
-**Remove duplicate events (common in retry storms):**
-```ruby
-E11y.configure do |config|
-  config.cost_optimization do
-    deduplication do
-      enabled true
-      
-      # Dedupe window
-      window 1.minute
-      
-      # Dedupe by these fields
-      dedupe_keys [:event_name, :user_id, :order_id, :error_code]
-      
-      # What to do with dupes
-      on_duplicate :count  # OR :drop, :sample
-      
-      # Count mode: Keep first, increment counter
-      counter_field :duplicate_count
-      
-      # Sample mode: Keep 10% of duplicates
-      duplicate_sample_rate 0.1
-    end
-  end
-end
-
-# Example:
-# Within 1 minute, same error repeats 100 times:
-Events::PaymentError.track(user_id: '123', order_id: '456', error: 'timeout')
-# × 100 times
-
-# Without dedup: 100 events stored
-# With dedup (count mode): 1 event with duplicate_count: 100
-# With dedup (sample mode): 1 event + 10 samples
-#
-# Cost reduction: 90-99%
-```
-
----
-
-### Strategy 3: Payload Minimization
+### Strategy 2: Payload Minimization
 
 **Remove unnecessary data:**
 ```ruby
@@ -261,7 +215,7 @@ end
 
 ---
 
-### Strategy 4: Compression
+### Strategy 3: Compression
 
 **Compress before sending:**
 ```ruby
@@ -298,7 +252,7 @@ end
 
 ---
 
-### Strategy 5: Tiered Storage
+### Strategy 4: Tiered Storage
 
 **Hot/warm/cold storage based on age:**
 ```ruby
@@ -353,7 +307,7 @@ end
 
 ---
 
-### Strategy 6: Smart Routing
+### Strategy 5: Smart Routing
 
 **Send events only to necessary destinations:**
 ```ruby
@@ -525,11 +479,9 @@ module E11y
       # Assumptions:
       # - 90% sampling reduction
       # - 70% compression
-      # - 80% deduplication for retries
       # - 60% cheaper storage (tiered)
       
       effective_events = total_events_month * 0.1  # 90% sampling
-      effective_events *= 0.2  # 80% deduplication
       effective_bytes = effective_events * avg_event_size_bytes * 0.3  # 70% compression
       effective_gb = effective_bytes / 1.gigabyte
       
@@ -585,7 +537,7 @@ E11y.configure do |config|
   config.self_monitoring do
     # Bytes saved by compression
     counter :cost_optimization_bytes_saved_total,
-            tags: [:optimization_type]  # compression, dedup, sampling
+            tags: [:optimization_type]  # compression, sampling
     
     # Events dropped/sampled
     counter :cost_optimization_events_reduced_total,
@@ -597,10 +549,6 @@ E11y.configure do |config|
     
     # Compression ratio
     histogram :cost_optimization_compression_ratio,
-              buckets: [0.1, 0.3, 0.5, 0.7, 0.9]
-    
-    # Deduplication ratio
-    histogram :cost_optimization_dedup_ratio,
               buckets: [0.1, 0.3, 0.5, 0.7, 0.9]
   end
 end
@@ -618,18 +566,17 @@ end
 ```ruby
 # spec/e11y/cost_optimization_spec.rb
 RSpec.describe 'Cost Optimization' do
-  describe 'deduplication' do
-    it 'removes duplicate events' do
+  describe 'compression' do
+    it 'compresses event payloads' do
       E11y.configure do |config|
         config.cost_optimization do
-          deduplication enabled: true,
-                        window: 1.minute,
-                        dedupe_keys: [:event_name, :user_id]
+          compression enabled: true,
+                      algorithm: :zstd
         end
       end
       
-      # Send 100 duplicate events
-      100.times { Events::TestEvent.track(user_id: '123', foo: 'bar') }
+      # Send event with large payload
+      Events::TestEvent.track(user_id: '123', large_data: 'x' * 10000)
       
       # Should only store 1
       events = E11y::Buffer.flush
@@ -691,11 +638,11 @@ end
 # ✅ GOOD: Layered optimizations
 config.cost_optimization do
   intelligent_sampling { ... }  # 90% reduction
-  deduplication { ... }         # 80% reduction (on remaining)
   compression { ... }           # 70% smaller payloads
   tiered_storage { ... }        # 60% cheaper storage
+  smart_routing { ... }         # 50% fewer expensive destinations
 end
-# Combined: ~98% cost reduction!
+# Combined: ~95% cost reduction!
 ```
 
 **2. Monitor savings**
@@ -704,7 +651,7 @@ end
 # Dashboard: "Cost Optimization Savings"
 # - Monthly savings: $X
 # - YTD savings: $Y
-# - Optimization breakdown (sampling, dedup, compression)
+# - Optimization breakdown (sampling, compression, tiered storage)
 ```
 
 **3. Test in staging first**
@@ -767,7 +714,6 @@ retention_for 'payment.*', 7.years
 | Optimization | Before | After | Savings |
 |--------------|--------|-------|---------|
 | **Intelligent sampling** | 100k ev/sec | 10k ev/sec | 90% |
-| **Deduplication** | 10k ev/sec | 2k ev/sec | 80% |
 | **Compression** | 2KB/event | 0.6KB/event | 70% |
 | **Tiered storage** | $200/TB/mo | $50/TB/mo | 75% |
 | **Smart routing** | All → Datadog | Errors only → Datadog | 90% |

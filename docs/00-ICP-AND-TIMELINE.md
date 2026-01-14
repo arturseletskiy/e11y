@@ -217,7 +217,7 @@
 
 **Week 21-22: Advanced Features**
 - [ ] Adaptive sampling (dynamic rate adjustment)
-- [ ] Cost optimization (deduplication, payload minimization)
+- [ ] Cost optimization (compression, payload minimization, smart routing)
 - [ ] Retention hints (per-event retention policies)
 - [ ] Compression benchmarks (verify 10x+ ratio)
 - [ ] Self-monitoring dashboard (monitor the gem itself)

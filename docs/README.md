@@ -88,7 +88,7 @@ Production-ready Ruby gem для структурированных бизнес
 - **[ADR-006: Security & Compliance](./ADR-006-security-compliance.md)** - PII filtering, rate limiting, audit trail
 - **[ADR-007: OpenTelemetry Integration](./ADR-007-opentelemetry-integration.md)** - OTLP, semantic conventions
 - **[ADR-008: Rails Integration](./ADR-008-rails-integration.md)** - Railtie, Rack, Sidekiq, ActiveJob
-- **[ADR-009: Cost Optimization](./ADR-009-cost-optimization.md)** - Sampling, deduplication, compression
+- **[ADR-009: Cost Optimization](./ADR-009-cost-optimization.md)** - Sampling, compression, smart routing
 - **[ADR-010: Developer Experience](./ADR-010-developer-experience.md)** - Console, Web UI, debug tools
 - **[ADR-011: Testing Strategy](./ADR-011-testing-strategy.md)** - RSpec matchers, test adapters
 - **[ADR-012: Event Evolution](./ADR-012-event-evolution.md)** - Versioning, schema changes, DLQ replay

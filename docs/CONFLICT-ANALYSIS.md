@@ -455,72 +455,7 @@ end
 
 ---
 
-### 🟢 Conflict #6: Cost Optimization Deduplication + Request-Scoped Buffer
-
-**Features:**
-- UC-015: Cost Optimization (deduplication)
-- UC-001: Request-Scoped Debug Buffering
-
-**Potential Conflict:**
-- Deduplication prevents sending duplicate events
-- Request-scoped buffer might hold duplicates
-- When buffer flushed on error, are duplicates sent?
-
-**Analysis:**
-```ruby
-# Scenario:
-# - Request makes 3 identical SQL queries (retry logic)
-# - Each logs debug event: Events::SqlQuery.track(sql: 'SELECT ...')
-# - Request fails → buffer flushed
-# - Should dedup apply to these 3 identical events?
-```
-
-**Issue:**
-- Deduplication window = 5 minutes (global)
-- Request buffer lifetime = < 1 second (per-request)
-- Duplicates within request ≠ duplicates across requests
-
-**Resolution:**
-```ruby
-# Option 1: Dedup AFTER buffer flush (RECOMMENDED)
-# Pipeline:
-Request Buffer → Flush on error → Deduplication → Adapters
-
-# Rationale: 
-# - Duplicates within request = useful context (shows retry count)
-# - Duplicates across requests = noise (true duplicates)
-
-# Option 2: Dedup within request buffer
-config.request_scope do
-  deduplicate_within_buffer true
-  dedup_window :request_lifetime
-end
-
-# Option 3: No dedup for debug events
-config.cost_optimization.deduplication do
-  exclude_severities [:debug]  # Don't dedup debug events
-end
-```
-
-**Decision:**
-- ✅ **Dedup happens AFTER request buffer flush**
-- Reason: Preserve request-level context (duplicates = retries)
-- Dedup window is global (5min), not per-request
-
-**Pipeline Order:**
-```ruby
-# Debug events:
-track(:debug) → Request Buffer → (on error) Flush → Deduplication → Adapters
-
-# Non-debug events:
-track(:info+) → Main Buffer → Flush (200ms) → Deduplication → Adapters
-```
-
-**No conflict:** Dedup is downstream of both buffers.
-
----
-
-### 🟢 Conflict #7: Circuit Breaker + Multi-Adapter Routing
+### 🟢 Conflict #6: Circuit Breaker + Multi-Adapter Routing
 
 **Features:**
 - Circuit Breaker (adapter health protection)
@@ -622,7 +557,7 @@ end
 
 ---
 
-### 🟡 Conflict #8: Compression + Payload Minimization
+### 🟡 Conflict #7: Compression + Payload Minimization
 
 **Features:**
 - UC-015: Cost Optimization (compression)
@@ -716,7 +651,7 @@ end
 
 ---
 
-### 🟡 Conflict #9: Tiered Storage + Retention Tagging
+### 🟡 Conflict #8: Tiered Storage + Retention Tagging
 
 **Features:**
 - UC-015: Tiered Storage (hot/warm/cold)
@@ -825,7 +760,7 @@ end
 
 ---
 
-### 🟢 Conflict #10: Background Job Tracing + Adaptive Sampling
+### 🟢 Conflict #9: Background Job Tracing + Adaptive Sampling
 
 **Features:**
 - UC-010: Background Job Tracking
@@ -941,7 +876,7 @@ end
 
 ---
 
-### 🟡 Conflict #11: Event Versioning + Schema Validation
+### 🟡 Conflict #10: Event Versioning + Schema Validation
 
 **Features:**
 - UC-020: Event Versioning
@@ -1051,7 +986,7 @@ OrderPaidV2.track(payload)
 
 ---
 
-### 🟡 Conflict #12: Event Versioning + DLQ Replay
+### 🟡 Conflict #11: Event Versioning + DLQ Replay
 
 **Features:**
 - UC-020: Event Versioning
@@ -1300,7 +1235,7 @@ end
 
 ---
 
-### 🟢 Conflict #13: Event Versioning + Event Registry
+### 🟢 Conflict #12: Event Versioning + Event Registry
 
 **Features:**
 - UC-020: Event Versioning
@@ -1441,7 +1376,7 @@ Registry.stats
 
 ---
 
-### 🟡 Conflict #14: Retry Policy + Rate Limiting
+### 🟡 Conflict #13: Retry Policy + Rate Limiting
 
 **Features:**
 - UC-021: Retry Policy
@@ -1578,7 +1513,7 @@ track(event)
 
 ---
 
-### 🟢 Conflict #15: DLQ Filter + Retry Policy
+### 🟢 Conflict #14: DLQ Filter + Retry Policy
 
 **Features:**
 - UC-021: DLQ Filter (save critical events only)
@@ -1714,7 +1649,7 @@ expr: e11y_dlq_events_filtered_total{event_name=~"payment.*|order.*"} > 0
 
 ---
 
-### 🟢 Conflict #16: Event Registry + Memory Optimization
+### 🟢 Conflict #15: Event Registry + Memory Optimization
 
 **Features:**
 - UC-022: Event Registry (eager load all events)
@@ -1839,17 +1774,16 @@ Conclusion: Registry cost (1MB) << Savings (864MB/day)
 | 3 | PII Filtering + OTel Semantic Conventions | 🟡 Minor | Per-adapter PII filtering | Resolved |
 | 4 | Audit Signing + PII Filtering | 🔴 Major | Audit events skip PII filtering | Resolved |
 | 5 | Cardinality + Auto-Metrics | 🟡 Minor | Require explicit labels | Resolved |
-| 6 | Deduplication + Request Buffer | ✅ None | Dedup after buffer flush | Resolved |
-| 7 | Circuit Breaker + Multi-Adapter | ✅ None | Independent circuits | Resolved |
-| 8 | Compression + Minimization | 🟡 Minor | Minimize → Compress | Resolved |
-| 9 | Tiered Storage + Retention Tags | 🟡 Minor | Event retention > Tiered | Resolved |
-| 10 | Job Tracing + Sampling | 🟡 Minor | Trace-consistent sampling | Resolved |
-| **11** | **Event Versioning + Schema Validation** | 🟡 Minor | Class-scoped validation | ✅ Resolved |
-| **12** | **Event Versioning + DLQ Replay** | 🟡 Minor | Keep V1 until DLQ drained + auto-upgrade | ✅ Resolved |
-| **13** | **Event Versioning + Event Registry** | ✅ None | Registry tracks all versions | ✅ Resolved |
-| **14** | **Retry Policy + Rate Limiting** | 🟡 Minor | Retries count toward limit + DLQ | ✅ Resolved |
-| **15** | **DLQ Filter + Retry Policy** | ✅ None | DLQ filter has precedence | ✅ Resolved |
-| **16** | **Event Registry + Memory Optimization** | ✅ None | Registry negligible vs. savings | ✅ Resolved |
+| 6 | Circuit Breaker + Multi-Adapter | ✅ None | Independent circuits | Resolved |
+| 7 | Compression + Minimization | 🟡 Minor | Minimize → Compress | Resolved |
+| 8 | Tiered Storage + Retention Tags | 🟡 Minor | Event retention > Tiered | Resolved |
+| 9 | Job Tracing + Sampling | 🟡 Minor | Trace-consistent sampling | Resolved |
+| **10** | **Event Versioning + Schema Validation** | 🟡 Minor | Class-scoped validation | ✅ Resolved |
+| **11** | **Event Versioning + DLQ Replay** | 🟡 Minor | Keep V1 until DLQ drained + auto-upgrade | ✅ Resolved |
+| **12** | **Event Versioning + Event Registry** | ✅ None | Registry tracks all versions | ✅ Resolved |
+| **13** | **Retry Policy + Rate Limiting** | 🟡 Minor | Retries count toward limit + DLQ | ✅ Resolved |
+| **14** | **DLQ Filter + Retry Policy** | ✅ None | DLQ filter has precedence | ✅ Resolved |
+| **15** | **Event Registry + Memory Optimization** | ✅ None | Registry negligible vs. savings | ✅ Resolved |
 
 ---
 
@@ -1862,11 +1796,16 @@ Conclusion: Registry cost (1MB) << Savings (864MB/day)
 | 3 | PII Filtering + OTel Semantic Conventions | 🟡 Minor | Per-adapter PII filtering | Resolved |
 | 4 | Audit Signing + PII Filtering | 🔴 Major | Audit events skip PII filtering | Resolved |
 | 5 | Cardinality + Auto-Metrics | 🟡 Minor | Require explicit labels | Resolved |
-| 6 | Deduplication + Request Buffer | ✅ None | Dedup after buffer flush | Resolved |
-| 7 | Circuit Breaker + Multi-Adapter | ✅ None | Independent circuits | Resolved |
-| 8 | Compression + Minimization | 🟡 Minor | Minimize → Compress | Resolved |
-| 9 | Tiered Storage + Retention Tags | 🟡 Minor | Event retention > Tiered | Resolved |
-| 10 | Job Tracing + Sampling | 🟡 Minor | Trace-consistent sampling | Resolved |
+| 6 | Circuit Breaker + Multi-Adapter | ✅ None | Independent circuits | Resolved |
+| 7 | Compression + Minimization | 🟡 Minor | Minimize → Compress | Resolved |
+| 8 | Tiered Storage + Retention Tags | 🟡 Minor | Event retention > Tiered | Resolved |
+| 9 | Job Tracing + Sampling | 🟡 Minor | Trace-consistent sampling | Resolved |
+| 10 | Event Versioning + Schema Validation | 🟡 Minor | Class-scoped validation | Resolved |
+| 11 | Event Versioning + DLQ Replay | 🟡 Minor | Keep V1 until DLQ drained + auto-upgrade | Resolved |
+| 12 | Event Versioning + Event Registry | ✅ None | Registry tracks all versions | Resolved |
+| 13 | Retry Policy + Rate Limiting | 🟡 Minor | Retries count toward limit + DLQ | Resolved |
+| 14 | DLQ Filter + Retry Policy | ✅ None | DLQ filter has precedence | Resolved |
+| 15 | Event Registry + Memory Optimization | ✅ None | Registry negligible vs. savings | Resolved |
 
 ---
 
@@ -1896,23 +1835,20 @@ track(event)
   ↓
   ├─→ Request Buffer (:debug only)
   │    ↓ (on error/end)
-  │    └─→ 7. Deduplication
   │
   └─→ Main Buffer (:info+)
        ↓ (every 200ms)
-       └─→ 7. Deduplication
+       └─→ 7. Batching
             ↓
-       8. Batching
+       8. Payload Minimization
             ↓
-       9. Payload Minimization
+       9. Serialization (JSON)
             ↓
-      10. Serialization (JSON)
+      10. Compression (if enabled)
             ↓
-      11. Compression (if enabled)
+      11. Circuit Breaker Check
             ↓
-      12. Circuit Breaker Check
-            ↓
-      13. Adapter Write (fan-out to all adapters)
+      12. Adapter Write (fan-out to all adapters)
 ```
 
 ### 2. Per-Adapter Overrides

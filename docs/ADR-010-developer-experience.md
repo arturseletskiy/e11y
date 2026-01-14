@@ -46,7 +46,7 @@
    ```ruby
    # ❌ Can't inspect event pipeline
    # What adapters received the event?
-   # Was it sampled? Deduplicated? Filtered?
+   # Was it sampled? Filtered?
    ```
 
 4. **No Visual Tools:**

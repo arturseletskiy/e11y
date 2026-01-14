@@ -208,7 +208,6 @@ sequenceDiagram
     Worker->>Buffer: .pop(batch_size: 100)
     Buffer-->>Worker: [event1, event2, ...]
     
-    Worker->>Worker: Deduplication
     Worker->>Worker: Batching
     Worker->>Worker: Compression (gzip)
     
@@ -257,7 +256,6 @@ sequenceDiagram
          ┌───────────────────────────────────────┐
          │ Flush Worker (Concurrent::TimerTask)  │
          │                                        │
-         │  - Deduplication                      │
          │  - Batching                           │
          │  - Payload minimization               │
          │  - Compression                        │
@@ -347,7 +345,6 @@ graph TB
     end
     
     subgraph "Post-Processing"
-        DD[Deduplication]
         Batch[Batching]
         Comp[Compression]
     end
@@ -1120,7 +1117,6 @@ sequenceDiagram
     participant Loki as Loki
     
     Buffer->>Worker: pop(100 events)
-    Worker->>Worker: Deduplication
     Worker->>Worker: Batching
     Worker->>Worker: Compression
     

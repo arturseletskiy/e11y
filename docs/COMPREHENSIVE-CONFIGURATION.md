@@ -577,151 +577,67 @@ E11y.configure do |config|
   end
   
   # ============================================================================
-  # UC-014: Adaptive Sampling
+  # UC-014: Adaptive Sampling (SIMPLIFIED)
   # ============================================================================
-  config.adaptive_sampling do
+  config.sampling do
     enabled true
     
-    # === Strategy 1: Error-Based Sampling ===
-    error_based do
-      enabled true
-      sample_rate_success 0.1    # 10% of success events
-      sample_rate_error 1.0      # 100% of errors
-      sample_rate_by_severity do
-        debug 0.01   # 1%
-        info 0.1     # 10%
-        success 0.1  # 10%
-        warn 0.5     # 50%
-        error 1.0    # 100%
-        fatal 1.0    # 100%
-      end
-    end
+    # ===================================================================
+    # SIMPLE APPROACH: Per-severity defaults
+    # ===================================================================
     
-    # === Strategy 2: Load-Based Sampling ===
-    load_based do
-      enabled true
-      
-      # How we detect system load (multiple strategies)
-      load_detection_strategy :events_per_second  # :events_per_second, :buffer_usage, :cpu, :memory, :combined
-      
-      # Strategy 1: Events per second (simplest, default)
-      events_per_second do
-        # Measure via internal counter (self-monitoring)
-        measurement_window 10.seconds  # Rolling window
-        
-        thresholds do
-          low_load threshold: 100, sample_rate: 1.0      # <100 events/sec = 100%
-          medium_load threshold: 1000, sample_rate: 0.5  # 100-1000 = 50%
-          high_load threshold: 10_000, sample_rate: 0.1  # 1000-10k = 10%
-          extreme_load threshold: :infinity, sample_rate: 0.01  # >10k = 1%
-        end
-      end
-      
-      # Strategy 2: Buffer usage (backpressure indicator)
-      buffer_usage do
-        enabled false  # Optional, can combine with events_per_second
-        
-        thresholds do
-          # Buffer usage % → sample rate
-          low threshold: 0.3, sample_rate: 1.0     # <30% full = 100%
-          medium threshold: 0.6, sample_rate: 0.5  # 30-60% = 50%
-          high threshold: 0.8, sample_rate: 0.1    # 60-80% = 10%
-          critical threshold: 1.0, sample_rate: 0.01  # >80% = 1%
-        end
-      end
-      
-      # Strategy 3: System metrics (advanced)
-      system_metrics do
-        enabled false  # Optional, requires sys-proctable gem
-        
-        # CPU-based
-        cpu_threshold 0.8  # >80% CPU → reduce sample rate
-        cpu_sample_rate 0.1
-        
-        # Memory-based
-        memory_threshold 0.9  # >90% memory → reduce sample rate
-        memory_sample_rate 0.01
-      end
-      
-      # Combined strategy (use multiple signals)
-      combined do
-        enabled false  # Advanced: combine all strategies
-        
-        # Take MIN sample rate from all strategies
-        aggregation_method :min  # or :max, :average
-      end
-      
-      # Check interval (how often to re-evaluate load)
-      check_interval 10.seconds
-      
-      # Smoothing (avoid rapid oscillation)
-      smoothing do
-        enabled true
-        window 30.seconds  # Average over 30s
-        min_change 0.1     # Only change if >10% difference
-      end
-    end
+    # Default sample rates by severity (simple, predictable)
+    default_rate :debug, 0.01    # 1% of debug events
+    default_rate :info, 0.1      # 10% of info events
+    default_rate :success, 0.5   # 50% of success events
+    default_rate :warn, 1.0      # 100% of warnings
+    default_rate :error, 1.0     # 100% of errors (always)
+    default_rate :fatal, 1.0     # 100% of fatal (always)
     
-    # === Strategy 3: Value-Based Sampling ===
-    value_based do
+    # ===================================================================
+    # PER-EVENT OVERRIDES (optional)
+    # ===================================================================
+    
+    # High-value events: always sample
+    always_sample 'Events::OrderPaid'
+    always_sample 'Events::PaymentProcessed'
+    always_sample 'Events::SecurityAlert'
+    always_sample /^Events::Critical/  # Regex pattern
+    
+    # Low-value events: aggressive sampling
+    sample 'Events::HealthCheck', rate: 0.001  # 0.1%
+    sample 'Events::CacheHit', rate: 0.01      # 1%
+    sample 'Events::MetricsExport', rate: 0.01 # 1%
+    sample /^Events::Debug/, rate: 0.01        # 1%
+    
+    # ===================================================================
+    # LOAD-BASED AUTO-ADJUSTMENT (optional, simple)
+    # ===================================================================
+    
+    # Automatically reduce sample rates when system overloaded
+    auto_adjust_on_load do
       enabled true
       
-      # Sample based on event payload values
-      sample_if do |event|
-        # Always sample high-value transactions
-        if event.name == 'payment.completed'
-          amount = event.payload[:amount].to_f
-          case amount
-          when 0..10 then 0.01      # $0-10 = 1%
-          when 10..100 then 0.1     # $10-100 = 10%
-          when 100..1000 then 0.5   # $100-1000 = 50%
-          else 1.0                  # >$1000 = 100%
-          end
-        else
-          1.0  # Default 100%
-        end
-      end
+      # Trigger: buffer >80% full
+      trigger_buffer_percent 80
+      
+      # Action: multiply all rates by 0.1 (10x reduction)
+      rate_multiplier 0.1
+      
+      # Recovery: restore rates when buffer <50% full
+      recovery_buffer_percent 50
     end
     
-    # === Strategy 4: Content-Based Sampling ===
-    content_based do
+    # ===================================================================
+    # TRACE-CONSISTENT SAMPLING (optional)
+    # ===================================================================
+    
+    # Ensure all events in a trace have same sampling decision
+    trace_consistent do
       enabled true
       
-      # Always sample events matching patterns
-      always_sample patterns: [
-        'security.*',
-        'audit.*',
-        'fraud.*',
-        'payment.failed',
-        '*.critical'
-      ]
-      
-      # Never sample (always 100%)
-      never_sample patterns: [
-        'health_check.*',
-        'ping.*',
-        'metrics.export'
-      ]
-    end
-    
-    # === Strategy 5: Tail-Based Sampling ===
-    tail_based do
-      enabled false  # Advanced feature, requires more resources
-      
-      # Buffer events and decide later
-      buffer_duration 30.seconds
-      buffer_size 10_000
-      
-      # Sampling decision after buffer
-      sample_decision do |events|
-        # Sample entire trace if any event is error
-        events.any? { |e| e.severity >= :error }
-      end
-    end
-    
-    # === Global Settings ===
-    
-    # Always sample for specific contexts
+      # Sample entire trace if any event is error/fatal
+      sample_on_error true
     always_sample_for do
       contexts { |ctx| ctx[:env] == 'development' }
       contexts { |ctx| ctx[:user_id] == 'test-user' }
@@ -745,23 +661,7 @@ E11y.configure do |config|
     # === Technique 1: Intelligent Sampling by Value ===
     # (See UC-014 adaptive_sampling.value_based)
     
-    # === Technique 2: Deduplication ===
-    deduplication do
-      enabled true
-      window 5.minutes
-      
-      # Dedup by event fingerprint
-      fingerprint_fields [:name, :payload, :context]
-      
-      # Keep first or last?
-      keep :first  # :first or :last
-      
-      # Storage
-      backend :redis
-      key_prefix 'e11y:dedup'
-    end
-    
-    # === Technique 3: Compression ===
+    # === Technique 2: Compression ===
     compression do
       enabled true
       algorithm :zstd  # :gzip, :zstd, :lz4
@@ -1054,46 +954,34 @@ E11y.configure do |config|
   # ============================================================================
   # UC-020: Event Versioning & Schema Evolution
   # ============================================================================
+  # IMPORTANT: Versioning is implemented as optional MIDDLEWARE (disabled by default)
+  # Enable it only if you have multiple event versions (OrderPaid, OrderPaidV2, etc.)
+  
+  # To enable versioning middleware (opt-in):
+  config.middleware.use E11y::Middleware::Versioning
+  
+  # Versioning Middleware behavior:
+  # - Extracts version from class name (Events::OrderPaidV2 → 2)
+  # - Normalizes event_name (Events::OrderPaidV2 → Events::OrderPaid)
+  # - Adds v: 2 to payload (only if version > 1)
+  # - MUST BE LAST middleware (before adapters!)
+  #   Why? All business logic (validation, PII, rate limiting) uses ORIGINAL class name
+  
   config.versioning do
-    enabled true
-    
-    # Include version in event payload
+    # Add v: field to payload (only if version > 1)
     include_version_in_payload true
-    version_field :event_version  # Field name: event_version
     
-    # Deprecation warnings
+    # Deprecation warnings (log when deprecated version is used)
     warn_on_deprecated_version true
     deprecation_log_level :warn  # :info, :warn, :error
     
-    # Automatic version detection from payload
-    auto_detect_version true
-    
-    # Auto-upgrade old versions (disabled by default)
-    auto_upgrade_to_current do
-      enabled false  # Explicit migration preferred
-      
-      # If enabled, define transformations:
-      # upgrade 'order.paid' do
-      #   from_version 1
-      #   to_version 2
-      #   transform do |v1_payload|
-      #     v1_payload.merge(currency: 'USD')  # Add default for missing field
-      #   end
-      # end
-    end
-    
-    # Deprecation enforcement
-    deprecation_enforcement do
-      # After this date, deprecated versions rejected/upgraded
-      enforce_after '2026-06-01'  # Set to nil to disable enforcement
-      
-      # What to do with deprecated versions after enforce_after
-      on_deprecated_version :warn  # :reject, :warn, :upgrade
-    end
-    
-    # Version metrics
-    track_version_usage true  # Track e11y_events_by_version_total{event_name, version}
+    # Track version usage in metrics
+    track_version_usage true  # e11y_events_by_version_total{event_name, version}
   end
+  
+  # NOTE: Auto-migration, auto-upgrade, chain migration - REMOVED for v1.0
+  # Reason: Overcomplicated, rarely needed in practice
+  # Best practice: V1 and V2 code coexist until migration complete
   
   # ============================================================================
   # UC-021: Error Handling, Retry Policy & Dead Letter Queue
@@ -2049,20 +1937,17 @@ Events::BackgroundJobExecuted.track(
 5. **Cardinality Protection + Metrics Auto-Creation**
    - Question: Can auto-metrics violate cardinality limits?
 
-6. **Cost Optimization Deduplication + Request-Scoped Buffer**
-   - Question: Are debug events deduplicated when flushed on error?
-
-7. **Circuit Breaker + Multi-Adapter Routing**
+6. **Circuit Breaker + Multi-Adapter Routing**
    - Question: If circuit opens for one adapter, do events still go to others?
 
-8. **Compression + Payload Minimization**
+7. **Compression + Payload Minimization**
    - Question: Order of operations?
 
-9. **Tiered Storage + Retention Tagging**
+8. **Tiered Storage + Retention Tagging**
    - Question: Duplicate retention configuration?
 
-10. **Background Job Tracing + Adaptive Sampling**
-    - Question: Are job events sampled differently than HTTP?
+9. **Background Job Tracing + Adaptive Sampling**
+   - Question: Are job events sampled differently than HTTP?
 
 ---
 
