@@ -21,7 +21,11 @@
 3. [Core Components](#3-core-components)
    - 3.1. Event Class (Zero-Allocation)
    - 3.2. Pipeline (Middleware Chain)
-   - 3.3. Ring Buffer Implementation
+   - 3.3. Ring Buffer Implementation with Adaptive Memory Management ⚠️ C20
+     - 3.3.1. Base Ring Buffer (Lock-Free)
+     - 3.3.2. Adaptive Buffer with Memory Limits (C20 Resolution)
+     - 3.3.3. Configuration Examples
+     - 3.3.4. Trade-offs & Monitoring (C20)
    - 3.4. Request-Scoped Buffer
    - 3.5. Adapter Base Class
    - 3.7. Request-Scoped Debug Buffer Flow
@@ -812,9 +816,16 @@ end
 
 ---
 
-### 3.3. Ring Buffer Implementation
+### 3.3. Ring Buffer Implementation with Adaptive Memory Management
 
-**Design Decision:** Lock-free SPSC ring buffer for main buffer.
+> **⚠️ CRITICAL: C20 Resolution - Memory Exhaustion Prevention**  
+> **See:** [CONFLICT-ANALYSIS.md C20](researches/CONFLICT-ANALYSIS.md#c20-memory-pressure--high-throughput) for detailed conflict analysis  
+> **Problem:** At high throughput (10K+ events/sec), fixed-size buffers can exhaust memory (up to 1GB+ per worker)  
+> **Solution:** Adaptive buffering with memory limits + backpressure mechanism
+
+**Design Decision:** Lock-free SPSC ring buffer with adaptive memory management.
+
+#### 3.3.1. Base Ring Buffer (Lock-Free)
 
 ```ruby
 module E11y
@@ -898,25 +909,331 @@ module E11y
       end
     end
   end
+end
+```
+
+#### 3.3.2. Adaptive Buffer with Memory Limits (C20 Resolution)
+
+**Key Innovation:** Track memory usage across ALL buffers, enforce global limit.
+
+```ruby
+module E11y
+  # Adaptive buffer manager with memory tracking
+  class AdaptiveBuffer
+    def initialize
+      @buffers = {}  # Per-adapter buffer (Hash)
+      @total_memory_bytes = Concurrent::AtomicFixnum.new(0)
+      @memory_limit_bytes = (Config.buffering.memory_limit_mb || 100) * 1024 * 1024
+      @memory_warning_threshold = @memory_limit_bytes * 0.8  # 80% threshold
+      @flush_mutex = Mutex.new
+    end
+    
+    # Add event with memory tracking
+    def add_event(event_data)
+      event_size = estimate_size(event_data)
+      current_memory = @total_memory_bytes.value
+      
+      # Check memory limit
+      if current_memory + event_size > @memory_limit_bytes
+        return handle_memory_exhaustion(event_data, event_size)
+      end
+      
+      # Warning threshold (trigger early flush)
+      if current_memory + event_size > @memory_warning_threshold
+        trigger_early_flush
+      end
+      
+      # Add to appropriate buffer
+      adapter_key = event_data[:adapter] || :default
+      @buffers[adapter_key] ||= []
+      @buffers[adapter_key] << event_data
+      
+      # Track memory
+      @total_memory_bytes.update { |v| v + event_size }
+      
+      # Increment metrics
+      Metrics.gauge('e11y.buffer.memory_bytes', current_memory + event_size)
+      Metrics.increment('e11y.buffer.events_added')
+      
+      true
+    end
+    
+    # Memory estimation (C20 requirement)
+    def estimate_size(event_data)
+      # Estimate memory footprint:
+      # 1. Payload JSON size
+      # 2. Ruby object overhead (~200 bytes per Hash)
+      # 3. String overhead (~40 bytes per String)
+      
+      payload_size = begin
+        event_data[:payload].to_json.bytesize
+      rescue
+        500  # Fallback estimate
+      end
+      
+      base_overhead = 200  # Hash object
+      string_overhead = event_data.keys.size * 40  # Keys
+      
+      payload_size + base_overhead + string_overhead
+    end
+    
+    # Flush buffers and return events
+    def flush
+      @flush_mutex.synchronize do
+        events = []
+        memory_freed = 0
+        
+        @buffers.each do |adapter_key, buffer|
+          events.concat(buffer)
+          
+          # Estimate memory freed
+          buffer.each { |event| memory_freed += estimate_size(event) }
+          
+          buffer.clear
+        end
+        
+        # Update memory tracking
+        @total_memory_bytes.update { |v| [v - memory_freed, 0].max }
+        
+        # Metrics
+        Metrics.gauge('e11y.buffer.memory_bytes', @total_memory_bytes.value)
+        Metrics.increment('e11y.buffer.flushes')
+        
+        events
+      end
+    end
+    
+    # Memory stats for monitoring
+    def memory_stats
+      {
+        current_bytes: @total_memory_bytes.value,
+        limit_bytes: @memory_limit_bytes,
+        utilization: (@total_memory_bytes.value.to_f / @memory_limit_bytes * 100).round(2),
+        buffer_counts: @buffers.transform_values(&:size)
+      }
+    end
+    
+    private
+    
+    # Handle memory exhaustion (C20 backpressure)
+    def handle_memory_exhaustion(event_data, event_size)
+      strategy = Config.buffering.backpressure.strategy
+      
+      case strategy
+      when :block
+        # Block event ingestion until space available
+        max_wait = Config.buffering.backpressure.max_block_time || 1.0
+        wait_start = Time.now
+        
+        loop do
+          # Trigger immediate flush
+          flush_all_buffers!
+          
+          # Check if space available
+          break if @total_memory_bytes.value + event_size <= @memory_limit_bytes
+          
+          # Check timeout
+          if Time.now - wait_start > max_wait
+            # Timeout exceeded - drop event
+            Metrics.increment('e11y.buffer.memory_exhaustion.dropped')
+            Rails.logger.warn "[E11y] Buffer memory exhausted, dropped event: #{event_data[:event_name]}"
+            return false
+          end
+          
+          sleep 0.01  # Wait 10ms before retry
+        end
+        
+        # Space available - retry add
+        Metrics.increment('e11y.buffer.memory_exhaustion.blocked')
+        add_event(event_data)
+        
+      when :drop
+        # Drop new event
+        Metrics.increment('e11y.buffer.memory_exhaustion.dropped')
+        Rails.logger.warn "[E11y] Buffer memory full, dropping event: #{event_data[:event_name]}"
+        false
+        
+      when :throttle
+        # Trigger immediate flush, then drop if still full
+        flush_all_buffers!
+        
+        if @total_memory_bytes.value + event_size <= @memory_limit_bytes
+          Metrics.increment('e11y.buffer.memory_exhaustion.throttled')
+          add_event(event_data)
+        else
+          Metrics.increment('e11y.buffer.memory_exhaustion.dropped')
+          Rails.logger.warn "[E11y] Buffer memory full after flush, dropping event: #{event_data[:event_name]}"
+          false
+        end
+      end
+    end
+    
+    # Trigger early flush (80% threshold)
+    def trigger_early_flush
+      # Notify flush worker to flush NOW (not wait for timer)
+      FlushWorker.trigger_immediate_flush
+      Metrics.increment('e11y.buffer.early_flush_triggered')
+    end
+    
+    # Emergency flush (memory exhaustion)
+    def flush_all_buffers!
+      FlushWorker.flush_now!
+      Metrics.increment('e11y.buffer.emergency_flush')
+    end
+  end
   
-  # Main buffer (singleton)
+  # Main buffer (singleton) with adaptive memory management
   class MainBuffer
     class << self
       def buffer
-        @buffer ||= RingBuffer.new(Config.buffer_capacity)
+        @buffer ||= if Config.buffering.adaptive.enabled
+                      AdaptiveBuffer.new
+                    else
+                      RingBuffer.new(Config.buffer_capacity)
+                    end
       end
       
       def add(event_data)
-        buffer.push(event_data)
+        buffer.add_event(event_data) rescue buffer.push(event_data)
       end
       
       def flush
-        buffer.pop(Config.batch_size)
+        buffer.flush
+      end
+      
+      # Memory stats (for monitoring)
+      def memory_stats
+        buffer.respond_to?(:memory_stats) ? buffer.memory_stats : {}
       end
     end
   end
 end
 ```
+
+#### 3.3.3. Configuration Examples
+
+**Production (High Throughput):**
+```ruby
+E11y.configure do |config|
+  config.buffering do
+    adaptive do
+      enabled true
+      memory_limit_mb 100  # Max 100 MB per worker
+      
+      # Backpressure strategy
+      backpressure do
+        enabled true
+        strategy :block  # Block event ingestion when full
+        max_block_time 1.second  # Max wait time before dropping
+      end
+    end
+    
+    # Standard flush triggers still apply
+    flush_interval 200.milliseconds
+    max_buffer_size 1000
+  end
+end
+```
+
+**Load Test Scenario (C20 Validation):**
+```ruby
+# Test setup:
+# - Throughput: 10,000 events/sec
+# - Event size: ~5 KB average
+# - Memory limit: 100 MB
+# - Expected behavior: Buffer stays under 100 MB, backpressure activates
+
+require 'benchmark'
+
+# Generate high-throughput events
+events_per_second = 10_000
+duration_seconds = 60
+
+total_events = events_per_second * duration_seconds
+
+puts "Starting load test: #{events_per_second} events/sec for #{duration_seconds}s"
+puts "Memory limit: #{E11y::Config.buffering.memory_limit_mb} MB"
+
+start_memory = GC.stat(:heap_live_slots) * GC::INTERNAL_CONSTANTS[:RVALUE_SIZE]
+start_time = Time.now
+
+# Generate events
+total_events.times do |i|
+  Events::OrderPaid.track(
+    order_id: "order-#{i}",
+    amount: rand(10..1000),
+    customer_id: "customer-#{rand(1..10_000)}",
+    items: Array.new(rand(1..10)) { { sku: "SKU-#{rand(1000)}", qty: rand(1..5) } }
+  )
+  
+  # Report progress every 10k events
+  if (i + 1) % 10_000 == 0
+    stats = E11y::MainBuffer.memory_stats
+    puts "[#{Time.now - start_time}s] Events: #{i + 1}, Memory: #{stats[:current_bytes] / 1024 / 1024} MB (#{stats[:utilization]}%)"
+  end
+  
+  # Throttle to match target rate
+  sleep(1.0 / events_per_second) if i % 100 == 0
+end
+
+end_time = Time.now
+end_memory = GC.stat(:heap_live_slots) * GC::INTERNAL_CONSTANTS[:RVALUE_SIZE]
+
+# Results
+puts "\n=== Load Test Results ==="
+puts "Duration: #{(end_time - start_time).round(2)}s"
+puts "Events: #{total_events}"
+puts "Rate: #{(total_events / (end_time - start_time)).round} events/sec"
+puts "Memory increase: #{((end_memory - start_memory) / 1024 / 1024).round(2)} MB"
+
+stats = E11y::MainBuffer.memory_stats
+puts "Final buffer memory: #{stats[:current_bytes] / 1024 / 1024} MB (#{stats[:utilization]}%)"
+
+# Assertions
+raise "Memory limit exceeded!" if stats[:current_bytes] > 105 * 1024 * 1024  # 5% tolerance
+puts "\n✅ Load test passed: Memory stayed under 100 MB limit"
+```
+
+#### 3.3.4. Trade-offs & Monitoring (C20)
+
+**Trade-offs:**
+
+| Aspect | Pro | Con | Mitigation |
+|--------|-----|-----|------------|
+| **Memory Safety** | ✅ Bounded memory usage | ⚠️ May drop events under extreme load | Monitor drop rate, alert if > 1% |
+| **Backpressure** | ✅ Prevents overload | ⚠️ Can slow request processing | Set max_block_time = 1s, then drop |
+| **Complexity** | ⚠️ Memory estimation overhead | ⚠️ ~50 bytes overhead per event | Acceptable for safety guarantee |
+| **Throughput** | ✅ Handles 10K+ events/sec | ⚠️ Early flush may increase I/O | Tune warning threshold (default 80%) |
+
+**Monitoring (Critical for C20):**
+
+```ruby
+# Prometheus/Yabeda metrics
+Yabeda.configure do
+  group :e11y_buffer do
+    gauge :memory_bytes, comment: 'Current buffer memory usage in bytes'
+    gauge :memory_utilization, comment: 'Buffer memory utilization %'
+    
+    counter :events_added, comment: 'Events added to buffer'
+    counter :flushes, comment: 'Buffer flushes triggered'
+    counter :early_flush_triggered, comment: 'Early flushes (80% threshold)'
+    counter :emergency_flush, comment: 'Emergency flushes (memory exhaustion)'
+    
+    counter :memory_exhaustion_blocked, comment: 'Events blocked due to memory limit', tags: [:strategy]
+    counter :memory_exhaustion_dropped, comment: 'Events dropped due to memory limit', tags: [:strategy]
+    counter :memory_exhaustion_throttled, comment: 'Events throttled due to memory limit', tags: [:strategy]
+  end
+end
+
+# Alert rules (Grafana)
+# Alert: Buffer memory utilization > 90%
+# Alert: Drop rate > 1% of ingestion rate
+# Alert: Emergency flushes > 10/min
+```
+
+**Related Conflicts:**
+- **C14:** Development buffer tuning (see ADR-010)
+- **C18:** Non-failing event tracking in background jobs (see ADR-013)
 
 ---
 
@@ -1348,15 +1665,20 @@ end
 
 ### 5.2. Memory Budget Breakdown
 
+> **⚠️ C20 Update:** Memory budget now enforced via adaptive buffering (see §3.3.2)
+
 **Target: <100MB @ steady state (1000 events/sec)**
 
 ```
 Component Breakdown:
 
-1. Ring Buffer (main):
-   - Capacity: 100k events
+1. Ring Buffer (main) - ADAPTIVE:
+   - Capacity: Dynamic (memory-limited)
+   - Memory limit: 100 MB (configurable)
    - Size per event: ~500 bytes (hash)
-   - Total: 100k × 500 = 50MB
+   - Max events: ~200k events @ 500 bytes each
+   - Actual usage: Adaptive based on throughput
+   - Total: ≤ 50MB (enforced by AdaptiveBuffer)
 
 2. Request Buffers (threads):
    - Threads: 10 concurrent requests
@@ -1383,6 +1705,15 @@ TOTAL: 50 + 0.5 + 1 + 10 + 35 = 96.5MB
 ```
 
 ✅ **Within budget: <100MB**
+
+**C20 Safety Guarantee:**
+- Adaptive buffer enforces hard memory limit (default 100 MB)
+- At high throughput (10K+ events/sec), backpressure prevents overflow
+- Early flush triggered at 80% memory utilization
+- Emergency flush at 100% memory utilization
+- Monitoring alerts when memory > 90% for > 1 minute
+
+**See:** §3.3.2 for adaptive buffer implementation details
 
 ### 5.3. GC Optimization
 
@@ -1879,6 +2210,7 @@ end
 |----------|-----|-----|-----------|
 | **Rails-only** | Simpler code, use Rails features | Smaller audience | Target Rails devs |
 | **Zero-allocation** | Low memory, fast | More complex code | Performance critical |
+| **Adaptive buffer (C20)** | Memory safety, prevents exhaustion | May drop events under extreme load | Safety > throughput (see §3.3.2) |
 | **Ring buffer** | Lock-free, fast | Fixed size, complex | Throughput matters |
 | **Middleware chain** | Extensible, familiar | Slower than direct | Extensibility > speed |
 | **Strict validation** | Fail fast | Less forgiving | Correctness matters |

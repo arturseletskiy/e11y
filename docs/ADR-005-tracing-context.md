@@ -17,6 +17,14 @@
 6. [Context Propagation](#6-context-propagation)
 7. [Sampling Decisions](#7-sampling-decisions)
 8. [Context Inheritance](#8-context-inheritance)
+   - 8.3. [Background Job Tracing Strategy (C17 Resolution)](#83-background-job-tracing-strategy-c17-resolution) ⚠️ CRITICAL
+     - 8.3.1. The Problem: Unbounded Traces
+     - 8.3.2. Decision: Hybrid Model (New Trace + Parent Link)
+     - 8.3.3. SidekiqTraceMiddleware Implementation
+     - 8.3.4. Configuration
+     - 8.3.5. Querying Full Flow (Request → Job)
+     - 8.3.6. Schema Changes
+     - 8.3.7. Trade-offs (C17 Resolution)
 9. [Trade-offs](#9-trade-offs)
 
 ---
@@ -890,6 +898,370 @@ end
 threads.each(&:join)
 ```
 
+### 8.3. Background Job Tracing Strategy (C17 Resolution)
+
+> **⚠️ CRITICAL: C17 Conflict Resolution - Background Job Tracing Strategy**  
+> **See:** [CONFLICT-ANALYSIS.md C17](researches/CONFLICT-ANALYSIS.md#c17-sidekiq-job-trace-context--parent-request-trace-uc-010--uc-009) for detailed analysis  
+> **Problem:** Should Sidekiq jobs inherit parent trace_id or start new trace?  
+> **Solution:** Hybrid model - jobs start NEW trace but LINK to parent
+
+#### 8.3.1. The Problem: Unbounded Traces
+
+**When a web request enqueues a background job, two competing models exist:**
+
+```ruby
+# Scenario:
+# Web request (trace_id: abc-123) enqueues Sidekiq job
+
+# Model A: Job INHERITS parent trace_id (same trace_id)
+# Result: ONE continuous trace (request → job)
+# Problem: Trace duration UNBOUNDED (job may run hours later!)
+# Problem: SLO metrics SKEWED (trace includes async work)
+
+# Model B: Job STARTS new trace_id (new trace)
+# Result: TWO separate traces (request trace + job trace)
+# Problem: Can't see full end-to-end flow in single trace
+# Problem: Lost context (job doesn't know parent)
+```
+
+**Architectural Trade-off:**
+- ✅ **Model A (inherit):** Complete trace, easy debugging
+- ❌ **Model A (inherit):** Unbounded duration, skewed SLOs
+- ✅ **Model B (new trace):** Bounded traces, accurate SLOs
+- ❌ **Model B (new trace):** Lost parent context, complex querying
+
+#### 8.3.2. Decision: Hybrid Model (New Trace + Parent Link)
+
+**Approved Solution:**  
+Jobs start **NEW trace** (`trace_id`) but **LINK to parent** (`parent_trace_id` field).
+
+```ruby
+# lib/e11y/trace_context/job_strategy.rb
+module E11y
+  module TraceContext
+    class JobStrategy
+      # Trace strategies for background jobs
+      STRATEGIES = {
+        # Job starts NEW trace, stores link to parent (RECOMMENDED)
+        start_new_with_link: -> (parent_context) {
+          {
+            trace_id: IDGenerator.generate_trace_id,  # ← NEW trace!
+            span_id: IDGenerator.generate_span_id,
+            parent_trace_id: parent_context[:trace_id],  # ← Link to parent
+            parent_span_id: parent_context[:span_id],
+            sampled: parent_context[:sampled],  # Inherit sampling
+            baggage: parent_context[:baggage],
+            user_id: parent_context[:user_id],
+            tenant_id: parent_context[:tenant_id]
+          }
+        },
+        
+        # Job INHERITS parent trace_id (same trace)
+        inherit_parent: -> (parent_context) {
+          {
+            trace_id: parent_context[:trace_id],  # ← SAME trace
+            parent_span_id: parent_context[:span_id],
+            span_id: IDGenerator.generate_span_id,  # New span
+            sampled: parent_context[:sampled],
+            baggage: parent_context[:baggage],
+            user_id: parent_context[:user_id],
+            tenant_id: parent_context[:tenant_id]
+          }
+        },
+        
+        # Job starts NEW trace, NO link (isolated)
+        start_new_isolated: -> (parent_context) {
+          {
+            trace_id: IDGenerator.generate_trace_id,  # ← NEW trace
+            span_id: IDGenerator.generate_span_id,
+            parent_trace_id: nil,  # ← NO link
+            sampled: parent_context[:sampled],  # Still inherit sampling
+            baggage: parent_context[:baggage],
+            user_id: parent_context[:user_id],
+            tenant_id: parent_context[:tenant_id]
+          }
+        }
+      }.freeze
+      
+      # Apply strategy to create job trace context
+      def self.apply(strategy, parent_context)
+        strategy_fn = STRATEGIES.fetch(strategy) do
+          raise ArgumentError, "Unknown strategy: #{strategy}"
+        end
+        
+        strategy_fn.call(parent_context)
+      end
+    end
+  end
+end
+```
+
+#### 8.3.3. SidekiqTraceMiddleware Implementation
+
+**Sidekiq server middleware (job execution):**
+
+```ruby
+# lib/e11y/middleware/sidekiq_trace_middleware.rb
+module E11y
+  module Middleware
+    class SidekiqTraceMiddleware
+      def call(worker, job, queue)
+        # Extract parent context from job metadata
+        parent_context = extract_parent_context(job)
+        
+        # Determine trace strategy (default: start_new_with_link)
+        strategy = worker.class.e11y_trace_strategy || :start_new_with_link
+        
+        # Apply strategy to create job trace context
+        job_context = E11y::TraceContext::JobStrategy.apply(
+          strategy,
+          parent_context
+        )
+        
+        # Set trace context for job execution
+        E11y::Current.set(job_context)
+        
+        # Track job execution start
+        Events::JobStarted.track(
+          job_class: worker.class.name,
+          job_id: job['jid'],
+          queue: queue,
+          parent_trace_id: job_context[:parent_trace_id]  # ← Link!
+        )
+        
+        yield
+        
+        # Track job success
+        Events::JobCompleted.track(
+          job_class: worker.class.name,
+          job_id: job['jid'],
+          queue: queue
+        )
+      rescue => e
+        # Track job failure
+        Events::JobFailed.track(
+          job_class: worker.class.name,
+          job_id: job['jid'],
+          queue: queue,
+          error_class: e.class.name,
+          error_message: e.message
+        )
+        raise
+      ensure
+        E11y::Current.reset
+      end
+      
+      private
+      
+      def extract_parent_context(job)
+        {
+          trace_id: job['e11y_trace_id'],
+          span_id: job['e11y_span_id'],
+          sampled: job['e11y_sampled'],
+          baggage: job['e11y_baggage'],
+          user_id: job['e11y_user_id'],
+          tenant_id: job['e11y_tenant_id']
+        }.compact
+      end
+    end
+  end
+end
+
+# Configure Sidekiq server
+Sidekiq.configure_server do |config|
+  config.server_middleware do |chain|
+    chain.add E11y::Middleware::SidekiqTraceMiddleware
+  end
+end
+```
+
+**Sidekiq client middleware (job enqueue):**
+
+```ruby
+# lib/e11y/middleware/sidekiq_client_middleware.rb
+module E11y
+  module Middleware
+    class SidekiqClientMiddleware
+      def call(worker_class, job, queue, redis_pool)
+        # Inject current trace context into job metadata
+        if E11y::Current.traced?
+          job['e11y_trace_id'] = E11y::Current.trace_id
+          job['e11y_span_id'] = E11y::Current.span_id
+          job['e11y_sampled'] = E11y::Current.sampled
+          job['e11y_baggage'] = E11y::Current.baggage if E11y::Current.baggage&.any?
+          job['e11y_user_id'] = E11y::Current.user_id if E11y::Current.user_id
+          job['e11y_tenant_id'] = E11y::Current.tenant_id if E11y::Current.tenant_id
+        end
+        
+        yield
+      end
+    end
+  end
+end
+
+# Configure Sidekiq client
+Sidekiq.configure_client do |config|
+  config.client_middleware do |chain|
+    chain.add E11y::Middleware::SidekiqClientMiddleware
+  end
+end
+```
+
+#### 8.3.4. Configuration
+
+**Global default strategy:**
+
+```ruby
+# config/initializers/e11y.rb
+E11y.configure do |config|
+  config.tracing do |tracing|
+    # Default strategy for ALL jobs
+    tracing.background_jobs.default_strategy = :start_new_with_link
+    
+    # Alternative strategies:
+    # - :inherit_parent (job uses same trace_id as parent)
+    # - :start_new_isolated (job gets new trace, no link)
+  end
+end
+```
+
+**Per-job strategy override:**
+
+```ruby
+# app/jobs/urgent_email_job.rb
+class UrgentEmailJob < ApplicationJob
+  include Sidekiq::Job
+  
+  # Override: Fast jobs (< 1 sec) can inherit parent trace
+  e11y_trace_strategy :inherit_parent
+  
+  def perform(order_id)
+    # This job runs in SAME trace as parent request
+    Events::EmailSent.track(order_id: order_id)
+  end
+end
+
+# app/jobs/batch_report_job.rb
+class BatchReportJob < ApplicationJob
+  include Sidekiq::Job
+  
+  # Override: Slow jobs (hours later) should start new trace
+  e11y_trace_strategy :start_new_with_link  # (default)
+  
+  def perform(report_id)
+    # This job runs in NEW trace, linked to parent
+    Events::ReportGenerated.track(report_id: report_id)
+  end
+end
+```
+
+#### 8.3.5. Querying Full Flow (Request → Job)
+
+**How to reconstruct full end-to-end flow:**
+
+```ruby
+# Find parent request trace
+parent_trace = Trace.find_by(trace_id: 'abc-123')
+
+# Find all child job traces (via parent_trace_id link)
+child_traces = Trace.where(parent_trace_id: 'abc-123')
+
+# Result:
+# Parent trace: abc-123 (request)
+#   → Child trace: xyz-789 (SendOrderEmailJob)
+#   → Child trace: def-456 (ProcessPaymentJob)
+
+# Query for full flow:
+SELECT * FROM events 
+WHERE trace_id = 'abc-123'  -- Parent request events
+   OR parent_trace_id = 'abc-123'  -- Child job events
+ORDER BY created_at;
+```
+
+**Example flow with hybrid model:**
+
+```ruby
+# 1. Web request (trace_id: abc-123)
+POST /orders
+  → Events::OrderCreated (trace_id: abc-123, span_id: span-001)
+  → Enqueue SendOrderEmailJob (metadata: {e11y_trace_id: 'abc-123'})
+
+# 2. Sidekiq job execution (NEW trace_id: xyz-789)
+SendOrderEmailJob#perform
+  → SidekiqTraceMiddleware applies :start_new_with_link strategy
+  → NEW trace_id: xyz-789, parent_trace_id: abc-123
+  → Events::JobStarted (trace_id: xyz-789, parent_trace_id: abc-123)
+  → Events::EmailSent (trace_id: xyz-789, span_id: span-001)
+  → Events::JobCompleted (trace_id: xyz-789)
+
+# Result: TWO traces with LINK
+# Trace abc-123: OrderCreated (request)
+# Trace xyz-789: JobStarted, EmailSent, JobCompleted (linked via parent_trace_id)
+```
+
+#### 8.3.6. Schema Changes
+
+**Add `parent_trace_id` field to events table:**
+
+```ruby
+# db/migrate/XXXXXX_add_parent_trace_id_to_events.rb
+class AddParentTraceIdToEvents < ActiveRecord::Migration[8.0]
+  def change
+    add_column :events, :parent_trace_id, :string, limit: 32, null: true
+    add_index :events, :parent_trace_id
+    
+    # For querying full flow: WHERE trace_id = X OR parent_trace_id = X
+    add_index :events, [:trace_id, :parent_trace_id]
+  end
+end
+```
+
+**Update Event base class:**
+
+```ruby
+# lib/e11y/event.rb
+module E11y
+  class Event
+    attribute :parent_trace_id, :string  # ← NEW field
+    
+    # Auto-populate from E11y::Current
+    def initialize(attributes = {})
+      super
+      
+      self.trace_id ||= E11y::Current.trace_id
+      self.span_id ||= E11y::Current.span_id
+      self.parent_trace_id ||= E11y::Current.parent_trace_id  # ← NEW!
+      self.user_id ||= E11y::Current.user_id
+      self.tenant_id ||= E11y::Current.tenant_id
+    end
+  end
+end
+```
+
+#### 8.3.7. Trade-offs (C17 Resolution)
+
+| Aspect | Hybrid Model (start_new_with_link) | Inherit Parent | Start New Isolated |
+|--------|-------------------------------------|----------------|--------------------|
+| **Trace Boundaries** | ✅ Clear (request vs job) | ❌ Unbounded (spans hours) | ✅ Clear (no link) |
+| **SLO Accuracy** | ✅ Accurate (separate latencies) | ❌ Skewed (includes job time) | ✅ Accurate |
+| **End-to-End Visibility** | ✅ Can reconstruct (via link) | ✅ Single trace view | ❌ Lost (no link) |
+| **Querying Complexity** | ⚠️ Must follow links (JOIN) | ✅ Simple (single trace_id) | ✅ Simple (isolated) |
+| **Storage Cost** | ⚠️ Two trace IDs to store | ✅ Single trace_id | ✅ Single trace_id |
+| **Use Case** | ✅ **RECOMMENDED (default)** | ⚠️ Fast jobs only (< 1s) | ⚠️ Isolated jobs only |
+
+**Why Hybrid Model is Default:**
+1. ✅ **Clear trace boundaries** - Request SLO ≠ Job SLO
+2. ✅ **Accurate metrics** - Can measure request latency separately from job latency
+3. ✅ **Bounded traces** - Traces have clear start/end (not hours long)
+4. ✅ **Still linked** - Can reconstruct full flow via `parent_trace_id`
+5. ✅ **Flexible** - Can override per-job if needed
+
+**Related Conflicts:**
+- **C05:** Trace-aware sampling (see ADR-009 §3.6)
+- **C11:** Stratified sampling (see ADR-009 §3.7)
+- **UC-010:** Background Job Tracking
+- **UC-009:** Multi-Service Tracing
+
 ---
 
 ## 9. Trade-offs
@@ -905,6 +1277,7 @@ threads.each(&:join)
 | **Auto-enrich events** | Zero boilerplate | Implicit behavior | DX > explicit |
 | **Baggage propagation** | Flexible metadata | Size overhead | Limited use, opt-in |
 | **Manual spans** | Simple | Less automation | v1.0 scope |
+| **Hybrid job tracing (C17)** ⚠️ | Clear boundaries, accurate SLOs | More complex queries | Prevents unbounded traces |
 
 ### 9.2. Alternatives Considered
 

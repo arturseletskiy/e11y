@@ -204,11 +204,11 @@ end
 
 ---
 
-### 3. Background Job Trace Propagation
+### 3. Background Job Trace Propagation (C17 Resolution) ⚠️
 
-> **Implementation:** See [ADR-005 Section 6.2: Job Propagator](../ADR-005-tracing-context.md#62-job-propagator-sidekiqactivejob) for automatic trace propagation to Sidekiq/ActiveJob.
+> **Implementation:** See [ADR-005 Section 8.3: Background Job Tracing Strategy](../ADR-005-tracing-context.md#83-background-job-tracing-strategy-c17-resolution) for the hybrid tracing model.
 
-**Preserve trace_id in async jobs:**
+**Hybrid Tracing Model (New Trace + Parent Link):**
 ```ruby
 # Service A: API Gateway
 class OrdersController < ApplicationController
@@ -217,10 +217,11 @@ class OrdersController < ApplicationController
     
     # Track event (trace_id: abc-123)
     Events::OrderCreated.track(order_id: order.id)
+    # Current trace: abc-123
     
-    # Enqueue job (trace_id automatically passed!)
+    # Enqueue job (parent trace context automatically passed!)
     ProcessOrderJob.perform_later(order.id)
-    # → trace_id stored in Sidekiq job metadata
+    # → Sidekiq metadata: { parent_trace_id: 'abc-123' }
     
     render json: order
   end
@@ -229,12 +230,19 @@ end
 # Service B: Worker Service (Sidekiq)
 class ProcessOrderJob < ApplicationJob
   def perform(order_id)
-    # E11y automatically restores trace_id: abc-123!
+    # ✅ NEW TRACE STARTED: trace_id: xyz-789 (fresh trace for job!)
+    # ✅ PARENT LINKED: parent_trace_id: abc-123 (link to request trace)
     
-    Events::OrderProcessingStarted.track(order_id: order_id)
+    Events::OrderProcessingStarted.track(
+      order_id: order_id
+      # Metadata auto-added:
+      # - trace_id: xyz-789 (job's own trace)
+      # - parent_trace_id: abc-123 (link to parent request)
+    )
     
-    # Call Payment Service (trace_id propagated!)
+    # Call Payment Service (NEW trace_id propagated!)
     PaymentServiceClient.charge(order_id: order_id)
+    # → HTTP header: traceparent: xyz-789 (job's trace!)
     
     Events::OrderProcessingCompleted.track(order_id: order_id)
   end
@@ -243,19 +251,105 @@ end
 # Service C: Payment Service
 class ChargesController < ApplicationController
   def create
-    # trace_id: abc-123 (from HTTP header)
+    # trace_id: xyz-789 (from job's HTTP header)
+    # parent_trace_id: abc-123 (preserved from job)
     Events::PaymentProcessed.track(...)
   end
 end
 
-# Timeline: {trace_id="abc-123"}
-# 10:00:00.000 [api-gateway] order.created
-# 10:00:00.010 [api-gateway] job.enqueued
-# 10:00:05.000 [worker] job.started (trace_id restored!)
-# 10:00:05.010 [worker] order.processing.started
-# 10:00:05.050 [payment] payment.processed
-# 10:00:07.000 [worker] order.processing.completed
-# → Complete trace across HTTP + background jobs!
+# Timeline 1: Request Trace {trace_id="abc-123"}
+# 10:00:00.000 [api-gateway] order.created (trace_id=abc-123)
+# 10:00:00.010 [api-gateway] job.enqueued (trace_id=abc-123)
+
+# Timeline 2: Job Trace {trace_id="xyz-789", parent_trace_id="abc-123"}
+# 10:00:05.000 [worker] job.started (trace_id=xyz-789, parent=abc-123)
+# 10:00:05.010 [worker] order.processing.started (trace_id=xyz-789)
+# 10:00:05.050 [payment] payment.processed (trace_id=xyz-789)
+# 10:00:07.000 [worker] order.processing.completed (trace_id=xyz-789)
+
+# Query to see full flow (request + job):
+# Loki: {trace_id="abc-123"} OR {parent_trace_id="abc-123"}
+# → Shows BOTH request trace AND linked job trace!
+```
+
+**Why Hybrid Model (not same trace_id)?**
+
+1. **Bounded trace duration:** Job may run for hours/days (not same as 100ms request)
+2. **SLO accuracy:** Request SLO (P99 200ms) ≠ Job SLO (P99 5 minutes)
+3. **Trace clarity:** Separate timelines for sync (request) vs async (job) operations
+4. **Link preserved:** `parent_trace_id` allows reconstructing full flow
+
+See [ADR-005 §8.3](../ADR-005-tracing-context.md#83-background-job-tracing-strategy-c17-resolution) for detailed rationale.
+
+**Visual Diagram: Request Trace → Job Trace (with parent link)**
+
+```mermaid
+graph LR
+    subgraph "Request Trace (trace_id=abc-123)"
+        A[HTTP Request] --> B[order.created]
+        B --> C[job.enqueued]
+    end
+    
+    subgraph "Job Trace (trace_id=xyz-789, parent=abc-123)"
+        D[job.started] --> E[order.processing.started]
+        E --> F[payment.processed]
+        F --> G[order.processing.completed]
+    end
+    
+    C -.parent_trace_id: abc-123.-> D
+    
+    style C fill:#f9f,stroke:#333,stroke-width:2px
+    style D fill:#9ff,stroke:#333,stroke-width:2px
+```
+
+**Query Examples:**
+
+```ruby
+# 1. Find all events in request trace
+Loki query: {trace_id="abc-123"}
+# Result:
+# - order.created
+# - job.enqueued
+
+# 2. Find all events in job trace
+Loki query: {trace_id="xyz-789"}
+# Result:
+# - job.started
+# - order.processing.started
+# - payment.processed
+# - order.processing.completed
+
+# 3. Find FULL FLOW (request + linked jobs)
+Loki query: {trace_id="abc-123"} OR {parent_trace_id="abc-123"}
+# Result: ALL events from request AND its child jobs!
+# - order.created (trace=abc-123)
+# - job.enqueued (trace=abc-123)
+# - job.started (trace=xyz-789, parent=abc-123)
+# - order.processing.started (trace=xyz-789, parent=abc-123)
+# - payment.processed (trace=xyz-789, parent=abc-123)
+# - order.processing.completed (trace=xyz-789, parent=abc-123)
+```
+
+**Database Schema (parent_trace_id field):**
+
+```sql
+-- events table
+CREATE TABLE events (
+  id BIGSERIAL PRIMARY KEY,
+  event_name VARCHAR(255),
+  trace_id VARCHAR(36),
+  parent_trace_id VARCHAR(36),  -- ✅ NEW: Link to parent trace!
+  -- ... other fields
+);
+
+-- Index for efficient queries
+CREATE INDEX idx_events_parent_trace_id ON events(parent_trace_id);
+
+-- Query to reconstruct full flow:
+SELECT * FROM events
+WHERE trace_id = 'abc-123'
+   OR parent_trace_id = 'abc-123'
+ORDER BY timestamp ASC;
 ```
 
 ---

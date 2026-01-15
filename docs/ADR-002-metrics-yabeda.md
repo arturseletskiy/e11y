@@ -55,6 +55,8 @@
 
 ### 1.2. Goals
 
+> **⚠️ NOTE (C03 Resolution):** Yabeda is the **default metrics backend** for E11y. OpenTelemetry metrics are **optional** (see ADR-007). Choose ONE backend to avoid double overhead. See [CONFLICT-ANALYSIS.md C03](../researches/CONFLICT-ANALYSIS.md#c03-dual-metrics-collection-overhead) for details.
+
 **Primary Goals:**
 - ✅ Auto-create metrics from events (pattern-based)
 - ✅ Prevent cardinality explosions (4-layer defense)

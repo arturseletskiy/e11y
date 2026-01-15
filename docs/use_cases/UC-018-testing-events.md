@@ -323,6 +323,307 @@ end
 
 ---
 
+### 6. Test Environment Configuration (C13)
+
+> **Implementation:** See [ADR-011 Section 10: Test Environment Configuration](../ADR-011-testing-strategy.md#10-test-environment-configuration) for detailed rationale on disabling production features in tests.
+
+**Critical: Production features MUST be disabled in tests for predictability.**
+
+**Problem: Non-Deterministic Tests**
+
+```ruby
+# ❌ BAD: Production config enabled in tests
+# config/environments/test.rb (default Rails)
+# → E11y inherits production config!
+
+RSpec.describe OrdersController do
+  it 'creates order' do
+    post :create, params: { order: order_params }
+    
+    # ❌ PROBLEM 1: Sampling enabled (10% rate)
+    #    → Event randomly dropped! Test flaky!
+    #    → Fails 90% of the time!
+    
+    # ❌ PROBLEM 2: Buffering enabled (10s flush)
+    #    → Event not visible yet! Test fails!
+    #    → Must wait 10 seconds or call E11y.flush
+    
+    # ❌ PROBLEM 3: Async adapters
+    #    → Events sent in background threads
+    #    → Race conditions!
+    
+    expect {
+      # ... may pass or fail randomly!
+    }.to track_event(Events::OrderCreated)
+  end
+end
+```
+
+**Solution: Disable Production Features in Tests**
+
+```ruby
+# spec/support/e11y_helper.rb (RECOMMENDED SETUP)
+RSpec.configure do |config|
+  config.before(:suite) do
+    # Configure E11y for test environment
+    E11y.configure do |config|
+      # === CRITICAL: Disable sampling ===
+      # ✅ Ensures ALL events are tracked (100% predictability)
+      # ❌ Without this: Random test failures (sampling drops 90% of events)
+      config.sampling.enabled = false
+      
+      # === CRITICAL: Disable buffering OR use flush helper ===
+      # Option 1: Disable buffering (immediate writes)
+      config.buffering.enabled = false
+      
+      # Option 2: Keep buffering but flush after each test
+      # config.buffering.enabled = true  # (if needed for performance tests)
+      
+      # === CRITICAL: Synchronous adapters only ===
+      # ✅ Use TestAdapter (stores events in memory)
+      # ❌ No Loki, Sentry, S3 (slow, async, flaky)
+      config.adapters = [
+        E11y::Adapters::TestAdapter.new
+      ]
+      
+      # === OPTIONAL: Disable rate limiting ===
+      config.rate_limiting.enabled = false
+      
+      # === OPTIONAL: Disable PII filtering (test data is fake) ===
+      config.pii_filtering.enabled = false
+    end
+  end
+  
+  config.before(:each) do
+    # Clear events before each test
+    E11y.reset!
+    
+    # If buffering enabled, flush before test
+    # E11y.flush
+  end
+  
+  config.after(:each) do
+    # If buffering enabled, flush after test (for assertions)
+    E11y.flush if E11y.config.buffering.enabled
+  end
+end
+```
+
+**Key Configuration Options:**
+
+| Feature | Test Value | Production Value | Why Different? |
+|---------|-----------|------------------|----------------|
+| **Sampling** | ❌ Disabled (100%) | ✅ Enabled (10-50%) | Tests need ALL events, no randomness |
+| **Buffering** | ❌ Disabled (immediate) | ✅ Enabled (10s batches) | Tests need synchronous assertions |
+| **Adapters** | `TestAdapter` (in-memory) | `LokiAdapter`, `SentryAdapter` | Tests need fast, synchronous, no network |
+| **Rate Limiting** | ❌ Disabled | ✅ Enabled (1000/min) | Tests may emit many events rapidly |
+| **PII Filtering** | ❌ Disabled (optional) | ✅ Enabled (GDPR) | Test data is fake (no real PII) |
+
+**Manual Flush Helper (for Buffering Tests):**
+
+If you need to test buffering behavior, use `E11y.flush`:
+
+```ruby
+RSpec.describe 'Buffering behavior' do
+  before do
+    E11y.configure do |config|
+      config.buffering do
+        enabled true
+        flush_interval 10.seconds
+        max_buffer_size 100
+      end
+    end
+  end
+  
+  it 'buffers events until flush' do
+    # Event tracked but NOT sent yet (buffered)
+    Events::OrderCreated.track(order_id: '123')
+    
+    # Buffer has 1 event
+    expect(E11y.buffer.size).to eq(1)
+    
+    # Adapter has 0 events (not flushed yet)
+    expect(E11y::Adapters::TestAdapter.events.size).to eq(0)
+    
+    # === CRITICAL: Manual flush for synchronous testing ===
+    E11y.flush
+    
+    # Now buffer is empty
+    expect(E11y.buffer.size).to eq(0)
+    
+    # Adapter has 1 event (flushed)
+    expect(E11y::Adapters::TestAdapter.events.size).to eq(1)
+  end
+  
+  it 'auto-flushes when buffer full' do
+    # Track 101 events (exceeds max_buffer_size: 100)
+    101.times { |i| Events::OrderCreated.track(order_id: i) }
+    
+    # Buffer auto-flushed when full (at 100)
+    expect(E11y::Adapters::TestAdapter.events.size).to eq(100)
+    
+    # 1 event still in buffer
+    expect(E11y.buffer.size).to eq(1)
+    
+    # Flush remaining
+    E11y.flush
+    expect(E11y::Adapters::TestAdapter.events.size).to eq(101)
+  end
+end
+```
+
+**Deterministic Sampling (for Sampling Tests):**
+
+If you need to test sampling behavior, use a **fixed random seed**:
+
+```ruby
+RSpec.describe 'Sampling behavior' do
+  before do
+    # === CRITICAL: Set fixed random seed for deterministic sampling ===
+    srand(12345)  # ← Same seed = same random sequence
+    
+    E11y.configure do |config|
+      config.sampling do
+        enabled true
+        strategy :random
+        rate 0.5  # Keep 50% of events
+      end
+    end
+  end
+  
+  it 'samples events deterministically with fixed seed' do
+    # With seed=12345, first 10 events sampled as:
+    # [KEEP, DROP, KEEP, DROP, KEEP, KEEP, DROP, DROP, KEEP, DROP]
+    # (this sequence is deterministic with seed=12345)
+    
+    10.times do |i|
+      Events::OrderCreated.track(order_id: i)
+    end
+    
+    # With seed=12345 and rate=0.5, expect 5 events kept
+    expect(E11y::Adapters::TestAdapter.events.size).to eq(5)
+    
+    # Verify specific events kept (deterministic!)
+    kept_order_ids = E11y::Adapters::TestAdapter.events.map { |e| e.payload[:order_id] }
+    expect(kept_order_ids).to eq([0, 2, 4, 5, 8])  # Deterministic with seed=12345
+  end
+  
+  it 'can test different sampling rates' do
+    E11y.configure do |config|
+      config.sampling.rate = 0.1  # Keep 10%
+    end
+    
+    100.times { |i| Events::OrderCreated.track(order_id: i) }
+    
+    # With seed=12345 and rate=0.1, expect ~10 events
+    expect(E11y::Adapters::TestAdapter.events.size).to be_within(2).of(10)
+  end
+end
+```
+
+**RSpec Shared Context (Reusable Config):**
+
+```ruby
+# spec/support/shared_contexts/e11y_test_config.rb
+RSpec.shared_context 'e11y_test_config' do
+  before do
+    E11y.configure do |config|
+      config.sampling.enabled = false
+      config.buffering.enabled = false
+      config.adapters = [E11y::Adapters::TestAdapter.new]
+    end
+  end
+  
+  after do
+    E11y.flush
+    E11y.reset!
+  end
+end
+
+# Usage:
+RSpec.describe OrdersController do
+  include_context 'e11y_test_config'
+  
+  it 'creates order' do
+    # ... test with clean E11y config
+  end
+end
+```
+
+**Trade-offs:**
+
+| Decision | Pro | Con | Recommendation |
+|----------|-----|-----|----------------|
+| **Disable sampling** | 100% predictable tests | Doesn't test prod sampling | ✅ Always disable (test sampling separately with fixed seed) |
+| **Disable buffering** | Synchronous assertions | Doesn't test buffering behavior | ✅ Disable by default (test buffering separately with `E11y.flush`) |
+| **Use TestAdapter** | Fast, in-memory, no network | Doesn't test real adapters | ✅ Always use (test real adapters in integration tests) |
+| **Fixed random seed** | Deterministic sampling tests | Non-obvious magic number | ⚠️ Use only for sampling tests, document seed choice |
+
+**Common Pitfalls:**
+
+```ruby
+# ❌ PITFALL 1: Forgot to disable sampling
+RSpec.describe 'Feature' do
+  it 'tracks event' do
+    # Sampling enabled (10% rate) → 90% chance of failure!
+    expect {
+      Events::OrderCreated.track(order_id: '123')
+    }.to track_event(Events::OrderCreated)  # ← Flaky!
+  end
+end
+
+# ✅ FIX: Disable sampling in spec/support/e11y_helper.rb
+
+# ❌ PITFALL 2: Forgot to flush buffer
+RSpec.describe 'Feature' do
+  before do
+    E11y.configure { |c| c.buffering.enabled = true }
+  end
+  
+  it 'tracks event' do
+    Events::OrderCreated.track(order_id: '123')
+    # Buffer not flushed → event not in adapter yet!
+    expect(E11y::Adapters::TestAdapter.events.size).to eq(1)  # ← Fails!
+  end
+end
+
+# ✅ FIX: Call E11y.flush before assertions
+it 'tracks event' do
+  Events::OrderCreated.track(order_id: '123')
+  E11y.flush  # ← Force flush
+  expect(E11y::Adapters::TestAdapter.events.size).to eq(1)  # ← Passes!
+end
+
+# ❌ PITFALL 3: Used production adapters in tests
+RSpec.describe 'Feature' do
+  before do
+    E11y.configure do |config|
+      config.adapters = [
+        E11y::Adapters::LokiAdapter.new(...)  # ← Slow! Network calls!
+      ]
+    end
+  end
+  
+  it 'tracks event' do
+    # Test takes 5 seconds per event! ❌
+    Events::OrderCreated.track(order_id: '123')
+  end
+end
+
+# ✅ FIX: Use TestAdapter
+config.adapters = [E11y::Adapters::TestAdapter.new]
+```
+
+**Key Takeaways:**
+
+1. **Always disable sampling in tests** (non-deterministic = flaky tests)
+2. **Disable buffering OR call `E11y.flush`** (synchronous assertions)
+3. **Use TestAdapter only** (fast, in-memory, no network)
+4. **Fixed random seed for sampling tests** (deterministic behavior)
+5. **Flush buffer in `after(:each)` hook** (if buffering enabled)
+
+---
+
 ## 💻 Implementation Examples
 
 ### Example 1: Controller Tests

@@ -545,6 +545,179 @@ end
 
 ---
 
+### Strategy 8: Stratified Sampling for Accurate SLO (C11 Resolution) ⚠️
+
+> **Reference:** See [ADR-009 §3.7: Stratified Sampling for SLO Accuracy](../ADR-009-cost-optimization.md#37-stratified-sampling-for-slo-accuracy-c11-resolution) for full architecture and [UC-004: SLO Tracking with Sampling Correction](./UC-004-zero-config-slo-tracking.md#sampling-correction-for-accurate-slo-c11-resolution) for SLO calculation details.
+
+**Problem with Random Sampling:** Breaks SLO metrics! Errors are rare (5%) → random 10% sampling drops 90% of errors → SLO appears better than reality.
+
+**Solution:** Stratified sampling preserves error/success RATIO by sampling each severity class at different rates.
+
+```ruby
+E11y.configure do |config|
+  config.cost_optimization do
+    sampling do
+      # ✅ Stratified sampling (NOT random!)
+      strategy :stratified_adaptive
+      
+      # Cost budget
+      cost_budget 100_000  # events/month
+      
+      # 🎯 SIMPLE CONFIG: Sample rate by severity (C11)
+      stratified_rates do
+        error 1.0    # 100% - Keep ALL errors (critical for SLO!)
+        warn  0.5    # 50%  - Medium priority
+        info  0.1    # 10%  - Low priority (успешные запросы)
+        debug 0.05   # 5%   - Very low priority
+      end
+    end
+  end
+  
+  # SLO tracking with automatic correction (enabled by default!)
+  config.slo do
+    enable_sampling_correction true  # ✅ Corrects metrics automatically
+  end
+end
+```
+
+**How It Works:**
+
+```ruby
+# Scenario: 1000 requests (950 success, 50 errors) → 95% success rate
+
+# Random sampling (10%):
+# - Sample 100 random events
+# - Might get: 98 success, 2 errors (luck!)
+# - Observed success rate: 98% ❌ WRONG! (should be 95%)
+
+# Stratified sampling (errors: 100%, success: 10%):
+# - Sample 50 errors (100% × 50)
+# - Sample 95 success (10% × 950)
+# - Total: 145 events sampled (85.5% cost savings!)
+# - Observed success rate: 95/145 = 65.5%
+# - Corrected success rate: (95 × 1/0.1) / ((95 × 1/0.1) + (50 × 1/1.0)) = 950 / 1000 = 95% ✅ CORRECT!
+```
+
+**Cost Savings Example:**
+
+```ruby
+# 10M events/month (9.5M success, 500K errors)
+
+# WITHOUT stratified sampling (100% all events):
+# Cost: 10M events × $0.001 = $10,000/month
+
+# WITH stratified sampling (errors: 100%, success: 10%):
+# Kept: (500K × 1.0) + (9.5M × 0.1) = 500K + 950K = 1.45M events
+# Cost: 1.45M × $0.001 = $1,450/month
+# Savings: $8,550/month (85.5% reduction!) 💰
+# SLO accuracy: 100% (errors fully preserved)
+```
+
+**Comparison: Random vs Stratified**
+
+| Aspect | Random Sampling (10%) | Stratified Sampling (C11) |
+|--------|----------------------|--------------------------|
+| **Events kept** | 1M (10% of 10M) | 1.45M (14.5% of 10M) |
+| **Errors kept** | ~50K (10% × 500K) ❌ | 500K (100% × 500K) ✅ |
+| **Success kept** | ~950K (10% × 9.5M) | 950K (10% × 9.5M) |
+| **SLO accuracy** | ±5% error ❌ | 0% error ✅ |
+| **Cost savings** | 90% | 85.5% |
+| **Best for** | Non-critical apps | Production SLO tracking |
+
+**StratifiedAdaptiveSampler Implementation:**
+
+```ruby
+# lib/e11y/sampling/stratified_adaptive_sampler.rb
+module E11y
+  module Sampling
+    class StratifiedAdaptiveSampler < SimplifiedSampler
+      def sample?(event)
+        # Get sample rate for event severity
+        sample_rate = stratified_rate_for(event)
+        
+        # Random sampling within stratum
+        rand < sample_rate
+      end
+      
+      def stratified_rate_for(event)
+        case event.severity
+        when :error, :fatal
+          1.0  # 100% - never drop errors!
+        when :warn
+          0.5  # 50%
+        when :info, :success
+          0.1  # 10%
+        when :debug
+          0.05 # 5%
+        else
+          0.1  # Default
+        end
+      end
+      
+      # Store sample rate in event metadata (for correction)
+      def after_sample(event, sampled)
+        if sampled
+          event.metadata[:sample_rate] = stratified_rate_for(event)
+        end
+      end
+    end
+  end
+end
+```
+
+**SLO Calculation with Correction:**
+
+```ruby
+# lib/e11y/slo/calculator.rb
+module E11y
+  module SLO
+    class Calculator
+      def error_rate
+        # Query sampled events
+        total_sampled = Event.count
+        errors_sampled = Event.where(severity: [:error, :fatal]).count
+        
+        # Apply sampling correction
+        total_corrected = correct_count(total_sampled)
+        errors_corrected = correct_count(errors_sampled, severity: :error)
+        
+        # Calculate corrected error rate
+        errors_corrected.to_f / total_corrected
+      end
+      
+      private
+      
+      def correct_count(sampled_count, severity: nil)
+        # Get sample rate for this severity
+        sample_rate = case severity
+                      when :error, :fatal then 1.0
+                      when :warn then 0.5
+                      when :info, :success then 0.1
+                      else 0.1
+                      end
+        
+        # Correct count: observed × (1 / sample_rate)
+        sampled_count / sample_rate
+      end
+    end
+  end
+end
+
+# Usage:
+E11y::SLO.error_rate  # ✅ Returns corrected error rate (accurate!)
+```
+
+**Trade-offs:**
+
+| Aspect | Pro | Con | Decision |
+|--------|-----|-----|----------|
+| **Stratified by severity** | SLO accuracy preserved | Slightly more complex | Accuracy > simplicity |
+| **100% errors, 10% success** | 85% cost savings + accurate SLO | More events than pure random | Best balance |
+| **Sampling correction math** | Accurate metrics | Need to apply correction | Auto-corrected by E11y |
+| **Simple config** | Easy to use | Less flexible than custom strata | Covers 95% of use cases |
+
+---
+
 ## 💻 Implementation Examples
 
 ### Example 1: Production Incident Response

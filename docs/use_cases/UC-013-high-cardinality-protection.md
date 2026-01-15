@@ -832,6 +832,273 @@ end
 
 ---
 
+### 6. Universal Cardinality Protection (C04 Resolution) ⚠️ CRITICAL
+
+> **⚠️ CRITICAL: C04 Conflict Resolution - Cardinality Protection for ALL Backends**  
+> **See:** [ADR-009 Section 8](../ADR-009-cost-optimization.md#8-cardinality-protection-c04-resolution--critical) for detailed architecture and cost impact analysis.  
+> **Problem:** Original UC-013 cardinality protection applied ONLY to Yabeda/Prometheus metrics, but NOT to OpenTelemetry span attributes or Loki log labels. High-cardinality values (`user_id`, `order_id`) bypassed protection and caused cost explosions in OTLP backends (Datadog, Honeycomb).  
+> **Solution:** Universal `CardinalityFilter` middleware applies protection to **ALL backends** (Yabeda, OpenTelemetry, Loki) with optional per-backend overrides.
+
+**The Problem - Inconsistent Cardinality Protection:**
+
+Before C04 resolution, cardinality protection was **metrics-only**:
+
+```ruby
+# ❌ BEFORE C04: Inconsistent protection (cost explosion!)
+E11y.configure do |config|
+  config.metrics do
+    # Cardinality protection for Yabeda/Prometheus ✅
+    forbidden_labels :user_id, :order_id
+    cardinality_limit_for 'orders_total', max: 100
+  end
+  
+  # OpenTelemetry: NO cardinality protection! ❌
+  config.opentelemetry do
+    enabled true
+    export_traces true  # Spans include ALL attributes
+  end
+end
+
+# Event tracking (10,000 unique users):
+10_000.times do |i|
+  Events::OrderCreated.track(
+    order_id: "order-#{i}",  # ← 10,000 unique values!
+    user_id: "user-#{i}",    # ← 10,000 unique values!
+    amount: 99.99
+  )
+end
+
+# Result:
+# ✅ Prometheus: order_id/user_id PROTECTED (only 100 unique values tracked)
+# ❌ OpenTelemetry: order_id/user_id NOT PROTECTED (all 10,000 exported!)
+# ❌ Loki: order_id/user_id NOT PROTECTED (index bloat!)
+
+# Cost impact:
+# - Datadog: $0.10/span × 10,000 = $1,000/day = $30,000/month 💸
+# - Backend cardinality limit exceeded → data loss
+```
+
+**The Solution - Universal Cardinality Protection:**
+
+After C04 resolution, protection applies to **ALL backends**:
+
+```ruby
+# ✅ AFTER C04: Unified protection (cost savings!)
+E11y.configure do |config|
+  # GLOBAL cardinality protection (applies to ALL backends)
+  config.cardinality_protection do
+    enabled true
+    max_unique_values 100  # Conservative default (Prometheus-safe)
+    protected_labels [:user_id, :order_id, :session_id, :tenant_id]
+  end
+  
+  # Optional: Per-backend overrides (if needed)
+  config.adapters do
+    # Yabeda: Use global settings (default)
+    yabeda do
+      cardinality_protection.inherit_from :global
+    end
+    
+    # OpenTelemetry: Higher limits OK (OTLP backends handle more)
+    opentelemetry do
+      cardinality_protection do
+        max_unique_values 1000  # OTLP backends can handle more
+        protected_labels [:user_id, :order_id]  # Subset of global
+      end
+    end
+    
+    # Loki: Use global settings
+    loki do
+      cardinality_protection.inherit_from :global
+    end
+  end
+end
+
+# Same event tracking (10,000 unique users):
+10_000.times do |i|
+  Events::OrderCreated.track(
+    order_id: "order-#{i}",
+    user_id: "user-#{i}",
+    amount: 99.99
+  )
+end
+
+# Result:
+# ✅ Prometheus: order_id/user_id → 100 + [OTHER] (protected)
+# ✅ OpenTelemetry: order_id/user_id → 1000 + [OTHER] (protected)
+# ✅ Loki: order_id/user_id → 100 + [OTHER] (protected)
+
+# Cost impact:
+# - Datadog: $0.01/span × 10,000 = $100/day = $3,000/month ✅
+# - Monthly savings: $27,000 💰 (90% reduction!)
+```
+
+**Configuration Examples:**
+
+**1. Production: Strict Limits (Cost-Sensitive)**
+
+```ruby
+# config/environments/production.rb
+E11y.configure do |config|
+  config.cardinality_protection do
+    enabled true
+    max_unique_values 100  # Prometheus-safe
+    protected_labels [:user_id, :order_id, :session_id, :tenant_id, :ip_address]
+  end
+  
+  # OTLP can handle more (optional override)
+  config.adapters.opentelemetry do
+    cardinality_protection.max_unique_values 1000
+  end
+end
+```
+
+**2. Development: No Limits (Full Visibility)**
+
+```ruby
+# config/environments/development.rb
+E11y.configure do |config|
+  config.cardinality_protection.enabled false  # Unlimited cardinality
+end
+```
+
+**3. Staging: Moderate Limits (Balance Cost vs Debugging)**
+
+```ruby
+# config/environments/staging.rb
+E11y.configure do |config|
+  config.cardinality_protection do
+    enabled true
+    max_unique_values 500  # More than prod, less than unlimited
+    protected_labels [:user_id, :order_id]
+  end
+  
+  # OTLP backend can handle even more
+  config.adapters.opentelemetry do
+    cardinality_protection.max_unique_values 1000
+  end
+end
+```
+
+**Per-Backend Cardinality Budgets:**
+
+Different backends have different cardinality tolerance:
+
+| Backend | Recommended `max_unique_values` | Why |
+|---------|----------------------------------|-----|
+| **Prometheus (Yabeda)** | 100 | Time-series DB, high memory usage per series |
+| **OpenTelemetry (Datadog)** | 1000 | Columnar storage, better cardinality handling |
+| **Loki** | 100 | Label cardinality affects index size & query performance |
+| **Sentry** | Unlimited | Error tracking needs full context (not cost-sensitive) |
+| **Audit (PostgreSQL)** | Unlimited | Compliance requires complete data |
+
+**Example: Different Limits per Backend**
+
+```ruby
+E11y.configure do |config|
+  # Global default (applies to Yabeda, Loki)
+  config.cardinality_protection do
+    enabled true
+    max_unique_values 100
+    protected_labels [:user_id, :order_id]
+  end
+  
+  # OpenTelemetry: 10× higher limit
+  config.adapters.opentelemetry do
+    cardinality_protection.max_unique_values 1000
+  end
+  
+  # Sentry: No limit (need full context for debugging)
+  config.adapters.sentry do
+    cardinality_protection.enabled false
+  end
+  
+  # Audit: No limit (compliance)
+  config.adapters.audit do
+    cardinality_protection.enabled false
+  end
+end
+
+# Event with high-cardinality fields:
+Events::OrderCreated.track(
+  order_id: "order-12345",  # High-cardinality
+  user_id: "user-67890",    # High-cardinality
+  amount: 99.99
+)
+
+# Result per backend:
+# Prometheus: order_id/user_id → [OTHER] (after 100 unique values)
+# OpenTelemetry: order_id/user_id → [OTHER] (after 1000 unique values)
+# Loki: order_id/user_id → [OTHER] (after 100 unique values)
+# Sentry: order_id="order-12345", user_id="user-67890" (full context)
+# Audit: order_id="order-12345", user_id="user-67890" (full context)
+```
+
+**Monitoring Cardinality Protection:**
+
+Track cardinality protection effectiveness:
+
+```ruby
+# Metrics:
+e11y_cardinality_filtered_labels_total{backend="all",label="user_id"}
+e11y_cardinality_unique_values{label="order_id"}
+e11y_cardinality_limit_breached_total{label="session_id"}
+
+# Prometheus queries:
+
+# 1. Cardinality protection rate (% of labels filtered)
+rate(e11y_cardinality_filtered_labels_total[5m])
+/
+rate(e11y_events_tracked_total[5m]) * 100
+
+# 2. Labels at risk (approaching limit)
+e11y_cardinality_unique_values
+/ 
+100 * 100 > 80  # 80% of max_unique_values (100)
+
+# 3. Top high-cardinality labels
+topk(10,
+  sum by (label) (
+    rate(e11y_cardinality_filtered_labels_total[1h])
+  )
+)
+
+# 4. Cost savings estimate (assume $0.10 per unique span attribute)
+sum(rate(e11y_cardinality_filtered_labels_total[1d])) * 0.10
+# Result: Daily $ saved
+```
+
+**Trade-offs:**
+
+| Aspect | Pros | Cons | Mitigation |
+|--------|------|------|------------|
+| **Unified protection** | Consistent across all backends | One size doesn't fit all backends | Per-backend overrides (`max_unique_values`) |
+| **[OTHER] grouping** | Prevents cost explosion | Loses context for debugging | Log original values at debug level |
+| **Global config** | Simple, DRY | May not fit all backend limits | Environment-specific: prod=100, staging=500, dev=unlimited |
+| **max_unique_values 100** | Conservative, safe for Prometheus | May be too strict for OTLP backends | Per-backend override: OTLP=1000, Yabeda=100 |
+
+**Cost Impact:**
+
+Real-world example from C04 analysis:
+
+```
+BEFORE C04 (no OTLP protection):
+- 10,000 orders/day with unique order_id
+- Datadog pricing: $0.10/span with high-cardinality attributes
+- Daily cost: $1,000
+- Monthly cost: $30,000 ❌
+
+AFTER C04 (universal protection):
+- Same 10,000 orders/day
+- Cardinality protected: 1000 unique + [OTHER]
+- Datadog pricing: $0.01/span with low-cardinality attributes
+- Daily cost: $100
+- Monthly cost: $3,000 ✅
+- Monthly savings: $27,000 💰 (90% reduction!)
+```
+
+---
+
 ## 📊 Self-Monitoring Metrics
 
 **E11y tracks its own cardinality:**
@@ -1402,6 +1669,7 @@ end
 ## 📚 Related Use Cases
 
 - **[UC-003: Pattern-Based Metrics](./UC-003-pattern-based-metrics.md)** - Auto-generate metrics
+- **[UC-008: OpenTelemetry Integration](./UC-008-opentelemetry-integration.md)** - OTLP cardinality protection (C04)
 - **[UC-015: Cost Optimization](./UC-015-cost-optimization.md)** - Reduce observability costs
 
 ---

@@ -440,6 +440,216 @@ E11y::DeadLetterQueue.replay(
 )
 ```
 
+---
+
+### DLQ Replay with PII & Schema Considerations (C07, C15)
+
+> **⚠️ CRITICAL:** DLQ replay requires special handling for PII filtering and schema migrations.  
+> **See:** [ADR-006 Section 5.6](../ADR-006-security-compliance.md#56-pii-handling-for-event-replay-from-dlq-c07-resolution) for C07 (PII double-hashing), [ADR-012 Section 8](../ADR-012-event-evolution.md#8-schema-migrations-and-dlq-replay-c15-resolution--critical) for C15 (schema migrations).
+
+**Problem 1: PII Double-Hashing on Replay (C07)**
+
+When replaying events from DLQ, PII filtering middleware runs again, causing double-hashing:
+
+```ruby
+# ❌ BAD: Double-hashing PII on replay
+# Original event (first processing):
+Events::UserLogin.track(
+  email: 'user@example.com',   # ← Original PII
+  ip: '192.168.1.1'             # ← Original PII
+)
+
+# Pipeline step 2: PII Filtering
+# → email: 'user@example.com' → SHA256 hash → 'a1b2c3d4...'
+# → ip: '192.168.1.1' → SHA256 hash → 'e5f6g7h8...'
+
+# Event sent, but Loki fails → goes to DLQ
+
+# DLQ Replay:
+E11y::DeadLetterQueue.replay_all
+
+# Pipeline step 2: PII Filtering runs AGAIN!
+# → email: 'a1b2c3d4...' (already hashed!) → SHA256 hash → 'x9y8z7w6...'
+#   ❌ DOUBLE-HASHED! Original: a1b2c3d4, Replay: x9y8z7w6
+
+# Result: DATA CORRUPTION!
+# - Same user, DIFFERENT hashes!
+# - Audit trail broken
+# - GDPR data deletion impossible
+```
+
+**Solution: Metadata Flags to Skip PII Filtering**
+
+```ruby
+# ✅ GOOD: Mark replayed events to skip PII filtering
+# config/initializers/e11y.rb
+E11y.configure do |config|
+  config.error_handling.dead_letter_queue do
+    enabled true
+    adapter :dlq_file
+    
+    # === CRITICAL: Enable replay metadata (C07) ===
+    # Replay service automatically adds flags:
+    # - :replayed => true (skip transformations)
+    # - :pii_filtered => true (already filtered)
+    mark_replayed_events true  # ← Default: true
+  end
+end
+
+# Replay service implementation:
+module E11y
+  module DLQ
+    class ReplayService
+      def replay_event(dlq_event)
+        event_data = dlq_event[:event_data]
+        
+        # ✅ CRITICAL: Add replay metadata flags
+        event_data[:metadata] ||= {}
+        event_data[:metadata][:replayed] = true
+        event_data[:metadata][:pii_filtered] = true  # Already filtered!
+        event_data[:metadata][:replayed_at] = Time.now.utc.iso8601
+        event_data[:metadata][:original_event_id] = event_data[:event_id]
+        
+        # Send through pipeline
+        # PII filter middleware will skip (checks :replayed flag)
+        E11y::Pipeline.process(event_data)
+      end
+    end
+  end
+end
+
+# PiiFilter middleware checks flags:
+class PiiFilter < Base
+  def call(event_data)
+    # ✅ Skip PII filtering for replayed events
+    if already_filtered?(event_data)
+      E11y.logger.debug "[E11y] Skipping PII filtering for replayed event"
+      return event_data
+    end
+    
+    # Apply PII filtering for new events
+    filter_pii(event_data)
+  end
+  
+  private
+  
+  def already_filtered?(event_data)
+    metadata = event_data[:metadata] || {}
+    metadata[:replayed] || metadata[:pii_filtered]
+  end
+end
+
+# Replay with idempotency guarantee:
+E11y::DeadLetterQueue.replay_all
+# → All events processed correctly
+# → PII hashes preserved (no double-hashing)
+# → Audit trail intact ✅
+```
+
+**Problem 2: Schema Migrations & DLQ Replay (C15) ⚠️ User Responsibility**
+
+> **Decision:** Schema migrations are the **user's responsibility**, not E11y's. This is an edge case for poorly managed DLQs.
+
+**Scenario:**
+
+```ruby
+# v1.0: Order event schema (old)
+class OrderCreated < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:string)
+    required(:amount).filled(:float)
+  end
+end
+
+# Events tracked with v1.0 schema
+Events::OrderCreated.track(order_id: '123', amount: 99.99)
+# → Loki fails → Event goes to DLQ
+
+# v2.0: Order event schema (new - added required field)
+class OrderCreated < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:string)
+    required(:amount).filled(:float)
+    required(:currency).filled(:string)  # ← NEW REQUIRED FIELD!
+  end
+end
+
+# DLQ Replay (after schema change):
+E11y::DeadLetterQueue.replay_all
+# → Old event: { order_id: '123', amount: 99.99 }
+# → ❌ Schema validation fails (missing :currency)!
+# → Event REJECTED!
+```
+
+**Recommendation: User Responsibility**
+
+1. **Clear DLQ before schema changes** (best practice):
+   ```ruby
+   # Before deploying v2.0:
+   # 1. Replay all DLQ events (under v1.0 schema)
+   E11y::DeadLetterQueue.replay_all
+   
+   # 2. Verify DLQ is empty
+   E11y::DeadLetterQueue.size  # => 0
+   
+   # 3. Deploy v2.0 with new schema
+   ```
+
+2. **Use lenient validation for DLQ replay** (optional - user-implemented):
+   ```ruby
+   # config/initializers/e11y.rb
+   E11y.configure do |config|
+     config.validation do
+       # Lenient validation for replayed events
+       # (user chooses to allow old schema)
+       lenient_mode_if do |event_data|
+         event_data.dig(:metadata, :replayed) == true
+       end
+     end
+   end
+   ```
+
+3. **Separate DLQ processing for old events** (optional - user-implemented):
+   ```ruby
+   # Replay old events with schema migration logic
+   E11y::DeadLetterQueue.replay do |event|
+     # User-implemented migration
+     if event.version == '1.0' && event.name == 'order.created'
+       # Add missing :currency field
+       event.payload[:currency] = 'USD'  # Default value
+     end
+     
+     true  # Replay this event
+   end
+   ```
+
+**Key Takeaways:**
+
+| Aspect | E11y Responsibility | User Responsibility |
+|--------|---------------------|---------------------|
+| **PII Double-Hashing** | ✅ Handled by E11y (metadata flags) | None - automatic |
+| **Schema Migrations** | ❌ NOT handled by E11y | ✅ User must clear DLQ before schema changes OR implement lenient validation |
+| **Idempotency** | ✅ Guaranteed by E11y (replay flags) | None - automatic |
+| **DLQ Management** | ❌ NOT handled by E11y | ✅ User must clear old events periodically |
+
+**Trade-offs (C07):**
+
+| Decision | Pro | Con | Mitigation |
+|----------|-----|-----|------------|
+| **Metadata flags** | Simple, automatic | Metadata size +24 bytes | Acceptable overhead |
+| **`:replayed` flag** | Clear intent | None | ✅ Best practice |
+| **Skip PII filter** | Prevents double-hashing | Must trust DLQ integrity | DLQ stored securely (encrypted) |
+
+**Trade-offs (C15):**
+
+| Decision | Pro | Con | Mitigation |
+|----------|-----|-----|------------|
+| **User responsibility** | E11y stays simple | User must manage DLQ lifecycle | Document best practices (clear DLQ before schema changes) |
+| **No auto-migration** | No complex migration logic in E11y | Old events may fail validation | User implements lenient validation OR pre-replay migration |
+| **Edge case** | Rare in well-managed systems | May surprise users with large DLQs | Clear warnings in docs |
+
+---
+
 ### Inspect DLQ
 
 ```ruby

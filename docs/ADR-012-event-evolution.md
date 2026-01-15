@@ -16,7 +16,9 @@
 5. [Schema Evolution Guidelines](#5-schema-evolution-guidelines)
 6. [Event Registry Integration](#6-event-registry-integration)
 7. [Migration Strategy](#7-migration-strategy)
-8. [Trade-offs](#8-trade-offs)
+8. [Schema Migrations and DLQ Replay (C15 Resolution)](#8-schema-migrations-and-dlq-replay-c15-resolution) ⚠️
+9. [Trade-offs](#9-trade-offs)
+10. [Summary](#10-summary)
 
 ---
 
@@ -737,9 +739,87 @@ event_class.track(dlq_event[:payload])          # ✅ Just replay as V1
 
 ---
 
-## 8. Trade-offs
+## 8. Schema Migrations and DLQ Replay (C15 Resolution) ⚠️
 
-### 8.1. Key Decisions
+**Reference:** [CONFLICT-ANALYSIS.md - C15: Event Versioning × DLQ Replay](../researches/CONFLICT-ANALYSIS.md#c15-event-versioning--dlq-replay)
+
+### Decision: User Responsibility (Not an E11y Problem)
+
+**E11y Position:**
+
+> Schema migrations during DLQ replay are **NOT an E11y responsibility**. This is an **operational edge case** that occurs only when DLQ is poorly managed (events sitting for weeks between deployments).
+
+**Why this is NOT a problem:**
+
+1. **DLQ is for transient failures** (minutes/hours, not weeks!)
+   - Loki down 30 seconds → retry → success
+   - Loki down 2 hours → DLQ → replay after fix (same deployment, same schema!)
+   
+2. **DLQ should be cleared between deployments**
+   - Replay DLQ before deploying schema changes
+   - If DLQ has events sitting for **weeks** → operational failure, not E11y problem
+
+3. **Real-world timeline:**
+   ```
+   09:00 - Loki down (transient failure)
+   09:02 - Events go to DLQ
+   09:05 - Loki back online
+   09:10 - DLQ replay ✅ (same schema, same deployment)
+   ```
+
+   **NOT:**
+   ```
+   Week 1 - Events in DLQ
+   Week 2 - Deploy new code with schema changes
+   Week 3 - Replay DLQ ❌ (BAD OPERATIONS!)
+   ```
+
+**If you MUST replay old-schema events (edge case):**
+
+This is **app-specific** and requires **user-implemented** migration logic:
+
+```ruby
+# Option 1: Lenient validation (skip schema validation for replayed events)
+E11y.configure do |config|
+  config.dlq_replay do
+    skip_validation true  # Allow old schemas
+  end
+end
+
+# Option 2: Transform old events before replay (user code)
+E11y::DeadLetterQueue.replay do |old_event|
+  # User implements migration logic
+  if old_event[:event_version] == 1
+    # Transform v1 → v2
+    {
+      order_id: old_event[:order_id],
+      amount_cents: (old_event[:amount] * 100).to_i  # amount → amount_cents
+    }
+  else
+    old_event
+  end
+end
+```
+
+**E11y provides:**
+- ✅ DLQ replay mechanism (UC-021)
+- ✅ Event version metadata (stored with event)
+- ✅ Validation bypass option (`skip_validation`)
+
+**User provides:**
+- 🔧 Migration logic (app-specific transformations)
+- 🔧 Operational discipline (clear DLQ between deployments)
+
+**Trade-off:**
+- ✅ **Pro:** E11y stays simple, no complex migration framework
+- ✅ **Pro:** User has full control over migration logic
+- ⚠️ **Con:** User must implement migrations for edge cases (poorly managed DLQ)
+
+---
+
+## 9. Trade-offs
+
+### 9.1. Key Decisions
 
 | Decision | Pro | Con | Rationale |
 |----------|-----|-----|-----------|
@@ -750,8 +830,9 @@ event_class.track(dlq_event[:payload])          # ✅ Just replay as V1
 | **`v:` only if > 1** | Reduces noise, storage | Need to infer V1 | 90% of events are V1 |
 | **Version from class name** | Single source of truth | Can't rename classes | Consistent, explicit |
 | **No dual emission** | Simple | Need to update consumers | Consumers are under our control |
+| **DLQ replay with old schemas: User responsibility (C15)** ⚠️ | Simple gem, no migration framework | Edge case if DLQ poorly managed | Operational discipline > gem complexity |
 
-### 8.2. Alternatives Considered
+### 9.2. Alternatives Considered
 
 **A) event_name = class name (with version suffix)**
 ```ruby
@@ -808,7 +889,7 @@ end
 
 ---
 
-## 9. Summary
+## 10. Summary
 
 ### 9.1. Core Principles
 

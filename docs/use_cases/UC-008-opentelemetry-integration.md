@@ -294,6 +294,178 @@ Events::OrderCreated.track(order_id: '123')
 
 ---
 
+### 6. Baggage PII Protection (C08 Resolution) ⚠️ CRITICAL
+
+> **⚠️ CRITICAL: C08 Conflict Resolution - PII Leaking via OpenTelemetry Baggage**  
+> **See:** [ADR-006 Section 5.5](../ADR-006-security-compliance.md#55-opentelemetry-baggage-pii-protection-c08-resolution--critical) for detailed architecture and GDPR compliance rationale.  
+> **Problem:** OpenTelemetry Baggage propagates data via HTTP headers (`baggage: key1=value1,key2=value2`), bypassing E11y's PII filtering. If a developer accidentally adds PII to baggage, it leaks across all services.  
+> **Solution:** Block ALL baggage keys by default, allow ONLY safe keys via allowlist.
+
+**The Problem - PII Leaking via HTTP Headers:**
+
+OpenTelemetry Baggage is a W3C standard for propagating key-value pairs across distributed traces. However, it bypasses ALL security controls:
+
+```ruby
+# ❌ DANGER: PII in baggage leaks via HTTP headers
+# Service A:
+OpenTelemetry::Baggage.set_value('user_email', 'user@example.com')
+OpenTelemetry::Baggage.set_value('ip_address', '192.168.1.100')
+
+# HTTP call to Service B includes:
+# baggage: user_email=user@example.com,ip_address=192.168.1.100
+# ↑ PII transmitted in PLAIN TEXT via HTTP headers!
+# ↑ Bypasses E11y PII filtering entirely!
+
+# Problems:
+# 1. ❌ GDPR violation - PII transmitted without consent
+# 2. ❌ Security risk - PII visible in HTTP logs, proxies, CDNs
+# 3. ❌ Audit risk - No record of PII transmission
+# 4. ❌ Compliance risk - PII leaves your infrastructure without controls
+```
+
+**The Solution - Allowlist-Only Baggage:**
+
+E11y blocks ALL baggage keys by default, allowing ONLY safe keys (no PII):
+
+```ruby
+# config/initializers/e11y.rb
+E11y.configure do |config|
+  config.security.baggage_protection do
+    enabled true  # ✅ CRITICAL: Always enable in production
+    
+    # Allowlist: ONLY these keys are safe
+    allowed_keys [
+      'trace_id',       # ✅ Safe: Correlation ID
+      'span_id',        # ✅ Safe: Trace context
+      'environment',    # ✅ Safe: Deployment context
+      'version',        # ✅ Safe: Service version
+      'service_name',   # ✅ Safe: Service identifier
+      'request_id',     # ✅ Safe: Request identifier
+      # Custom safe keys (no PII!):
+      'feature_flag_id',  # ✅ Safe: Feature flag name
+      'ab_test_variant'   # ✅ Safe: A/B test group
+    ]
+    
+    # Block mode: What happens when PII detected?
+    block_mode :silent   # Options: :silent (log), :warn (log+warn), :raise (exception)
+    
+    # Monitoring: Track violations
+    on_blocked_key do |key, value, caller_location|
+      Yabeda.e11y_baggage_pii_blocked.increment(
+        key: key,
+        service: ENV['SERVICE_NAME']
+      )
+    end
+  end
+end
+```
+
+**Usage Examples:**
+
+**❌ BLOCKED: PII Keys (Not in Allowlist)**
+
+```ruby
+# Service A:
+OpenTelemetry::Baggage.set_value('user_email', 'user@example.com')
+# → BLOCKED ❌ (not in allowlist)
+# → Logged: "[E11y] Blocked PII from OpenTelemetry baggage: key='user_email'"
+
+OpenTelemetry::Baggage.set_value('ip_address', '192.168.1.100')
+# → BLOCKED ❌ (not in allowlist)
+
+OpenTelemetry::Baggage.set_value('session_id', 'abc123')
+# → BLOCKED ❌ (not in allowlist)
+
+# HTTP call to Service B:
+# baggage: (empty - all PII blocked!)
+```
+
+**✅ ALLOWED: Safe Keys (In Allowlist)**
+
+```ruby
+# Service A:
+OpenTelemetry::Baggage.set_value('trace_id', 'abc123def456')
+# → ALLOWED ✅
+
+OpenTelemetry::Baggage.set_value('environment', 'production')
+# → ALLOWED ✅
+
+OpenTelemetry::Baggage.set_value('version', 'v2.1.0')
+# → ALLOWED ✅
+
+OpenTelemetry::Baggage.set_value('feature_flag_id', 'new_checkout_v2')
+# → ALLOWED ✅
+
+# HTTP call to Service B:
+# baggage: trace_id=abc123def456,environment=production,version=v2.1.0,feature_flag_id=new_checkout_v2
+# ✅ All safe keys propagated, no PII!
+```
+
+**✅ ALTERNATIVE: Use Pseudonymized Identifiers**
+
+If you need to propagate user context, use non-PII identifiers:
+
+```ruby
+# ❌ BAD: PII in baggage
+OpenTelemetry::Baggage.set_value('user_email', 'user@example.com')
+
+# ✅ GOOD: Pseudonymized user identifier
+OpenTelemetry::Baggage.set_value('user_id_hash', Digest::SHA256.hexdigest(user.email))
+# → No PII, still allows correlation across services ✅
+```
+
+**Strict Mode for Development:**
+
+Fail fast in non-production environments:
+
+```ruby
+# config/environments/development.rb
+E11y.configure do |config|
+  config.security.baggage_protection do
+    enabled true
+    block_mode :raise  # ← RAISE exception on blocked keys (fail fast)
+    allowed_keys E11y::Middleware::BaggageProtection::ALLOWED_KEYS
+  end
+end
+
+# Developer tries to set PII:
+OpenTelemetry::Baggage.set_value('user_email', 'test@example.com')
+# → RAISES BaggagePiiError:
+#    "Blocked PII from OpenTelemetry baggage: key='user_email'.
+#     Only allowed keys: trace_id, environment, version, ..."
+# ✅ Catch PII leaks during development!
+```
+
+**Why This Matters (GDPR Compliance):**
+
+| GDPR Article | Requirement | How Baggage Protection Helps |
+|--------------|-------------|------------------------------|
+| **Art. 5(1)(c)** | Data minimisation | Only necessary metadata propagated |
+| **Art. 5(1)(f)** | Integrity and confidentiality | PII cannot leak via trace context |
+| **Art. 32** | Security of processing | Technical measure to prevent PII transmission |
+
+**Monitoring:**
+
+Track baggage protection effectiveness:
+
+```ruby
+# Metrics (via Yabeda)
+Yabeda.e11y_baggage_pii_blocked_total.increment(
+  key: 'user_email',
+  service: 'api-gateway'
+)
+
+# Alert on repeated violations (indicates developer training needed)
+if Yabeda.e11y_baggage_pii_blocked_total.get > 100
+  Sentry.capture_message(
+    "High volume of baggage PII violations detected",
+    level: :warning
+  )
+end
+```
+
+---
+
 ## 💻 Implementation Examples
 
 ### Example 1: OTel Collector Setup
@@ -951,6 +1123,7 @@ Events::HttpRequest.track(
 ## 📚 Related Use Cases
 
 - **[UC-006: Trace Context Management](./UC-006-trace-context-management.md)** - W3C Trace Context
+- **[UC-007: PII Filtering](./UC-007-pii-filtering.md)** - PII protection (baggage allowlist: C08)
 - **[UC-009: Multi-Service Tracing](./UC-009-multi-service-tracing.md)** - Distributed traces
 - **[UC-010: Background Job Tracking](./UC-010-background-job-tracking.md)** - Job tracing
 

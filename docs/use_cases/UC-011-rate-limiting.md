@@ -232,6 +232,212 @@ end
 
 ---
 
+### Layer 4: DLQ Filter Integration (C02 Resolution) ⚠️
+
+> **Reference:** See [ADR-013 §4.6: Rate Limiting × DLQ Filter](../ADR-013-reliability-error-handling.md#46-rate-limiting--dlq-filter-interaction-c02-resolution) for full architecture.
+
+**Problem:** Rate limiting drops events BEFORE they reach DLQ filter. Critical events (e.g., payments) may be lost during traffic spikes, even though DLQ filter says "always save payments".
+
+**Solution:** Rate limiter respects DLQ `always_save` filter - critical events bypass rate limits.
+
+```ruby
+E11y.configure do |config|
+  config.rate_limiting do
+    enabled true
+    global limit: 10_000, window: 1.minute
+    
+    # ✅ Respect DLQ filter for critical events
+    respect_dlq_filter true  # Critical events bypass rate limits!
+    
+    # Alternative: Explicit bypass patterns
+    bypass_for do
+      event_patterns ['payment.*', 'order.*', 'audit.*']
+      severities [:error, :fatal]
+    end
+  end
+  
+  # DLQ filter configuration
+  config.error_handling.dead_letter_queue.filter do
+    always_save do
+      event_patterns ['payment.*', 'order.*']
+    end
+  end
+end
+
+# Scenario: Traffic spike (15,000 payment failures/sec)
+15_000.times do
+  Events::PaymentFailed.track(order_id: '123', amount: 500)
+end
+
+# Result:
+# - Rate limit: 10,000/min
+# - Excess: 5,000 events over limit
+# - ❌ WITHOUT C02 fix: 5,000 critical payment events DROPPED!
+# - ✅ WITH C02 fix: ALL payment events processed (bypass rate limit!)
+#   → Why? DLQ filter says "always_save payment.*"
+#   → Rate limiter checks: dlq_filter.always_save?(event) → true
+#   → Bypass rate limit → event goes to buffer → success!
+```
+
+**Flow Diagram:**
+
+```
+Event → Rate Limiter
+  ├─ Check: dlq_filter.always_save?(event)?
+  │   ├─ YES (critical event) → ✅ BYPASS rate limit → Buffer
+  │   └─ NO (non-critical)
+  │       ├─ Under limit? → ✅ PASS → Buffer
+  │       └─ Over limit? → ❌ DROP (or sample)
+  └─ Buffer → Adapter → DLQ (if adapter fails)
+```
+
+**Configuration Options:**
+
+```ruby
+# Option 1: Auto-respect DLQ filter (recommended)
+config.rate_limiting.respect_dlq_filter = true
+
+# Option 2: Explicit bypass patterns (more control)
+config.rate_limiting.bypass_for do
+  event_patterns ['payment.*', 'fraud.*', 'security.*']
+  severities [:error, :fatal]
+  custom_check { |event| event[:vip_customer] == true }
+end
+
+# Option 3: Hybrid (DLQ filter + extra patterns)
+config.rate_limiting do
+  respect_dlq_filter true  # Respect DLQ always_save
+  bypass_for do
+    event_patterns ['audit.*']  # Additional patterns
+  end
+end
+```
+
+**Trade-offs:**
+
+| Aspect | Pro | Con | Decision |
+|--------|-----|-----|----------|
+| **Bypass critical events** | Zero data loss for payments | Rate limit less effective during attacks | Critical events > rate limits |
+| **respect_dlq_filter** | DRY (single source of truth) | Tight coupling to DLQ config | Worth it for simplicity |
+| **bypass_for patterns** | Flexible custom rules | Need to maintain bypass list | Use for edge cases only |
+
+---
+
+### Layer 5: Retry Rate Limiting (C06 Resolution) ⚠️
+
+> **Reference:** See [ADR-013 §3.5: Retry Rate Limiting](../ADR-013-reliability-error-handling.md#35-retry-rate-limiting-c06-resolution) for full architecture.
+
+**Problem:** Adapter failures trigger retries. If 1000 events fail → 3000 retry attempts (thundering herd) → buffer overflow.
+
+**Solution:** Separate rate limit for RETRIES (staged retry with jitter).
+
+```ruby
+E11y.configure do |config|
+  config.error_handling do
+    retry_policy do
+      max_attempts 3
+      base_delay 100  # ms
+      max_delay 5000  # ms
+      exponential_backoff true
+      jitter true
+      
+      # ✅ Retry rate limiting (separate from main rate limit!)
+      retry_rate_limit do
+        enabled true
+        limit 1000        # Max 1000 retries/minute (not 10k!)
+        window 1.minute
+        
+        # When retry is rate-limited:
+        on_limit_exceeded :delay  # Options: :drop, :delay, :dlq
+        
+        # Delay strategy (staged retry)
+        delay_strategy do
+          base_delay 1000      # 1 sec
+          max_delay 60_000     # 60 sec
+          backoff_multiplier 2 # 1s → 2s → 4s → 8s → 16s → 32s → 60s
+          jitter_range 0.2     # ±20% randomization
+        end
+      end
+    end
+  end
+end
+
+# Scenario: Loki down for 5 minutes (adapter fails)
+# - 10,000 events/min attempted
+# - Adapter fails → 10,000 events need retry
+# - Without retry rate limiting:
+#   - 10,000 × 3 attempts = 30,000 retries
+#   - Immediate retry storm (buffer overflow!)
+# - With retry rate limiting:
+#   - First retry: 1,000 events (rate limit enforced)
+#   - Next 9,000 events: delayed (staged retry)
+#   - Retry schedule:
+#     - 00:00 - 1,000 retries (immediate)
+#     - 00:01 - 1,000 retries (delayed 1s)
+#     - 00:02 - 1,000 retries (delayed 2s)
+#     - 00:04 - 1,000 retries (delayed 4s)
+#     - ... (exponential backoff)
+#     - 01:00 - Last batch (delayed 60s)
+#   - Result: ✅ No buffer overflow! Smooth retry spread over time.
+```
+
+**Retry Timeline Comparison:**
+
+```
+WITHOUT retry rate limiting:
+00:00 Loki down
+00:00 10,000 events fail → 30,000 immediate retries ❌ BUFFER OVERFLOW!
+00:01 All retries exhausted, 10,000 events lost
+
+WITH retry rate limiting:
+00:00 Loki down
+00:00 10,000 events fail → 1,000 immediate retries (rate limited)
+00:01 1,000 retries (delayed)
+00:02 1,000 retries (delayed)
+00:04 1,000 retries (delayed)
+00:08 1,000 retries (delayed)
+00:16 1,000 retries (delayed)
+00:32 1,000 retries (delayed)
+01:00 1,000 retries (delayed)
+02:00 1,000 retries (delayed)
+04:00 1,000 retries (delayed)
+05:00 Loki back online → 1,000 final retries → ✅ All 10,000 events saved!
+```
+
+**Configuration: Main Rate Limit vs Retry Rate Limit**
+
+```ruby
+E11y.configure do |config|
+  # Main rate limiting (for NEW events)
+  config.rate_limiting do
+    global limit: 10_000, window: 1.minute
+    on_exceeded :sample  # Sample excess events
+  end
+  
+  # Retry rate limiting (for FAILED events)
+  config.error_handling.retry_policy.retry_rate_limit do
+    limit: 1_000, window: 1.minute  # 10× LOWER than main limit!
+    on_limit_exceeded :delay         # Delay excess retries (don't drop!)
+  end
+end
+
+# Why separate limits?
+# 1. Retries are MORE expensive (adapter already failed once)
+# 2. Lower retry rate prevents cascading failures (give adapter time to recover)
+# 3. Main limit protects ingestion, retry limit protects adapter
+```
+
+**Trade-offs:**
+
+| Aspect | Pro | Con | Decision |
+|--------|-----|-----|----------|
+| **Retry rate limit 10× lower** | Prevents adapter overload | Slower retry | Adapter stability > speed |
+| **:delay (not :drop)** | No data loss | Memory for delayed queue | Worth it for reliability |
+| **Exponential backoff + jitter** | Smooth recovery | Complex timing | Industry best practice |
+| **Separate from main limit** | Fine-grained control | More config | Flexibility > simplicity |
+
+---
+
 ## 💻 Rate Limiting Strategies
 
 ### Strategy 1: Drop

@@ -324,6 +324,218 @@ end
 
 ---
 
+### 6. Environment-Specific Configuration Recommendations (C14)
+
+> **Implementation:** See [ADR-010 Section 2: Development vs Production](../ADR-010-developer-experience.md#2-development-vs-production-configuration) for detailed architecture rationale.
+
+**Critical differences between development and production configurations:**
+
+**Development: Immediate Feedback (Zero Delay)**
+
+```ruby
+# config/environments/development.rb
+E11y.configure do |config|
+  # === BUFFERING: DISABLED (immediate writes) ===
+  # ✅ Events appear INSTANTLY in console
+  # ✅ No need to wait for flush
+  # ⚠️  Trade-off: Slightly slower per-request performance (acceptable in dev)
+  config.buffering.enabled = false
+  
+  # OR: Very short interval (near-immediate)
+  # config.buffering do
+  #   enabled true
+  #   flush_interval 0.1.seconds  # Flush every 100ms
+  # end
+  
+  # === SAMPLING: DISABLED (keep all events) ===
+  # ✅ See EVERY event for complete debugging
+  # ✅ No data loss during development
+  # ⚠️  Trade-off: More console noise (filter with ignore_events)
+  config.sampling.enabled = false
+  
+  # === RATE LIMITING: DISABLED (no throttling) ===
+  # ✅ Rapid testing won't hit limits
+  config.rate_limiting.enabled = false
+  
+  # === PII FILTERING: DISABLED (optional) ===
+  # ✅ See real data for easier debugging
+  # ⚠️  Only disable if you're NOT using production data in dev!
+  config.pii_filtering.enabled = false
+  
+  # === FLUSH HELPER: Available for manual testing ===
+  # Sometimes you want to force-flush buffered events:
+  # E11y.flush  # ← Forces immediate flush
+end
+```
+
+**Production: Performance & Cost Optimization**
+
+```ruby
+# config/environments/production.rb
+E11y.configure do |config|
+  # === BUFFERING: ENABLED (batch writes) ===
+  # ✅ 10× performance improvement (batching)
+  # ✅ 50% cost reduction (fewer network calls)
+  # ⚠️  Trade-off: Events delayed by up to 10s
+  config.buffering do
+    enabled true
+    flush_interval 10.seconds
+    max_buffer_size 1000
+  end
+  
+  # === SAMPLING: ENABLED (cost savings) ===
+  # ✅ 50-80% cost reduction
+  # ✅ Errors always kept (100% sampling)
+  # ⚠️  Trade-off: Some success events dropped
+  config.sampling do
+    enabled true
+    strategy :adaptive
+    base_rate 0.1  # Keep 10% of success events
+    error_rate 1.0  # Keep 100% of errors
+  end
+  
+  # === RATE LIMITING: ENABLED (DDoS protection) ===
+  # ✅ Prevents cost explosions
+  # ✅ Protects backend from overload
+  config.rate_limiting do
+    enabled true
+    limit 1000
+    window 1.minute
+  end
+  
+  # === PII FILTERING: ENABLED (GDPR compliance) ===
+  # ✅ GDPR/CCPA compliant
+  # ✅ Protects sensitive data
+  config.pii_filtering.enabled true
+end
+```
+
+**Comparison Table:**
+
+| Feature | Development | Production | Why Different? |
+|---------|-------------|------------|----------------|
+| **Buffering** | ❌ Disabled (immediate) | ✅ Enabled (10s batches) | Dev needs instant feedback, prod needs performance |
+| **Sampling** | ❌ Disabled (100%) | ✅ Enabled (10-50%) | Dev needs complete data, prod needs cost savings |
+| **Rate Limiting** | ❌ Disabled | ✅ Enabled (1000/min) | Dev needs rapid testing, prod needs DDoS protection |
+| **PII Filtering** | ⚠️ Optional (easier debugging) | ✅ Enabled (GDPR) | Dev may use fake data, prod has real user data |
+| **Flush Helper** | ✅ `E11y.flush` available | ⚠️ Available but rarely needed | Dev uses for manual testing |
+
+**Manual Flush Helper (Development Testing):**
+
+```ruby
+# Scenario: Testing event delivery in specs
+RSpec.describe 'Order creation' do
+  it 'tracks order.created event' do
+    # Event is buffered (not sent yet)
+    post '/orders', params: { order: {...} }
+    
+    # Force immediate flush (for testing)
+    E11y.flush
+    
+    # Now event is available in test adapter
+    expect(E11y.test_adapter.events).to include(
+      hash_including(event_name: 'order.created')
+    )
+  end
+end
+
+# Rails console manual testing:
+> Events::OrderCreated.track(order_id: 123)
+# → Event buffered, not visible yet
+
+> E11y.flush
+# → Forces immediate flush, event now visible in console
+
+> E11y.buffer.size
+# => 0 (buffer is empty after flush)
+```
+
+**Trade-offs & Gotchas:**
+
+**⚠️ Warning: Development ≠ Production Behavior**
+
+```ruby
+# ❌ GOTCHA: Event appears instantly in dev, delayed in prod
+# Development (buffering disabled):
+Events::OrderCreated.track(order_id: 123)
+# → Appears in console IMMEDIATELY ✅
+
+# Production (buffering enabled, 10s flush):
+Events::OrderCreated.track(order_id: 123)
+# → Buffered, appears after 10 seconds ⏱️
+# → Or when buffer full (1000 events)
+# → Or when E11y.flush called manually
+
+# Solution: If you need instant delivery in prod (e.g., critical alerts):
+Events::CriticalAlert.track(
+  alert_type: 'payment_failure',
+  severity: :fatal
+)
+E11y.flush  # ← Force immediate delivery (bypasses buffer)
+```
+
+**⚠️ Warning: Sampling Differences**
+
+```ruby
+# ❌ GOTCHA: All events visible in dev, some dropped in prod
+# Development (sampling disabled):
+100.times { Events::UserLogin.track(user_id: rand(1000)) }
+# → See ALL 100 events in console ✅
+
+# Production (sampling enabled, 10% rate):
+100.times { Events::UserLogin.track(user_id: rand(1000)) }
+# → Only ~10 events reach Loki (90 dropped) ❌
+# → Errors ALWAYS kept (100% sampling) ✅
+
+# Solution: Test sampling behavior in staging:
+# config/environments/staging.rb
+config.sampling do
+  enabled true  # ← Test production-like sampling
+  base_rate 0.1
+end
+```
+
+**Staging Environment (Recommended Middle Ground):**
+
+```ruby
+# config/environments/staging.rb
+E11y.configure do |config|
+  # Balanced config: production-like but easier to debug
+  
+  # Buffering: Shorter interval (faster feedback than prod)
+  config.buffering do
+    enabled true
+    flush_interval 1.second  # vs 10s in prod
+  end
+  
+  # Sampling: Higher rate (more data than prod)
+  config.sampling do
+    enabled true
+    base_rate 0.5  # vs 0.1 in prod (keep 50% of events)
+    error_rate 1.0  # Always keep errors
+  end
+  
+  # Rate limiting: Higher limits (easier testing)
+  config.rate_limiting do
+    enabled true
+    limit 10_000  # vs 1000 in prod
+  end
+  
+  # PII: Enabled (test GDPR compliance)
+  config.pii_filtering.enabled true
+end
+```
+
+**Key Takeaways:**
+
+1. **Development:** Disable buffering & sampling for instant, complete feedback
+2. **Production:** Enable buffering & sampling for performance & cost savings
+3. **Staging:** Middle ground - production-like but easier to debug
+4. **Use `E11y.flush`:** For manual testing when buffering is enabled
+5. **Test in staging:** Catch production behavior differences before deployment
+
+---
+
 ## 💻 Implementation Examples
 
 ### Example 1: Full Development Config

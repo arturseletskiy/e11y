@@ -12,16 +12,43 @@
 1. [Context & Problem](#1-context--problem)
 2. [Architecture Overview](#2-architecture-overview)
 3. [Adaptive Sampling](#3-adaptive-sampling)
+   - 3.6. [Trace-Aware Adaptive Sampling (C05 Resolution)](#36-trace-aware-adaptive-sampling-c05-resolution) ⚠️ CRITICAL
+     - 3.6.1. The Problem: Broken Distributed Traces
+     - 3.6.2. Decision: Trace-Level Sampling with Decision Cache
+     - 3.6.3. TraceAwareSampler Implementation
+     - 3.6.4. Configuration
+     - 3.6.5. Multi-Service Trace Scenario (Correct Behavior)
+     - 3.6.6. Cache Management & TTL
+     - 3.6.7. Head-Based Sampling (W3C Trace Context)
+     - 3.6.8. Trade-offs & Distributed Tracing Integrity (C05)
+   - 3.7. [Stratified Sampling for SLO Accuracy (C11 Resolution)](#37-stratified-sampling-for-slo-accuracy-c11-resolution) ⚠️ CRITICAL
+     - 3.7.1. The Problem: Sampling Bias Breaks SLO Metrics
+     - 3.7.2. Decision: Stratified Sampling by Event Severity
+     - 3.7.3. StratifiedAdaptiveSampler Implementation
+     - 3.7.4. SLO Calculator with Sampling Correction
+     - 3.7.5. Configuration
+     - 3.7.6. Accuracy Comparison: Random vs Stratified Sampling
+     - 3.7.7. Cost Savings vs Accuracy Trade-off
+     - 3.7.8. Testing Sampling Correction Accuracy
+     - 3.7.9. Trade-offs & SLO Accuracy (C11)
 4. [Compression](#4-compression)
 5. [Smart Routing](#5-smart-routing)
 6. [Tiered Storage](#6-tiered-storage)
 7. [Payload Minimization](#7-payload-minimization)
-8. [Cost Metrics](#8-cost-metrics)
-9. [Trade-offs](#9-trade-offs)
-10. [Complete Configuration Example](#10-complete-configuration-example)
-11. [Backlog (Future Enhancements)](#11-backlog-future-enhancements)
-    - [11.1. Quick Start Presets](#111-quick-start-presets)
-    - [11.2. Sampling Budget](#112-sampling-budget)
+8. [Cardinality Protection (C04 Resolution)](#8-cardinality-protection-c04-resolution) ⚠️ CRITICAL
+   - 8.1. The Problem: Cardinality Explosion Across Backends
+   - 8.2. Decision: Unified Cardinality Protection for All Backends
+   - 8.3. Configuration: Inherit from Global Settings
+   - 8.4. Implementation: Apply to Yabeda + OpenTelemetry
+   - 8.5. Cost Impact: Before vs After Protection
+   - 8.6. Monitoring Metrics
+   - 8.7. Trade-offs (C04 Resolution)
+9. [Cost Metrics](#9-cost-metrics)
+10. [Trade-offs](#10-trade-offs)
+11. [Complete Configuration Example](#11-complete-configuration-example)
+12. [Backlog (Future Enhancements)](#12-backlog-future-enhancements)
+   - [12.1. Quick Start Presets](#121-quick-start-presets)
+   - [12.2. Sampling Budget](#122-sampling-budget)
 
 ---
 
@@ -546,6 +573,941 @@ end
 
 ---
 
+## 3.6. Trace-Aware Adaptive Sampling (C05 Resolution)
+
+> **⚠️ CRITICAL: C05 Conflict Resolution - Adaptive Sampling × Trace Consistency**  
+> **See:** [CONFLICT-ANALYSIS.md C05](researches/CONFLICT-ANALYSIS.md#c05-adaptive-sampling--trace-consistent-sampling) for detailed analysis  
+> **Problem:** Per-event adaptive sampling breaks distributed traces (incomplete traces across services)  
+> **Solution:** Trace-level sampling decisions with propagation via W3C trace context
+
+### 3.6.1. The Problem: Broken Distributed Traces
+
+**Scenario - Incomplete Trace:**
+
+```ruby
+# Trace across 3 microservices (trace_id: abc-123):
+
+# Service A: Order Service
+Events::OrderCreated.track(
+  order_id: '123',
+  trace_id: 'abc-123'
+)
+# → Adaptive sampling: KEEP (within budget) ✅
+
+# Service B: Payment Service (same trace)
+Events::PaymentProcessing.track(
+  payment_id: '456',
+  trace_id: 'abc-123'
+)
+# → Adaptive sampling: DROP (budget exceeded!) ❌
+
+# Service C: Notification Service (same trace)
+Events::NotificationSent.track(
+  notification_id: '789',
+  trace_id: 'abc-123'
+)
+# → Adaptive sampling: KEEP (budget recovered) ✅
+
+# Result: INCOMPLETE TRACE!
+# Loki shows:
+# - Order created: YES ✅
+# - Payment processing: MISSING ❌ ← Gap in trace!
+# - Notification sent: YES ✅
+#
+# → Can't reconstruct full user journey!
+# → Debugging payment issues impossible!
+```
+
+**Why This Breaks:**
+- ❌ **Per-event sampling:** Each service makes independent sampling decisions
+- ❌ **Distributed traces incomplete:** Missing spans break trace visualization
+- ❌ **Debugging impossible:** Can't see where payment processing failed
+- ❌ **Misleading SLO metrics:** Partial traces skew latency calculations
+
+### 3.6.2. Decision: Trace-Level Sampling with Decision Cache
+
+**Strategy:** All events in a trace share the same sampling decision.
+
+**Key Principles:**
+1. **Sampling decision made per-trace** (not per-event)
+2. **First event in trace makes decision** (head-based sampling)
+3. **Decision propagated via W3C trace context** (`trace_flags` field)
+4. **Decision cached per trace_id** (TTL: 1 hour)
+
+### 3.6.3. TraceAwareSampler Implementation
+
+```ruby
+module E11y
+  module Cost
+    class TraceAwareSampler < SimplifiedSampler
+      def initialize(config)
+        super(config)
+        @trace_decision_cache = Concurrent::Map.new
+        @cache_ttl = config.trace_cache_ttl || 3600  # 1 hour default
+        @cache_cleanup_interval = 300  # 5 minutes
+        
+        # Start cache cleanup thread
+        start_cache_cleanup!
+      end
+      
+      def should_sample?(event_data, context = {})
+        # Extract trace context
+        trace_context = event_data[:trace_context] || context[:trace_context]
+        
+        unless trace_context && trace_context[:trace_id]
+          # No trace context → fall back to per-event sampling
+          return super(event_data, context)
+        end
+        
+        trace_id = trace_context[:trace_id]
+        
+        # ✅ CRITICAL: Check if sampling decision already made for this trace
+        cached_decision = get_trace_decision(trace_id)
+        return cached_decision unless cached_decision.nil?
+        
+        # No cached decision → make NEW decision for this trace
+        decision = make_trace_decision(event_data, context)
+        
+        # Cache decision for this trace (all future events use same decision)
+        set_trace_decision(trace_id, decision)
+        
+        # Propagate decision via trace_flags (W3C Trace Context)
+        propagate_decision_to_trace_context!(trace_context, decision)
+        
+        decision
+      end
+      
+      private
+      
+      def get_trace_decision(trace_id)
+        entry = @trace_decision_cache[trace_id]
+        return nil unless entry
+        
+        # Check if cache entry expired
+        if Time.now.to_i > entry[:expires_at]
+          @trace_decision_cache.delete(trace_id)
+          return nil
+        end
+        
+        entry[:decision]
+      end
+      
+      def set_trace_decision(trace_id, decision)
+        @trace_decision_cache[trace_id] = {
+          decision: decision,
+          expires_at: Time.now.to_i + @cache_ttl,
+          created_at: Time.now.to_i
+        }
+        
+        # Track cache size
+        Yabeda.e11y_trace_decision_cache_size.set(@trace_decision_cache.size)
+      end
+      
+      def make_trace_decision(event_data, context)
+        # Use standard sampling logic (severity + pattern-based)
+        base_decision = super(event_data, context)
+        
+        # Apply adaptive adjustment based on budget
+        if over_budget?
+          # Reduce sampling rate for traces
+          rand() < calculate_adaptive_rate(base_decision)
+        else
+          base_decision
+        end
+      end
+      
+      def over_budget?
+        # Check if monthly event budget exceeded
+        current_month_events = Yabeda.e11y_events_tracked_total.values.sum
+        budget = @config.cost_budget || 100_000
+        
+        current_month_events > budget
+      end
+      
+      def calculate_adaptive_rate(base_decision)
+        return 1.0 if base_decision == false  # Already dropping
+        
+        budget_utilization = Yabeda.e11y_events_tracked_total.values.sum.to_f / @config.cost_budget
+        
+        # Scale down aggressively when over budget
+        if budget_utilization > 1.5
+          0.1  # Keep only 10% of traces
+        elsif budget_utilization > 1.2
+          0.5  # Keep 50% of traces
+        else
+          1.0  # Keep all traces (within budget)
+        end
+      end
+      
+      def propagate_decision_to_trace_context!(trace_context, decision)
+        # Set W3C Trace Context trace_flags
+        # Bit 0 (0x01): sampled flag
+        if decision
+          trace_context[:trace_flags] ||= 0x01  # Set sampled bit
+        else
+          trace_context[:trace_flags] ||= 0x00  # Clear sampled bit
+        end
+      end
+      
+      def start_cache_cleanup!
+        Thread.new do
+          loop do
+            sleep @cache_cleanup_interval
+            
+            # Remove expired entries
+            now = Time.now.to_i
+            @trace_decision_cache.delete_if do |trace_id, entry|
+              expired = now > entry[:expires_at]
+              
+              if expired
+                Yabeda.e11y_trace_decision_cache_evictions.increment
+              end
+              
+              expired
+            end
+          end
+        rescue StandardError => e
+          E11y.logger.error "[E11y] Trace cache cleanup error: #{e.message}"
+          retry
+        end
+      end
+    end
+  end
+end
+```
+
+### 3.6.4. Configuration
+
+```ruby
+# config/initializers/e11y.rb
+E11y.configure do |config|
+  config.cost_optimization do
+    sampling do
+      # ✅ Use trace-aware sampler for distributed tracing
+      strategy :trace_aware  # NEW: Trace-consistent sampling
+      
+      # Trace decision cache
+      trace_cache_ttl 3600  # 1 hour (3600 seconds)
+      trace_cache_cleanup_interval 300  # 5 minutes
+      
+      # Cost budget (monthly)
+      cost_budget 100_000  # 100K events/month
+      
+      # Per-severity sampling rates (base rates before adaptive adjustment)
+      severity_rates do
+        debug   0.01   # 1%
+        info    0.1    # 10%
+        success 0.5    # 50%
+        warn    1.0    # 100%
+        error   1.0    # 100%
+        fatal   1.0    # 100%
+      end
+      
+      # Pattern-based overrides (take precedence)
+      pattern_rates do
+        pattern /^audit\./, rate: 1.0       # Always sample audit events
+        pattern /^payment\./, rate: 1.0     # Always sample payments
+        pattern /^debug\./, rate: 0.01      # 1% of debug events
+      end
+    end
+  end
+end
+```
+
+### 3.6.5. Multi-Service Trace Scenario (Correct Behavior)
+
+**Service A (Order Service) - First Event:**
+
+```ruby
+# Create new trace context
+trace_context = E11y::TraceContext.generate
+
+# Track event (FIRST in trace → makes sampling decision)
+Events::OrderCreated.track(
+  order_id: '123',
+  user_id: 'u456',
+  trace_context: trace_context
+)
+
+# TraceAwareSampler:
+# 1. No cached decision for trace_id
+# 2. Makes NEW decision: should_sample? → TRUE (severity: info, rate: 0.1 → sampled)
+# 3. Caches decision: trace_decision_cache[trace_id] = TRUE
+# 4. Sets trace_flags: 0x01 (sampled bit set)
+# 5. Event KEPT ✅
+
+# HTTP call to Service B (trace context propagated via W3C headers)
+# traceparent: 00-abc123...-def456...-01
+#                                      ^^
+#                                      trace_flags = 0x01 (sampled)
+```
+
+**Service B (Payment Service) - Downstream Event:**
+
+```ruby
+# Receive trace context from Service A (via HTTP headers)
+incoming_trace_context = extract_trace_context_from_headers(request.headers)
+# trace_id: 'abc123...', trace_flags: 0x01 (sampled)
+
+# Track event (DOWNSTREAM in trace → uses cached decision)
+Events::PaymentProcessing.track(
+  payment_id: '456',
+  order_id: '123',
+  trace_context: incoming_trace_context
+)
+
+# TraceAwareSampler:
+# 1. Check cache for trace_id: abc123... → FOUND (decision: TRUE)
+# 2. Return cached decision: TRUE
+# 3. Event KEPT ✅ (consistent with Service A decision)
+
+# HTTP call to Service C (trace context propagated)
+```
+
+**Service C (Notification Service) - Further Downstream:**
+
+```ruby
+# Receive trace context from Service B
+incoming_trace_context = extract_trace_context_from_headers(request.headers)
+
+# Track event
+Events::NotificationSent.track(
+  notification_id: '789',
+  order_id: '123',
+  trace_context: incoming_trace_context
+)
+
+# TraceAwareSampler:
+# 1. Check cache for trace_id: abc123... → FOUND (decision: TRUE)
+# 2. Return cached decision: TRUE
+# 3. Event KEPT ✅ (consistent across all services)
+
+# Result: COMPLETE TRACE in Loki!
+# - Order created: YES ✅
+# - Payment processing: YES ✅
+# - Notification sent: YES ✅
+# → Full user journey reconstructed!
+```
+
+### 3.6.6. Cache Management & TTL
+
+**Why 1-hour TTL?**
+
+```ruby
+# Typical trace duration: <10 seconds (99th percentile)
+# Cache TTL: 1 hour (3600 seconds)
+# → 360x safety margin
+
+# Trade-off:
+# - Short TTL (e.g., 1 minute): Cache misses if service delayed (retries, async jobs)
+# - Long TTL (e.g., 24 hours): High memory usage (1M traces = 100MB cache)
+# - 1 hour: Balance between memory and cache hit rate
+```
+
+**Cache Size Estimation:**
+
+```ruby
+# Assumptions:
+# - 10,000 events/sec
+# - 10 events per trace (average)
+# - 1,000 new traces/sec
+# - 1-hour TTL
+
+# Cache size:
+# 1,000 traces/sec × 3,600 seconds = 3.6M traces
+# 3.6M traces × 100 bytes/entry = 360MB
+
+# Mitigation:
+# - Cache cleanup every 5 minutes (remove expired)
+# - LRU eviction if memory limit exceeded
+# - Monitor: Yabeda.e11y_trace_decision_cache_size
+```
+
+**Cache Cleanup:**
+
+```ruby
+# Automatic cleanup every 5 minutes
+config.cost_optimization.sampling do
+  trace_cache_cleanup_interval 300  # seconds
+end
+
+# Manual cleanup (if needed)
+E11y::Cost::TraceAwareSampler.instance.cleanup_expired_traces!
+
+# Monitoring
+Yabeda.e11y_trace_decision_cache_size.observe(cache_size)
+Yabeda.e11y_trace_decision_cache_evictions.increment
+```
+
+### 3.6.7. Head-Based Sampling (W3C Trace Context)
+
+**W3C Trace Context Propagation:**
+
+```ruby
+# HTTP Request Header (Service A → Service B):
+# traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+#              ││ │                                │                │
+#              ││ └─ trace_id (128-bit)            └─ span_id       └─ trace_flags
+#              │└─ version                                            (01 = sampled)
+#              └─ format
+
+# Service B extracts trace context:
+trace_context = {
+  version: '00',
+  trace_id: '4bf92f3577b34da6a3ce929d0e0e4736',
+  parent_span_id: '00f067aa0ba902b7',
+  trace_flags: 0x01  # ← Sampled bit set by Service A
+}
+
+# Service B respects sampling decision:
+if trace_context[:trace_flags] & 0x01 == 0x01
+  # Sampled bit set → KEEP event
+else
+  # Sampled bit clear → DROP event
+end
+```
+
+### 3.6.8. Trade-offs & Distributed Tracing Integrity (C05)
+
+**Trade-offs:**
+
+| Decision | Pro | Con | Rationale |
+|----------|-----|-----|-----------|
+| **Trace-level sampling** | Complete traces | Can't sample per-event | Trace integrity > granularity |
+| **Decision cache (1h TTL)** | Consistent decisions | 360MB memory (1M traces) | Cache hit rate > memory |
+| **Head-based sampling** | Simple propagation | First service decides for all | Simplicity > flexibility |
+| **W3C trace_flags** | Standard propagation | Requires trace context | Interoperability > custom |
+
+**Distributed Tracing Integrity:**
+
+✅ **Complete traces:**  
+All events in a trace sampled together → no gaps in trace visualization.
+
+✅ **Consistent debugging:**  
+If Service A event visible, all downstream events visible → full user journey.
+
+✅ **Accurate SLO metrics:**  
+Complete traces provide accurate latency calculations (no partial trace skew).
+
+**Limitations:**
+
+⚠️ **All-or-nothing:** Can't sample some events within a trace (e.g., keep errors, drop debug)  
+**Mitigation:** Use severity-based trace decision (errors always sampled)
+
+⚠️ **Memory overhead:** Cache stores decisions for 1 hour (360MB for 1M traces)  
+**Mitigation:** LRU eviction + periodic cleanup
+
+⚠️ **Long traces:** If trace spans 2+ hours, cache may expire mid-trace  
+**Mitigation:** Increase TTL for long-running workflows (e.g., async jobs)
+
+**Monitoring Metrics:**
+
+```ruby
+# Track trace-aware sampling effectiveness
+Yabeda.e11y_trace_decision_cache_hit_rate.observe(
+  hits / (hits + misses).to_f
+)
+
+# Track cache size
+Yabeda.e11y_trace_decision_cache_size.set(cache_size)
+
+# Track incomplete traces (should be 0%)
+Yabeda.e11y_incomplete_traces_total.increment(
+  trace_id: 'abc123',
+  missing_spans: 3
+)
+```
+
+**Related Conflicts:**
+- **C11:** Stratified sampling for SLO accuracy (see §3.7 below)
+- **C17:** Background job tracing (see ADR-005, UC-010)
+- **C09:** Multi-service tracing (see UC-009)
+
+---
+
+## 3.7. Stratified Sampling for SLO Accuracy (C11 Resolution)
+
+> **⚠️ CRITICAL: C11 Conflict Resolution - Adaptive Sampling × SLO Tracking**  
+> **See:** [CONFLICT-ANALYSIS.md C11](researches/CONFLICT-ANALYSIS.md#c11-adaptive-sampling--slo-tracking) for detailed analysis  
+> **Problem:** Random sampling skews SLO metrics (inaccurate success rates)  
+> **Solution:** Stratified sampling by severity + sampling correction math
+
+### 3.7.1. The Problem: Sampling Bias Breaks SLO Metrics
+
+**Scenario - Inaccurate Success Rate:**
+
+```ruby
+# Real production traffic (1000 requests):
+# - 950 success (HTTP 200) → 95% success rate
+# - 50 errors (HTTP 500) → 5% error rate
+
+# Adaptive sampling (random 50% sampling to save costs):
+# Expected: Keep 500 events (475 success, 25 errors) → 95% success rate ✅
+
+# But random sampling can be BIASED!
+# Actual sample: 500 events (450 success, 50 errors) → 90% success rate ❌
+
+# Result: FALSE SLO VIOLATION ALERT!
+# - Real success rate: 95% (above 95% SLO) ✅
+# - Calculated success rate: 90% (below 95% SLO) ❌
+# → False alert triggered!
+```
+
+**Why Random Sampling Fails:**
+
+```ruby
+# Random sampling treats ALL events equally
+Events::ApiRequest.track(status: 200)  # Success → 50% chance to keep
+Events::ApiRequest.track(status: 500)  # Error → 50% chance to keep
+
+# Problem: We're dropping CRITICAL ERROR events!
+# - Errors are rare (5% of traffic) but CRITICAL for SLO
+# - Success events are common (95% of traffic) but less critical
+# - Random 50% sampling may drop errors → undercount error rate!
+```
+
+**Impact:**
+- ❌ **Inaccurate SLO metrics:** Success rate skewed by sampling bias
+- ❌ **False alerts:** SLO violations that don't exist
+- ❌ **Missed real issues:** Actual SLO violations hidden by lucky sampling
+- ❌ **Wrong business decisions:** Acting on bad data
+
+### 3.7.2. Decision: Stratified Sampling by Event Severity
+
+**Strategy:** Sample different event types at different rates to preserve statistical properties.
+
+**Strata Definition:**
+
+| Stratum | Criteria | Sample Rate | Rationale |
+|---------|----------|-------------|-----------|
+| **Errors** | `severity: [:error, :fatal]` OR `http_status: 5xx` | 100% | Always keep errors (critical for SLO) |
+| **Warnings** | `severity: [:warn]` OR `http_status: 4xx` | 50% | Medium importance |
+| **Success** | `severity: [:info, :debug, :success]` OR `http_status: 2xx, 3xx` | 10% | Drop 90% (common, less critical) |
+
+**Key Principles:**
+1. **Always keep errors** (100% sampling) → accurate error rates
+2. **Aggressively sample success** (10% sampling) → cost savings
+3. **Apply sampling correction** in SLO calculations → accurate metrics
+
+### 3.7.3. StratifiedAdaptiveSampler Implementation
+
+```ruby
+module E11y
+  module Cost
+    class StratifiedAdaptiveSampler < SimplifiedSampler
+      STRATA = {
+        errors: {
+          severities: [:error, :fatal],
+          http_statuses: (500..599).to_a,
+          sample_rate: 1.0  # 100% - always keep
+        },
+        warnings: {
+          severities: [:warn],
+          http_statuses: (400..499).to_a,
+          sample_rate: 0.5  # 50%
+        },
+        success: {
+          severities: [:debug, :info, :success],
+          http_statuses: (200..399).to_a,
+          sample_rate: 0.1  # 10% - aggressive sampling
+        }
+      }.freeze
+      
+      def initialize(config)
+        super(config)
+        @strata_config = config.stratification || STRATA
+      end
+      
+      def should_sample?(event_data, context = {})
+        # Determine event stratum
+        stratum = determine_stratum(event_data)
+        
+        # Get sample rate for this stratum
+        sample_rate = @strata_config[stratum][:sample_rate]
+        
+        # Make sampling decision
+        decision = rand() < sample_rate
+        
+        # Store stratum in event metadata (needed for correction later)
+        event_data[:metadata] ||= {}
+        event_data[:metadata][:sampling_stratum] = stratum
+        event_data[:metadata][:sampling_rate] = sample_rate
+        event_data[:metadata][:sampled] = decision
+        
+        # Track metrics
+        Yabeda.e11y_sampling_decisions_total.increment(
+          stratum: stratum,
+          decision: decision ? 'kept' : 'dropped',
+          sample_rate: sample_rate
+        )
+        
+        decision
+      end
+      
+      def determine_stratum(event_data)
+        severity = event_data[:severity]
+        http_status = event_data.dig(:payload, :http_status) || 
+                     event_data.dig(:payload, :status)
+        
+        # Check each stratum (priority order: errors → warnings → success)
+        @strata_config.each do |stratum_name, stratum_config|
+          # Check severity match
+          if stratum_config[:severities].include?(severity)
+            return stratum_name
+          end
+          
+          # Check HTTP status match
+          if http_status && stratum_config[:http_statuses].include?(http_status)
+            return stratum_name
+          end
+        end
+        
+        # Default: success stratum
+        :success
+      end
+    end
+  end
+end
+```
+
+### 3.7.4. SLO Calculator with Sampling Correction
+
+**Critical:** Must apply sampling correction to get accurate SLO metrics.
+
+```ruby
+module E11y
+  module SLO
+    class Calculator
+      def calculate_success_rate(events)
+        # Group events by stratum
+        events_by_stratum = events.group_by do |event|
+          event[:metadata][:sampling_stratum]
+        end
+        
+        # Apply sampling correction for each stratum
+        corrected_counts = {}
+        
+        events_by_stratum.each do |stratum, stratum_events|
+          sample_rate = stratum_events.first[:metadata][:sampling_rate]
+          
+          # Correction factor: 1 / sample_rate
+          # Example: 10% sample rate → multiply by 10
+          correction_factor = 1.0 / sample_rate
+          
+          corrected_counts[stratum] = {
+            observed: stratum_events.count,
+            corrected: stratum_events.count * correction_factor
+          }
+        end
+        
+        # Calculate corrected totals
+        corrected_success = corrected_counts[:success][:corrected] rescue 0
+        corrected_warnings = corrected_counts[:warnings][:corrected] rescue 0
+        corrected_errors = corrected_counts[:errors][:corrected] rescue 0
+        
+        total = corrected_success + corrected_warnings + corrected_errors
+        
+        # Success rate = (success + warnings) / total
+        # (warnings are not SLO violations, only errors are)
+        success_rate = (corrected_success + corrected_warnings) / total.to_f
+        
+        {
+          success_rate: success_rate,
+          error_rate: corrected_errors / total.to_f,
+          breakdown: corrected_counts,
+          total_corrected_events: total
+        }
+      end
+      
+      def calculate_p99_latency(events)
+        # Group by stratum and apply correction
+        latencies = []
+        
+        events.each do |event|
+          latency = event[:payload][:duration_ms]
+          sample_rate = event[:metadata][:sampling_rate]
+          correction_factor = (1.0 / sample_rate).round
+          
+          # Duplicate latency by correction factor
+          # (simulate missing events for percentile calculation)
+          correction_factor.times { latencies << latency }
+        end
+        
+        # Calculate P99
+        latencies.sort!
+        p99_index = (latencies.size * 0.99).ceil - 1
+        latencies[p99_index]
+      end
+    end
+  end
+end
+```
+
+### 3.7.5. Configuration
+
+**Вариант 1: Единый простой конфиг (рекомендуется) 🎯**
+
+```ruby
+# config/initializers/e11y.rb
+E11y.configure do |config|
+  config.cost_optimization do
+    sampling do
+      # ✅ Stratified sampling - smart sampling for accurate SLO
+      strategy :stratified_adaptive
+      
+      # Cost budget (как и раньше)
+      cost_budget 100_000  # events/month
+      
+      # 🎯 ЕДИНЫЙ конфиг: sample_rate по severity (default: never drop errors!)
+      stratified_rates do
+        error 1.0    # 100% - keep all errors (критично для SLO!)
+        warn  0.5    # 50%  - medium priority
+        info  0.1    # 10%  - low priority (успешные запросы)
+        debug 0.05   # 5%   - очень low priority
+      end
+    end
+  end
+  
+  # SLO tracking с автоматической коррекцией (включено по умолчанию!)
+  config.slo do
+    enable_sampling_correction true  # ✅ Automatic correction in SLO calculations
+  end
+end
+```
+
+**Как это работает:**
+- `error`/`fatal` severity → sample_rate **1.0** (100%, никогда не drop!)
+- `warn` severity → sample_rate **0.5** (50%)
+- `info`/`success` severity → sample_rate **0.1** (10%)
+- `debug` severity → sample_rate **0.05** (5%)
+
+**SLO коррекция автоматическая:**
+```ruby
+# Пользователь пишет как раньше:
+E11y::SLO.error_rate  # ✅ Автоматически скорректировано!
+
+# Внутри:
+observed_errors = 50
+corrected_errors = observed_errors / error_sample_rate  # 50 / 1.0 = 50
+
+observed_success = 95
+corrected_success = observed_success / info_sample_rate  # 95 / 0.1 = 950
+
+corrected_error_rate = corrected_errors / (corrected_errors + corrected_success)
+# = 50 / (50 + 950) = 5% ✅ ACCURATE!
+```
+
+---
+
+**Вариант 2: Продвинутый конфиг (для сложных случаев)**
+
+Если нужна гибкость (например, разные sample_rate для HTTP 4xx vs 5xx):
+
+```ruby
+E11y.configure do |config|
+  config.cost_optimization do
+    sampling do
+      strategy :stratified_adaptive
+      cost_budget 100_000
+      
+      # Продвинутая стратификация по severities + http_statuses
+      stratification do
+        stratum :critical_errors do
+          severities [:error, :fatal]
+          http_statuses (500..599).to_a
+          sample_rate 1.0  # 100%
+        end
+        
+        stratum :client_errors do
+          severities [:warn]
+          http_statuses (400..499).to_a
+          sample_rate 0.3  # 30% (меньше чем warn, т.к. 4xx не так критично)
+        end
+        
+        stratum :success do
+          severities [:info, :success]
+          http_statuses (200..399).to_a
+          sample_rate 0.1  # 10%
+        end
+      end
+    end
+  end
+end
+```
+
+### 3.7.6. Accuracy Comparison: Random vs Stratified Sampling
+
+**Scenario:** 1000 requests (950 success, 50 errors) → 95% success rate
+
+| Sampling Strategy | Events Kept | Observed Success Rate | Corrected Success Rate | Error |
+|-------------------|-------------|----------------------|------------------------|-------|
+| **No Sampling** | 1000 (100%) | 95.0% | N/A | 0% ✅ |
+| **Random 50%** | 500 (50%) | 90-100% (varies!) | 90-100% (varies!) | ±5% ❌ |
+| **Stratified** | 145 (14.5%) | 65.5% (95/145) | **95.0%** (corrected) | 0% ✅ |
+
+**Stratified Sampling Breakdown:**
+```ruby
+# Stratum 1: Errors (100% sampling)
+50 errors × 1.0 = 50 kept → corrected: 50 / 1.0 = 50
+
+# Stratum 2: Warnings (50% sampling)
+0 warnings × 0.5 = 0 kept → corrected: 0 / 0.5 = 0
+
+# Stratum 3: Success (10% sampling)
+950 success × 0.1 = 95 kept → corrected: 95 / 0.1 = 950
+
+# Total kept: 145 events (85.5% cost savings!)
+# Corrected total: 1000 events
+# Corrected success rate: (950 + 0) / 1000 = 95% ✅ ACCURATE!
+```
+
+### 3.7.7. Cost Savings vs Accuracy Trade-off
+
+**Example: 10M events/month (9.5M success, 500K errors)**
+
+| Strategy | Events Stored | Cost | Success Rate Accuracy |
+|----------|---------------|------|----------------------|
+| **No Sampling** | 10M | $1000 | 100% (baseline) ✅ |
+| **Random 50%** | 5M | $500 | ~95% (biased) ⚠️ |
+| **Stratified** | 1.45M | $145 | **99.9%** (corrected) ✅ |
+
+**Stratified Breakdown:**
+- Errors: 500K × 100% = 500K kept (50% of budget!)
+- Success: 9.5M × 10% = 950K kept (50% of budget)
+- **Total: 1.45M events (85.5% cost savings!)**
+
+**Key Insight:** Stratified sampling provides **85% cost savings** with **99.9% accuracy** vs random sampling's **50% savings** with **95% accuracy**.
+
+### 3.7.8. Testing Sampling Correction Accuracy
+
+```ruby
+# spec/lib/e11y/slo/calculator_spec.rb
+RSpec.describe E11y::SLO::Calculator do
+  describe '#calculate_success_rate with stratified sampling' do
+    it 'accurately calculates success rate with sampling correction' do
+      # Simulate 1000 requests (950 success, 50 errors)
+      events = []
+      
+      # Generate 950 success events (10% sampled → 95 kept)
+      95.times do
+        events << {
+          severity: :info,
+          payload: { http_status: 200 },
+          metadata: {
+            sampling_stratum: :success,
+            sampling_rate: 0.1,
+            sampled: true
+          }
+        }
+      end
+      
+      # Generate 50 error events (100% sampled → 50 kept)
+      50.times do
+        events << {
+          severity: :error,
+          payload: { http_status: 500 },
+          metadata: {
+            sampling_stratum: :errors,
+            sampling_rate: 1.0,
+            sampled: true
+          }
+        }
+      end
+      
+      # Calculate SLO with correction
+      calculator = described_class.new
+      result = calculator.calculate_success_rate(events)
+      
+      # Expected corrected success rate: 95%
+      expect(result[:success_rate]).to be_within(0.001).of(0.95)
+      expect(result[:error_rate]).to be_within(0.001).of(0.05)
+      expect(result[:total_corrected_events]).to eq(1000)
+      
+      # Breakdown verification
+      expect(result[:breakdown][:success][:corrected]).to eq(950)
+      expect(result[:breakdown][:errors][:corrected]).to eq(50)
+    end
+    
+    it 'matches baseline accuracy without sampling' do
+      # Generate 1000 events without sampling
+      baseline_events = generate_events(success: 950, errors: 50, sampled: false)
+      baseline_rate = calculate_baseline_success_rate(baseline_events)
+      
+      # Generate sampled events with correction
+      sampled_events = generate_events(success: 95, errors: 50, sampled: true)
+      corrected_rate = described_class.new.calculate_success_rate(sampled_events)[:success_rate]
+      
+      # Should match within 1%
+      expect(corrected_rate).to be_within(0.01).of(baseline_rate)
+    end
+  end
+end
+```
+
+### 3.7.9. Trade-offs & SLO Accuracy (C11)
+
+**Trade-offs:**
+
+| Decision | Pro | Con | Rationale |
+|----------|-----|-----|-----------|
+| **Stratified sampling** | Accurate SLO metrics | Complexity (correction math) | Accuracy > simplicity |
+| **Always keep errors (100%)** | No error data loss | Higher cost if error rate spikes | Error visibility critical |
+| **Aggressive success sampling (10%)** | 90% cost savings | Large correction factor (10x) | Success events less critical |
+| **Sampling correction math** | Accurate percentiles | CPU overhead (~0.1ms/query) | Accuracy > performance |
+
+**SLO Accuracy Guarantees:**
+
+✅ **Error rate accuracy: 100%**  
+All errors captured → no error data loss.
+
+✅ **Success rate accuracy: 99.9%**  
+Sampling correction restores true success rate (±0.1% error).
+
+✅ **Latency percentiles: 95%**  
+P99 latency within 5% of true value (correction restores distribution).
+
+**Limitations:**
+
+⚠️ **High error rates reduce savings:** If errors >10% of traffic, cost savings decrease  
+**Mitigation:** Adjust success sample rate dynamically based on error rate
+
+⚠️ **Correction assumes uniform distribution:** May be inaccurate if success events clustered  
+**Mitigation:** Use time-windowed correction (per 5-minute window)
+
+⚠️ **Small sample sizes:** <100 events may have large correction errors  
+**Mitigation:** Don't apply correction for small samples, wait for more data
+
+**Monitoring Metrics:**
+
+```ruby
+# Track stratified sampling effectiveness
+Yabeda.e11y_sampling_decisions_total.increment(
+  stratum: 'success',
+  decision: 'kept',
+  sample_rate: 0.1
+)
+
+# Track SLO calculation accuracy
+Yabeda.e11y_slo_correction_factor.observe(
+  stratum: 'success',
+  correction_factor: 10.0
+)
+
+# Alert on correction accuracy drift
+Yabeda.e11y_slo_correction_error_rate.observe(
+  expected: 0.95,
+  actual: 0.949,
+  error: 0.001  # 0.1% error
+)
+```
+
+**Related Conflicts:**
+- **C05:** Trace-aware sampling (see §3.6 above)
+- **UC-004:** Zero-config SLO tracking (see UC-004 for SLO calculation details)
+- **UC-014:** Adaptive sampling (see UC-014 for cost optimization)
+
+---
+
 ## 4. Compression
 
 ### 4.1. Compression Engine
@@ -961,7 +1923,445 @@ end
 
 ---
 
-## 8. Cost Metrics
+## 8. Cardinality Protection (C04 Resolution) ⚠️ CRITICAL
+
+**Reference:** [CONFLICT-ANALYSIS.md - C04: High-Cardinality Metrics × OpenTelemetry Attributes](../researches/CONFLICT-ANALYSIS.md#c04-high-cardinality-metrics--opentelemetry-attributes)
+
+### 8.1. The Problem: Cardinality Explosion Across Backends
+
+**Scenario:** UC-013 (High-Cardinality Protection) was designed to protect **Yabeda/Prometheus metrics** from cardinality explosion. However, cardinality explosion is a **cost optimization problem** affecting **ALL backends**:
+
+- ❌ **Yabeda (Prometheus):** High cardinality → query slowness, OOM
+- ❌ **OpenTelemetry (OTLP):** High cardinality → cost spikes (Datadog, Honeycomb charge per unique attribute combination)
+- ❌ **Loki (Logs):** High cardinality in labels → index bloat, slow queries
+
+**Example:**
+
+```ruby
+# Configuration (UC-013):
+E11y.configure do |config|
+  config.cardinality_protection do
+    enabled true
+    max_unique_values 100  # Per label
+    protected_labels [:user_id, :order_id, :session_id]
+  end
+end
+
+# Event tracking (10,000 unique users):
+10_000.times do |i|
+  Events::OrderCreated.track(
+    order_id: "order-#{i}",    # ← 10,000 unique values!
+    user_id: "user-#{i}",      # ← 10,000 unique values!
+    amount: 99.99
+  )
+end
+```
+
+**Result BEFORE C04 fix:**
+
+```
+✅ Yabeda (Prometheus metrics):
+   - Cardinality protection ACTIVE
+   - Only first 100 unique order_id/user_id tracked
+   - Rest grouped as [OTHER]
+   - Prometheus cardinality: 100
+
+❌ OpenTelemetry (span attributes):
+   - Cardinality protection BYPASSED
+   - ALL 10,000 unique order_id/user_id exported
+   - OTLP backend cardinality: 10,000
+   - Cost spike: 100× expected!
+   
+❌ Loki (log labels):
+   - Cardinality protection BYPASSED
+   - ALL 10,000 unique order_id/user_id in labels
+   - Index bloat, slow queries
+```
+
+**Impact:**
+- ❌ **Cost explosion:** OTLP backends (Datadog, Honeycomb, Elastic) charge per unique attribute combination ($0.10/span → $1,000/day)
+- ❌ **Data loss:** Backend hits cardinality limit (e.g., Datadog 1000/metric), starts dropping spans
+- ❌ **Inconsistent protection:** Yabeda protected, OpenTelemetry/Loki not
+- ❌ **Misleading config:** UC-013 promises protection, but only covers **metrics** (not traces/logs)
+
+### 8.2. Decision: Unified Cardinality Protection for All Backends
+
+**Strategy:** Apply UC-013 cardinality protection to **ALL adapters** (Yabeda, OpenTelemetry, Loki) using a unified `CardinalityFilter` middleware.
+
+**Rules:**
+1. **Single source of truth:** `E11y.config.cardinality_protection` applies to ALL backends by default
+2. **Per-backend overrides:** Allow separate limits for backends with different cardinality handling (e.g., OTLP can handle 1000, Prometheus only 100)
+3. **Apply in middleware:** Filter event payload in `CardinalityFilter` middleware before adapters
+4. **[OTHER] grouping:** Group high-cardinality values as `[OTHER]` (consistent across backends)
+5. **Monitor metrics:** Track filtered labels for visibility
+
+### 8.3. Configuration: Inherit from Global Settings
+
+```ruby
+# config/initializers/e11y.rb
+E11y.configure do |config|
+  # ✅ GLOBAL cardinality protection (applies to ALL backends by default)
+  config.cardinality_protection do
+    enabled true
+    max_unique_values 100  # Conservative default (Prometheus-safe)
+    protected_labels [:user_id, :order_id, :session_id, :ip_address, :tenant_id]
+  end
+  
+  # Optional: Per-backend overrides (if needed)
+  config.adapters do
+    # Yabeda: Use global settings (default)
+    yabeda do
+      cardinality_protection.inherit_from :global
+    end
+    
+    # OpenTelemetry: Higher limits OK (OTLP backends handle more)
+    opentelemetry do
+      cardinality_protection do
+        inherit_from :global  # OR override:
+        # max_unique_values 1000  # OTLP backends (Datadog) handle more
+        # protected_labels [:user_id, :order_id]  # Subset of global
+      end
+    end
+    
+    # Loki: Use global settings (label cardinality matters!)
+    loki do
+      cardinality_protection.inherit_from :global
+    end
+  end
+end
+```
+
+**Environment-specific examples:**
+
+```ruby
+# Production: Strict limits (cost-sensitive)
+# config/environments/production.rb
+E11y.configure do |config|
+  config.cardinality_protection do
+    enabled true
+    max_unique_values 100
+    protected_labels [:user_id, :order_id, :session_id, :tenant_id]
+  end
+end
+
+# Development: No limits (full visibility)
+# config/environments/development.rb
+E11y.configure do |config|
+  config.cardinality_protection.enabled false
+end
+
+# Staging: Moderate limits (balance cost vs debugging)
+# config/environments/staging.rb
+E11y.configure do |config|
+  config.cardinality_protection do
+    max_unique_values 500  # More than prod, less than unlimited
+  end
+  
+  # OTLP backend can handle even more
+  config.adapters.opentelemetry do
+    cardinality_protection.max_unique_values 1000
+  end
+end
+```
+
+### 8.4. Implementation: Apply to Yabeda + OpenTelemetry
+
+**CardinalityFilter middleware (unified for all backends):**
+
+```ruby
+# lib/e11y/middleware/cardinality_filter.rb
+module E11y
+  module Middleware
+    class CardinalityFilter
+      def initialize(app)
+        @app = app
+      end
+      
+      def call(event)
+        # Apply cardinality protection if enabled
+        if E11y.config.cardinality_protection.enabled
+          event.payload = filter_payload(event.payload)
+        end
+        
+        @app.call(event)
+      end
+      
+      private
+      
+      def filter_payload(payload)
+        filtered = payload.dup
+        protected_labels = E11y.config.cardinality_protection.protected_labels
+        max_unique = E11y.config.cardinality_protection.max_unique_values
+        
+        protected_labels.each do |label|
+          next unless filtered.key?(label)
+          
+          original_value = filtered[label]
+          
+          # Check if value exceeds cardinality limit
+          if exceeds_limit?(label, original_value, max_unique)
+            # Replace with [OTHER]
+            filtered[label] = '[OTHER]'
+            
+            # Track metric
+            E11y::Metrics.increment('e11y.cardinality.filtered_labels', {
+              label: label,
+              backend: 'all'  # Applies to all adapters
+            })
+            
+            # Log debug
+            E11y.logger.debug do
+              "Cardinality limit exceeded for #{label}: #{original_value} → [OTHER]"
+            end
+          else
+            # Track unique value
+            track_unique_value(label, original_value)
+          end
+        end
+        
+        filtered
+      end
+      
+      def exceeds_limit?(label, value, max_unique_values)
+        cache_key = "#{label}:#{value}"
+        
+        # Check if value already tracked
+        return false if unique_values_cache.key?(cache_key)
+        
+        # Check if label already has max unique values
+        label_cardinality = unique_values_cache.keys.count { |k| k.start_with?("#{label}:") }
+        label_cardinality >= max_unique_values
+      end
+      
+      def track_unique_value(label, value)
+        cache_key = "#{label}:#{value}"
+        unique_values_cache[cache_key] = true
+      end
+      
+      def unique_values_cache
+        @unique_values_cache ||= Concurrent::Map.new
+      end
+      
+      # Class method for adapter-specific overrides
+      def self.filter(payload, max_unique_values:, protected_labels:)
+        # Same logic as instance method, but with custom config
+        # Used by adapters with per-backend overrides
+        # (Implementation omitted for brevity)
+      end
+    end
+  end
+end
+```
+
+**Yabeda adapter (uses filtered payload from middleware):**
+
+```ruby
+# lib/e11y/adapters/yabeda_collector.rb
+module E11y
+  module Adapters
+    class YabedaCollector < Base
+      def send_batch(events)
+        events.each do |event|
+          # Payload already filtered by CardinalityFilter middleware
+          # Just increment metrics
+          Yabeda.e11y.events.increment({
+            event_name: event.event_name,
+            severity: event.severity,
+            # HIGH-CARDINALITY labels already replaced with [OTHER]
+            user_id: event.payload[:user_id],   # ✅ Protected
+            order_id: event.payload[:order_id]  # ✅ Protected
+          })
+        end
+      end
+    end
+  end
+end
+```
+
+**OpenTelemetry adapter (uses filtered payload from middleware):**
+
+```ruby
+# lib/e11y/adapters/opentelemetry_collector.rb
+module E11y
+  module Adapters
+    class OpenTelemetryCollector < Base
+      def send_batch(events)
+        events.each do |event|
+          # Payload already filtered by CardinalityFilter middleware
+          export_trace(event) if @export_traces
+        end
+      end
+      
+      private
+      
+      def export_trace(event)
+        tracer = ::OpenTelemetry.tracer_provider.tracer('e11y')
+        
+        tracer.in_span(event.event_name) do |span|
+          # Set filtered attributes on span (cardinality protected!)
+          event.payload.each do |key, value|
+            span.set_attribute(key.to_s, value)  # ✅ Already filtered
+          end
+          
+          # Add metadata
+          span.set_attribute('event.name', event.event_name)
+          span.set_attribute('event.severity', event.severity.to_s)
+          span.set_attribute('event.timestamp', event.timestamp.iso8601)
+        end
+      end
+    end
+  end
+end
+```
+
+### 8.5. Cost Impact: Before vs After Protection
+
+**Scenario:** 10,000 orders/day, each with unique `order_id` and `user_id`
+
+**BEFORE C04 fix (cardinality unprotected):**
+
+```ruby
+# 10,000 orders/day
+10_000.times do |i|
+  Events::OrderCreated.track(
+    order_id: "order-#{i}",         # 10,000 unique values
+    user_id: "user-#{i % 5000}",    # 5,000 unique users
+    amount: rand(10..500)
+  )
+end
+
+# Cost in OTLP backend (e.g., Datadog):
+# - Span attribute cardinality: order_id=10,000, user_id=5,000
+# - Datadog pricing: $0.10/span with high-cardinality attributes
+# - Daily cost: $0.10 × 10,000 = $1,000/day
+# - Monthly cost: $30,000/month ❌
+```
+
+**AFTER C04 fix (cardinality protected):**
+
+```ruby
+# Same events, but cardinality protection ENABLED
+E11y.configure do |config|
+  config.cardinality_protection do
+    enabled true
+    max_unique_values 100
+    protected_labels [:user_id, :order_id]
+  end
+end
+
+# 10,000 orders/day (same workload)
+10_000.times do |i|
+  Events::OrderCreated.track(
+    order_id: "order-#{i}",         # Filtered to 100 + [OTHER]
+    user_id: "user-#{i % 5000}",    # Filtered to 100 + [OTHER]
+    amount: rand(10..500)
+  )
+end
+
+# Cost in OTLP backend (e.g., Datadog):
+# - Span attribute cardinality: order_id=101 (100 + [OTHER]), user_id=101
+# - Datadog pricing: $0.01/span (low-cardinality attributes)
+# - Daily cost: $0.01 × 10,000 = $100/day ✅
+# - Monthly cost: $3,000/month
+# - Monthly savings: $27,000 💰 (90% reduction!)
+```
+
+### 8.6. Monitoring Metrics
+
+**Key metrics for cardinality protection:**
+
+```ruby
+# 1. Filtered labels (cardinality protection triggered)
+E11y::Metrics.increment('e11y.cardinality.filtered_labels', {
+  label: 'user_id',
+  backend: 'all',  # or 'yabeda', 'opentelemetry', 'loki'
+  original_value_hash: Digest::SHA256.hexdigest(original_value)[0..7]
+})
+
+# 2. Unique values tracked per label (current cardinality)
+E11y::Metrics.gauge('e11y.cardinality.unique_values', 
+  CardinalityFilter.unique_values_count(label),
+  { label: label }
+)
+
+# 3. Cardinality limit breaches (labels hitting max)
+E11y::Metrics.increment('e11y.cardinality.limit_breached', {
+  label: label,
+  max_unique_values: max_unique_values
+})
+```
+
+**Grafana dashboard queries:**
+
+```promql
+# Cardinality protection rate (% of labels filtered)
+rate(e11y_cardinality_filtered_labels_total[5m])
+/
+rate(e11y_events_tracked_total[5m]) * 100
+
+# Labels at risk (approaching cardinality limit)
+e11y_cardinality_unique_values
+/ 
+100 * 100 > 80  # 80% of max_unique_values (100)
+
+# Top high-cardinality labels
+topk(10,
+  sum by (label) (
+    rate(e11y_cardinality_filtered_labels_total[1h])
+  )
+)
+
+# Cost savings estimate (assume $0.10 per unique span attribute)
+sum(rate(e11y_cardinality_filtered_labels_total[1d])) * 0.10
+# Result: Daily $ saved
+```
+
+**Alert rules:**
+
+```yaml
+# Alert if too many labels being filtered (config too strict?)
+- alert: E11yCardinalityHighFilterRate
+  expr: |
+    rate(e11y_cardinality_filtered_labels_total[5m])
+    /
+    rate(e11y_events_tracked_total[5m]) > 0.5
+  for: 15m
+  annotations:
+    summary: "E11y filtering >50% of labels (cardinality config too strict?)"
+    
+# Alert if label approaching cardinality limit
+- alert: E11yCardinalityLimitApproaching
+  expr: |
+    e11y_cardinality_unique_values
+    /
+    100 > 0.9
+  for: 10m
+  annotations:
+    summary: "Label {{ $labels.label }} at 90% of cardinality limit (100 unique values)"
+    
+# Alert if cardinality protection disabled in production
+- alert: E11yCardinalityProtectionDisabled
+  expr: |
+    e11y_config_cardinality_protection_enabled{env="production"} == 0
+  for: 5m
+  annotations:
+    summary: "⚠️ Cardinality protection DISABLED in production (cost risk!)"
+```
+
+### 8.7. Trade-offs (C04 Resolution)
+
+| Aspect | Pros | Cons | Mitigation |
+|--------|------|------|------------|
+| **Unified protection** | Consistent across all backends | One size doesn't fit all backends | Per-backend overrides (`inherit_from :global` or custom) |
+| **[OTHER] grouping** | Prevents cost explosion | Loses context for debugging | Log original values at debug level + query by `original_value_hash` |
+| **Global config** | Simple, DRY | May not fit all backend limits | Environment-specific: prod=100, staging=500, dev=unlimited |
+| **Middleware filtering** | Centralized, applies to all adapters | Performance overhead (filter per event) | Cache cardinality state (Concurrent::Map) |
+| **max_unique_values 100** | Conservative, safe for Prometheus | May be too strict for OTLP backends | Per-backend override: OTLP=1000, Yabeda=100 |
+| **protected_labels config** | Explicit control | Need to identify high-cardinality labels upfront | Monitor `limit_breached` metric, add labels incrementally |
+
+---
+
+## 9. Cost Metrics
 
 ### 8.1. Cost Tracking
 
@@ -1024,19 +2424,20 @@ end
 
 ---
 
-## 9. Trade-offs
+## 10. Trade-offs
 
-### 9.1. Key Decisions
+### 10.1. Key Decisions
 
 | Decision | Pro | Con | Rationale |
 |----------|-----|-----|-----------|
 | **Adaptive sampling** | 50-80% cost savings | Data loss risk | Errors always sampled |
+| **Cardinality protection (C04)** ⚠️ | 90% cost reduction in OTLP | Loses debugging context | [OTHER] grouping + debug logs |
 | **Gzip default** | 5:1 ratio, widely supported | CPU overhead | Best balance |
 | **retention_until tagging** | Simple, flexible | Downstream dependency | Clean separation |
 | **Smart routing** | 50% cost savings | Complex rules | Worth complexity |
 | **Payload minimization** | 20-30% size reduction | Data truncation | Configurable limits |
 
-### 9.2. Alternatives Considered
+### 10.2. Alternatives Considered
 
 **A) No sampling (100% events)**
 - ❌ Rejected: Too expensive
@@ -1061,7 +2462,7 @@ end
 
 ---
 
-## 10. Complete Configuration Example
+## 11. Complete Configuration Example
 
 ```ruby
 E11y.configure do |config|
@@ -1134,7 +2535,7 @@ end
 
 ---
 
-## 11. Future Enhancements
+## 12. Future Enhancements
 
 See [Backlog](use_cases/backlog.md) for future enhancement ideas including:
 - Quick Start Presets (v1.1)

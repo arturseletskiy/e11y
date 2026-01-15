@@ -27,6 +27,23 @@
    - 5.2. [Cryptographic Signing](#52-cryptographic-signing)
    - 5.3. [Compliance Features](#53-compliance-features)
    - 5.4. [Tamper Detection](#54-tamper-detection)
+   - 5.5. [OpenTelemetry Baggage PII Protection (C08 Resolution)](#55-opentelemetry-baggage-pii-protection-c08-resolution) ⚠️ CRITICAL
+     - 5.5.1. The Problem: PII Leaking via OpenTelemetry Baggage
+     - 5.5.2. Decision: Block PII from Baggage Entirely
+     - 5.5.3. BaggageProtection Middleware Implementation
+     - 5.5.4. Configuration
+     - 5.5.5. Usage Examples
+     - 5.5.6. Strict Mode (Development/Staging)
+     - 5.5.7. Trade-offs & GDPR Compliance (C08)
+   - 5.6. [PII Handling for Event Replay from DLQ (C07 Resolution)](#56-pii-handling-for-event-replay-from-dlq-c07-resolution) ⚠️ HIGH
+     - 5.6.1. The Problem: Double-Hashing PII on Replay
+     - 5.6.2. Decision: Skip PII Filtering for Replayed Events
+     - 5.6.3. PiiFilter Middleware with Replay Detection
+     - 5.6.4. DLQ Replay Service with Metadata Flags
+     - 5.6.5. Configuration
+     - 5.6.6. Usage Examples
+     - 5.6.7. Idempotency Verification (Testing)
+     - 5.6.8. Trade-offs & Audit Trail Integrity (C07)
 6. [GDPR Compliance](#6-gdpr-compliance)
 7. [Configuration](#7-configuration)
 8. [Testing](#8-testing)
@@ -2980,6 +2997,718 @@ end
 
 ---
 
+## 5.5. OpenTelemetry Baggage PII Protection (C08 Resolution)
+
+> **⚠️ CRITICAL: C08 Conflict Resolution - PII × OpenTelemetry Baggage**  
+> **See:** [CONFLICT-ANALYSIS.md C08](researches/CONFLICT-ANALYSIS.md#c08-pii-filtering--opentelemetry-baggage) for detailed analysis  
+> **Problem:** OpenTelemetry Baggage automatically propagates via HTTP headers and can leak PII to downstream services  
+> **Solution:** Block PII from baggage entirely with safe key allowlist
+
+### 5.5.1. The Problem: PII Leaking via OpenTelemetry Baggage
+
+**Scenario - GDPR Violation:**
+
+```ruby
+# Service A: User registration
+Events::UserRegistered.track(
+  user_id: '123',
+  email: 'user@example.com',  # ← PII, filtered in event payload ✅
+  name: 'John Doe'             # ← PII, filtered in event payload ✅
+)
+
+# Developer accidentally sets PII in baggage:
+OpenTelemetry::Baggage.set_value('user_email', 'user@example.com')  # ❌ PII in baggage!
+OpenTelemetry::Baggage.set_value('user_name', 'John Doe')            # ❌ PII in baggage!
+
+# Service A → Service B (HTTP call)
+# HTTP headers AUTOMATICALLY include baggage:
+# baggage: user_email=user@example.com,user_name=John Doe
+
+# Service B receives baggage with PII!
+# Service B logs baggage → PII LEAKED to downstream service!
+
+# Result: PII BYPASS!
+# - Event payload: PII filtered ✅
+# - Baggage: PII NOT filtered ❌ ← GDPR violation!
+```
+
+**Why This Is Critical:**
+- ✅ OpenTelemetry Baggage is **W3C standard** for trace context propagation
+- ❌ Baggage is **automatically transmitted** via HTTP headers (`baggage: key=value`)
+- ❌ Downstream services **receive PII without filtering**
+- ❌ Logs, metrics, traces in downstream services **contain PII**
+- ❌ **GDPR Article 5(1)(c) violation:** PII transmitted beyond necessary scope
+
+### 5.5.2. Decision: Block PII from Baggage Entirely
+
+**Strategy:** Allowlist-only mode for safe keys, block all others.
+
+**Safe Keys (Allowed):**
+- `trace_id` - OpenTelemetry trace ID (not PII)
+- `span_id` - OpenTelemetry span ID (not PII)
+- `environment` - Environment name (production, staging, etc.)
+- `version` - Application version (deployment ID)
+- `service_name` - Service identifier
+- `deployment_id` - Deployment identifier
+- `request_id` - Internal request ID (UUID, not PII)
+
+**Blocked Keys (PII Risk):**
+- `user_id`, `user_email`, `user_name` - User identifiers
+- `ip_address`, `client_ip` - IP addresses (GDPR Article 4(1))
+- `session_id`, `session_token` - Session identifiers (can be PII)
+- `api_key`, `token`, `password` - Credentials
+- Any custom keys not in allowlist
+
+### 5.5.3. BaggageProtection Middleware Implementation
+
+```ruby
+module E11y
+  module Middleware
+    class BaggageProtection
+      # Safe keys that can be set in baggage
+      ALLOWED_KEYS = %w[
+        trace_id
+        span_id
+        environment
+        version
+        service_name
+        deployment_id
+        request_id
+      ].freeze
+      
+      def initialize(config)
+        @enabled = config.baggage_protection_enabled || true
+        @allowed_keys = config.baggage_allowed_keys || ALLOWED_KEYS
+        @block_mode = config.baggage_block_mode || :silent  # :silent, :warn, :raise
+        @logger = E11y.logger
+      end
+      
+      def call(event_data)
+        return event_data unless @enabled
+        
+        # Intercept OpenTelemetry::Baggage.set_value calls
+        protect_baggage!
+        
+        event_data
+      end
+      
+      private
+      
+      def protect_baggage!
+        # Monkey-patch OpenTelemetry::Baggage (runtime protection)
+        OpenTelemetry::Baggage.singleton_class.prepend(BaggageInterceptor.new(
+          allowed_keys: @allowed_keys,
+          block_mode: @block_mode,
+          logger: @logger
+        ))
+      end
+    end
+    
+    # Interceptor for OpenTelemetry::Baggage.set_value
+    module BaggageInterceptor
+      def initialize(allowed_keys:, block_mode:, logger:)
+        @allowed_keys = allowed_keys
+        @block_mode = block_mode
+        @logger = logger
+        super()
+      end
+      
+      def set_value(key, value, context = nil)
+        # Check if key is allowed
+        unless @allowed_keys.include?(key.to_s)
+          handle_blocked_key(key, value)
+          return context || OpenTelemetry::Context.current
+        end
+        
+        # Key is safe, proceed
+        super(key, value, context)
+      end
+      
+      private
+      
+      def handle_blocked_key(key, value)
+        message = "[E11y] Blocked PII from OpenTelemetry baggage: key=#{key.inspect}"
+        
+        case @block_mode
+        when :silent
+          # Block silently (default)
+          @logger.debug(message)
+        when :warn
+          # Block with warning
+          @logger.warn(message)
+        when :raise
+          # Block with exception (strict mode)
+          raise BaggagePiiError, "#{message}. Only allowed keys: #{@allowed_keys.join(', ')}"
+        end
+      end
+    end
+    
+    class BaggagePiiError < StandardError; end
+  end
+end
+```
+
+### 5.5.4. Configuration
+
+```ruby
+# config/initializers/e11y.rb
+E11y.configure do |config|
+  config.security.baggage_protection do
+    enabled true  # ✅ CRITICAL: Always enable in production
+    
+    # Allowlist: Only these keys allowed in baggage
+    allowed_keys [
+      'trace_id',
+      'span_id',
+      'environment',
+      'version',
+      'service_name',
+      'deployment_id',
+      'request_id',
+      # Custom safe keys (optional):
+      'feature_flag_id',   # Feature flag identifier (not PII)
+      'ab_test_variant'    # A/B test variant (not PII)
+    ]
+    
+    # Block mode (how to handle violations)
+    block_mode :silent   # Options: :silent, :warn, :raise
+    
+    # Monitoring
+    on_blocked_key do |key, value, caller_location|
+      # Track violations for security audit
+      Yabeda.e11y_baggage_pii_blocked.increment(
+        key: key,
+        service: ENV['SERVICE_NAME']
+      )
+      
+      # Alert on critical violations
+      if key.match?(/email|password|ssn|credit_card/)
+        Sentry.capture_message(
+          "Critical PII blocked from baggage: #{key}",
+          level: :warning,
+          extra: { caller: caller_location }
+        )
+      end
+    end
+  end
+end
+```
+
+### 5.5.5. Usage Examples
+
+**❌ BAD: Blocked PII Keys**
+
+```ruby
+# Service A:
+OpenTelemetry::Baggage.set_value('user_email', 'user@example.com')
+# → BLOCKED (not in allowlist)
+# → Logged: "[E11y] Blocked PII from OpenTelemetry baggage: key='user_email'"
+
+OpenTelemetry::Baggage.set_value('ip_address', '192.168.1.100')
+# → BLOCKED (not in allowlist)
+
+OpenTelemetry::Baggage.set_value('session_id', 'abc123')
+# → BLOCKED (not in allowlist)
+
+# HTTP call to Service B:
+# baggage: (empty - all blocked)
+```
+
+**✅ GOOD: Allowed Safe Keys**
+
+```ruby
+# Service A:
+OpenTelemetry::Baggage.set_value('trace_id', 'abc123def456')
+# → ALLOWED ✅
+
+OpenTelemetry::Baggage.set_value('environment', 'production')
+# → ALLOWED ✅
+
+OpenTelemetry::Baggage.set_value('version', 'v2.1.0')
+# → ALLOWED ✅
+
+OpenTelemetry::Baggage.set_value('feature_flag_id', 'new_checkout_v2')
+# → ALLOWED ✅ (custom safe key)
+
+# HTTP call to Service B:
+# baggage: trace_id=abc123def456,environment=production,version=v2.1.0,feature_flag_id=new_checkout_v2
+# → All safe keys propagated ✅
+```
+
+**✅ ALTERNATIVE: Use Non-PII Identifiers**
+
+```ruby
+# Instead of user_email in baggage:
+OpenTelemetry::Baggage.set_value('user_id_hash', Digest::SHA256.hexdigest(user.email))
+# → Pseudonymized, no PII ✅
+
+# Instead of session_id:
+OpenTelemetry::Baggage.set_value('request_id', SecureRandom.uuid)
+# → Non-PII identifier ✅
+```
+
+### 5.5.6. Strict Mode (Development/Staging)
+
+**Recommended for non-production environments:**
+
+```ruby
+# config/environments/development.rb
+E11y.configure do |config|
+  config.security.baggage_protection do
+    enabled true
+    
+    # RAISE exception on blocked keys (fail fast)
+    block_mode :raise  # ← Developer sees error immediately
+    
+    allowed_keys E11y::Middleware::BaggageProtection::ALLOWED_KEYS
+  end
+end
+
+# Developer tries to set PII in baggage:
+OpenTelemetry::Baggage.set_value('user_email', 'test@example.com')
+# → RAISES BaggagePiiError:
+#    "[E11y] Blocked PII from OpenTelemetry baggage: key='user_email'.
+#     Only allowed keys: trace_id, span_id, environment, version, ..."
+```
+
+### 5.5.7. Trade-offs & GDPR Compliance (C08)
+
+**Trade-offs:**
+
+| Decision | Pro | Con | Rationale |
+|----------|-----|-----|-----------|
+| **Allowlist-only mode** | No PII can leak | Less flexible | GDPR compliance > flexibility |
+| **Block at runtime** | No code changes needed | Performance overhead (~0.01ms) | Security > performance |
+| **Silent mode default** | No breaking changes | Harder to debug | Gradual rollout safer |
+| **Raise mode (dev)** | Fail fast | Breaks tests | Catch violations early |
+
+**GDPR Compliance:**
+
+✅ **Article 5(1)(c) - Data minimisation:**  
+Baggage protection ensures PII is not transmitted beyond necessary scope.
+
+✅ **Article 5(1)(f) - Integrity and confidentiality:**  
+Blocking PII from automatic propagation protects data integrity.
+
+✅ **Article 32 - Security of processing:**  
+Technical measure to prevent PII leakage via trace context.
+
+**Monitoring Metrics:**
+
+```ruby
+# Track baggage protection effectiveness
+Yabeda.e11y_baggage_pii_blocked.increment(
+  key: 'user_email',
+  service: 'api-gateway'
+)
+
+# Alert on repeated violations (indicates developer education needed)
+Yabeda.e11y_baggage_pii_violations_total.increment(
+  caller_service: 'user-service',
+  blocked_key_pattern: 'user_*'
+)
+```
+
+**Related Conflicts:**
+- **C07:** DLQ replay with PII filtering (see §5.6 below)
+- **C01:** Audit trail signing with PII (see ADR-015 §3.3)
+
+---
+
+## 5.6. PII Handling for Event Replay from DLQ (C07 Resolution)
+
+> **⚠️ HIGH: C07 Conflict Resolution - PII Pseudonymization × DLQ Replay**  
+> **See:** [CONFLICT-ANALYSIS.md C07](researches/CONFLICT-ANALYSIS.md#c07-pii-pseudonymization--dlq-replay) for detailed analysis  
+> **Problem:** Replayed events from DLQ go through pipeline again and get double-hashed PII  
+> **Solution:** Mark events as already filtered to prevent idempotency violations
+
+### 5.6.1. The Problem: Double-Hashing PII on Replay
+
+**Scenario - Data Corruption:**
+
+```ruby
+# Original event (first processing):
+Events::UserLogin.track(
+  user_id: '123',
+  email: 'user@example.com',  # ← Original PII
+  ip_address: '192.168.1.1'   # ← Original PII
+)
+
+# Pipeline step 2: PII Filtering (ADR-015)
+# → email: 'user@example.com' → SHA256 hash → 'a1b2c3d4...'
+# → ip_address: '192.168.1.1' → SHA256 hash → 'e5f6g7h8...'
+
+# Event sent to adapters, but Loki adapter fails
+# → Event goes to Dead Letter Queue (DLQ)
+
+# UC-021: DLQ Replay
+# Event replayed from DLQ → goes through pipeline AGAIN
+
+# Pipeline step 2: PII Filtering runs AGAIN!
+# → email: 'a1b2c3d4...' (already hashed!) → SHA256 hash → 'x9y8z7w6...'
+#   ❌ DOUBLE-HASHED! Original: a1b2c3d4, Replay: x9y8z7w6
+
+# Result: DATA CORRUPTION!
+# - Original event: { email: 'a1b2c3d4...', ip: 'e5f6g7h8...' }
+# - Replayed event: { email: 'x9y8z7w6...', ip: 'k9l8m7n6...' }
+# - Same user, DIFFERENT hashes!
+```
+
+**Why This Breaks:**
+- ❌ **Idempotency violated:** Replay produces different output than original
+- ❌ **Audit trail corrupted:** Can't correlate original event with replayed event
+- ❌ **Forensics impossible:** User tracking broken (different email hashes)
+- ❌ **GDPR violation:** Can't fulfill data deletion requests (can't find all user data)
+
+### 5.6.2. Decision: Skip PII Filtering for Replayed Events
+
+**Strategy:** Metadata flag prevents double-processing.
+
+**Metadata Flags:**
+- `:pii_filtered` - Event already went through PII filtering (set by PII filter middleware)
+- `:replayed` - Event is being replayed from DLQ (set by DLQ replay service)
+
+**When to Skip PII Filtering:**
+1. Event has `:pii_filtered => true` (already processed)
+2. Event has `:replayed => true` (replay scenario)
+3. Both flags present → skip PII filtering entirely
+
+### 5.6.3. PiiFilter Middleware with Replay Detection
+
+```ruby
+module E11y
+  module Middleware
+    class PiiFilter < Base
+      def initialize(config)
+        @config = config
+        @rails_filter = Rails::ParameterFilter.new(Rails.application.config.filter_parameters)
+        @pattern_matcher = PatternMatcher.new(config.patterns)
+      end
+      
+      def call(event_data)
+        # ✅ CRITICAL: Check if already filtered (replay scenario)
+        if already_filtered?(event_data)
+          E11y.logger.debug "[E11y] Skipping PII filtering for replayed event: #{event_data[:event_id]}"
+          return event_data  # Skip filtering!
+        end
+        
+        # Get event class
+        event_class = E11y::Registry.get_class(event_data[:event_name])
+        
+        # Check if event contains PII
+        unless event_class.contains_pii?
+          # No PII declared, skip filtering (Tier 1)
+          return event_data
+        end
+        
+        # Apply PII filtering
+        filtered_data = apply_pii_rules(event_class, event_data)
+        
+        # ✅ Mark as filtered (prevents double-processing)
+        filtered_data[:metadata] ||= {}
+        filtered_data[:metadata][:pii_filtered] = true
+        
+        filtered_data
+      end
+      
+      private
+      
+      def already_filtered?(event_data)
+        metadata = event_data[:metadata] || {}
+        
+        # Check for replay flag
+        return true if metadata[:replayed]
+        
+        # Check for already-filtered flag
+        return true if metadata[:pii_filtered]
+        
+        false
+      end
+      
+      def apply_pii_rules(event_class, event_data)
+        # Per-field PII filtering logic
+        # (implementation details in §3.4)
+        #...
+      end
+    end
+  end
+end
+```
+
+### 5.6.4. DLQ Replay Service with Metadata Flags
+
+```ruby
+module E11y
+  module DLQ
+    class ReplayService
+      def replay_event(dlq_event)
+        # Extract original event data
+        event_data = dlq_event[:event_data]
+        
+        # ✅ CRITICAL: Mark as replayed (skip transformations)
+        event_data[:metadata] ||= {}
+        event_data[:metadata][:replayed] = true
+        event_data[:metadata][:pii_filtered] = true  # Already filtered!
+        event_data[:metadata][:replayed_at] = Time.now.utc.iso8601
+        event_data[:metadata][:original_event_id] = event_data[:event_id]
+        event_data[:metadata][:replay_reason] = dlq_event[:failure_reason]
+        
+        # Send through pipeline
+        # PII filter middleware will skip (already_filtered? returns true)
+        E11y::Pipeline.process(event_data)
+        
+        # Log successful replay
+        E11y.logger.info "[E11y] Replayed event from DLQ: #{event_data[:event_id]}"
+      end
+      
+      def replay_batch(dlq_events)
+        dlq_events.each do |event|
+          begin
+            replay_event(event)
+          rescue StandardError => e
+            E11y.logger.error "[E11y] Failed to replay event: #{e.message}"
+            # Re-queue to DLQ with updated metadata
+          end
+        end
+      end
+    end
+  end
+end
+```
+
+### 5.6.5. Configuration
+
+```ruby
+# config/initializers/e11y.rb
+E11y.configure do |config|
+  config.security.pii_filtering do
+    enabled true
+    
+    # Replay handling
+    replay_handling do
+      # Skip PII filtering for replayed events (default: true)
+      skip_on_replay true
+      
+      # Validate metadata flags (safety check)
+      validate_replay_flags true
+      
+      # Warn if replayed event missing pii_filtered flag
+      warn_on_missing_flag :warn  # Options: :silent, :warn, :raise
+    end
+  end
+  
+  config.dlq.replay do
+    # Metadata flags for replayed events
+    set_metadata_flags do
+      replayed true
+      pii_filtered true
+      replay_timestamp true
+      original_event_id true
+    end
+  end
+end
+```
+
+### 5.6.6. Usage Examples
+
+**✅ CORRECT: Replay from DLQ with Metadata**
+
+```ruby
+# UC-021: Event failed to write to adapter
+original_event = {
+  event_id: 'evt_123',
+  event_name: 'user.login',
+  payload: {
+    user_id: '123',
+    email: 'a1b2c3d4...',  # Already hashed by first pass
+    ip_address: 'e5f6g7h8...'  # Already hashed
+  },
+  metadata: {
+    pii_filtered: true  # ✅ Set during first pass
+  }
+}
+
+# Event sent to DLQ after adapter failure
+DLQ.enqueue(original_event)
+
+# Later: Replay from DLQ
+replay_service = E11y::DLQ::ReplayService.new
+replay_service.replay_event(original_event)
+
+# ✅ Result: PII filter skipped, email hash unchanged
+# Replayed event: { email: 'a1b2c3d4...' } (same as original!)
+```
+
+**❌ BAD: Replay without Metadata (Double-Hashing)**
+
+```ruby
+# Hypothetical scenario: Replayed event missing metadata
+replayed_event = {
+  event_id: 'evt_123',
+  event_name: 'user.login',
+  payload: {
+    email: 'a1b2c3d4...',  # Already hashed!
+  },
+  metadata: {}  # ❌ Missing pii_filtered flag!
+}
+
+# Pipeline processes event
+# PII filter middleware does NOT skip (no flag)
+# → email: 'a1b2c3d4...' → SHA256 hash → 'x9y8z7w6...'
+# ❌ DOUBLE-HASHED!
+
+# UC-021 MUST set metadata flags to prevent this!
+```
+
+**✅ ALTERNATIVE: Separate Replay Pipeline**
+
+```ruby
+# Optional: Dedicated pipeline for replays (skip all transformations)
+E11y.configure do |config|
+  config.pipeline_order do
+    # Standard pipeline (for new events)
+    standard_pipeline do
+      step :validation
+      step :pii_filtering      # ← Runs for NEW events
+      step :rate_limiting
+      step :sampling
+      step :trace_context
+      step :buffer
+      step :adapters
+    end
+    
+    # Replay pipeline (skip transformations)
+    replay_pipeline do
+      step :validation         # ← Still validate schema
+      # NO pii_filtering       # ← Skip! Already filtered
+      # NO rate_limiting       # ← Skip! Already passed
+      # NO sampling            # ← Skip! Already sampled
+      step :trace_context      # ← Restore trace context
+      step :buffer
+      step :adapters           # ← Write to adapters
+    end
+  end
+  
+  # Use replay pipeline for DLQ events
+  config.dlq.replay do
+    use_pipeline :replay_pipeline
+  end
+end
+```
+
+### 5.6.7. Idempotency Verification (Testing)
+
+**Critical:** Verify replay produces identical output.
+
+```ruby
+# spec/lib/e11y/dlq/replay_service_spec.rb
+RSpec.describe E11y::DLQ::ReplayService do
+  describe '#replay_event' do
+    it 'produces identical output for replayed events (idempotency)' do
+      # Original event with PII
+      original_event = Events::UserLogin.track(
+        user_id: '123',
+        email: 'user@example.com',
+        ip_address: '192.168.1.1'
+      )
+      
+      # Capture filtered output (first pass)
+      first_pass_output = E11y::Adapters[:elasticsearch].written_events.last
+      
+      # Simulate DLQ scenario
+      dlq_event = {
+        event_data: original_event.to_h,
+        failure_reason: 'Adapter timeout'
+      }
+      
+      # Replay event
+      replay_service = described_class.new
+      replay_service.replay_event(dlq_event)
+      
+      # Capture replayed output (second pass)
+      second_pass_output = E11y::Adapters[:elasticsearch].written_events.last
+      
+      # ✅ CRITICAL: Hashes must be IDENTICAL
+      expect(second_pass_output[:payload][:email]).to eq(first_pass_output[:payload][:email])
+      expect(second_pass_output[:payload][:ip_address]).to eq(first_pass_output[:payload][:ip_address])
+      
+      # Verify no double-hashing
+      expect(second_pass_output[:payload][:email]).not_to match(/x9y8z7w6/)  # Wrong hash
+      expect(second_pass_output[:payload][:email]).to match(/^[a-f0-9]{64}$/)  # SHA256
+    end
+    
+    it 'skips PII filtering for replayed events' do
+      # Event already processed
+      processed_event = {
+        event_id: 'evt_123',
+        event_name: 'user.login',
+        payload: {
+          email: 'a1b2c3d4...',  # Already hashed
+        },
+        metadata: {
+          pii_filtered: true
+        }
+      }
+      
+      # Spy on PII filter middleware
+      pii_filter = E11y::Middleware::PiiFilter.instance
+      allow(pii_filter).to receive(:apply_pii_rules).and_call_original
+      
+      # Replay event
+      replay_service = described_class.new
+      replay_service.replay_event({ event_data: processed_event })
+      
+      # ✅ PII filter should NOT be called (already filtered)
+      expect(pii_filter).not_to have_received(:apply_pii_rules)
+    end
+  end
+end
+```
+
+### 5.6.8. Trade-offs & Audit Trail Integrity (C07)
+
+**Trade-offs:**
+
+| Decision | Pro | Con | Rationale |
+|----------|-----|-----|-----------|
+| **Skip PII on replay** | Idempotent replay | Complexity (metadata flags) | Audit integrity > simplicity |
+| **Metadata flag check** | Prevents double-hashing | Runtime overhead (~0.01ms) | Data correctness > performance |
+| **Separate replay pipeline** | Clear separation | More configuration | Optional advanced feature |
+| **Validate flags** | Catches missing metadata | May raise errors | Safety > convenience |
+
+**Audit Trail Integrity:**
+
+✅ **Idempotency guarantee:**  
+Replay produces identical output → audit trail remains consistent.
+
+✅ **User tracking:**  
+Email hashes remain stable across replays → GDPR data deletion requests work correctly.
+
+✅ **Forensic analysis:**  
+Can correlate original event with replayed event using `original_event_id` metadata.
+
+**Monitoring Metrics:**
+
+```ruby
+# Track replay operations
+Yabeda.e11y_dlq_replays_total.increment(
+  event_type: 'user.login',
+  pii_filtered_skipped: true
+)
+
+# Alert on potential double-hashing
+Yabeda.e11y_pii_double_hash_prevented.increment(
+  event_id: 'evt_123'
+)
+```
+
+**Related Conflicts:**
+- **C08:** OpenTelemetry Baggage PII protection (see §5.5 above)
+- **C01:** Audit trail signing (see ADR-015 §3.3)
+- **C15:** Event versioning × replay (see ADR-012 - user responsibility for schema migrations)
+
+---
+
 ## 6. GDPR Compliance
 
 ### 6.1. GDPR Features
@@ -3283,6 +4012,8 @@ end
 | **Chain verification** | Detects gaps | Memory overhead | Critical for audit |
 | **Audit skip PII** | Compliance | Privacy risk | Legal obligation wins |
 | **Retry count toward limit** | System safety | Less delivery | Prevent amplification |
+| **Baggage allowlist (C08)** | No PII leaks | Less flexible | GDPR compliance > flexibility |
+| **Block baggage at runtime** | No code changes | 0.01ms overhead | Security > performance |
 
 ### 9.2. Pipeline Order (From CONFLICT-ANALYSIS.md)
 

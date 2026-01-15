@@ -98,6 +98,65 @@ Events::OrderPaid.audit(
 )
 ```
 
+**Declaring Audit Events (audit_event: true flag):**
+
+```ruby
+# app/events/permission_changed.rb
+class Events::PermissionChanged < E11y::Event::Base
+  # ✅ Mark as audit event (uses separate pipeline!)
+  audit_event true
+  
+  schema do
+    required(:user_id).filled(:integer)
+    required(:permission).filled(:string)
+    required(:action).filled(:string, included_in: ['granted', 'revoked'])
+    required(:granted_by).filled(:integer)
+    required(:reason).filled(:string)
+    required(:ip_address).filled(:string)  # PII preserved in audit!
+  end
+end
+
+# Usage (automatically uses audit pipeline):
+Events::PermissionChanged.track(
+  user_id: 42,
+  permission: 'admin',
+  action: 'granted',
+  granted_by: current_user.id,
+  reason: 'promotion to admin role',
+  ip_address: request.remote_ip  # ✅ Original IP preserved (no PII filtering)
+)
+
+# Pipeline flow for audit events:
+# 1. ✅ Signing (signs ORIGINAL data with IP address)
+# 2. ✅ Encryption (encrypts signed data)
+# 3. ✅ Audit Adapter (writes to secure storage)
+# 4. ❌ PII Filtering SKIPPED (audit pipeline)
+# 5. ❌ Rate Limiting SKIPPED (audit events never dropped)
+
+# Non-audit events (standard pipeline):
+class Events::PageView < E11y::Event::Base
+  # No audit_event flag → uses standard pipeline
+  
+  schema do
+    required(:user_id).filled(:integer)
+    required(:page_url).filled(:string)
+    required(:ip_address).filled(:string)
+  end
+end
+
+Events::PageView.track(
+  user_id: 42,
+  page_url: '/dashboard',
+  ip_address: request.remote_ip  # ❌ IP filtered (standard pipeline)
+)
+
+# Pipeline flow for standard events:
+# 1. ✅ PII Filtering (filters IP → '[FILTERED]')
+# 2. ✅ Rate Limiting (may drop if over limit)
+# 3. ✅ Signing (signs FILTERED data)
+# 4. ✅ Buffer → Adapters
+```
+
 **Audit events have special properties:**
 - ❌ **Never sampled** - 100% of audit events stored
 - ❌ **Never rate-limited** - All audit events tracked
@@ -108,18 +167,41 @@ Events::OrderPaid.audit(
 - ✅ **Separate storage** - Isolated from regular logs
 - ✅ **Long retention** - Configurable (1-10+ years)
 
-> **⚠️ IMPORTANT: PII Handling in Audit Events**  
-> Audit events **skip PII filtering by default** (GDPR Art. 6(1)(c) - legal obligation). This means original PII (emails, IP addresses, etc.) is preserved in audit logs for compliance purposes.  
+> **⚠️ IMPORTANT: Separate Audit Pipeline (C01 Resolution)**  
+> Audit events use a **SEPARATE PIPELINE** that skips PII filtering and signs ORIGINAL data for legal compliance.
 >  
-> **Why:** Audit trails are legally required (SOX, HIPAA, GDPR Art. 30) and must contain original data for accountability.  
+> **Why Separate Pipeline:**  
+> - **Legal requirement:** Audit trails must contain original data (SOX, HIPAA, GDPR Art. 30) for non-repudiation
+> - **Cryptographic signing:** Signature must be based on ORIGINAL data (before PII filtering)
+> - **GDPR compliance:** Audit events justify PII retention under GDPR Art. 6(1)(c) (legal obligation)
 >  
+> **Standard Pipeline vs Audit Pipeline:**
+> 
+> ```
+> STANDARD EVENTS (regular pipeline):
+> Event.track(...) 
+>   → PII Filtering (step 1) → filters emails, IPs, etc.
+>   → Rate Limiting (step 2)
+>   → Signing (step 3) → signs FILTERED data ❌
+>   → Buffer → Adapters
+> 
+> AUDIT EVENTS (separate pipeline):
+> Event.audit(...) 
+>   → Signing (step 1) → signs ORIGINAL data ✅ (before PII filtering!)
+>   → Encrypted Storage (step 2) → encrypts signed data
+>   → Audit Adapter (step 3) → writes to secure audit storage
+>   → NO PII filtering (skipped entirely)
+>   → NO rate limiting (audit events never dropped)
+> ```
+> 
 > **Compensating Controls:**  
-> - Encryption at rest
-> - Access control (auditor role only)
-> - Read access requires reason & is logged (meta-audit)
-> - Per-adapter PII rules (e.g., mask in Sentry, keep in `file_audit`)
+> - ✅ Encryption at rest (AES-256-GCM)
+> - ✅ Access control (auditor role only)
+> - ✅ Read access logged (meta-audit)
+> - ✅ Separate storage (isolated from app DB)
+> - ✅ Long retention (7-10 years)
 >  
-> **Implementation:** See [ADR-006 Section 3.4: Per-Adapter PII Rules](../ADR-006-security-compliance.md#34-per-adapter-pii-rules) and [Implementation Details](#implementation-details) section below for detailed architecture.
+> **Implementation:** See [ADR-015 §3.3: Audit Event Pipeline Separation](../ADR-015-middleware-order.md#33-audit-event-pipeline-separation-c01-resolution) for full architecture.
 
 ---
 
@@ -167,6 +249,131 @@ computed_signature = HMAC.hexdigest('SHA256', secret_key, event_json)
 if computed_signature != stored_signature
   raise AuditTrail::TamperDetected, "Event #{event_id} signature invalid!"
 end
+```
+
+#### 2.1. Legal Compliance Rationale (C01: Non-Repudiation) ⚠️
+
+**Why Sign BEFORE PII Filtering?**
+
+For audit events to meet legal requirements (SOX, HIPAA, GDPR Art. 30), they must provide **non-repudiation** - cryptographic proof that the event is authentic and hasn't been tampered with.
+
+**Problem with Standard Pipeline:**
+
+```
+STANDARD EVENTS (sign AFTER PII filtering):
+Event → PII Filter (email → [FILTERED]) → Sign filtered data
+  ❌ Signature is based on FILTERED data
+  ❌ Can't prove original event content
+  ❌ Non-repudiation FAILS (auditor can't verify original data)
+```
+
+**Solution: Separate Audit Pipeline:**
+
+```
+AUDIT EVENTS (sign BEFORE PII filtering):
+Event → Sign original data → Encrypt → Audit Storage
+  ✅ Signature is based on ORIGINAL data
+  ✅ Can prove original event content (cryptographically)
+  ✅ Non-repudiation SUCCESS (meets legal requirements)
+```
+
+**Example: GDPR "Right to Be Forgotten" Audit**
+
+```ruby
+# User requests data deletion (GDPR Art. 17)
+Events::UserDeleted.audit(
+  user_id: 42,
+  user_email: 'alice@example.com',  # ✅ Original email preserved!
+  deleted_by: admin.id,
+  deleted_by_email: 'admin@company.com',  # ✅ Original email preserved!
+  ip_address: request.remote_ip,  # ✅ Original IP preserved!
+  reason: 'gdpr_right_to_be_forgotten',
+  timestamp: Time.now.utc
+)
+
+# Cryptographic signature (HMAC-SHA256):
+# signature = HMAC(secret, "user_email=alice@example.com&deleted_by_email=admin@company.com&...")
+# ✅ Signature proves original data (with emails, IPs)
+
+# 6 months later: Auditor review
+auditor_query = "Show proof of Alice's data deletion"
+
+# E11y provides:
+# 1. ✅ Signed audit event (with original emails, IPs)
+# 2. ✅ Cryptographic signature (proves authenticity)
+# 3. ✅ Timestamp (proves when deletion occurred)
+# 4. ✅ Who deleted (admin@company.com)
+# 5. ✅ Reason (GDPR Art. 17 compliance)
+
+# Auditor verifies signature:
+computed_signature = HMAC(secret, original_event_data)
+if computed_signature == stored_signature
+  # ✅ Event is authentic (not tampered)
+  # ✅ Company proves GDPR compliance
+  # ✅ No GDPR fine!
+else
+  # ❌ Event tampered → GDPR violation → €20M fine!
+end
+```
+
+**Legal Requirements:**
+
+| Regulation | Requirement | How E11y Satisfies |
+|------------|-------------|-------------------|
+| **GDPR Art. 30** | Maintain records of processing activities | ✅ Audit events with original data (emails, IPs) |
+| **GDPR Art. 6(1)(c)** | Legal obligation to process PII | ✅ Audit events exempt from PII filtering |
+| **SOX Section 404** | Maintain internal controls for financial reporting | ✅ Cryptographic signing prevents tampering |
+| **HIPAA § 164.312(c)(2)** | Implement authentication mechanisms | ✅ Signature proves event authenticity |
+| **ISO 27001 A.12.4.1** | Event logging | ✅ Immutable audit trail with retention |
+
+**Why Standard Pipeline Can't Be Used:**
+
+```ruby
+# ❌ BAD: Standard pipeline (sign AFTER PII filtering)
+class Events::UserDeleted < E11y::Event::Base
+  # No audit_event flag → standard pipeline
+  
+  schema do
+    required(:user_email).filled(:string)
+  end
+end
+
+Events::UserDeleted.track(
+  user_email: 'alice@example.com'
+)
+
+# Pipeline flow:
+# 1. PII Filter: user_email → '[FILTERED]'
+# 2. Signing: signature = HMAC(secret, "user_email=[FILTERED]")
+# 3. Storage: { user_email: '[FILTERED]', signature: 'abc123' }
+
+# Auditor asks: "Prove Alice's data was deleted"
+# ❌ Can't prove! Event only shows user_email='[FILTERED]'
+# ❌ Signature is based on FILTERED data (not original)
+# ❌ Non-repudiation FAILS → GDPR fine risk!
+
+# ✅ GOOD: Audit pipeline (sign BEFORE PII filtering)
+class Events::UserDeleted < E11y::Event::Base
+  audit_event true  # ✅ Uses separate audit pipeline!
+  
+  schema do
+    required(:user_email).filled(:string)
+  end
+end
+
+Events::UserDeleted.track(
+  user_email: 'alice@example.com'
+)
+
+# Pipeline flow:
+# 1. Signing: signature = HMAC(secret, "user_email=alice@example.com")
+#    ✅ Signature based on ORIGINAL data!
+# 2. Encryption: encrypted_data = AES-256-GCM(signed_event)
+# 3. Storage: encrypted audit record
+
+# Auditor asks: "Prove Alice's data was deleted"
+# ✅ Can prove! Decrypt → verify signature → show original email
+# ✅ Non-repudiation SUCCESS → GDPR compliant!
 ```
 
 ---

@@ -12,6 +12,7 @@
 
 1. [Context & Problem](#1-context--problem)
 2. [Architecture Overview](#2-architecture-overview)
+   - 2.2. [Metrics Backend Selection (C03 Resolution)](#22-metrics-backend-selection-c03-resolution) ⚠️ CRITICAL
 3. [OTel Collector Adapter](#3-otel-collector-adapter)
 4. [Semantic Conventions](#4-semantic-conventions)
 5. [Logs Signal Export](#5-logs-signal-export)
@@ -20,6 +21,8 @@
 8. [Trace Context Integration](#8-trace-context-integration)
 9. [Testing Strategy](#9-testing-strategy)
 10. [Trade-offs](#10-trade-offs)
+
+**Note:** Cardinality Protection (C04 Resolution) moved to [ADR-009 Cost Optimization §8](ADR-009-cost-optimization.md#8-cardinality-protection-c04-resolution) ⚠️
 
 ---
 
@@ -69,6 +72,8 @@
 - ❌ Replace existing adapters (OTel is optional, v1.1+)
 - ❌ OTel auto-instrumentation (already exists separately)
 
+> **⚠️ NOTE (C03 Resolution):** OpenTelemetry is **optional** for E11y. **Yabeda is the default metrics backend** (see ADR-002). You can choose OpenTelemetry for metrics, but **not both simultaneously** to avoid double overhead. See [Metrics Backend Selection](#22-metrics-backend-selection-c03-resolution) and [CONFLICT-ANALYSIS.md C03](../researches/CONFLICT-ANALYSIS.md#c03-dual-metrics-collection-overhead).
+
 ### 1.3. Success Metrics
 
 | Metric | Target | Critical? |
@@ -109,7 +114,239 @@ C4Context
     UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
 ```
 
-### 2.2. Component Architecture
+### 2.2. Metrics Backend Selection (C03 Resolution) ⚠️ CRITICAL
+
+**Reference:** [CONFLICT-ANALYSIS.md - C03: Dual Metrics Collection Overhead](../researches/CONFLICT-ANALYSIS.md#c03-dual-metrics-collection-overhead)
+
+**Problem:** Running both Yabeda (ADR-002) and OpenTelemetry metrics simultaneously causes **double overhead** - every event increments counters in both systems, doubling CPU/memory usage and storage costs.
+
+**Decision:** E11y supports **configurable metrics backend** - choose ONE:
+1. **`:yabeda`** (default) - Ruby-native, Prometheus, best for Rails
+2. **`:opentelemetry`** (optional) - Vendor-neutral, OTLP, multi-backend
+3. **`[:yabeda, :opentelemetry]`** (migration only) - Both enabled (⚠️ double overhead!)
+
+**Configuration:**
+
+```ruby
+# config/initializers/e11y.rb
+E11y.configure do |config|
+  # Option 1: Yabeda only (DEFAULT, recommended for Rails)
+  config.metrics do
+    backend :yabeda  # Prometheus via Yabeda
+  end
+  
+  # Option 2: OpenTelemetry only (for OTLP backends)
+  # config.metrics do
+  #   backend :opentelemetry  # OTLP via OTel SDK
+  # end
+  
+  # Option 3: Both (for migration period ONLY)
+  # config.metrics do
+  #   backend [:yabeda, :opentelemetry]  # ⚠️ DOUBLE OVERHEAD!
+  # end
+end
+```
+
+**Metrics Adapter Pattern:**
+
+E11y uses an internal **Metrics Adapter** to abstract the backend:
+
+```ruby
+# lib/e11y/metrics.rb
+module E11y
+  module Metrics
+    class << self
+      # Unified API (backend-agnostic)
+      def increment(metric_name, tags = {}, by: 1)
+        backends.each do |backend|
+          case backend
+          when :yabeda
+            increment_yabeda(metric_name, tags, by)
+          when :opentelemetry
+            increment_opentelemetry(metric_name, tags, by)
+          end
+        end
+      end
+      
+      def histogram(metric_name, value, tags = {})
+        backends.each do |backend|
+          case backend
+          when :yabeda
+            histogram_yabeda(metric_name, value, tags)
+          when :opentelemetry
+            histogram_opentelemetry(metric_name, value, tags)
+          end
+        end
+      end
+      
+      private
+      
+      def backends
+        Array(E11y.config.metrics.backend)
+      end
+      
+      def increment_yabeda(metric_name, tags, by)
+        return unless defined?(Yabeda)
+        
+        # Convert metric_name to Yabeda format
+        # e.g., 'events_total' → Yabeda.e11y_events_total
+        yabeda_metric = Yabeda.e11y.public_send(metric_name)
+        yabeda_metric.increment(tags, by: by)
+      rescue NameError => e
+        E11y.logger.warn "Yabeda metric not found: #{metric_name} (#{e.message})"
+      end
+      
+      def increment_opentelemetry(metric_name, tags, by)
+        return unless defined?(OpenTelemetry)
+        
+        # Convert to OpenTelemetry format
+        # e.g., 'events_total' → 'e11y.events.total'
+        otel_metric_name = "e11y.#{metric_name.to_s.tr('_', '.')}"
+        
+        meter = OpenTelemetry.meter_provider.meter('e11y')
+        counter = meter.create_counter(otel_metric_name, unit: '1', description: 'E11y metric')
+        counter.add(by, attributes: tags)
+      end
+      
+      def histogram_yabeda(metric_name, value, tags)
+        return unless defined?(Yabeda)
+        
+        yabeda_metric = Yabeda.e11y.public_send(metric_name)
+        yabeda_metric.measure(tags, value)
+      end
+      
+      def histogram_opentelemetry(metric_name, value, tags)
+        return unless defined?(OpenTelemetry)
+        
+        otel_metric_name = "e11y.#{metric_name.to_s.tr('_', '.')}"
+        
+        meter = OpenTelemetry.meter_provider.meter('e11y')
+        histogram = meter.create_histogram(otel_metric_name, unit: 'ms', description: 'E11y metric')
+        histogram.record(value, attributes: tags)
+      end
+    end
+  end
+end
+```
+
+**Usage in E11y (backend-agnostic):**
+
+```ruby
+# lib/e11y/event.rb
+class Event
+  def track
+    # Single call - backend determined by config
+    E11y::Metrics.increment('events_total', {
+      event_name: self.event_name,
+      severity: self.severity
+    })
+    
+    # ... rest of tracking logic
+  end
+end
+
+# Depending on config.metrics.backend:
+# - :yabeda → Yabeda.e11y_events_total.increment(...)
+# - :opentelemetry → OpenTelemetry counter.add(...)
+# - [:yabeda, :opentelemetry] → BOTH (double overhead!)
+```
+
+**Warning System:**
+
+```ruby
+# lib/e11y/config/metrics.rb
+module E11y
+  module Config
+    class Metrics
+      attr_accessor :backend
+      
+      def initialize
+        @backend = :yabeda  # Default
+      end
+      
+      def backend=(value)
+        @backend = value
+        
+        # Warn if both backends enabled
+        if Array(value).size > 1
+          E11y.logger.warn do
+            "⚠️ Multiple metrics backends enabled: #{Array(value).join(', ')}. " \
+            "This causes DOUBLE OVERHEAD (CPU, memory, storage). " \
+            "Only use multiple backends during migration. " \
+            "See ADR-007 and CONFLICT-ANALYSIS.md C03."
+          end
+        end
+      end
+    end
+  end
+end
+```
+
+**Migration Guide (Yabeda → OpenTelemetry):**
+
+```ruby
+# Step 1: Start with Yabeda (production)
+config.metrics.backend = :yabeda
+
+# Step 2: Enable both backends in staging (test OTLP pipeline)
+config.metrics.backend = [:yabeda, :opentelemetry]
+# ⚠️ Monitor: CPU/memory usage should ~2× (expected)
+
+# Step 3: Validate OTLP metrics (Grafana dashboards work)
+# Check: e11y.events.total (OTLP) matches e11y_events_total (Prometheus)
+
+# Step 4: Switch to OpenTelemetry only in production
+config.metrics.backend = :opentelemetry
+
+# Step 5: Remove Yabeda gem dependency (cleanup)
+# gem 'yabeda' - no longer needed
+```
+
+**Performance Impact:**
+
+```ruby
+# Benchmark: 10,000 events/sec
+# Single backend (:yabeda OR :opentelemetry):
+# - CPU: ~5% overhead
+# - Memory: ~10 MB for metric buffers
+# - Latency: +0.1ms per event
+
+# Both backends ([:yabeda, :opentelemetry]):
+# - CPU: ~10% overhead (2×)
+# - Memory: ~20 MB (2×)
+# - Latency: +0.2ms per event (2×)
+# ⚠️ Only use during migration (1-2 weeks max)
+```
+
+**Monitoring:**
+
+```ruby
+# Track which backends are active
+E11y::Metrics.gauge('e11y.metrics.backends_active', 
+  Array(E11y.config.metrics.backend).size,
+  { backends: Array(E11y.config.metrics.backend).join(',') }
+)
+
+# Alert if multiple backends enabled in production
+# Alert: e11y_metrics_backends_active{env="production"} > 1
+```
+
+**Trade-offs:**
+
+| Aspect | Yabeda (default) | OpenTelemetry | Both (migration) |
+|--------|------------------|---------------|------------------|
+| **Performance** | Fast (Ruby-native) | Slightly slower (SDK overhead) | 2× overhead ⚠️ |
+| **Ecosystem** | Rails/Ruby best fit | Vendor-neutral | N/A |
+| **Backend** | Prometheus only | Any OTLP backend | Prometheus + OTLP |
+| **Setup** | Simple (gem install) | Requires OTel Collector | Complex |
+| **Use case** | Rails apps, Prometheus | Multi-language, cloud-native | Migration period only |
+
+**Recommendation:**
+- **Rails apps with Prometheus:** Use `:yabeda` (default)
+- **Cloud-native, multi-backend:** Use `:opentelemetry`
+- **Migration period:** Use `[:yabeda, :opentelemetry]` for 1-2 weeks max
+
+### 2.3. Component Architecture
 
 ```mermaid
 graph TB
@@ -161,7 +398,7 @@ graph TB
     style HTTPConv fill:#d4edda
 ```
 
-### 2.3. Data Flow Sequence
+### 2.4. Data Flow Sequence
 
 ```mermaid
 sequenceDiagram
@@ -971,9 +1208,25 @@ end
 
 ---
 
-## 9. Testing Strategy
+## 9. Cardinality Protection (C04 Resolution) ⚠️
 
-### 9.1. OTel Adapter Tests
+**This section has been moved to [ADR-009 Cost Optimization §8: Cardinality Protection](ADR-009-cost-optimization.md#8-cardinality-protection-c04-resolution).**
+
+**Rationale:** Cardinality explosion is a **cost optimization concern** affecting ALL backends (Yabeda/Prometheus, OpenTelemetry, Loki), not just OTLP. The unified solution is now documented in ADR-009.
+
+**Summary:**
+- ✅ Unified cardinality protection for **all adapters** (Yabeda, OpenTelemetry, Loki)
+- ✅ Single config: `E11y.config.cardinality_protection` applies globally
+- ✅ Per-backend overrides: `inherit_from :global` or custom limits
+- ✅ 90% cost reduction for high-cardinality OTLP attributes
+
+See [ADR-009 §8](ADR-009-cost-optimization.md#8-cardinality-protection-c04-resolution) for full implementation details.
+
+---
+
+## 10. Testing Strategy
+
+### 10.1. OTel Adapter Tests
 
 ```ruby
 # spec/e11y/adapters/opentelemetry_collector_spec.rb
@@ -1047,7 +1300,7 @@ RSpec.describe E11y::Adapters::OpenTelemetryCollector do
 end
 ```
 
-### 9.2. Semantic Conventions Tests
+### 10.2. Semantic Conventions Tests
 
 ```ruby
 # spec/e11y/opentelemetry/semantic_conventions_spec.rb
@@ -1099,19 +1352,19 @@ end
 
 ---
 
-## 10. Trade-offs
+## 11. Trade-offs
 
-### 10.1. Key Decisions
+### 11.1. Key Decisions
 
 | Decision | Pro | Con | Rationale |
 |----------|-----|-----|-----------|
 | **Optional v1.1+** | No breaking changes | Later adoption | Rails 8+ ecosystem first |
 | **OTel Collector required** | Advanced features | Extra component | Industry standard |
 | **Logs Signal primary** | Best fit for events | Not traces-first | E11y is event-focused |
-| **Yabeda for metrics** | Better Rails integration | Separate system | Yabeda is superior |
+| **Yabeda for metrics (C03)** ⚠️ | Better Rails integration | Separate from OTLP | Yabeda is superior for Rails |
 | **HTTP OTLP only** | Simple, universal | No gRPC (v1) | HTTP is 95% use case |
 
-### 10.2. Alternatives Considered
+### 11.2. Alternatives Considered
 
 **A) Direct OTel SDK Integration**
 - ❌ Rejected: Too complex for v1.0, optional for v1.1+
