@@ -108,18 +108,31 @@ end
 
 ## ⚡ Quick Examples
 
-### Basic Event (Unified DSL - ОДИН способ!)
+### Basic Event (v1.1 - Event-Level Configuration!)
+
+> **🎯 NEW in v1.1:** Event-level configuration reduces global config from 1400+ to <300 lines!
 
 ```ruby
-# 1. Define event (простой Ruby класс)
-class Events::OrderPaid < E11y::Event
-  # Атрибуты (dry-struct для type safety)
-  attribute :order_id, Types::String
-  attribute :amount, Types::Decimal
-  attribute :currency, Types::String.default('USD')
+# 1. Define event (простой Ruby класс + конфигурация)
+class Events::OrderPaid < E11y::Event::Base
+  # Schema (dry-schema для валидации)
+  schema do
+    required(:order_id).filled(:string)
+    required(:amount).filled(:decimal)
+    required(:currency).filled(:string)
+  end
   
-  # Severity по умолчанию
-  default_severity :success
+  # ✨ NEW: Event-level configuration (right next to schema!)
+  severity :success
+  rate_limit 1000, window: 1.second
+  sample_rate 1.0  # Never sample payments
+  retention 7.years  # Financial records
+  adapters [:loki, :sentry, :s3_archive]
+  
+  # Metric definition
+  metric :counter,
+         name: 'orders.paid.total',
+         tags: [:currency]
 end
 
 # 2. Track - ТОЛЬКО ТАК, больше никаких вариантов!
@@ -132,6 +145,60 @@ Events::OrderPaid.track(
 # ❌ НЕТ других способов:
 # E11y.track_event(...) - НЕТ!
 # Severity.track(...) - НЕТ!
+```
+
+**90% событий нужен ТОЛЬКО schema (zero config!):**
+
+```ruby
+# Conventions = sensible defaults!
+class Events::OrderCreated < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:string)
+    required(:amount).filled(:decimal)
+  end
+  # ← That's it! All config from conventions:
+  #    severity: :success (from name)
+  #    adapters: [:loki] (from severity)
+  #    sample_rate: 0.1 (from severity)
+  #    retention: 30.days (from severity)
+  #    rate_limit: 1000 (default)
+end
+```
+
+**Inheritance для DRY:**
+
+```ruby
+# Base class для payment events
+module Events
+  class BasePaymentEvent < E11y::Event::Base
+    severity :success
+    sample_rate 1.0  # Never sample
+    retention 7.years
+    adapters [:loki, :sentry, :s3_archive]
+  end
+end
+
+# Inherit from base (1-2 lines per event!)
+class Events::PaymentSucceeded < Events::BasePaymentEvent
+  schema do
+    required(:transaction_id).filled(:string)
+    required(:amount).filled(:decimal)
+  end
+  # ← Inherits ALL config from BasePaymentEvent!
+end
+```
+
+**Preset modules для 1-line includes:**
+
+```ruby
+class Events::PaymentProcessed < E11y::Event::Base
+  include E11y::Presets::HighValueEvent  # ← All config inherited!
+  
+  schema do
+    required(:transaction_id).filled(:string)
+    required(:amount).filled(:decimal)
+  end
+end
 ```
 
 ### With Duration Measurement
@@ -169,13 +236,35 @@ end
 
 ---
 
-## 🔧 Configuration (10 minutes)
+## 🔧 Configuration (v1.1 - Simplified!)
+
+> **🎯 NEW in v1.1:** Global config reduced from 1400+ to <300 lines!
+>
+> **Philosophy:** Global config = infrastructure only. Event config = in event classes.
+
+### Global Config (Infrastructure Only)
 
 ```ruby
-# config/initializers/e11y.rb
+# config/initializers/e11y.rb (<300 lines!)
 E11y.configure do |config|
-  # === SEVERITY ===
-  config.severity = Rails.env.production? ? :info : :debug
+  # === ADAPTERS REGISTRATION (infrastructure) ===
+  config.register_adapter :loki, E11y::Adapters::LokiAdapter.new(
+    url: ENV['LOKI_URL'],
+    labels: { env: Rails.env, service: 'api' }
+  )
+  
+  config.register_adapter :sentry, E11y::Adapters::SentryAdapter.new(
+    dsn: ENV['SENTRY_DSN']
+  )
+  
+  config.register_adapter :s3, E11y::Adapters::S3Adapter.new(
+    bucket: 'events-archive'
+  )
+  
+  # === DEFAULTS (conventions) ===
+  config.default_adapters = [:loki]  # Most events → Loki
+  config.default_sample_rate = 0.1   # 10% sampling
+  config.default_rate_limit = 1000   # 1000 events/sec
   
   # === REQUEST SCOPE BUFFERING ===
   config.request_scope do
@@ -184,7 +273,156 @@ E11y.configure do |config|
     flush_on :error   # :error, :always, :never
   end
   
-  # === ADAPTERS (multiple supported!) ===
+  # === GLOBAL RATE LIMITING (infrastructure) ===
+  config.rate_limiting do
+    global limit: 10_000, window: 1.minute
+  end
+  
+  # === CARDINALITY PROTECTION (infrastructure) ===
+  config.cardinality_protection do
+    forbidden_labels :user_id, :order_id, :session_id
+    default_cardinality_limit 100
+  end
+  
+  # === SLO TRACKING (zero config!) ===
+  config.slo_tracking = true  # ← ВСЁ!
+  
+  # === AUDIT RETENTION (global default) ===
+  # Default for audit events, can be overridden per event
+  config.audit_retention = case ENV['JURISDICTION']
+                           when 'EU' then 7.years   # GDPR
+                           when 'US' then 10.years  # SOX
+                           else 5.years
+                           end
+  
+  # ✅ That's it! No per-event config here anymore!
+end
+```
+
+### Event-Level Config (Locality of Behavior)
+
+```ruby
+# app/events/order_created.rb
+module Events
+  class OrderCreated < E11y::Event::Base
+    schema do
+      required(:order_id).filled(:string)
+      required(:amount).filled(:decimal)
+    end
+    
+    # ✨ Event-level config (right next to schema!)
+    severity :success
+    rate_limit 1000, window: 1.second
+    sample_rate 0.1  # 10% sampling
+    retention 30.days
+    adapters [:loki, :elasticsearch]
+    
+    # Metric definition
+    metric :counter,
+           name: 'orders.created.total',
+           tags: [:currency]
+  end
+end
+```
+
+### Old vs New Config
+
+**Before (v1.0): 1400+ lines in global config**
+
+```ruby
+# config/initializers/e11y.rb (1400+ lines!)
+E11y.configure do |config|
+  # Adapters registration
+  config.register_adapter :loki, Loki.new(...)
+  config.register_adapter :sentry, Sentry.new(...)
+  
+  # ❌ Per-event config (100+ events!)
+  config.events do
+    event 'Events::OrderCreated' do
+      severity :success
+      adapters [:loki]
+      sample_rate 0.1
+      retention 30.days
+      rate_limit 1000
+    end
+    
+    event 'Events::PaymentSucceeded' do
+      severity :success
+      adapters [:loki, :sentry, :s3]
+      sample_rate 1.0
+      retention 7.years
+      rate_limit 1000
+    end
+    
+    # ... 98+ more events ...
+  end
+end
+```
+
+**After (v1.1): <300 lines in global config**
+
+```ruby
+# config/initializers/e11y.rb (<300 lines!)
+E11y.configure do |config|
+  # ONLY infrastructure
+  config.register_adapter :loki, Loki.new(...)
+  config.register_adapter :sentry, Sentry.new(...)
+  
+  # Defaults (conventions)
+  config.default_adapters = [:loki]
+  
+  # ✅ No per-event config here!
+end
+
+# app/events/order_created.rb
+class Events::OrderCreated < E11y::Event::Base
+  schema do; required(:order_id).filled(:string); end
+  # ← Uses conventions (zero config!)
+end
+
+# app/events/payment_succeeded.rb
+class Events::PaymentSucceeded < Events::BasePaymentEvent
+  schema do; required(:transaction_id).filled(:string); end
+  # ← Inherits config from BasePaymentEvent (DRY!)
+end
+```
+
+### Migration Path (Backward Compatible)
+
+```ruby
+# v1.1 supports BOTH styles (backward compatible!)
+
+# Old style (still works):
+E11y.configure do |config|
+  config.events do
+    event 'Events::OrderCreated' do
+      adapters [:loki]
+    end
+  end
+end
+
+# New style (preferred):
+class Events::OrderCreated < E11y::Event::Base
+  adapters [:loki]  # ← Event-level (overrides global)
+end
+
+# Migrate incrementally (both work together!)
+```
+
+---
+
+## 🔧 Old Configuration (v1.0 - Deprecated)
+
+> **⚠️ Deprecated:** This section shows v1.0 configuration style for reference.
+> Use event-level configuration (above) for new projects.
+
+```ruby
+# config/initializers/e11y.rb (OLD STYLE)
+E11y.configure do |config|
+  # === SEVERITY ===
+  config.severity = Rails.env.production? ? :info : :debug
+  
+  # === ADAPTERS (old style) ===
   config.adapters = [
     # Loki for logs
     E11y::Adapters::LokiAdapter.new(

@@ -823,6 +823,151 @@ end
 
 ---
 
+### Event Inheritance for PII (NEW - v1.1)
+
+> **🎯 CONTRADICTION_01 Resolution:** Use inheritance to share common PII rules across related events.
+
+**Base class with common PII rules:**
+
+```ruby
+# app/events/base_user_event.rb
+module Events
+  class BaseUserEvent < E11y::Event::Base
+    # Common for ALL user events
+    contains_pii true
+    
+    pii_filtering do
+      # Common PII handling
+      hashes :email, :phone  # Pseudonymize for searchability
+      allows :user_id        # ID is not PII
+    end
+  end
+end
+
+# Inherit and extend
+class Events::UserRegistered < Events::BaseUserEvent
+  schema do
+    required(:user_id).filled(:string)
+    required(:email).filled(:string)
+    required(:password).filled(:string)
+    required(:phone).filled(:string)
+  end
+  
+  pii_filtering do
+    # Inherits: hashes :email, :phone + allows :user_id
+    # Add more:
+    masks :password  # ← Additional field
+  end
+end
+
+class Events::UserProfileUpdated < Events::BaseUserEvent
+  schema do
+    required(:user_id).filled(:string)
+    required(:email).filled(:string)
+    required(:phone).filled(:string)
+    required(:address).filled(:hash)
+  end
+  
+  pii_filtering do
+    # Inherits: hashes :email, :phone + allows :user_id
+    # Add more:
+    masks :address  # ← Additional field
+  end
+end
+```
+
+**Base class for payment events with PII:**
+
+```ruby
+# app/events/base_payment_event.rb
+module Events
+  class BasePaymentEvent < E11y::Event::Base
+    contains_pii true
+    
+    pii_filtering do
+      # Common payment PII handling
+      hashes :email, :user_id  # Pseudonymize
+      allows :order_id, :amount, :currency  # Non-PII
+      masks :card_number, :cvv  # Sensitive
+    end
+  end
+end
+
+# Inherit from base
+class Events::PaymentSucceeded < Events::BasePaymentEvent
+  schema do
+    required(:transaction_id).filled(:string)
+    required(:order_id).filled(:string)
+    required(:user_id).filled(:string)
+    required(:email).filled(:string)
+    required(:amount).filled(:decimal)
+    required(:currency).filled(:string)
+    required(:card_number).filled(:string)
+  end
+  # ← Inherits ALL PII rules from BasePaymentEvent!
+end
+
+class Events::PaymentFailed < Events::BasePaymentEvent
+  schema do
+    required(:transaction_id).filled(:string)
+    required(:order_id).filled(:string)
+    required(:user_id).filled(:string)
+    required(:email).filled(:string)
+    required(:amount).filled(:decimal)
+    required(:error_code).filled(:string)
+  end
+  # ← Inherits ALL PII rules from BasePaymentEvent!
+end
+```
+
+**Benefits:**
+- ✅ DRY (common PII rules shared)
+- ✅ Consistency (all user events handle PII same way)
+- ✅ Easy to update (change base → all events updated)
+- ✅ Linter validates base + child (complete coverage)
+
+**Preset modules for PII:**
+
+```ruby
+# lib/e11y/presets/pii_aware_event.rb
+module E11y
+  module Presets
+    module PiiAwareEvent
+      extend ActiveSupport::Concern
+      included do
+        contains_pii true
+        
+        pii_filtering do
+          # Common PII patterns
+          hashes :email, :phone, :ip_address
+          masks :password, :token, :api_key, :secret
+          allows :user_id, :order_id, :transaction_id
+        end
+      end
+    end
+  end
+end
+
+# Usage:
+class Events::UserAction < E11y::Event::Base
+  include E11y::Presets::PiiAwareEvent  # ← Common PII rules!
+  
+  schema do
+    required(:user_id).filled(:string)
+    required(:email).filled(:string)
+    required(:action).filled(:string)
+  end
+  
+  pii_filtering do
+    # Inherits: hashes :email + allows :user_id
+    # Add more if needed:
+    allows :action  # ← Additional field
+  end
+end
+```
+
+---
+
 ## ⚡ DSL Shortcuts (Rails-Style)
 
 > **Implementation:** See [ADR-006 Section 3.4.4: Configuration API (Rails-Style DSL)](../ADR-006-security-compliance.md#344-configuration-api-rails-style-dsl) for detailed architecture.
@@ -2258,6 +2403,210 @@ event = {
 
 ---
 
+## 🔒 Validations (NEW - v1.1)
+
+> **🎯 Pattern:** Validate PII configuration at class load time.
+
+### PII Strategy Validation
+
+**Problem:** Invalid PII strategies → runtime errors.
+
+**Solution:** Validate strategy against whitelist:
+
+```ruby
+# Gem implementation (automatic):
+VALID_PII_STRATEGIES = [:mask, :hash, :remove, :allow]
+
+def self.pii_filtering(&block)
+  # Validate strategies during DSL execution
+  # Raises ArgumentError if invalid strategy used
+end
+
+# Result:
+class Events::UserRegistered < E11y::Event::Base
+  contains_pii true
+  pii_filtering do
+    encrypts :email  # ← ERROR: "Invalid PII strategy: :encrypts. Valid: mask, hash, remove, allow"
+  end
+end
+```
+
+### PII Field Existence Validation
+
+**Problem:** Typos in PII field names → fields not filtered.
+
+**Solution:** Validate against schema fields:
+
+```ruby
+# Gem implementation (automatic):
+def self.pii_filtering(&block)
+  # After schema is defined, validate PII fields exist
+  pii_fields = extract_pii_fields_from_block(block)
+  schema_fields = self.schema.keys
+  
+  invalid_fields = pii_fields - schema_fields
+  if invalid_fields.any?
+    raise ArgumentError, "PII fields not in schema: #{invalid_fields.join(', ')}"
+  end
+end
+
+# Result:
+class Events::UserRegistered < E11y::Event::Base
+  schema do
+    required(:email).filled(:string)
+    required(:name).filled(:string)
+  end
+  
+  contains_pii true
+  pii_filtering do
+    masks :email, :username  # ← ERROR: "PII fields not in schema: username"
+  end
+end
+```
+
+---
+
+## 🌍 Environment-Specific PII Configuration (NEW - v1.1)
+
+> **🎯 Pattern:** Different PII strategies per environment.
+
+### Example 1: Strict Masking in Production
+
+```ruby
+class Events::UserRegistered < E11y::Event::Base
+  schema do
+    required(:email).filled(:string)
+    required(:name).filled(:string)
+    required(:ip_address).filled(:string)
+  end
+  
+  contains_pii true
+  pii_filtering do
+    if Rails.env.production?
+      # Production: strict masking
+      masks :email, :name, :ip_address
+    else
+      # Dev/Test: allow for debugging
+      allows :email, :name, :ip_address
+    end
+  end
+end
+```
+
+### Example 2: Jurisdiction-Specific Hashing
+
+```ruby
+class Events::PaymentProcessed < E11y::Event::Base
+  schema do
+    required(:user_id).filled(:string)
+    required(:credit_card_last4).filled(:string)
+  end
+  
+  contains_pii true
+  pii_filtering do
+    case ENV['JURISDICTION']
+    when 'EU'
+      # GDPR: pseudonymization (reversible)
+      hashes :user_id, algorithm: :sha256, salt: ENV['PII_SALT']
+      masks :credit_card_last4
+    when 'US'
+      # US: allow user_id (not PII), mask card
+      allows :user_id
+      masks :credit_card_last4
+    else
+      # Default: strict masking
+      masks :user_id, :credit_card_last4
+    end
+  end
+end
+```
+
+---
+
+## 📊 Precedence Rules for PII (NEW - v1.1)
+
+> **🎯 Pattern:** PII configuration precedence (most specific wins).
+
+### Precedence Order (Highest to Lowest)
+
+```
+1. Event-level pii_filtering block (highest)
+   ↓
+2. Preset module PII config
+   ↓
+3. Base class PII config
+   ↓
+4. Rails.application.config.filter_parameters
+   ↓
+5. Global E11y.config.pii_filter (lowest)
+```
+
+### Example: Mixing Inheritance + Presets for PII
+
+```ruby
+# Global config (lowest priority)
+E11y.configure do |config|
+  config.pii_filter do
+    use_rails_filter_parameters true  # Use Rails config
+    masks :password, :ssn  # Additional global masks
+  end
+end
+
+# Rails config (used by global)
+Rails.application.config.filter_parameters += [:email, :phone]
+
+# Base class (medium priority)
+class Events::BaseUserEvent < E11y::Event::Base
+  contains_pii true
+  pii_filtering do
+    hashes :user_id, :email  # Override global (hash instead of mask)
+    allows :name  # Allow name (not PII in this context)
+  end
+end
+
+# Preset module (higher priority)
+module E11y::Presets::PiiAwareEvent
+  extend ActiveSupport::Concern
+  included do
+    contains_pii true
+    pii_filtering do
+      masks :ip_address, :session_id  # Additional masks
+    end
+  end
+end
+
+# Event (highest priority)
+class Events::UserLogin < Events::BaseUserEvent
+  include E11y::Presets::PiiAwareEvent
+  
+  pii_filtering do
+    allows :email  # Override base (allow email for login events)
+  end
+  
+  # Final PII config:
+  # - user_id: hashed (from base)
+  # - email: allowed (event-level override)
+  # - name: allowed (from base)
+  # - ip_address: masked (from preset)
+  # - session_id: masked (from preset)
+  # - password: masked (from global)
+  # - ssn: masked (from global)
+  # - phone: masked (from Rails config)
+end
+```
+
+### PII Precedence Rules Table
+
+| Field | Global | Rails Config | Base Class | Preset | Event-Level | Winner |
+|-------|--------|--------------|------------|--------|-------------|--------|
+| `email` | `mask` | `mask` | `hash` | - | `allow` | **`allow`** (event) |
+| `user_id` | - | - | `hash` | - | - | **`hash`** (base) |
+| `ip_address` | - | - | - | `mask` | - | **`mask`** (preset) |
+| `password` | `mask` | - | - | - | - | **`mask`** (global) |
+| `phone` | - | `mask` | - | - | - | **`mask`** (Rails) |
+
+---
+
 ## 🔒 GDPR Compliance
 
 ### Key GDPR Requirements Met
@@ -2294,6 +2643,6 @@ end
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** January 12, 2026  
-**Status:** ✅ Complete
+**Document Version:** 1.1 (Unified DSL)  
+**Last Updated:** January 16, 2026  
+**Status:** ✅ Complete - Consistent with DSL-SPECIFICATION.md v1.1.0

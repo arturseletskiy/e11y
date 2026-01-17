@@ -424,6 +424,359 @@ Events::UserLoggedIn.track(
 )
 ```
 
+---
+
+### Event-Level Configuration (NEW - v1.1)
+
+> **🎯 CONTRADICTION_01 Resolution:** Move configuration from global initializer to event classes.
+>
+> **Goal:** Reduce global config from 1400+ lines to <300 lines by distributing settings across events.
+
+**Event-level DSL:**
+
+```ruby
+# app/events/order_created.rb
+module Events
+  class OrderCreated < E11y::Event::Base
+    schema do
+      required(:order_id).filled(:string)
+      required(:amount).filled(:decimal)
+      required(:currency).filled(:string)
+    end
+    
+    # ✨ Event-level configuration (right next to schema!)
+    severity :success
+    rate_limit 1000, window: 1.second  # Max 1000 events/sec
+    sample_rate 0.1                     # 10% sampling
+    retention 30.days                   # Keep for 30 days
+    adapters [:loki, :elasticsearch]    # Override global adapters
+    
+    # Metric definition
+    metric :counter,
+           name: 'orders.created.total',
+           tags: [:currency]
+  end
+end
+```
+
+**Available event-level settings:**
+
+| Setting | Type | Example | Default |
+|---------|------|---------|---------|
+| `severity` | Symbol | `:success, :error, :debug` | Inferred from name |
+| `rate_limit` | Integer + window | `1000, window: 1.second` | 1000/sec |
+| `sample_rate` | Float | `0.1` (10%) | By severity |
+| `retention` | Duration | `30.days, 7.years` | By severity |
+| `adapters` | Array | `[:loki, :sentry]` | By severity |
+| `adapters_strategy` | Symbol | `:replace, :append` | `:replace` |
+
+**Precedence (event-level overrides global):**
+
+```ruby
+# Global config (infrastructure):
+E11y.configure do |config|
+  config.register_adapter :loki, Loki.new(url: ENV['LOKI_URL'])
+  config.default_adapters = [:loki]
+  config.default_sample_rate = 0.1  # 10%
+end
+
+# Event-level config (overrides global):
+class Events::CriticalError < E11y::Event::Base
+  severity :fatal
+  sample_rate 1.0  # ← Override: 100% (not 10%)
+  adapters [:sentry, :pagerduty]  # ← Override: not [:loki]
+end
+```
+
+---
+
+### Event Inheritance (NEW - v1.1)
+
+> **🎯 Pattern:** Use base classes to share common configuration across related events.
+
+**Base class for payment events:**
+
+```ruby
+# app/events/base_payment_event.rb
+module Events
+  class BasePaymentEvent < E11y::Event::Base
+    # Common configuration for ALL payment events
+    severity :success
+    rate_limit 1000
+    sample_rate 1.0  # Never sample payments (high-value)
+    retention 7.years  # Financial records
+    adapters [:loki, :sentry, :s3_archive]
+    
+    # Common PII filtering
+    contains_pii true
+    pii_filtering do
+      hashes :email, :user_id  # Pseudonymize
+      allows :order_id, :amount, :currency  # Non-PII
+    end
+    
+    # Common metric
+    metric :counter,
+           name: 'payments.total',
+           tags: [:currency, :payment_method]
+  end
+end
+
+# Inherit from base (1-2 lines per event!)
+class Events::PaymentSucceeded < Events::BasePaymentEvent
+  schema do
+    required(:transaction_id).filled(:string)
+    required(:order_id).filled(:string)
+    required(:amount).filled(:decimal)
+    required(:currency).filled(:string)
+    required(:payment_method).filled(:string)
+  end
+  # ← Inherits ALL config from BasePaymentEvent!
+end
+
+class Events::PaymentFailed < Events::BasePaymentEvent
+  severity :error  # ← Override base (errors, not success)
+  
+  schema do
+    required(:transaction_id).filled(:string)
+    required(:order_id).filled(:string)
+    required(:amount).filled(:decimal)
+    required(:error_code).filled(:string)
+    required(:error_message).filled(:string)
+  end
+  # ← Inherits: rate_limit, sample_rate, retention, adapters, PII
+end
+```
+
+**Benefits:**
+- ✅ 1-2 lines per event (just schema!)
+- ✅ DRY (common config shared)
+- ✅ Consistency (all payments have same config)
+- ✅ Easy to change (update base → all events updated)
+
+**More base class examples:**
+
+```ruby
+# Base for audit events
+module Events
+  class BaseAuditEvent < E11y::Event::Base
+    severity :warn
+    audit_event true
+    adapters [:audit_encrypted]
+    # ← Auto-set by audit_event:
+    #    retention = E11y.config.audit_retention (default: 7.years, configurable!)
+    #    rate_limiting = false (LOCKED!)
+    #    sampling = false (LOCKED!)
+    
+    signing do
+      enabled true
+      algorithm :ed25519
+    end
+  end
+end
+
+# Base for debug events
+module Events
+  class BaseDebugEvent < E11y::Event::Base
+    severity :debug
+    rate_limit 100
+    sample_rate 0.01  # 1%
+    retention 7.days
+    adapters [:file]  # Local only
+    contains_pii false
+  end
+end
+```
+
+---
+
+### Preset Modules (NEW - v1.1)
+
+> **🎯 Pattern:** Use preset modules for 1-line configuration includes (Rails-style concerns).
+
+**Built-in presets:**
+
+```ruby
+# E11y provides built-in presets:
+module E11y
+  module Presets
+    module HighValueEvent
+      extend ActiveSupport::Concern
+      included do
+        rate_limit 10_000
+        sample_rate 1.0  # Never sample
+        retention 7.years
+        adapters [:loki, :sentry, :s3_archive]
+      end
+    end
+    
+    module DebugEvent
+      extend ActiveSupport::Concern
+      included do
+        severity :debug
+        rate_limit 100
+        sample_rate 0.01
+        retention 7.days
+        adapters [:file]
+      end
+    end
+    
+    module AuditEvent
+      extend ActiveSupport::Concern
+      included do
+        audit_event true
+        adapters [:audit_encrypted]
+        retention 7.years
+        rate_limiting false
+        sampling false
+      end
+    end
+  end
+end
+```
+
+**Usage (1-line includes!):**
+
+```ruby
+class Events::PaymentProcessed < E11y::Event::Base
+  include E11y::Presets::HighValueEvent  # ← All config inherited!
+  
+  schema do
+    required(:transaction_id).filled(:string)
+    required(:amount).filled(:decimal)
+  end
+end
+
+class Events::DebugSqlQuery < E11y::Event::Base
+  include E11y::Presets::DebugEvent  # ← All config inherited!
+  
+  schema do
+    required(:query).filled(:string)
+    required(:duration_ms).filled(:float)
+  end
+end
+```
+
+**Custom presets (project-specific):**
+
+```ruby
+# app/events/presets/critical_business_event.rb
+module Events
+  module Presets
+    module CriticalBusinessEvent
+      extend ActiveSupport::Concern
+      included do
+        severity :success
+        rate_limit 5000
+        sample_rate 1.0
+        retention 7.years
+        adapters [:loki, :elasticsearch, :s3_archive, :slack_business]
+        
+        metric :counter,
+               name: 'critical_business_events.total',
+               tags: [:event_name]
+      end
+    end
+  end
+end
+
+# Usage:
+class Events::LargeOrderPlaced < E11y::Event::Base
+  include Events::Presets::CriticalBusinessEvent
+  
+  schema do
+    required(:order_id).filled(:string)
+    required(:amount).filled(:decimal)
+  end
+end
+```
+
+---
+
+### Conventions & Sensible Defaults (NEW - v1.1)
+
+> **Philosophy:** "Explicit over implicit" + conventions = best balance.
+>
+> E11y applies **sensible defaults** to eliminate 80% of configuration.
+
+**Convention 1: Event Name → Severity**
+
+```ruby
+# *Failed, *Error → :error
+class Events::PaymentFailed < E11y::Event::Base
+  # ← Auto: severity = :error
+end
+
+# *Paid, *Succeeded, *Completed → :success
+class Events::OrderPaid < E11y::Event::Base
+  # ← Auto: severity = :success
+end
+
+# *Started, *Processing → :info
+class Events::OrderProcessing < E11y::Event::Base
+  # ← Auto: severity = :info
+end
+
+# Debug* → :debug
+class Events::DebugQuery < E11y::Event::Base
+  # ← Auto: severity = :debug
+end
+```
+
+**Convention 2: Severity → Adapters**
+
+```ruby
+# :error/:fatal → [:sentry]
+# :success/:info/:warn → [:loki]
+# :debug → [:file] (dev), [:loki] (prod)
+```
+
+**Convention 3: Severity → Sample Rate**
+
+```ruby
+# :error/:fatal → 1.0 (100%)
+# :warn → 0.5 (50%)
+# :success/:info → 0.1 (10%)
+# :debug → 0.01 (1%)
+```
+
+**Convention 4: Severity → Retention**
+
+```ruby
+# :error/:fatal → 90 days
+# :info/:success → 30 days
+# :debug → 7 days
+```
+
+**Result: Zero-Config Events**
+
+```ruby
+# 90% of events need ONLY schema!
+class Events::OrderCreated < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:string)
+    required(:amount).filled(:decimal)
+  end
+  # ← That's it! All config from conventions:
+  #    severity: :success (from name)
+  #    adapters: [:loki] (from severity)
+  #    sample_rate: 0.1 (from severity)
+  #    retention: 30.days (from severity)
+  #    rate_limit: 1000 (default)
+end
+```
+
+**Override when needed:**
+
+```ruby
+class Events::OrderCreated < E11y::Event::Base
+  schema do; required(:order_id).filled(:string); end
+  
+  severity :info  # ← Override convention
+  sample_rate 1.0  # ← Never sample
+  retention 7.years  # ← Financial records
+end
+```
+
 ### Event Naming Conventions
 
 **Recommended pattern:** `<entity>.<past_tense_verb>`
@@ -1346,6 +1699,244 @@ E11y::Profiler.report
 - Create middleware with blocking I/O (use async adapters)
 - Set `flush_interval` <50ms (too aggressive)
 - Disable batching for high-volume adapters
+
+---
+
+## 🔒 Validations (NEW - v1.1)
+
+> **🎯 Pattern:** Validate configuration at class load time (fail fast!).
+
+### Schema Presence Validation
+
+**Problem:** Events without schema → runtime errors.
+
+**Solution:** Validate schema presence at class load:
+
+```ruby
+# Gem implementation (automatic):
+class E11y::Event::Base
+  def self.inherited(subclass)
+    super
+    at_exit do
+      unless subclass.respond_to?(:schema) && subclass.schema
+        raise "#{subclass} missing schema! All events must define schema."
+      end
+    end
+  end
+end
+
+# Result:
+class Events::OrderPaid < E11y::Event::Base
+  # ← ERROR at load time: "Events::OrderPaid missing schema!"
+end
+```
+
+### Severity Level Validation
+
+**Problem:** Typos in severity levels → silent failures.
+
+**Solution:** Validate severity against whitelist:
+
+```ruby
+# Gem implementation (automatic):
+VALID_SEVERITIES = [:debug, :info, :success, :warn, :error, :fatal]
+
+def self.severity(level)
+  unless VALID_SEVERITIES.include?(level)
+    raise ArgumentError, "Invalid severity: #{level}. Valid: #{VALID_SEVERITIES.join(', ')}"
+  end
+  self._severity = level
+end
+
+# Result:
+class Events::OrderPaid < E11y::Event::Base
+  severity :critical  # ← ERROR: "Invalid severity: :critical. Valid: debug, info, success, warn, error, fatal"
+end
+```
+
+### Adapters Registration Validation
+
+**Problem:** Typos in adapter names → events lost.
+
+**Solution:** Validate adapters against registered list:
+
+```ruby
+# Gem implementation (automatic):
+def self.adapters(list)
+  list.each do |adapter|
+    unless E11y.registered_adapters.include?(adapter)
+      raise ArgumentError, "Unknown adapter: #{adapter}. Registered: #{E11y.registered_adapters.keys.join(', ')}"
+    end
+  end
+  self._adapters = list
+end
+
+# Result:
+class Events::OrderPaid < E11y::Event::Base
+  adapters [:loki, :sentri]  # ← ERROR: "Unknown adapter: :sentri. Registered: loki, sentry, file"
+end
+```
+
+### Audit Event Locked Settings Validation
+
+**Problem:** Overriding audit event settings → compliance violations.
+
+**Solution:** Lock `rate_limiting` and `sampling` for audit events:
+
+```ruby
+# Gem implementation (automatic):
+def self.rate_limiting(enabled)
+  if self._audit_event && enabled
+    raise ArgumentError, "Cannot enable rate_limiting for audit events! Audit events must never be rate limited."
+  end
+  self._rate_limiting = enabled
+end
+
+def self.sampling(enabled)
+  if self._audit_event && enabled
+    raise ArgumentError, "Cannot enable sampling for audit events! Audit events must never be sampled."
+  end
+  self._sampling = enabled
+end
+
+# Result:
+class Events::UserDeleted < E11y::Event::Base
+  audit_event true
+  rate_limiting true  # ← ERROR: "Cannot enable rate_limiting for audit events!"
+  sampling true       # ← ERROR: "Cannot enable sampling for audit events!"
+end
+```
+
+---
+
+## 🌍 Environment-Specific Configuration (NEW - v1.1)
+
+> **🎯 Pattern:** Use Ruby conditionals for environment-specific config.
+
+### Example 1: Debug Events (File in Dev, Loki in Prod)
+
+```ruby
+class Events::DebugQuery < E11y::Event::Base
+  schema do
+    required(:query).filled(:string)
+    required(:duration_ms).filled(:integer)
+  end
+  
+  # Environment-specific adapters
+  adapters Rails.env.production? ? [:loki] : [:file]
+  
+  # Environment-specific sampling
+  sample_rate Rails.env.production? ? 0.01 : 1.0  # 1% prod, 100% dev
+end
+```
+
+### Example 2: High-Volume Events (Different Rates)
+
+```ruby
+class Events::ApiRequest < E11y::Event::Base
+  schema do
+    required(:endpoint).filled(:string)
+    required(:status).filled(:integer)
+  end
+  
+  # Environment-specific rate limiting
+  rate_limit case Rails.env
+             when 'production' then 10_000
+             when 'staging' then 1_000
+             else 100
+             end
+end
+```
+
+### Example 3: Audit Retention (Jurisdiction-Specific)
+
+```ruby
+# config/initializers/e11y.rb
+E11y.configure do |config|
+  # Configurable audit retention (GDPR: 7 years, other: custom)
+  config.audit_retention = case ENV['JURISDICTION']
+                           when 'EU' then 7.years
+                           when 'US' then 10.years  # Financial regulations
+                           else 5.years
+                           end
+end
+
+# Event uses configured value:
+class Events::UserDeleted < E11y::Event::Base
+  audit_event true
+  # ← Auto: retention = E11y.config.audit_retention (7/10/5 years)
+end
+```
+
+---
+
+## 📊 Precedence Rules (NEW - v1.1)
+
+> **🎯 Pattern:** Configuration precedence (most specific wins).
+
+### Precedence Order (Highest to Lowest)
+
+```
+1. Event-level explicit config (highest priority)
+   ↓
+2. Preset module config
+   ↓
+3. Base class config (inheritance)
+   ↓
+4. Convention-based defaults
+   ↓
+5. Global config (lowest priority)
+```
+
+### Example: Mixing Inheritance + Presets
+
+```ruby
+# Global config (lowest priority)
+E11y.configure do |config|
+  config.adapters = [:file]  # Default for all events
+  config.sample_rate = 0.1   # 10% default
+end
+
+# Base class (medium priority)
+class Events::BasePaymentEvent < E11y::Event::Base
+  severity :success
+  adapters [:loki, :sentry]  # Override global
+  sample_rate 1.0            # Never sample payments
+end
+
+# Preset module (higher priority)
+module E11y::Presets::HighValueEvent
+  extend ActiveSupport::Concern
+  included do
+    rate_limit 10_000
+    retention 7.years
+    # Does NOT override adapters/sample_rate (not defined in preset)
+  end
+end
+
+# Event (highest priority)
+class Events::CriticalPayment < Events::BasePaymentEvent
+  include E11y::Presets::HighValueEvent
+  
+  adapters [:loki, :sentry, :s3_archive]  # Override base (add S3)
+  
+  # Final config:
+  # - severity: :success (from base)
+  # - adapters: [:loki, :sentry, :s3_archive] (event-level override)
+  # - sample_rate: 1.0 (from base)
+  # - rate_limit: 10_000 (from preset)
+  # - retention: 7.years (from preset)
+end
+```
+
+### Precedence Rules Table
+
+| Config | Global | Convention | Base Class | Preset | Event-Level | Winner |
+|--------|--------|------------|------------|--------|-------------|--------|
+| `severity` | - | `:success` | `:warn` | - | `:error` | **`:error`** (event) |
+| `adapters` | `[:file]` | `[:loki]` | `[:sentry]` | - | - | **`[:sentry]`** (base) |
+| `sample_rate` | `0.1` | `0.5` | - | `1.0` | - | **`1.0`** (preset) |
+| `rate_limit` | `1000` | - | - | - | - | **`1000`** (global) |
 
 ---
 

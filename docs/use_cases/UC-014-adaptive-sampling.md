@@ -87,6 +87,185 @@ end
 
 > **Implementation:** See [ADR-009 Section 3: Adaptive Sampling](../ADR-009-cost-optimization.md#3-adaptive-sampling) for complete architecture, including error-based, load-based, value-based, and content-based strategies with cost reduction analysis.
 
+---
+
+### Event-Level Sampling Configuration (NEW - v1.1)
+
+> **🎯 CONTRADICTION_01 Resolution:** Move sampling config from global initializer to event classes.
+
+**Event-level sampling DSL:**
+
+```ruby
+# app/events/order_created.rb
+module Events
+  class OrderCreated < E11y::Event::Base
+    schema do
+      required(:order_id).filled(:string)
+      required(:amount).filled(:decimal)
+    end
+    
+    # ✨ Event-level sampling (right next to schema!)
+    sample_rate 0.1  # 10% sampling
+    
+    # Or adaptive sampling:
+    adaptive_sampling do
+      base_rate 0.1  # 10% default
+      
+      # Increase for high-value orders
+      sample_by_value do
+        field :amount
+        threshold 1000  # Always sample >$1000
+      end
+      
+      # Increase during errors
+      on_error_spike do
+        sample_rate 1.0  # 100% during errors
+        duration 5.minutes
+      end
+    end
+  end
+end
+```
+
+**Inheritance for sampling:**
+
+```ruby
+# Base class with common sampling
+module Events
+  class BasePaymentEvent < E11y::Event::Base
+    # Never sample payments (high-value)
+    sample_rate 1.0  # 100%
+    
+    # Or adaptive:
+    adaptive_sampling do
+      base_rate 1.0  # Always sample by default
+      
+      # But reduce during extreme load
+      on_high_load do
+        sample_rate 0.5  # 50% during overload
+        load_threshold 100_000  # events/sec
+      end
+    end
+  end
+end
+
+# Inherit from base
+class Events::PaymentSucceeded < Events::BasePaymentEvent
+  schema do; required(:transaction_id).filled(:string); end
+  # ← Inherits: sample_rate 1.0 + adaptive rules
+end
+
+class Events::PaymentFailed < Events::BasePaymentEvent
+  # Override: ALWAYS sample errors (even during overload)
+  sample_rate 1.0
+  adaptive_sampling enabled: false  # ← Disable adaptive (keyword arg!)
+end
+```
+
+**Preset modules for sampling:**
+
+```ruby
+# lib/e11y/presets/high_value_event.rb
+module E11y
+  module Presets
+    module HighValueEvent
+      extend ActiveSupport::Concern
+      included do
+        sample_rate 1.0  # Never sample (100%)
+        
+        adaptive_sampling do
+          # Only reduce during extreme load
+          on_high_load do
+            sample_rate 0.5  # 50%
+            load_threshold 100_000
+          end
+        end
+      end
+    end
+    
+    module DebugEvent
+      extend ActiveSupport::Concern
+      included do
+        sample_rate 0.01  # 1% sampling
+        
+        adaptive_sampling do
+          # Increase during errors
+          on_error_spike do
+            sample_rate 0.1  # 10% during errors
+          end
+        end
+      end
+    end
+  end
+end
+
+# Usage:
+class Events::PaymentProcessed < E11y::Event::Base
+  include E11y::Presets::HighValueEvent  # ← Sampling inherited!
+  schema do; required(:transaction_id).filled(:string); end
+end
+
+class Events::DebugQuery < E11y::Event::Base
+  include E11y::Presets::DebugEvent  # ← Sampling inherited!
+  schema do; required(:query).filled(:string); end
+end
+```
+
+**Conventions for sampling (sensible defaults):**
+
+```ruby
+# Convention: Severity → Sample Rate
+# :error/:fatal → 1.0 (100%, never sample errors!)
+# :warn → 0.5 (50%)
+# :success/:info → 0.1 (10%)
+# :debug → 0.01 (1%)
+
+# Zero-config event (uses conventions):
+class Events::OrderCreated < E11y::Event::Base
+  severity :success
+  schema do; required(:order_id).filled(:string); end
+  # ← Auto: sample_rate = 0.1 (10%, from severity!)
+end
+
+# Override convention:
+class Events::OrderCreated < E11y::Event::Base
+  severity :success
+  sample_rate 1.0  # ← Override: never sample orders
+  schema do; required(:order_id).filled(:string); end
+end
+```
+
+**Precedence (event-level overrides global):**
+
+```ruby
+# Global config (infrastructure):
+E11y.configure do |config|
+  config.sampling do
+    base_sample_rate 0.1  # 10% default
+    
+    adaptive_sampling do
+      on_error_spike do
+        sample_rate 1.0
+      end
+    end
+  end
+end
+
+# Event-level config (overrides global):
+class Events::CriticalError < E11y::Event::Base
+  sample_rate 1.0  # ← Override: always 100% (not 10%)
+  adaptive_sampling enabled: false  # ← Disable adaptive (keyword arg!)
+end
+```
+
+**Benefits:**
+- ✅ Locality of behavior (sampling next to schema)
+- ✅ DRY via inheritance/presets
+- ✅ Sensible defaults (90% events need zero config)
+- ✅ Easy to override when needed
+
+---
+
 ### Strategy 1: Error-Based Sampling
 
 **Increase sampling during error spikes:**
@@ -1053,6 +1232,225 @@ base_sample_rate 0.1  # 10%, adjust based on data
 
 ---
 
+## 🔒 Validations (NEW - v1.1)
+
+> **🎯 Pattern:** Validate sampling configuration at class load time.
+
+### Sample Rate Validation
+
+**Problem:** Invalid sample rates → silent failures.
+
+**Solution:** Validate sample_rate is between 0.0 and 1.0:
+
+```ruby
+# Gem implementation (automatic):
+def self.sample_rate(rate)
+  unless rate.is_a?(Numeric) && rate >= 0.0 && rate <= 1.0
+    raise ArgumentError, "sample_rate must be 0.0..1.0, got: #{rate.inspect}"
+  end
+  self._sample_rate = rate
+end
+
+# Result:
+class Events::ApiRequest < E11y::Event::Base
+  sample_rate 1.5  # ← ERROR: "sample_rate must be 0.0..1.0, got: 1.5"
+end
+```
+
+### Adaptive Sampling Validation
+
+**Problem:** Invalid adaptive_sampling config → runtime errors.
+
+**Solution:** Validate enabled parameter:
+
+```ruby
+# Gem implementation (automatic):
+def self.adaptive_sampling(enabled:)
+  unless [true, false].include?(enabled)
+    raise ArgumentError, "adaptive_sampling enabled: must be true or false, got: #{enabled.inspect}"
+  end
+  self._adaptive_sampling = enabled
+end
+
+# Result:
+class Events::ApiRequest < E11y::Event::Base
+  adaptive_sampling enabled: "yes"  # ← ERROR: "adaptive_sampling enabled: must be true or false, got: \"yes\""
+end
+```
+
+### Audit Event Sampling Validation (LOCKED)
+
+**Problem:** Attempting to sample audit events → compliance violations.
+
+**Solution:** Lock sampling for audit events:
+
+```ruby
+# Gem implementation (automatic):
+def self.sampling(enabled)
+  if self._audit_event && enabled
+    raise ArgumentError, "Cannot enable sampling for audit events! Audit events must never be sampled."
+  end
+  self._sampling = enabled
+end
+
+# Result:
+class Events::UserDeleted < E11y::Event::Base
+  audit_event true
+  sample_rate 0.5  # ← ERROR: "Cannot enable sampling for audit events!"
+end
+```
+
+---
+
+## 🌍 Environment-Specific Sampling (NEW - v1.1)
+
+> **🎯 Pattern:** Different sampling rates per environment.
+
+### Example 1: Higher Sampling in Production
+
+```ruby
+class Events::DebugQuery < E11y::Event::Base
+  schema do
+    required(:query).filled(:string)
+    required(:duration_ms).filled(:integer)
+  end
+  
+  # Environment-specific sampling
+  sample_rate Rails.env.production? ? 0.01 : 1.0  # 1% prod, 100% dev
+  adaptive_sampling enabled: Rails.env.production?  # Only in prod
+end
+```
+
+### Example 2: Feature Flag for Adaptive Sampling
+
+```ruby
+class Events::ApiRequest < E11y::Event::Base
+  schema do
+    required(:endpoint).filled(:string)
+    required(:status).filled(:integer)
+  end
+  
+  # Enable adaptive sampling only when flag is on
+  if ENV['ENABLE_ADAPTIVE_SAMPLING'] == 'true'
+    adaptive_sampling enabled: true
+    sample_rate 0.1  # Base rate: 10%
+  else
+    sample_rate 1.0  # Fixed: 100%
+  end
+end
+```
+
+### Example 3: Cost-Based Sampling
+
+```ruby
+class Events::UserAction < E11y::Event::Base
+  schema do
+    required(:action_type).filled(:string)
+  end
+  
+  # Aggressive sampling in high-cost environments
+  sample_rate case ENV['OBSERVABILITY_TIER']
+              when 'premium' then 1.0    # 100% (unlimited budget)
+              when 'standard' then 0.1   # 10% (moderate budget)
+              when 'basic' then 0.01     # 1% (tight budget)
+              else 0.1
+              end
+end
+```
+
+---
+
+## 📊 Precedence Rules for Sampling (NEW - v1.1)
+
+> **🎯 Pattern:** Sampling configuration precedence (most specific wins).
+
+### Precedence Order (Highest to Lowest)
+
+```
+1. Event-level explicit config (highest priority)
+   ↓
+2. Preset module config
+   ↓
+3. Base class config (inheritance)
+   ↓
+4. Convention-based defaults (severity → sample rate)
+   ↓
+5. Global config (lowest priority)
+```
+
+### Example: Mixing Inheritance + Presets for Sampling
+
+```ruby
+# Global config (lowest priority)
+E11y.configure do |config|
+  config.sampling do
+    base_sample_rate 0.1  # Default: 10%
+    adaptive_sampling enabled: false
+  end
+end
+
+# Base class (medium priority)
+class Events::BasePaymentEvent < E11y::Event::Base
+  severity :success
+  sample_rate 1.0  # Override global (never sample payments!)
+  adaptive_sampling enabled: false  # Disable adaptive
+end
+
+# Preset module (higher priority)
+module E11y::Presets::DebugEvent
+  extend ActiveSupport::Concern
+  included do
+    sample_rate 0.01  # Override base (1% for debug)
+    adaptive_sampling enabled: true  # Enable adaptive
+  end
+end
+
+# Event (highest priority)
+class Events::CriticalDebug < Events::BasePaymentEvent
+  include E11y::Presets::DebugEvent
+  
+  sample_rate 0.1  # Override preset (10% for critical debug)
+  
+  # Final config:
+  # - severity: :success (from base)
+  # - sample_rate: 0.1 (event-level override)
+  # - adaptive_sampling: enabled: true (from preset)
+end
+```
+
+### Precedence Rules Table
+
+| Config | Global | Convention | Base Class | Preset | Event-Level | Winner |
+|--------|--------|------------|------------|--------|-------------|--------|
+| `sample_rate` | `0.1` | `0.5` (`:warn`) | `1.0` | `0.01` | `0.1` | **`0.1`** (event) |
+| `adaptive_sampling` | `false` | - | `false` | `true` | - | **`true`** (preset) |
+
+### Convention-Based Defaults
+
+**Convention:** Severity → sample_rate (if not specified):
+
+```ruby
+# :error/:fatal → 1.0 (100%)
+class Events::PaymentFailed < E11y::Event::Base
+  severity :error
+  # ← Auto: sample_rate = 1.0 (convention!)
+end
+
+# :warn → 0.5 (50%)
+class Events::SlowQuery < E11y::Event::Base
+  severity :warn
+  # ← Auto: sample_rate = 0.5 (convention!)
+end
+
+# :debug → 0.01 (1%)
+class Events::DebugLog < E11y::Event::Base
+  severity :debug
+  # ← Auto: sample_rate = 0.01 (convention!)
+end
+```
+
+---
+
 ## 📚 Related Use Cases
 
 - **[UC-006: Trace Context Management](./UC-006-trace-context-management.md)** - Trace-consistent sampling requires trace propagation
@@ -1077,6 +1475,6 @@ base_sample_rate 0.1  # 10%, adjust based on data
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** January 12, 2026  
-**Status:** ✅ Complete
+**Document Version:** 1.1 (Unified DSL)  
+**Last Updated:** January 16, 2026  
+**Status:** ✅ Complete - Consistent with DSL-SPECIFICATION.md v1.1.0

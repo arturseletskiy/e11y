@@ -1685,6 +1685,359 @@ end
 
 ---
 
+## 10a. Event-Level Adapter Configuration (NEW - v1.1)
+
+> **🎯 CONTRADICTION_01 Resolution:** Move adapter configuration from global initializer to event classes.
+>
+> **Goal:** Reduce global config from 1400+ lines to <300 lines by distributing adapter routing across events.
+
+### 10a.1. Problem: Global Adapter Routing Complexity
+
+**Before (v1.0): All routing in global config**
+
+```ruby
+# config/initializers/e11y.rb (1400+ lines!)
+E11y.configure do |config|
+  # Register adapters (infrastructure)
+  config.register_adapter :loki, Loki.new(url: ENV['LOKI_URL'])
+  config.register_adapter :sentry, Sentry.new(dsn: ENV['SENTRY_DSN'])
+  config.register_adapter :s3, S3Adapter.new(bucket: 'events-archive')
+  config.register_adapter :audit_encrypted, AuditAdapter.new(...)
+  
+  # ❌ PROBLEM: Routing for EVERY event in global config
+  config.events do
+    # Payment events → multiple adapters
+    event 'Events::PaymentSucceeded' do
+      adapters [:loki, :sentry, :s3]
+    end
+    event 'Events::PaymentFailed' do
+      adapters [:loki, :sentry, :s3]
+    end
+    event 'Events::PaymentRefunded' do
+      adapters [:loki, :sentry, :s3]
+    end
+    
+    # Audit events → encrypted adapter
+    event 'Events::UserDeleted' do
+      adapters [:audit_encrypted]
+    end
+    event 'Events::PermissionChanged' do
+      adapters [:audit_encrypted]
+    end
+    
+    # Debug events → file only
+    event 'Events::DebugQuery' do
+      adapters [:file]
+    end
+    
+    # ... 100+ more events ...
+  end
+end
+```
+
+**Problems:**
+- ❌ 1400+ lines of global config
+- ❌ Routing far from event definition (locality violation)
+- ❌ Hard to find which events use which adapters
+- ❌ Duplication (many events → same adapters)
+
+### 10a.2. Solution: Event-Level Adapter Declaration
+
+**After (v1.1): Adapters in event classes**
+
+```ruby
+# config/initializers/e11y.rb (<300 lines!)
+E11y.configure do |config|
+  # ONLY infrastructure (adapter registration)
+  config.register_adapter :loki, Loki.new(url: ENV['LOKI_URL'])
+  config.register_adapter :sentry, Sentry.new(dsn: ENV['SENTRY_DSN'])
+  config.register_adapter :s3, S3Adapter.new(bucket: 'events-archive')
+  config.register_adapter :audit_encrypted, AuditAdapter.new(...)
+  
+  # Optional: default adapters (convention)
+  config.default_adapters = [:loki]  # Most events → Loki
+end
+
+# app/events/payment_succeeded.rb
+module Events
+  class PaymentSucceeded < E11y::Event::Base
+    schema do; required(:transaction_id).filled(:string); end
+    
+    # ✅ Adapters right next to schema!
+    adapters [:loki, :sentry, :s3]
+  end
+end
+
+# app/events/user_deleted.rb
+module Events
+  class UserDeleted < E11y::Event::Base
+    schema do; required(:user_id).filled(:string); end
+    
+    # ✅ Adapters right next to schema!
+    adapters [:audit_encrypted]
+  end
+end
+
+# app/events/debug_query.rb
+module Events
+  class DebugQuery < E11y::Event::Base
+    schema do; required(:query).filled(:string); end
+    
+    # ✅ Adapters right next to schema!
+    adapters [:file]
+  end
+end
+```
+
+**Benefits:**
+- ✅ Global config <300 lines (only infrastructure)
+- ✅ Locality of behavior (adapters next to schema)
+- ✅ Easy to find (grep event file)
+- ✅ DRY via inheritance (see below)
+
+### 10a.3. Inheritance for Adapter Routing
+
+**Base class with common adapters:**
+
+```ruby
+# app/events/base_payment_event.rb
+module Events
+  class BasePaymentEvent < E11y::Event::Base
+    # Common adapters for ALL payment events
+    adapters [:loki, :sentry, :s3]
+    
+    # Common config
+    severity :success
+    sample_rate 1.0
+    retention 7.years
+  end
+end
+
+# Inherit from base (1-2 lines per event!)
+class Events::PaymentSucceeded < Events::BasePaymentEvent
+  schema do; required(:transaction_id).filled(:string); end
+  # ← Inherits: adapters [:loki, :sentry, :s3]
+end
+
+class Events::PaymentFailed < Events::BasePaymentEvent
+  severity :error  # ← Override severity
+  schema do; required(:error_code).filled(:string); end
+  # ← Inherits: adapters [:loki, :sentry, :s3]
+end
+
+class Events::PaymentRefunded < Events::BasePaymentEvent
+  schema do; required(:refund_id).filled(:string); end
+  # ← Inherits: adapters [:loki, :sentry, :s3]
+end
+```
+
+**Base class for audit events:**
+
+```ruby
+# app/events/base_audit_event.rb
+module Events
+  class BaseAuditEvent < E11y::Event::Base
+    # Common adapters for ALL audit events
+    adapters [:audit_encrypted]
+    
+    # Common config
+    audit_event true
+    # ← Auto-set: retention = E11y.config.audit_retention (configurable!)
+    #             rate_limiting = false (LOCKED!)
+    #             sampling = false (LOCKED!)
+  end
+end
+
+# Inherit from base
+class Events::UserDeleted < Events::BaseAuditEvent
+  schema do; required(:user_id).filled(:string); end
+  # ← Inherits: adapters [:audit_encrypted]
+end
+
+class Events::PermissionChanged < Events::BaseAuditEvent
+  schema do; required(:user_id).filled(:string); end
+  # ← Inherits: adapters [:audit_encrypted]
+end
+```
+
+### 10a.4. Preset Modules for Adapters
+
+```ruby
+# lib/e11y/presets/high_value_event.rb
+module E11y
+  module Presets
+    module HighValueEvent
+      extend ActiveSupport::Concern
+      included do
+        adapters [:loki, :sentry, :s3_archive]
+        sample_rate 1.0
+        retention 7.years
+      end
+    end
+    
+    module DebugEvent
+      extend ActiveSupport::Concern
+      included do
+        adapters [:file]  # Local only
+        severity :debug
+        sample_rate 0.01
+        retention 7.days
+      end
+    end
+  end
+end
+
+# Usage:
+class Events::PaymentProcessed < E11y::Event::Base
+  include E11y::Presets::HighValueEvent  # ← Adapters inherited!
+  schema do; required(:transaction_id).filled(:string); end
+end
+
+class Events::DebugQuery < E11y::Event::Base
+  include E11y::Presets::DebugEvent  # ← Adapters inherited!
+  schema do; required(:query).filled(:string); end
+end
+```
+
+### 10a.5. Conventions for Adapters (Sensible Defaults)
+
+```ruby
+# Convention: Severity → Adapters
+# :error/:fatal → [:sentry]
+# :success/:info/:warn → [:loki]
+# :debug → [:file] (dev), [:loki] (prod with sampling)
+
+# Zero-config event (uses conventions):
+class Events::OrderCreated < E11y::Event::Base
+  severity :success
+  schema do; required(:order_id).filled(:string); end
+  # ← Auto: adapters = [:loki] (from severity!)
+end
+
+class Events::CriticalError < E11y::Event::Base
+  severity :fatal
+  schema do; required(:error_code).filled(:string); end
+  # ← Auto: adapters = [:sentry] (from severity!)
+end
+
+# Override convention:
+class Events::OrderCreated < E11y::Event::Base
+  severity :success
+  adapters [:loki, :elasticsearch, :s3]  # ← Override
+  schema do; required(:order_id).filled(:string); end
+end
+```
+
+### 10a.6. Adapter Strategy: Replace vs Append
+
+```ruby
+# Replace strategy (default): Override parent/convention
+class Events::PaymentSucceeded < Events::BasePaymentEvent
+  adapters [:loki, :sentry]  # ← Replaces base [:loki, :sentry, :s3]
+end
+
+# Append strategy: Add to parent/convention
+class Events::PaymentSucceeded < Events::BasePaymentEvent
+  adapters_strategy :append
+  adapters [:slack_business]  # ← Adds to base (result: [:loki, :sentry, :s3, :slack_business])
+end
+```
+
+### 10a.7. Precedence Rules
+
+```ruby
+# Precedence (highest to lowest):
+# 1. Event-level explicit: adapters [:loki]
+# 2. Preset module: include E11y::Presets::HighValueEvent
+# 3. Base class inheritance: class < BasePaymentEvent
+# 4. Convention: severity :success → [:loki]
+# 5. Global default: config.default_adapters = [:loki]
+
+# Example:
+E11y.configure do |config|
+  config.default_adapters = [:loki]  # 5. Global default
+end
+
+class Events::BasePaymentEvent < E11y::Event::Base
+  adapters [:loki, :sentry]  # 3. Base class
+end
+
+class Events::PaymentSucceeded < Events::BasePaymentEvent
+  include E11y::Presets::HighValueEvent  # 2. Preset (adds :s3)
+  adapters [:loki, :sentry, :pagerduty]  # 1. Event-level (WINS!)
+end
+
+# Result: [:loki, :sentry, :pagerduty]
+```
+
+### 10a.8. Migration Path
+
+**Step 1: Keep global config (backward compatible)**
+
+```ruby
+# v1.1 supports BOTH global and event-level config
+E11y.configure do |config|
+  # Old style (still works):
+  config.events do
+    event 'Events::OrderCreated' do
+      adapters [:loki]
+    end
+  end
+end
+
+# New style (preferred):
+class Events::OrderCreated < E11y::Event::Base
+  adapters [:loki]  # ← Event-level (overrides global)
+end
+```
+
+**Step 2: Migrate incrementally**
+
+```ruby
+# Migrate high-value events first:
+class Events::PaymentSucceeded < E11y::Event::Base
+  adapters [:loki, :sentry, :s3]  # ← Migrated
+end
+
+# Keep others in global config (temporary):
+E11y.configure do |config|
+  config.events do
+    event 'Events::DebugQuery' do
+      adapters [:file]  # ← Not migrated yet
+    end
+  end
+end
+```
+
+**Step 3: Remove global routing**
+
+```ruby
+# After all events migrated:
+E11y.configure do |config|
+  # Only infrastructure (adapters registration)
+  config.register_adapter :loki, Loki.new(...)
+  config.register_adapter :sentry, Sentry.new(...)
+  
+  # Optional: default adapters (convention)
+  config.default_adapters = [:loki]
+  
+  # ✅ No more config.events { ... } block!
+end
+```
+
+### 10a.9. Benefits Summary
+
+| Aspect | Before (v1.0) | After (v1.1) | Improvement |
+|--------|---------------|--------------|-------------|
+| **Global config lines** | 1400+ | <300 | 78% reduction |
+| **Locality** | ❌ Far from event | ✅ Next to schema | Better |
+| **DRY** | ❌ Duplication | ✅ Inheritance | Better |
+| **Discoverability** | ❌ Hard to find | ✅ Grep event file | Better |
+| **Conventions** | ❌ None | ✅ Severity → adapters | Better |
+| **Backward compat** | N/A | ✅ Both styles work | Safe |
+
+---
+
 ## 11. Trade-offs
 
 ### 11.1. Key Decisions
@@ -1710,6 +2063,110 @@ end
 
 ---
 
-**Status:** ✅ Draft Complete  
+## 12. Validations & Environment-Specific Configuration (NEW - v1.1)
+
+### 12.1. Adapter Registration Validation
+
+**Problem:** Typos in adapter names → events lost.
+
+**Solution:** Validate adapters against registered list:
+
+```ruby
+# Gem implementation (automatic):
+def self.adapters(list)
+  list.each do |adapter|
+    unless E11y.registered_adapters.include?(adapter)
+      raise ArgumentError, "Unknown adapter: #{adapter}. Registered: #{E11y.registered_adapters.keys.join(', ')}"
+    end
+  end
+  self._adapters = list
+end
+
+# Result:
+class Events::OrderPaid < E11y::Event::Base
+  adapters [:loki, :sentri]  # ← ERROR: "Unknown adapter: :sentri. Registered: loki, sentry, file"
+end
+```
+
+### 12.2. Environment-Specific Adapters
+
+**Problem:** Different adapters per environment (dev/staging/prod).
+
+**Solution:** Use Ruby conditionals:
+
+```ruby
+class Events::DebugQuery < E11y::Event::Base
+  schema do
+    required(:query).filled(:string)
+  end
+  
+  # Environment-specific adapters
+  adapters Rails.env.production? ? [:loki] : [:file]
+end
+
+class Events::PaymentFailed < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:string)
+  end
+  
+  # Multi-environment routing
+  adapters case Rails.env
+           when 'production' then [:loki, :sentry, :s3_archive]
+           when 'staging' then [:loki, :sentry]
+           else [:file]
+           end
+end
+```
+
+### 12.3. Precedence Rules for Adapters
+
+**Precedence Order (Highest to Lowest):**
+
+```
+1. Event-level explicit config (highest)
+   ↓
+2. Preset module config
+   ↓
+3. Base class config (inheritance)
+   ↓
+4. Convention-based defaults (severity → adapters)
+   ↓
+5. Global config (lowest)
+```
+
+**Example:**
+
+```ruby
+# Global config (lowest)
+E11y.configure do |config|
+  config.adapters = [:file]  # Default
+end
+
+# Base class (medium)
+class Events::BasePaymentEvent < E11y::Event::Base
+  adapters [:loki, :sentry]  # Override global
+end
+
+# Preset (higher)
+module E11y::Presets::HighValueEvent
+  extend ActiveSupport::Concern
+  included do
+    adapters [:loki, :sentry, :s3_archive]  # Add S3
+  end
+end
+
+# Event (highest)
+class Events::CriticalPayment < Events::BasePaymentEvent
+  include E11y::Presets::HighValueEvent
+  
+  adapters [:loki, :sentry, :s3_archive, :datadog]  # Add Datadog
+  
+  # Final: [:loki, :sentry, :s3_archive, :datadog] (event-level wins)
+end
+```
+
+---
+
+**Status:** ✅ Draft Complete (Updated to Unified DSL v1.1.0)  
 **Next:** ADR-006 (Security & Compliance) or ADR-008 (Rails Integration)  
 **Estimated Implementation:** 2 weeks

@@ -2257,6 +2257,308 @@ end
 
 ---
 
+## 12. Opt-In Features Pattern (C05: TRIZ #10 Extension)
+
+> **🎯 CONTRADICTION_05 Resolution Extension:** Extend opt-in pattern to PII filtering and rate limiting for maximum performance flexibility.
+
+### 12.1. Motivation
+
+**Problem:**
+- PII filtering adds ~0.2ms latency per event
+- Rate limiting adds ~0.01ms latency per event
+- Many events don't need these features (e.g., public page views have no PII, rare admin actions don't need rate limiting)
+- Disabling globally removes protection for events that need it
+
+**Solution (TRIZ #10: Prior Action):**
+- Features enabled by default (safety first)
+- Allow opt-out per event for performance optimization
+- Follow Rails conventions (simple DSL)
+
+**Benefit:**
+- Events without PII save ~0.2ms (20% of 1ms budget!)
+- Rare events without rate limiting save ~0.01ms
+- 90% of events use defaults (no code needed)
+- 10% edge cases opt-out for performance
+
+---
+
+### 12.2. Opt-Out DSL
+
+**Pattern:**
+```ruby
+class Events::OptimizedEvent < E11y::Event::Base
+  # Opt-out of PII filtering (no PII in this event)
+  pii_filtering false
+  
+  # Opt-out of rate limiting (rare event, no need to limit)
+  rate_limiting false
+  
+  # Opt-out of sampling (critical event, always capture)
+  sampling false
+  
+  schema do
+    # No PII fields here!
+    required(:page_url).filled(:string)
+    required(:referrer).filled(:string)
+  end
+end
+```
+
+---
+
+### 12.3. Use Cases
+
+#### Use Case 1: Public Page View (No PII)
+
+**Problem:** Page views have no PII, but PII filtering still runs (0.2ms wasted)
+
+```ruby
+class Events::PublicPageView < E11y::Event::Base
+  severity :debug
+  pii_filtering false  # ← Opt-out (no PII fields!)
+  
+  schema do
+    required(:page_url).filled(:string)
+    required(:referrer).filled(:string)
+    required(:user_agent).filled(:string)  # Not PII (public info)
+  end
+end
+```
+
+**Performance gain:** 0.2ms per event × 1000 events/sec = 200ms/sec saved!
+
+---
+
+#### Use Case 2: Rare Admin Action (No Rate Limiting)
+
+**Problem:** Admin actions are rare (1/hour), but rate limiting still checks (0.01ms wasted)
+
+```ruby
+class Events::AdminServerRestart < E11y::Event::Base
+  severity :warn
+  rate_limiting false  # ← Opt-out (rare event, <10/day)
+  
+  schema do
+    required(:admin_id).filled(:string)
+    required(:reason).filled(:string)
+    required(:downtime_seconds).filled(:integer)
+  end
+end
+```
+
+**Performance gain:** 0.01ms per event (small, but adds up)
+
+---
+
+#### Use Case 3: Critical Payment Event (No Sampling)
+
+**Problem:** Payment events must be 100% captured, but sampling still checks (0.01ms wasted)
+
+```ruby
+class Events::PaymentProcessed < E11y::Event::Base
+  severity :success
+  sampling false  # ← Opt-out (NEVER sample payments!)
+  
+  schema do
+    required(:payment_id).filled(:string)
+    required(:amount).filled(:decimal)
+    required(:currency).filled(:string)
+  end
+end
+```
+
+**Performance gain:** 0.01ms per event + 100% capture guarantee
+
+---
+
+### 12.4. Implementation
+
+**Middleware checks opt-out flag before processing:**
+
+```ruby
+# E11y::Middleware::PIIFiltering
+def call(event_data)
+  event_class = event_data[:event_class]
+  
+  # Check opt-out flag
+  if event_class.pii_filtering_enabled?
+    # Apply PII filtering
+    filter_pii!(event_data[:payload])
+  else
+    # Skip PII filtering (0.2ms saved!)
+  end
+  
+  @app.call(event_data)
+end
+```
+
+**Event DSL:**
+
+```ruby
+class E11y::Event::Base
+  # Default: enabled (safety first)
+  class_attribute :pii_filtering_enabled, default: true
+  class_attribute :rate_limiting_enabled, default: true
+  class_attribute :sampling_enabled, default: true
+  
+  def self.pii_filtering(enabled)
+    self.pii_filtering_enabled = enabled
+  end
+  
+  def self.rate_limiting(enabled)
+    self.rate_limiting_enabled = enabled
+  end
+  
+  def self.sampling(enabled)
+    self.sampling_enabled = enabled
+  end
+end
+```
+
+---
+
+### 12.5. Validation & Safety
+
+**Prevent dangerous opt-outs:**
+
+```ruby
+# Validate PII opt-out (must have no PII fields)
+class Events::PublicPageView < E11y::Event::Base
+  pii_filtering false
+  
+  schema do
+    required(:email).filled(:string)  # ← ERROR: PII field with pii_filtering disabled!
+  end
+end
+
+# E11y::Validators::PIIOptOutValidator
+def validate!
+  if !pii_filtering_enabled? && schema_has_pii_fields?
+    raise ConfigurationError, <<~ERROR
+      Event #{event_class} has pii_filtering disabled but schema contains PII fields: #{pii_fields.join(', ')}
+      
+      Either:
+      1. Enable PII filtering: pii_filtering true
+      2. Remove PII fields from schema
+    ERROR
+  end
+end
+
+# PII field detection (via naming convention)
+def schema_has_pii_fields?
+  schema.keys.any? { |field|
+    field.to_s.match?(/email|phone|ip_address|ssn|passport/)
+  }
+end
+```
+
+---
+
+### 12.6. Already Implemented Opt-Ins
+
+**1. Versioning Middleware (already opt-in):**
+```ruby
+class Events::ApiRequest < E11y::Event::Base
+  version 1  # ← Explicitly enable versioning (opt-in)
+end
+```
+
+**2. Adaptive Sampling (opt-in via conventions):**
+```ruby
+class Events::PageView < E11y::Event::Base
+  severity :debug
+  # sample_rate 0.01 ← Auto from severity (convention)
+  
+  # Override (opt-in):
+  sample_rate 0.1  # ← Custom rate
+end
+```
+
+---
+
+### 12.7. Performance Impact
+
+**Without opt-out:**
+- PII filtering: 0.2ms per event
+- Rate limiting: 0.01ms per event
+- Sampling: 0.01ms per event
+- **Total:** 0.22ms per event
+
+**With opt-out (edge cases):**
+- Public page views (no PII): 0.2ms saved
+- Rare admin actions (no rate limit): 0.01ms saved
+- Critical payments (no sampling): 0.01ms saved
+
+**Performance budget:**
+- Target: <1ms p99
+- Middleware chain: 0.15-0.3ms
+- With opt-outs: **0.15-0.3ms - 0.22ms = saves up to 70% of middleware overhead!**
+
+---
+
+### 12.8. Trade-Offs
+
+| Decision | Pro | Con | Rationale |
+|----------|-----|-----|-----------|
+| **Default: enabled** | Safety first | Slight overhead for edge cases | 90% of events need protection |
+| **Opt-out pattern** | Performance flexibility | Requires explicit opt-out | Edge cases (10%) benefit most |
+| **Validation at class load** | Catch errors early | Stricter enforcement | Prevent accidental PII exposure |
+
+---
+
+### 12.9. Migration Path
+
+**Identify candidates for opt-out:**
+
+```bash
+# Find events with no PII fields
+bin/rails runner '
+  events_without_pii = E11y::EventRegistry.all.select do |event_class|
+    !event_class.schema.keys.any? { |field|
+      field.to_s.match?(/email|phone|ip_address|ssn|passport/)
+    }
+  end
+  
+  puts "Events without PII (#{events_without_pii.count}):"
+  events_without_pii.each do |event_class|
+    puts "- #{event_class.name}"
+  end
+'
+
+# Output:
+# Events without PII (15):
+# - Events::PublicPageView
+# - Events::StaticAssetLoaded
+# - Events::HealthCheckPing
+# ...
+```
+
+**Add opt-out incrementally:**
+```ruby
+# Before:
+class Events::PublicPageView < E11y::Event::Base
+  # PII filtering enabled by default (0.2ms overhead)
+end
+
+# After:
+class Events::PublicPageView < E11y::Event::Base
+  pii_filtering false  # ← Opt-out (no PII fields)
+  # 0.2ms saved! ✅
+end
+```
+
+---
+
+### 12.10. Related
+
+**See also:**
+- **ADR-006: Security & Compliance** - PII filtering architecture
+- **ADR-006 Section 4: Rate Limiting** - Rate limiting implementation
+- **UC-014: Adaptive Sampling** - Sampling conventions and opt-in overrides
+- **CONTRADICTION_05** - Performance vs. Features (TRIZ #10: Opt-In Features)
+
+---
+
 ## 13. Next Steps
 
 ### 13.1. Implementation Plan

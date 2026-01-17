@@ -311,6 +311,9 @@ Storage
 # Audit event - uses audit pipeline
 class Events::PermissionChanged < E11y::Event::Base
   audit_event true  # ← Trigger audit pipeline
+  # Auto-set: retention = E11y.config.audit_retention (configurable!)
+  #           rate_limiting = false (LOCKED!)
+  #           sampling = false (LOCKED!)
   
   schema do
     required(:user_id).filled(:string)

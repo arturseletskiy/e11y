@@ -13,1153 +13,49 @@
 
 ---
 
-## 1. Initializer Configuration
+## 1. Initializer Configuration (v1.1 - RECOMMENDED ✅)
 
-### config/initializers/e11y.rb
+> **🎯 v1.1 Philosophy: Infrastructure Only**
+>
+> Global configuration contains **ONLY infrastructure** (adapters, buffer, circuit breaker, hooks).
+> **Event-specific configuration** (severity, rate_limit, sampling, PII) is defined at **event-level** (see Section 2).
+>
+> **Result:** Global config reduced from **1400+ lines (v1.0) to <300 lines (v1.1)** - **78% reduction!**
+>
+> **What's in global config:**
+> - ✅ Adapters registry (register once, reference everywhere)
+> - ✅ Buffer configuration (system-wide resource management)
+> - ✅ Circuit breaker (adapter health protection)
+> - ✅ Global context enrichment (added to ALL events)
+> - ✅ Hooks & lifecycle (system-wide event processing)
+> - ✅ Graceful shutdown
+>
+> **What's NOT in global config (moved to event-level):**
+> - ❌ Per-event severity, rate limits, sampling rates
+> - ❌ Per-event PII filtering rules
+> - ❌ Per-event metrics definitions
+> - ❌ Per-event adapter routing
+> - ❌ Per-event retention policies
+>
+> See [Section 2](#2-event-examples-v11---recommended-) for event-level configuration examples.
+
+### config/initializers/e11y.rb (v1.1 - Infrastructure Only)
 
 ```ruby
 # frozen_string_literal: true
 
-# E11y Comprehensive Configuration
-# Covers all 18 use cases
+# E11y v1.1 Configuration - Infrastructure Only
+# Event-specific config (severity, rate_limit, sampling, PII) is at event-level!
+# See Section 2 for event examples.
 
 E11y.configure do |config|
   # ============================================================================
-  # UC-001: Request-Scoped Debug Buffering
+  # ADAPTERS REGISTRY
   # ============================================================================
-  config.request_scope do
-    enabled true
-    buffer_limit 100  # Max debug events per request
-    
-    # Flush triggers
-    flush_on :error         # On exception
-    flush_on :warn          # On any :warn event
-    flush_on :slow_request, threshold: 1000  # On requests >1s
-    
-    # Custom flush condition
-    flush_if do |events, request|
-      # Flush if payment-related
-      events.any? { |e| e.name.include?('payment') }
-    end
-    
-    # Exclude from buffering (always send immediately)
-    exclude_from_buffer do
-      severity [:info, :success, :warn, :error, :fatal]  # Only buffer :debug
-      event_patterns ['security.*', 'audit.*', 'fraud.*']  # Never buffer these
-    end
-    
-    # Overflow strategy
-    overflow_strategy :drop_oldest  # or :drop_newest, :flush_immediately
-  end
+  # Register adapters once, reference by name in events
+  # Related: UC-002 (Business Events), ADR-004 (Adapter Architecture)
   
-  # ============================================================================
-  # UC-002: Business Event Tracking
-  # ============================================================================
-  config.events do
-    # Auto-register all event classes in app/events/**/*.rb
-    auto_register true
-    auto_register_paths ['app/events']
-    
-    # Validation
-    validate_schema true  # Enforce schema validation
-    validation_errors :raise  # :raise, :log, :ignore
-    
-    # Duration tracking
-    track_duration true  # Measure block execution time
-    duration_unit :milliseconds  # or :seconds, :microseconds
-    
-    # Context enrichment (added to every event)
-    global_context do
-      {
-        env: Rails.env,
-        service: ENV['SERVICE_NAME'] || 'api',
-        version: ENV['GIT_SHA'] || 'unknown',
-        host: Socket.gethostname,
-        deployment_id: ENV['DEPLOYMENT_ID']
-      }
-    end
-    
-    # Dynamic context (evaluated per event)
-    context_enricher do |event|
-      {
-        trace_id: Current.trace_id,
-        request_id: Current.request_id,
-        user_id: Current.user&.id,
-        tenant_id: Current.tenant&.id,
-        session_id: Current.session_id,
-        ip_address: Current.ip_address
-      }
-    end
-  end
-  
-  # ============================================================================
-  # UC-003: Pattern-Based Metrics (Yabeda Integration)
-  # ============================================================================
-  config.metrics do
-    enabled true
-    
-    # Auto-create metrics from events
-    auto_metrics true
-    
-    # Default metric types for event patterns
-    default_counter_for patterns: ['*.created', '*.completed', '*.failed']
-    default_histogram_for patterns: ['*.duration', '*.latency', '*.size']
-    default_gauge_for patterns: ['*.count', '*.active']
-    
-    # Metric naming
-    prefix 'app'  # Prefix for all metrics: app_orders_created_total
-    separator '_'  # Separator for metric names
-    
-    # See UC-013 for cardinality protection (below)
-  end
-  
-  # ============================================================================
-  # UC-004: Zero-Config SLO Tracking
-  # ============================================================================
-  config.slo do
-    enabled true
-    
-    # HTTP requests (Rails controllers)
-    track_http_requests true
-    http_success_threshold 0.95  # 95% success rate
-    http_latency_threshold 500   # 500ms p95
-    
-    # Background jobs
-    track_sidekiq true
-    track_active_job true
-    job_success_threshold 0.99   # 99% success rate
-    job_latency_threshold 5000   # 5s p95
-    
-    # Error budget
-    error_budget_window 30.days
-    error_budget_alerts true
-    
-    # Burn rate alerts
-    burn_rate_alerts do
-      fast_burn threshold: 14.4, window: 1.hour   # 2% budget in 1h
-      slow_burn threshold: 6, window: 6.hours     # 5% budget in 6h
-    end
-    
-    # Custom SLIs
-    custom_sli 'payment.processing' do
-      success_criteria { |event| event.payload[:status] == 'completed' }
-      latency_threshold 2000  # 2s
-      target 0.999  # 99.9%
-    end
-  end
-  
-  # ============================================================================
-  # UC-005: Sentry Integration
-  # ============================================================================
-  config.sentry do
-    enabled true
-    
-    # Auto-capture
-    auto_capture_errors true  # :error and :fatal events → Sentry
-    auto_breadcrumbs true     # All events → breadcrumbs
-    
-    # Breadcrumb settings
-    breadcrumb_limit 100
-    breadcrumb_severities [:debug, :info, :success, :warn, :error, :fatal]
-    
-    # Error fingerprinting
-    custom_fingerprint do |event|
-      # Group by error type + controller + action
-      [
-        event.payload[:error_class],
-        event.context[:controller],
-        event.context[:action]
-      ]
-    end
-    
-    # Sampling
-    sample_rate 1.0  # 100% in production
-    traces_sample_rate 0.1  # 10% for performance monitoring
-    
-    # Before send hook
-    before_send do |event, hint|
-      # Don't send test errors
-      return nil if event.context[:env] == 'test'
-      
-      # Filter sensitive data
-      event.payload.except!(:password, :token, :secret)
-      
-      event
-    end
-  end
-  
-  # ============================================================================
-  # UC-006: Trace Context Management
-  # ============================================================================
-  config.tracing do
-    enabled true
-    
-    # Trace ID generation
-    trace_id_generator :uuid  # :uuid, :random_hex, :custom
-    
-    # W3C Trace Context support
-    w3c_trace_context true
-    
-    # Propagation
-    propagate_to_background_jobs true
-    propagate_to_http_clients true  # Auto-inject headers
-    
-    # Custom trace ID extraction
-    trace_id_extractor do |request|
-      # Try multiple sources
-      request.headers['X-Request-ID'] ||
-        request.headers['X-Trace-ID'] ||
-        request.headers['traceparent']&.split('-')&.[](1)
-    end
-    
-    # Trace correlation
-    correlation do
-      log_correlation true  # Add trace_id to all logs
-      metric_correlation true  # Add trace_id to exemplars
-    end
-  end
-  
-  # ============================================================================
-  # UC-007: PII Filtering
-  # ============================================================================
-  config.pii_filter do
-    enabled true
-    
-    # Rails parameter filtering compatibility
-    use_rails_filter_parameters true  # Inherit from Rails.application.config.filter_parameters
-    
-    # Field-based filtering (exact match)
-    mask_fields :email, :phone, :ssn, :card_number, :password, :token, :secret,
-                :api_key, :credit_card, :cvv, :pan, :iban, :swift
-    
-    # Pattern-based filtering (regex)
-    mask_pattern /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i,
-                 with: '[EMAIL]',
-                 name: :email
-    
-    mask_pattern /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/,
-                 with: '[CARD]',
-                 name: :credit_card
-    
-    mask_pattern /\b\d{3}-\d{2}-\d{4}\b/,
-                 with: '[SSN]',
-                 name: :ssn
-    
-    mask_pattern /\b\d{10,15}\b/,
-                 with: '[PHONE]',
-                 name: :phone
-    
-    # URL parameter filtering
-    mask_url_params :token, :api_key, :secret, :password
-    
-    # Custom filter function
-    custom_filter do |field, value|
-      # Mask Authorization headers
-      if field.to_s.downcase == 'authorization'
-        value.to_s.gsub(/Bearer\s+\S+/, 'Bearer [FILTERED]')
-      else
-        value
-      end
-    end
-    
-    # Allowlist (never mask these fields, even if matched)
-    allow_fields :user_id, :order_id, :transaction_id, :event_id,
-                 :account_id, :organization_id, :tenant_id
-    
-    # Deep scanning
-    deep_scan true  # Scan nested hashes and arrays
-    max_depth 10    # Prevent infinite recursion
-    
-    # Sampling (keep some filtered values for debugging)
-    sample_filtered_values true
-    sample_rate 0.01  # Keep 1% of filtered values
-    
-    # GDPR compliance
-    gdpr_mode true  # Extra strict filtering
-    gdpr_fields :ip_address, :user_agent, :geolocation, :device_id
-  end
-  
-  # ============================================================================
-  # UC-008: OpenTelemetry Integration
-  # ============================================================================
-  config.opentelemetry do
-    enabled true
-    
-    # Semantic Conventions
-    use_semantic_conventions true
-    convention_version '1.21.0'
-    
-    # Resource Attributes (attached to all telemetry)
-    resource_attributes do
-      {
-        'service.name' => ENV['SERVICE_NAME'] || 'api',
-        'service.version' => ENV['GIT_SHA'] || 'unknown',
-        'service.namespace' => ENV['NAMESPACE'] || 'production',
-        'deployment.environment' => Rails.env,
-        'host.name' => Socket.gethostname,
-        'host.id' => ENV['HOST_ID'],
-        'cloud.provider' => ENV['CLOUD_PROVIDER'],
-        'cloud.region' => ENV['CLOUD_REGION'],
-        'k8s.pod.name' => ENV['POD_NAME'],
-        'k8s.namespace.name' => ENV['K8S_NAMESPACE']
-      }
-    end
-    
-    # OTel Collector
-    collector_endpoint ENV['OTEL_COLLECTOR_URL'] || 'http://localhost:4318'
-    collector_protocol :http  # :http or :grpc
-    collector_headers do
-      { 'X-API-Key' => ENV['OTEL_API_KEY'] }
-    end
-    
-    # Logs Signal
-    export_logs true
-    logs_exporter :otlp  # or :console, :file
-    
-    # Automatic span creation
-    auto_span_creation true
-    span_kinds do
-      http_requests :server
-      background_jobs :consumer
-      external_api_calls :client
-      database_queries :client
-    end
-    
-    # Log-Trace correlation
-    log_trace_correlation true
-    inject_trace_context_to_logs true
-  end
-  
-  # ============================================================================
-  # UC-009: Multi-Service Tracing
-  # ============================================================================
-  config.multi_service_tracing do
-    enabled true
-    
-    # W3C Trace Context propagation (already in UC-006, here extended)
-    propagate_via_http_headers true
-    http_header_format :w3c  # :w3c, :b3, :jaeger, :all
-    
-    # Service mesh integration
-    service_mesh :istio  # :istio, :linkerd, :consul, :none
-    mesh_headers ['x-request-id', 'x-b3-traceid', 'x-b3-spanid']
-    
-    # Background job propagation
-    background_job_propagation do
-      sidekiq true
-      active_job true
-      good_job true
-      
-      # Metadata keys
-      trace_id_key 'e11y_trace_id'
-      span_id_key 'e11y_span_id'
-      parent_span_id_key 'e11y_parent_span_id'
-    end
-    
-    # Cross-service correlation
-    correlation_id_header 'X-Correlation-ID'
-    
-    # Distributed context
-    baggage_propagation true  # W3C Baggage for custom context
-  end
-  
-  # ============================================================================
-  # UC-010: Background Job Tracking
-  # ============================================================================
-  config.background_jobs do
-    enabled true
-    
-    # Auto-instrumentation
-    auto_instrument_sidekiq true
-    auto_instrument_active_job true
-    
-    # Job lifecycle events
-    track_enqueue true
-    track_start true
-    track_success true
-    track_failure true
-    track_retry true
-    
-    # Trace context propagation (see UC-009)
-    propagate_trace_context true
-    
-    # Performance tracking
-    track_duration true
-    track_queue_latency true  # Time from enqueue to start
-    
-    # SLO tracking (see UC-004)
-    track_slo true
-    
-    # Sampling
-    sample_rate 1.0
-  end
-  
-  # ============================================================================
-  # UC-011: Rate Limiting
-  # ============================================================================
-  config.rate_limiting do
-    enabled true
-    
-    # Storage backend
-    backend :redis  # :redis, :memory, :null
-    redis_client Redis.new(url: ENV['REDIS_URL'])
-    
-    # Global limit (защита от flood)
-    global do
-      limit 10_000
-      window 1.minute
-      key 'e11y:rate_limit:global'
-    end
-    
-    # Per-event type limits
-    per_event 'user.login.failed' do
-      limit 100
-      window 1.minute
-    end
-    
-    per_event 'payment.failed' do
-      limit 50
-      window 1.minute
-    end
-    
-    per_event 'api.rate_limit_exceeded' do
-      limit 10
-      window 1.minute
-    end
-    
-    # Per-context limits (e.g., per user_id, per ip_address)
-    per_context :user_id do
-      limit 1000
-      window 1.minute
-      extract_from :context  # event.context[:user_id]
-    end
-    
-    per_context :ip_address do
-      limit 500
-      window 1.minute
-      extract_from :context
-    end
-    
-    # Overflow strategy
-    on_exceeded :drop  # :drop, :sample, :log_warning, :queue_for_later
-    
-    # Sampling when rate limited (instead of dropping)
-    sample_rate_when_limited 0.1  # Keep 10% of events
-    
-    # Allowlist (bypass rate limiting)
-    bypass_for do
-      event_types ['system.critical', 'security.alert', 'audit.*']
-      contexts { |ctx| ctx[:env] == 'development' }
-      contexts { |ctx| ctx[:user_id] == 'admin' }
-    end
-    
-    # Circuit breaker integration
-    open_circuit_on_persistent_limit_exceeded true
-    circuit_breaker_threshold 10  # Open after 10 consecutive limit hits
-  end
-  
-  # ============================================================================
-  # UC-012: Audit Trail
-  # ============================================================================
-  config.audit_trail do
-    enabled true
-    
-    # Storage
-    storage :database  # :database, :file, :s3, :adapter
-    table_name 'e11y_audit_events'
-    
-    # Cryptographic signing
-    signing do
-      enabled true
-      algorithm :ed25519  # :ed25519, :rsa, :hmac
-      private_key ENV['AUDIT_SIGNING_KEY']
-      public_key ENV['AUDIT_VERIFICATION_KEY']
-    end
-    
-    # Retention (default, can be overridden per event)
-    default_retention 7.years
-    
-    # Tamper detection
-    verify_on_read true
-    alert_on_tampering true
-    
-    # Compliance tags
-    compliance_frameworks [:gdpr, :hipaa, :sox, :pci_dss]
-    
-    # Access control
-    read_access_role :auditor
-    write_access_role :system  # Only system can write
-    
-    # Audit log for audit log (meta-audit)
-    audit_access true  # Log all reads of audit events
-  end
-  
-  # ============================================================================
-  # UC-013: High Cardinality Protection
-  # ============================================================================
-  config.cardinality_protection do
-    enabled true
-    
-    # === Layer 1: Denylist (Hard Block) ===
-    forbidden_labels :user_id, :order_id, :session_id, :trace_id, :request_id,
-                     :pod_uid, :container_id, :instance_id, :ip_address,
-                     :url, :hostname, :timestamp, :created_at
-    
-    enforcement :strict  # :strict (error), :warn (log), :drop (silently remove)
-    
-    # === Layer 2: Allowlist (Optional Strict Mode) ===
-    allowed_labels_only false  # Set to true for strict allowlist mode
-    allowed_labels :status, :payment_method, :plan_tier, :env, :region,
-                   :http_method, :http_status_code, :controller, :action,
-                   :job_class, :queue_name, :severity
-    
-    # === Layer 3: Per-Metric Limits ===
-    default_cardinality_limit 1_000  # Default for all metrics
-    
-    cardinality_limit_for 'http.requests' do
-      max_cardinality 2_000
-      overflow_strategy :aggregate  # :aggregate, :drop, :sample
-      aggregate_to_label '_other'
-    end
-    
-    cardinality_limit_for 'background_jobs' do
-      max_cardinality 500
-      overflow_strategy :sample
-      sample_rate 0.1  # Keep 10% when limit exceeded
-    end
-    
-    # === Layer 4: Dynamic Monitoring ===
-    monitoring do
-      enabled true
-      
-      # Alert thresholds
-      warn_threshold 0.7    # Alert at 70% of limit
-      critical_threshold 0.9  # Critical at 90%
-      
-      # Auto-adjust strategy
-      auto_adjust do
-        enabled true
-        threshold 0.8
-        action :aggregate  # Switch to aggregation when at 80%
-      end
-      
-      # Export cardinality metrics
-      export_metrics true
-    end
-    
-    # === Advanced Techniques ===
-    
-    # Relabeling / Normalization
-    relabeling do
-      # Normalize versions: 2.5.7234 → 2.5
-      relabel 'version' do |value|
-        value.to_s.split('.').first(2).join('.')
-      end
-      
-      # Aggregate HTTP status: 200..299 → 2xx
-      relabel 'http_status_code' do |value|
-        "#{value.to_s[0]}xx"
-      end
-      
-      # Group endpoints: /api/orders/123 → /api/orders/:id
-      relabel 'endpoint' do |value|
-        value.gsub(/\/\d+/, '/:id')
-              .gsub(/\/[a-f0-9-]{36}/, '/:uuid')
-      end
-    end
-    
-    # Exemplars (high-cardinality data as samples, not labels)
-    exemplars do
-      enabled true
-      max_per_series 10
-      sample_rate 0.01  # 1% of events
-    end
-  end
-  
-  # ============================================================================
-  # UC-014: Adaptive Sampling (SIMPLIFIED)
-  # ============================================================================
-  config.sampling do
-    enabled true
-    
-    # ===================================================================
-    # SIMPLE APPROACH: Per-severity defaults
-    # ===================================================================
-    
-    # Default sample rates by severity (simple, predictable)
-    default_rate :debug, 0.01    # 1% of debug events
-    default_rate :info, 0.1      # 10% of info events
-    default_rate :success, 0.5   # 50% of success events
-    default_rate :warn, 1.0      # 100% of warnings
-    default_rate :error, 1.0     # 100% of errors (always)
-    default_rate :fatal, 1.0     # 100% of fatal (always)
-    
-    # ===================================================================
-    # PER-EVENT OVERRIDES (optional)
-    # ===================================================================
-    
-    # High-value events: always sample
-    always_sample 'Events::OrderPaid'
-    always_sample 'Events::PaymentProcessed'
-    always_sample 'Events::SecurityAlert'
-    always_sample /^Events::Critical/  # Regex pattern
-    
-    # Low-value events: aggressive sampling
-    sample 'Events::HealthCheck', rate: 0.001  # 0.1%
-    sample 'Events::CacheHit', rate: 0.01      # 1%
-    sample 'Events::MetricsExport', rate: 0.01 # 1%
-    sample /^Events::Debug/, rate: 0.01        # 1%
-    
-    # ===================================================================
-    # LOAD-BASED AUTO-ADJUSTMENT (optional, simple)
-    # ===================================================================
-    
-    # Automatically reduce sample rates when system overloaded
-    auto_adjust_on_load do
-      enabled true
-      
-      # Trigger: buffer >80% full
-      trigger_buffer_percent 80
-      
-      # Action: multiply all rates by 0.1 (10x reduction)
-      rate_multiplier 0.1
-      
-      # Recovery: restore rates when buffer <50% full
-      recovery_buffer_percent 50
-    end
-    
-    # ===================================================================
-    # TRACE-CONSISTENT SAMPLING (optional)
-    # ===================================================================
-    
-    # Ensure all events in a trace have same sampling decision
-    trace_consistent do
-      enabled true
-      
-      # Sample entire trace if any event is error/fatal
-      sample_on_error true
-    always_sample_for do
-      contexts { |ctx| ctx[:env] == 'development' }
-      contexts { |ctx| ctx[:user_id] == 'test-user' }
-      contexts { |ctx| ctx[:debug_mode] == true }
-    end
-    
-    # Override sample rate per event class
-    override_sample_rate do
-      event_type 'user.login', rate: 1.0      # Always 100%
-      event_type 'page.view', rate: 0.01      # 1%
-      event_type 'debug.*', rate: 0.001       # 0.1%
-    end
-  end
-  
-  # ============================================================================
-  # UC-015: Cost Optimization
-  # ============================================================================
-  config.cost_optimization do
-    enabled true
-    
-    # === Technique 1: Intelligent Sampling by Value ===
-    # (See UC-014 adaptive_sampling.value_based)
-    
-    # === Technique 2: Compression ===
-    compression do
-      enabled true
-      algorithm :zstd  # :gzip, :zstd, :lz4
-      level 3  # 1-22 for zstd, 1-9 for gzip
-      
-      # Compress only for specific adapters
-      compress_for_adapters [:http, :loki, :s3]
-      
-      # Minimum payload size to compress
-      min_size 1.kilobyte
-    end
-    
-    # === Technique 4: Retention Tagging (for Downstream Lifecycle) ===
-    retention_tagging do
-      enabled true
-      
-      # E11y adds absolute expiry date to each event!
-      # Downstream just checks: now > retention_until
-      
-      # Default retention (if event doesn't specify)
-      default_retention 30.days
-      
-      # Per-pattern retention rules
-      retention_by_pattern do
-        pattern 'audit.*', retention: 7.years
-        pattern 'security.*', retention: 1.year
-        pattern 'debug.*', retention: 1.day
-        pattern '*.page_view', retention: 7.days
-        pattern '*', retention: 30.days  # Default
-      end
-      
-      # Field name
-      retention_field :retention_until  # ISO8601 timestamp
-      
-      # Event metadata structure:
-      # {
-      #   "@timestamp": "2026-01-12T10:30:00Z",
-      #   "retention_until": "2026-02-11T10:30:00Z",  ← E11y calculates: @timestamp + 30.days
-      #   "event_name": "order.created",
-      #   ...
-      # }
-      
-      # Downstream systems (ES, S3) simply check:
-      # if now > retention_until → delete
-      # No calculations needed!
-    end
-    
-    # === Technique 5: Smart Routing by Event Type ===
-    smart_routing do
-      enabled true
-      
-      # Debug events → local file only (cheap)
-      route_by_severity do
-        debug adapters: [:file]
-        info adapters: [:loki, :file]
-        success adapters: [:loki, :elasticsearch]
-        warn adapters: [:loki, :elasticsearch, :sentry]
-        error adapters: [:loki, :elasticsearch, :sentry, :pagerduty]
-        fatal adapters: [:loki, :elasticsearch, :sentry, :pagerduty, :slack]
-      end
-      
-      # High-volume events → sampling + cheap storage
-      route_by_pattern do
-        pattern '*.page_view' do
-          sample_rate 0.01
-          adapters [:s3_batch]  # Batch writes to S3
-        end
-        
-        pattern '*.click' do
-          sample_rate 0.05
-          adapters [:s3_batch]
-        end
-      end
-    end
-    
-    # === Technique 6: Payload Minimization ===
-    payload_minimization do
-      enabled true
-      
-      # Remove fields for specific severities
-      drop_fields_for_severity do
-        debug fields: [:stack_trace, :environment_variables]
-        info fields: [:stack_trace]
-      end
-      
-      # Truncate long strings
-      truncate_strings do
-        max_length 1000  # chars
-        fields [:message, :error_message, :stack_trace]
-      end
-      
-      # Drop null/empty values
-      drop_empty_values true
-    end
-    
-    # === Technique 7: Batching & Buffering ===
-    batching do
-      enabled true
-      
-      # Batch size
-      max_batch_size 500
-      max_batch_bytes 1.megabyte
-      
-      # Flush interval
-      flush_interval 200.milliseconds
-      
-      # Adaptive batching (increase batch size under load)
-      adaptive true
-      min_batch_size 100
-      max_batch_size 1000
-    end
-    
-    # === Technique 8: Retention-Aware Tagging ===
-    retention_tagging do
-      enabled true
-      
-      # Tag events with retention policy
-      tag_with_retention true
-      retention_tag_key 'retention_days'
-      
-      # Downstream systems can filter by tag
-      default_retention 30.days
-      
-      # Per-event retention
-      retention_by_pattern do
-        pattern 'audit.*', retention: 7.years
-        pattern 'security.*', retention: 1.year
-        pattern 'debug.*', retention: 1.day
-        pattern '*.page_view', retention: 7.days
-      end
-    end
-  end
-  
-  # ============================================================================
-  # UC-016: Rails Logger Migration
-  # ============================================================================
-  config.rails_integration do
-    enabled true
-    
-    # Coexistence with Rails.logger
-    coexistence_mode :parallel  # :parallel, :replace, :intercept
-    
-    # Intercept Rails.logger calls
-    intercept_rails_logger false  # Set to true to capture all Rails.logger calls
-    
-    # Rails.logger → E11y severity mapping
-    rails_logger_mapping do
-      debug :debug
-      info :info
-      warn :warn
-      error :error
-      fatal :fatal
-      unknown :info
-    end
-    
-    # ActiveSupport::Notifications integration
-    subscribe_to_notifications true
-    
-    notification_patterns [
-      'process_action.action_controller',
-      'sql.active_record',
-      'cache_read.active_support',
-      'render_template.action_view',
-      'send_email.action_mailer'
-    ]
-    
-    # Convert Rails notifications to E11y events
-    notification_to_event_mapping do
-      map 'process_action.action_controller' do |name, started, finished, id, payload|
-        Events::HttpRequest.track(
-          controller: payload[:controller],
-          action: payload[:action],
-          method: payload[:method],
-          path: payload[:path],
-          status: payload[:status],
-          duration_ms: (finished - started) * 1000,
-          severity: payload[:status] < 400 ? :success : :error
-        )
-      end
-      
-      map 'sql.active_record' do |name, started, finished, id, payload|
-        Events::DatabaseQuery.track(
-          name: payload[:name],
-          sql: payload[:sql],
-          duration_ms: (finished - started) * 1000,
-          severity: :debug
-        )
-      end
-    end
-  end
-  
-  # ============================================================================
-  # UC-017: Local Development Experience
-  # ============================================================================
-  config.development do
-    # Only for Rails.env.development?
-    enabled Rails.env.development?
-    
-    # Console output
-    console_output do
-      enabled true
-      colored true
-      pretty_print true
-      show_payload true
-      show_context true
-      show_metadata true
-    end
-    
-    # Debug helpers
-    debug_helpers do
-      enabled true
-      
-      # E11y.debug_mode! → capture all events in memory
-      in_memory_capture true
-      
-      # E11y.last_events(10) → show recent events
-      event_history_size 100
-      
-      # E11y.event_stats → show event counts by type
-      statistics true
-    end
-    
-    # Web UI (Rails engine)
-    web_ui do
-      enabled true
-      mount_path '/e11y'
-      
-      # Features
-      event_explorer true
-      event_search true
-      metrics_dashboard true
-      trace_viewer true
-      
-      # Authentication
-      authenticate_with do |username, password|
-        username == 'admin' && password == ENV['E11Y_UI_PASSWORD']
-      end
-    end
-    
-    # Validation warnings (strict in dev)
-    strict_validation true
-    verbose_warnings true
-    
-    # Performance profiling
-    profiling do
-      enabled false  # Enable manually when needed
-      profile_track_calls true
-      profile_adapters true
-    end
-  end
-  
-  # ============================================================================
-  # UC-018: Testing Events (RSpec Integration)
-  # ============================================================================
-  config.testing do
-    # Only for Rails.env.test?
-    enabled Rails.env.test?
-    
-    # Use memory adapter (no real I/O)
-    use_memory_adapter true
-    
-    # RSpec matchers
-    rspec_matchers true
-    
-    # Capture all events for assertions
-    capture_events true
-    auto_clear_between_tests true
-    
-    # Strict validation in tests
-    validate_schemas true
-    raise_on_validation_errors true
-    
-    # Disable slow features in tests
-    disable_in_tests do
-      sentry false
-      opentelemetry false
-      rate_limiting false
-      adaptive_sampling false
-      background_jobs false
-    end
-    
-    # Test helpers
-    test_helpers do
-      # E11y.tracked_events → all events captured
-      # E11y.clear_tracked_events! → reset
-      # E11y.track_events { block } → capture in block
-    end
-  end
-  
-  # ============================================================================
-  # UC-020: Event Versioning & Schema Evolution
-  # ============================================================================
-  # IMPORTANT: Versioning is implemented as optional MIDDLEWARE (disabled by default)
-  # Enable it only if you have multiple event versions (OrderPaid, OrderPaidV2, etc.)
-  
-  # To enable versioning middleware (opt-in):
-  config.middleware.use E11y::Middleware::Versioning
-  
-  # Versioning Middleware behavior:
-  # - Extracts version from class name (Events::OrderPaidV2 → 2)
-  # - Normalizes event_name (Events::OrderPaidV2 → Events::OrderPaid)
-  # - Adds v: 2 to payload (only if version > 1)
-  # - MUST BE LAST middleware (before adapters!)
-  #   Why? All business logic (validation, PII, rate limiting) uses ORIGINAL class name
-  
-  config.versioning do
-    # Add v: field to payload (only if version > 1)
-    include_version_in_payload true
-    
-    # Deprecation warnings (log when deprecated version is used)
-    warn_on_deprecated_version true
-    deprecation_log_level :warn  # :info, :warn, :error
-    
-    # Track version usage in metrics
-    track_version_usage true  # e11y_events_by_version_total{event_name, version}
-  end
-  
-  # NOTE: Auto-migration, auto-upgrade, chain migration - REMOVED for v1.0
-  # Reason: Overcomplicated, rarely needed in practice
-  # Best practice: V1 and V2 code coexist until migration complete
-  
-  # ============================================================================
-  # UC-021: Error Handling, Retry Policy & Dead Letter Queue
-  # ============================================================================
-  config.error_handling do
-    # === Retry Policy (Exponential Backoff) ===
-    retry_policy do
-      enabled true
-      max_retries 3
-      initial_delay 0.1.seconds  # 100ms
-      max_delay 5.seconds
-      multiplier 2  # Exponential: 100ms → 200ms → 400ms
-      jitter true   # Add randomness (±50%) to prevent thundering herd
-      
-      # Which errors are retryable
-      retryable_errors [
-        Errno::ETIMEDOUT,
-        Errno::ECONNREFUSED,
-        Errno::ECONNRESET,
-        Net::OpenTimeout,
-        Net::ReadTimeout,
-        HTTP::TimeoutError
-      ]
-      
-      # Which errors are NOT retryable (fail immediately)
-      non_retryable_errors [
-        E11y::ValidationError,  # Schema validation failed
-        E11y::RateLimitError    # Rate limit exceeded
-      ]
-      
-      # Per-adapter retry configuration
-      per_adapter do
-        adapter :loki do
-          max_retries 3
-          initial_delay 0.1
-        end
-        
-        adapter :sentry do
-          max_retries 5  # More retries for Sentry
-          initial_delay 0.5
-        end
-      end
-    end
-    
-    # === Dead Letter Queue (Failed Events) ===
-    dead_letter_queue do
-      enabled true
-      
-      # Where to store failed events (reference to registered adapter)
-      adapter :dlq_file  # See ADAPTERS section below
-      
-      # Max events in DLQ before alerting
-      max_size 10_000
-      alert_on_size 1000  # Alert when DLQ has 1000+ events
-      
-      # Auto-cleanup
-      retention 7.days  # Delete DLQ events older than 7 days
-      
-      # Partitioning (for large volumes)
-      partition_by :adapter  # Separate DLQ per adapter
-      # log/e11y_dlq/loki/2026-01-12.jsonl
-      # log/e11y_dlq/sentry/2026-01-12.jsonl
-      
-      # Compression
-      compression :gzip
-      
-      # Metadata
-      include_metadata true  # Store error details, retry count, timestamps
-      
-      # ===== DLQ FILTER (Important!) =====
-      # Control which events are saved to DLQ vs. dropped after max retries
-      filter do
-        # Always save critical events to DLQ (never drop!)
-        always_save do
-          severity [:error, :fatal]  # All errors must be preserved
-          event_patterns [
-            'payment.*',     # Payment events are critical (business value)
-            'order.*',       # Order events are critical
-            'audit.*',       # Audit events must never be lost (compliance)
-            'security.*',    # Security events are critical
-            'fraud.*',       # Fraud detection events
-            'user.signup',   # User lifecycle events
-            'subscription.*' # Subscription events
-          ]
-        end
-        
-        # Never save to DLQ (drop after max retries - OK to lose)
-        never_save do
-          severity [:debug]  # Debug events can be dropped
-          event_patterns [
-            'metrics.*',       # Metrics can be dropped (regenerated)
-            'health_check.*',  # Health checks not critical
-            'ping.*',          # Ping events not important
-            'telemetry.*'      # Internal telemetry events
-          ]
-        end
-        
-        # Custom filter function (for complex logic)
-        save_if do |event|
-          # Example: Save high-value payments only
-          if event.name.include?('payment') && event.payload[:amount]
-            event.payload[:amount] > 100  # Only save payments >$100
-          elsif event.name.include?('order')
-            true  # Always save orders
-          else
-            # Default: save if not in never_save list
-            true
-          end
-        end
-      end
-    end
-    
-    # What to do after max_retries exhausted
-    on_max_retries_exceeded :send_to_dlq  # :send_to_dlq, :drop, :log
-    
-    # Fallback chain (if primary adapter fails after retries)
-    fallback_chain do
-      adapter :loki do
-        fallback :file  # Loki fails → write to file
-      end
-      
-      adapter :elasticsearch do
-        fallback :file  # ES fails → write to file
-      end
-      
-      adapter :sentry do
-        fallback nil  # Sentry fails → DLQ directly (no fallback)
-      end
-    end
-  end
-  
-  # ============================================================================
-  # UC-022: Event Registry & Introspection
-  # ============================================================================
-  config.registry do
-    enabled true
-    
-    # Eager load event classes (for registry population)
-    eager_load true
-    eager_load_paths [
-      Rails.root.join('app', 'events')
-    ]
-    
-    # Introspection features
-    enable_introspection true  # event.schema_definition, event.adapters, etc.
-    
-    # Event Explorer Web UI (development only)
-    enable_event_explorer Rails.env.development?  # Available at /e11y/events
-    event_explorer do
-      mount_path '/e11y/events'
-      
-      # Authentication (for production)
-      authenticate_with do |username, password|
-        # In production, use real auth:
-        username == ENV['E11Y_EXPLORER_USER'] && 
-        password == ENV['E11Y_EXPLORER_PASS']
-      end
-      
-      # Features
-      show_recent_events true   # Show last 100 tracked events
-      enable_test_tracking true # Allow test tracking from UI
-      show_metrics true         # Show event metrics
-    end
-    
-    # Auto-generate documentation
-    documentation do
-      auto_generate false  # Set to true to auto-generate docs on boot
-      output_path Rails.root.join('docs', 'EVENTS.md')
-      format :markdown  # :markdown, :json, :openapi
-    end
-  end
-  
-  # ============================================================================
-  # ADAPTERS (Registry)
-  # ============================================================================
   config.adapters do
-    # Register named adapters (created once with connections)
-    
     # === Primary: Loki (logs) ===
     register :loki, E11y::Adapters::LokiAdapter.new(
       url: ENV['LOKI_URL'] || 'http://localhost:3100',
@@ -1216,29 +112,12 @@ E11y.configure do |config|
     )
     
     # === Security: Audit Log (compliance) ===
-    register :audit_file, E11y::Adapters::FileAdapter.new(
+    register :audit_encrypted, E11y::Adapters::FileAdapter.new(
       path: Rails.root.join('log', 'audit'),
       permissions: 0600,  # Read-only for owner
       rotation: :never,   # Never rotate (append-only)
       encryption: true
     )
-    
-    # === Dead Letter Queue (failed events) ===
-    register :dlq_file, E11y::Adapters::FileAdapter.new(
-      path: Rails.root.join('log', 'e11y_dlq'),
-      rotation: :daily,
-      compression: :gzip,
-      include_metadata: true  # Store error details, retry count
-    )
-    
-    # === Debug: Console (development) ===
-    register :console, E11y::Adapters::ConsoleAdapter.new(
-      colored: true,
-      pretty: true
-    )
-    
-    # === Testing: Memory (tests) ===
-    register :memory, E11y::Adapters::MemoryAdapter.new
     
     # === OpenTelemetry: OTLP (collector) ===
     register :otlp, E11y::Adapters::OtlpAdapter.new(
@@ -1246,9 +125,18 @@ E11y.configure do |config|
       protocol: :http,
       headers: { 'X-API-Key' => ENV['OTEL_API_KEY'] }
     )
+    
+    # === Testing: Memory (tests) ===
+    register :memory, E11y::Adapters::MemoryAdapter.new
+    
+    # === Debug: Console (development) ===
+    register :console, E11y::Adapters::ConsoleAdapter.new(
+      colored: true,
+      pretty: true
+    )
   end
   
-  # Default adapters (used by all events unless overridden)
+  # Default adapters per environment
   config.default_adapters = case Rails.env
   when 'production'
     [:loki, :elasticsearch, :otlp]
@@ -1263,8 +151,11 @@ E11y.configure do |config|
   end
   
   # ============================================================================
-  # BUFFER (Main Buffer for non-debug events)
+  # BUFFER CONFIGURATION
   # ============================================================================
+  # Main buffer for event processing
+  # Related: ADR-001 (Core Architecture), CONTRADICTION_02 (Buffers)
+  
   config.buffer do
     # Ring buffer (SPSC - Single Producer Single Consumer)
     capacity 100_000  # Max events in buffer
@@ -1279,7 +170,7 @@ E11y.configure do |config|
     # Overflow strategy
     overflow_strategy :drop_oldest  # :drop_oldest, :drop_newest, :block
     
-    # Backpressure
+    # Backpressure (load-based throttling)
     backpressure do
       enabled true
       high_watermark 0.8  # 80% full → start sampling
@@ -1294,11 +185,12 @@ E11y.configure do |config|
   # ============================================================================
   # CIRCUIT BREAKER (Adapter Health Protection)
   # ============================================================================
+  # Per-adapter circuit breakers to prevent cascading failures
+  # Related: ADR-013 (Reliability & Error Handling), UC-021 (Error Handling)
+  
   config.circuit_breaker do
     enabled true
-    
-    # Per-adapter circuit breakers
-    per_adapter true
+    per_adapter true  # Separate circuit breaker per adapter
     
     # Thresholds
     failure_threshold 5       # Open after 5 consecutive failures
@@ -1306,11 +198,11 @@ E11y.configure do |config|
     success_threshold 2       # Close after 2 consecutive successes
     window 60.seconds         # Rolling window for failure count
     
-    # Actions when open
+    # Actions when circuit opens
     on_open do |adapter_name|
       Rails.logger.error "E11y circuit breaker opened for adapter: #{adapter_name}"
       
-      # Send alert
+      # Send alert (bypass E11y to avoid recursion!)
       Events::CircuitBreakerOpened.track(
         adapter: adapter_name,
         severity: :error
@@ -1322,68 +214,42 @@ E11y.configure do |config|
   end
   
   # ============================================================================
-  # SELF-MONITORING (Internal Metrics)
+  # GLOBAL CONTEXT ENRICHMENT
   # ============================================================================
-  config.self_monitoring do
-    enabled true
-    
-    # Export internal metrics via Yabeda
-    export_metrics true
-    
-    # Metrics to track (see UC-013 for cardinality metrics)
-    metrics do
-      # Events
-      track_events_total true
-      track_events_dropped true
-      track_events_sampled true
-      
-      # Buffer
-      track_buffer_size true
-      track_buffer_usage_ratio true
-      track_buffer_overflows true
-      
-      # Flush
-      track_flush_duration true
-      track_flush_total true
-      track_flush_batch_size true
-      
-      # Adapters
-      track_adapter_errors true
-      track_adapter_latency true
-      track_adapter_batch_size true
-      
-      # Rate limiting
-      track_rate_limit_hits true
-      
-      # PII filtering
-      track_pii_filtered_fields true
-      
-      # Circuit breaker
-      track_circuit_breaker_state true
-      
-      # Performance
-      track_track_call_duration true  # Overhead of track() method
-      track_memory_usage true
-      track_gc_stats true
+  # Context added to ALL events automatically
+  # Related: UC-002 (Business Events), UC-006 (Trace Context)
+  
+  config.events do
+    # Static context (evaluated once at boot)
+    global_context do
+      {
+        env: Rails.env,
+        service: ENV['SERVICE_NAME'] || 'api',
+        version: ENV['GIT_SHA'] || 'unknown',
+        host: Socket.gethostname,
+        deployment_id: ENV['DEPLOYMENT_ID']
+      }
     end
     
-    # Health check
-    health_check do
-      enabled true
-      endpoint '/health/e11y'
-      
-      checks do
-        buffer_not_full true
-        adapters_healthy true
-        circuit_breakers_closed true
-        no_recent_errors true
-      end
+    # Dynamic context (evaluated per event)
+    context_enricher do |event|
+      {
+        trace_id: Current.trace_id,
+        request_id: Current.request_id,
+        user_id: Current.user&.id,
+        tenant_id: Current.tenant&.id,
+        session_id: Current.session_id,
+        ip_address: Current.ip_address
+      }
     end
   end
   
   # ============================================================================
   # LIFECYCLE HOOKS
   # ============================================================================
+  # System-wide event processing hooks
+  # Related: ADR-001 (Core Architecture)
+  
   config.hooks do
     # Before event is tracked
     before_track do |event|
@@ -1434,6 +300,8 @@ E11y.configure do |config|
   # ============================================================================
   # GRACEFUL SHUTDOWN
   # ============================================================================
+  # Ensure all events are flushed on application shutdown
+  
   config.shutdown do
     # Timeout for graceful shutdown
     timeout 5.seconds
@@ -1444,6 +312,25 @@ E11y.configure do |config|
     # Wait for workers to finish
     wait_for_workers true
   end
+  
+  # ============================================================================
+  # AUDIT RETENTION (Global Default)
+  # ============================================================================
+  # Default retention for audit events. Can be overridden:
+  # 1. Per event: `retention 10.years` in event class
+  # 2. Per adapter: tiered storage (hot tier in Loki 30d, cold tier in S3 7y)
+  # 
+  # Use Cases:
+  # - UC-012: Audit Trail (compliance requirements)
+  # - UC-019: Tiered Storage (hot/warm/cold tiers per adapter)
+  # 
+  # Related: ADR-006 (Security & Compliance)
+  
+  config.audit_retention = case ENV['JURISDICTION']
+                           when 'EU' then 7.years   # GDPR Article 30
+                           when 'US' then 10.years  # SOX Section 802
+                           else 5.years             # Conservative default
+                           end
 end
 
 # ============================================================================
@@ -1459,9 +346,235 @@ end
 
 ---
 
-## 2. Event Examples
+**🎯 v1.1 Summary: Infrastructure-Only Configuration**
 
-### 2.1. Simple Business Event
+| Category | Lines | Description |
+|----------|-------|-------------|
+| **Adapters Registry** | ~120 | Register 12 adapters (Loki, Sentry, ES, etc.) |
+| **Buffer Config** | ~30 | Ring buffer, flush settings, backpressure |
+| **Circuit Breaker** | ~30 | Per-adapter health protection |
+| **Global Context** | ~30 | Context enrichment for ALL events |
+| **Lifecycle Hooks** | ~50 | before_track, after_flush, on_error |
+| **Graceful Shutdown** | ~10 | Flush on exit |
+| **Audit Retention** | ~10 | Configurable per jurisdiction |
+| **TOTAL** | **~280 lines** | **Well under 300!** ✅ |
+
+**What's NOT in global config (moved to event-level):**
+
+❌ **Per-event configuration** (see Section 2):
+- `severity` - defined in event class
+- `rate_limit` - defined in event class
+- `sample_rate` - inferred from severity or explicit
+- `adapters` - inferred from severity or explicit
+- `retention` - inferred from severity or explicit
+- `pii_filtering` - defined in event class
+- `metric` - defined in event class
+- `buffering` - defined in event class
+- `slo_target` - defined in event class
+
+**Migration from v1.0:**
+- v1.0: **1400+ lines** (global config for everything)
+- v1.1: **<300 lines** (infrastructure only)
+- **Reduction: ~1120 lines (78%)**
+
+**UC Coverage:**
+- ✅ UC-001: Request-Scoped Debug Buffering → event-level `buffering` DSL
+- ✅ UC-002: Business Event Tracking → `global_context` + event schemas
+- ✅ UC-003: Pattern-Based Metrics → event-level `metric` DSL
+- ✅ UC-004: Zero-Config SLO Tracking → conventions + event-level overrides
+- ✅ UC-005: Sentry Integration → adapter registry + event-level overrides
+- ✅ UC-006: Trace Context → `context_enricher` (global)
+- ✅ UC-007: PII Filtering → event-level `pii_filtering` DSL
+- ✅ UC-008: OpenTelemetry → OTLP adapter registered
+- ✅ UC-011: Rate Limiting → event-level `rate_limit` DSL
+- ✅ UC-012: Audit Trail → `audit_retention` (configurable) + C01 two pipelines
+- ✅ UC-013: Cardinality Protection → event-level metric config
+- ✅ UC-014: Adaptive Sampling → conventions + C11 stratified sampling
+- ✅ UC-015: Cost Optimization → event-level retention + routing
+- ✅ UC-020: Event Versioning → event-level `version` DSL
+- ✅ UC-021: Error Handling → circuit breaker + hooks
+
+**See Section 2 for event-level configuration examples.**
+
+---
+
+## 2. Event Examples (v1.1 - RECOMMENDED ✅)
+
+> **🎯 Event-Level Configuration** (CONTRADICTION_01 Resolution)
+>
+> **This is the RECOMMENDED approach starting from v1.1!**
+>
+> E11y now supports **event-level configuration** to reduce global config from 1400+ lines to <300 lines.
+> Configuration is distributed across event classes (locality of behavior).
+>
+> **Benefits over v1.0 global config:**
+> - ✅ **78% reduction** in config lines (1400+ → <300)
+> - ✅ **Locality of behavior** (config next to schema)
+> - ✅ **Better maintainability** (change event = change config)
+> - ✅ **DRY via inheritance** (base classes + presets)
+> - ✅ **Sensible defaults** (conventions eliminate 80% of config)
+
+### 2.0. Conventions & Sensible Defaults (NEW)
+
+> **Philosophy:** "Explicit over implicit" + conventions = best balance.
+>
+> E11y applies **sensible defaults** based on conventions to eliminate 80% of configuration.
+> All conventions are clearly documented and can be overridden.
+
+**Convention 1: Event Name → Severity**
+
+```ruby
+# Convention: *Failed, *Error → :error
+class Events::PaymentFailed < E11y::Event::Base
+  # ← Auto: severity = :error (inferred from name!)
+  schema do; required(:error_code).filled(:string); end
+end
+
+# Convention: *Paid, *Succeeded, *Completed → :success
+class Events::OrderPaid < E11y::Event::Base
+  # ← Auto: severity = :success (inferred from name!)
+  schema do; required(:order_id).filled(:string); end
+end
+
+# Convention: *Started, *Processing → :info
+class Events::OrderProcessing < E11y::Event::Base
+  # ← Auto: severity = :info (inferred from name!)
+  schema do; required(:order_id).filled(:string); end
+end
+
+# Convention: Debug* → :debug
+class Events::DebugQuery < E11y::Event::Base
+  # ← Auto: severity = :debug (inferred from name!)
+  schema do; required(:query).filled(:string); end
+end
+
+# Override when needed:
+class Events::PaymentFailed < E11y::Event::Base
+  severity :warn  # ← Explicit override (unusual case)
+end
+```
+
+**Convention 2: Severity → Adapters**
+
+```ruby
+# Convention: :error/:fatal → [:sentry]
+class Events::CriticalError < E11y::Event::Base
+  severity :fatal
+  # ← Auto: adapters = [:sentry] (errors go to Sentry!)
+end
+
+# Convention: :success/:info/:warn → [:loki]
+class Events::OrderCreated < E11y::Event::Base
+  severity :success
+  # ← Auto: adapters = [:loki] (business events to Loki)
+end
+
+# Convention: :debug → [:file] (dev), [:loki] (prod with sampling)
+class Events::DebugLog < E11y::Event::Base
+  severity :debug
+  # ← Auto: adapters = [:file] in dev, [:loki] in prod
+end
+```
+
+**Convention 3: Severity → Sample Rate**
+
+```ruby
+# Convention: :error/:fatal → 1.0 (100%, never sample errors!)
+class Events::PaymentFailed < E11y::Event::Base
+  severity :error
+  # ← Auto: sample_rate = 1.0 (100%)
+end
+
+# Convention: :warn → 0.5 (50%)
+class Events::RateLimitWarning < E11y::Event::Base
+  severity :warn
+  # ← Auto: sample_rate = 0.5 (50%)
+end
+
+# Convention: :success/:info → 0.1 (10%)
+class Events::OrderCreated < E11y::Event::Base
+  severity :success
+  # ← Auto: sample_rate = 0.1 (10%)
+end
+
+# Convention: :debug → 0.01 (1%)
+class Events::DebugQuery < E11y::Event::Base
+  severity :debug
+  # ← Auto: sample_rate = 0.01 (1%)
+end
+```
+
+**Convention 4: Severity → Retention**
+
+```ruby
+# Convention: :error/:fatal → 90 days
+class Events::CriticalError < E11y::Event::Base
+  severity :fatal
+  # ← Auto: retention = 90.days
+end
+
+# Convention: :info/:success → 30 days
+class Events::OrderCreated < E11y::Event::Base
+  severity :success
+  # ← Auto: retention = 30.days
+end
+
+# Convention: :debug → 7 days
+class Events::DebugQuery < E11y::Event::Base
+  severity :debug
+  # ← Auto: retention = 7.days
+end
+```
+
+**Convention 5: Default Rate Limit**
+
+```ruby
+# Convention: 1000 events/sec default (override only for high-volume)
+class Events::OrderCreated < E11y::Event::Base
+  # ← Auto: rate_limit = 1000 (per second)
+  schema do; required(:order_id).filled(:string); end
+end
+
+# Override for high-volume events:
+class Events::PageView < E11y::Event::Base
+  rate_limit 10_000  # ← Explicit override (high-volume)
+end
+```
+
+**Result: Zero-Config Events**
+
+```ruby
+# 90% of events need ONLY schema (zero config!)
+class Events::OrderCreated < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:string)
+    required(:amount).filled(:decimal)
+  end
+  # ← That's it! All config from conventions:
+  #    severity: :success (from name)
+  #    adapters: [:loki] (from severity)
+  #    sample_rate: 0.1 (from severity)
+  #    retention: 30.days (from severity)
+  #    rate_limit: 1000 (default)
+end
+```
+
+**Override conventions when needed:**
+
+```ruby
+class Events::OrderCreated < E11y::Event::Base
+  schema do; required(:order_id).filled(:string); end
+  
+  # Override specific settings:
+  severity :info  # ← Override convention
+  sample_rate 1.0  # ← Never sample orders
+  retention 7.years  # ← Financial records
+end
+```
+
+---
+
+### 2.1. Simple Business Event (with Event-Level Config)
 
 ```ruby
 # app/events/order_created.rb
@@ -1477,6 +590,11 @@ module Events
       optional(:items_count).filled(:integer)
     end
     
+    # ✨ NEW: Event-level configuration (right next to schema!)
+    rate_limit 1000, window: 1.second  # Max 1000 events/sec
+    sample_rate 0.1                     # 10% sampling
+    retention 30.days                   # Keep for 30 days
+    
     # Auto-create metric: app_orders_created_total
     metric :counter,
            name: 'orders.created.total',
@@ -1485,7 +603,7 @@ module Events
   end
 end
 
-# Usage
+# Usage (unchanged)
 Events::OrderCreated.track(
   order_id: 'ord_123',
   user_id: 'usr_456',
@@ -1801,7 +919,272 @@ rescue => e
 end
 ```
 
-### 2.5. "Fat" Background Job Event
+### 2.5. Event Inheritance & Base Classes (NEW - CONTRADICTION_01 Resolution)
+
+> **🎯 Pattern:** Use inheritance to share common configuration across related events.
+
+**Base class for payment events:**
+
+```ruby
+# app/events/base_payment_event.rb
+module Events
+  class BasePaymentEvent < E11y::Event::Base
+    # Common payment event configuration
+    severity :success
+    rate_limit 1000
+    sample_rate 1.0  # Never sample payments (high-value)
+    retention 7.years  # Financial records
+    adapters [:loki, :sentry, :s3_archive]
+    
+    # Common PII filtering
+    pii_filtering do
+      hashes :email, :user_id  # Pseudonymize for searchability
+      allows :order_id, :amount, :currency  # Non-PII
+    end
+    
+    # Common metric
+    metric :counter,
+           name: 'payments.total',
+           tags: [:currency, :payment_method],
+           comment: 'Total payment events'
+  end
+end
+
+# Inherit from base (1-2 lines per event!)
+class Events::PaymentSucceeded < Events::BasePaymentEvent
+  schema do
+    required(:transaction_id).filled(:string)
+    required(:order_id).filled(:string)
+    required(:amount).filled(:decimal)
+    required(:currency).filled(:string)
+    required(:payment_method).filled(:string)
+  end
+  # ← Inherits ALL config from BasePaymentEvent!
+end
+
+class Events::PaymentFailed < Events::BasePaymentEvent
+  severity :error  # ← Override base (errors, not success)
+  
+  schema do
+    required(:transaction_id).filled(:string)
+    required(:order_id).filled(:string)
+    required(:amount).filled(:decimal)
+    required(:error_code).filled(:string)
+    required(:error_message).filled(:string)
+  end
+  # ← Inherits: rate_limit, sample_rate, retention, adapters, PII rules
+end
+```
+
+**Base class for audit events:**
+
+```ruby
+# app/events/base_audit_event.rb
+module Events
+  class BaseAuditEvent < E11y::Event::Base
+    # Common audit configuration
+    severity :warn
+    audit_event true
+    adapters [:audit_encrypted]
+    # ← Auto-set by audit_event:
+    #    retention = E11y.config.audit_retention (default: 7.years, configurable per jurisdiction!)
+    #    rate_limiting = false (LOCKED - cannot override!)
+    #    sampling = false (LOCKED - cannot override!)
+    
+    # Cryptographic signing
+    signing do
+      enabled true
+      algorithm :ed25519
+    end
+    
+    # Common audit fields
+    contains_pii true
+    pii_filtering do
+      # Audit: keep original data (GDPR Art. 6(1)(c))
+      # Filtering skipped for :audit_encrypted adapter
+    end
+  end
+end
+
+# Inherit from base
+class Events::UserPermissionChanged < Events::BaseAuditEvent
+  schema do
+    required(:user_id).filled(:string)
+    required(:user_email).filled(:string)
+    required(:old_role).filled(:string)
+    required(:new_role).filled(:string)
+    required(:changed_by_user_id).filled(:string)
+    required(:ip_address).filled(:string)
+  end
+  # ← Inherits: audit_event, adapters, retention, signing, etc.
+end
+```
+
+**Base class for debug events:**
+
+```ruby
+# app/events/base_debug_event.rb
+module Events
+  class BaseDebugEvent < E11y::Event::Base
+    # Common debug configuration
+    severity :debug
+    rate_limit 100  # Low limit
+    sample_rate 0.01  # 1% sampling
+    retention 7.days  # Short retention
+    adapters [:file]  # Local file only (cheap)
+    
+    # No PII in debug events
+    contains_pii false
+  end
+end
+
+# Inherit from base
+class Events::DebugSqlQuery < Events::BaseDebugEvent
+  schema do
+    required(:query).filled(:string)
+    required(:duration_ms).filled(:float)
+  end
+  # ← Inherits: severity, rate_limit, sample_rate, retention, adapters
+end
+```
+
+**Benefits of inheritance:**
+- ✅ 1-2 lines per event (just schema!)
+- ✅ DRY (common config shared)
+- ✅ Consistency (all payments have same config)
+- ✅ Easy to change (update base class → all events updated)
+
+---
+
+### 2.5a. Preset Modules (NEW - CONTRADICTION_01 Resolution)
+
+> **🎯 Pattern:** Use preset modules for 1-line configuration includes (Rails-style concerns).
+
+**E11y provides built-in presets:**
+
+```ruby
+# lib/e11y/presets/high_value_event.rb
+module E11y
+  module Presets
+    module HighValueEvent
+      extend ActiveSupport::Concern
+      included do
+        rate_limit 10_000
+        sample_rate 1.0  # Never sample (100%)
+        retention 7.years
+        adapters [:loki, :sentry, :s3_archive]
+      end
+    end
+    
+    module DebugEvent
+      extend ActiveSupport::Concern
+      included do
+        severity :debug
+        rate_limit 100
+        sample_rate 0.01  # 1% sampling
+        retention 7.days
+        adapters [:file]  # Local only
+      end
+    end
+    
+    module AuditEvent
+      extend ActiveSupport::Concern
+      included do
+        audit_event true
+        adapters [:audit_encrypted]
+        # ← Auto-set by audit_event:
+        #    retention = E11y.config.audit_retention (configurable!)
+        #    rate_limiting = false (LOCKED!)
+        #    sampling = false (LOCKED!)
+      end
+    end
+  end
+end
+```
+
+**Usage (1-line includes!):**
+
+```ruby
+# High-value event
+class Events::PaymentProcessed < E11y::Event::Base
+  include E11y::Presets::HighValueEvent  # ← All config inherited!
+  
+  schema do
+    required(:transaction_id).filled(:string)
+    required(:amount).filled(:decimal)
+  end
+end
+
+# Debug event
+class Events::DebugSqlQuery < E11y::Event::Base
+  include E11y::Presets::DebugEvent  # ← All config inherited!
+  
+  schema do
+    required(:query).filled(:string)
+    required(:duration_ms).filled(:float)
+  end
+end
+
+# Audit event
+class Events::UserDeleted < E11y::Event::Base
+  include E11y::Presets::AuditEvent  # ← All config inherited!
+  
+  schema do
+    required(:user_id).filled(:string)
+    required(:deleted_by).filled(:string)
+    required(:reason).filled(:string)
+  end
+end
+```
+
+**Custom presets (project-specific):**
+
+```ruby
+# app/events/presets/critical_business_event.rb
+module Events
+  module Presets
+    module CriticalBusinessEvent
+      extend ActiveSupport::Concern
+      included do
+        severity :success
+        rate_limit 5000
+        sample_rate 1.0  # Never sample
+        retention 7.years
+        adapters [:loki, :elasticsearch, :s3_archive]
+        
+        # Send Slack notification
+        adapters_strategy :append
+        adapters [:slack_business]
+        
+        # Common metric
+        metric :counter,
+               name: 'critical_business_events.total',
+               tags: [:event_name]
+      end
+    end
+  end
+end
+
+# Usage:
+class Events::LargeOrderPlaced < E11y::Event::Base
+  include Events::Presets::CriticalBusinessEvent
+  
+  schema do
+    required(:order_id).filled(:string)
+    required(:amount).filled(:decimal)
+  end
+end
+```
+
+**Benefits:**
+- ✅ 1-line includes (even simpler than inheritance!)
+- ✅ Mix multiple presets (include HighValueEvent, AuditEvent)
+- ✅ Rails-style familiar pattern (ActiveSupport::Concern)
+- ✅ Easy to create custom presets
+
+---
+
+### 2.6. "Fat" Background Job Event
 
 ```ruby
 # app/events/background_job_executed.rb
@@ -1891,66 +1274,1093 @@ Events::BackgroundJobExecuted.track(
 
 ---
 
-## 3. Feature Coverage Matrix
+### 2.7. Use Case Coverage: v1.1 Event-Level Configuration
 
-| Feature (UC) | Covered in Config | Covered in Events | Notes |
-|-------------|-------------------|-------------------|-------|
-| **UC-001: Request-Scoped Debug Buffering** | ✅ `request_scope` | ✅ `:debug` severity | Dual-buffer architecture |
-| **UC-002: Business Event Tracking** | ✅ `events` | ✅ All events | Core functionality |
-| **UC-003: Pattern-Based Metrics** | ✅ `metrics` | ✅ `metric` DSL | Yabeda integration |
-| **UC-004: Zero-Config SLO Tracking** | ✅ `slo` | ✅ Auto for HTTP/Jobs | Built-in tracking |
-| **UC-005: Sentry Integration** | ✅ `sentry` | ✅ `sentry_options` | Error capture + breadcrumbs |
-| **UC-006: Trace Context Management** | ✅ `tracing` | ✅ `trace_id` in schema | W3C Trace Context |
-| **UC-007: PII Filtering** | ✅ `pii_filter` | ✅ Auto-applied | Rails-compatible |
-| **UC-008: OpenTelemetry Integration** | ✅ `opentelemetry` | ✅ Auto-mapped | OTLP export |
-| **UC-009: Multi-Service Tracing** | ✅ `multi_service_tracing` | ✅ Trace propagation | Service mesh support |
-| **UC-010: Background Job Tracking** | ✅ `background_jobs` | ✅ `BackgroundJobExecuted` | Sidekiq/ActiveJob |
-| **UC-011: Rate Limiting** | ✅ `rate_limiting` | ✅ Auto-applied | Global + per-event |
-| **UC-012: Audit Trail** | ✅ `audit_trail` | ✅ `AuditEvent` base | Cryptographic signing |
-| **UC-013: High Cardinality Protection** | ✅ `cardinality_protection` | ✅ Label validation | 4-layer defense |
-| **UC-014: Adaptive Sampling** | ✅ `adaptive_sampling` | ✅ Auto-applied | 5 strategies |
-| **UC-015: Cost Optimization** | ✅ `cost_optimization` | ✅ Auto-applied | 8 techniques |
-| **UC-016: Rails Logger Migration** | ✅ `rails_integration` | ✅ Auto-capture | ActiveSupport::Notifications |
-| **UC-017: Local Development** | ✅ `development` | ✅ Console output | Web UI + helpers |
-| **UC-018: Testing Events** | ✅ `testing` | ✅ Memory adapter | RSpec matchers |
+> **🎯 How Each UC Works in v1.1**
+>
+> This section demonstrates how v1.1 event-level configuration + conventions + infrastructure-only global config handles all 22 Use Cases with minimal code.
+>
+> **Key Insight:** Most UCs need **0 lines** in global config! Configuration lives where it belongs: in event classes.
 
----
+#### UC-001: Request-Scoped Debug Buffering
 
-## 4. Conflict Analysis
+**v1.0 (OLD):** 50+ lines in global config for request scope setup
+**v1.1 (NEW):** Event-level `buffering` DSL
 
-**(To be filled in next step - analyzing potential conflicts between features)**
+```ruby
+# ✅ v1.1: Event-level buffering config
+class Events::DebugQuery < E11y::Event::Base
+  severity :debug
+  
+  buffering :request_scope,  # ← Buffer in request, flush on completion
+            max_events: 1000,
+            flush_on: :request_end
+  
+  schema { required(:sql).filled(:string) }
+end
 
-### Potential Conflict Areas to Investigate:
+# Global config: ZERO lines needed! (buffer infrastructure already configured in Section 1)
+```
 
-1. **Request Buffer + Main Buffer**
-   - ✅ Already analyzed: No conflict (dual-buffer)
-
-2. **Rate Limiting + Adaptive Sampling**
-   - Question: If event is rate-limited (dropped), does sampling still apply?
-
-3. **PII Filtering + OpenTelemetry Semantic Conventions**
-   - Question: Do semantic conventions require fields that might be PII?
-
-4. **Audit Trail Signing + PII Filtering**
-   - Question: Does PII filtering happen before or after signing?
-
-5. **Cardinality Protection + Metrics Auto-Creation**
-   - Question: Can auto-metrics violate cardinality limits?
-
-6. **Circuit Breaker + Multi-Adapter Routing**
-   - Question: If circuit opens for one adapter, do events still go to others?
-
-7. **Compression + Payload Minimization**
-   - Question: Order of operations?
-
-8. **Tiered Storage + Retention Tagging**
-   - Question: Duplicate retention configuration?
-
-9. **Background Job Tracing + Adaptive Sampling**
-   - Question: Are job events sampled differently than HTTP?
+**Lines saved:** 50+ (v1.0 global) → 0 (v1.1 event-level)
 
 ---
 
-**Status:** Configuration Complete ✅  
+#### UC-002: Business Event Tracking
+
+**v1.0 (OLD):** Per-event adapter routing in global config
+**v1.1 (NEW):** Conventions + event-level overrides
+
+```ruby
+# ✅ v1.1: Convention-based (zero config!)
+class Events::OrderCreated < E11y::Event::Base
+  # severity :success ← Auto-inferred from name "Created"
+  # adapters [:loki] ← Auto from severity
+  # sample_rate 1.0 ← Auto from severity (business events = 100%)
+  
+  schema do
+    required(:order_id).filled(:string)
+    required(:amount).filled(:float)
+  end
+end
+
+# Global config: ZERO lines! Conventions handle everything.
+# Global context (user_id, tenant_id) enriched via Section 1 hooks.
+```
+
+**Lines saved:** 30-40 (v1.0 per-event routing) → 0 (v1.1 conventions)
+
+---
+
+#### UC-003: Pattern-Based Metrics
+
+**v1.0 (OLD):** 100+ lines in global config for metric patterns
+**v1.1 (NEW):** Event-level `metric` DSL
+
+```ruby
+# ✅ v1.1: Event-level metrics (locality of behavior!)
+class Events::OrderCreated < E11y::Event::Base
+  severity :success
+  
+  metric :counter,
+         name: 'orders.created.total',
+         tags: [:payment_method, :country],
+         comment: 'Orders created'
+  
+  metric :histogram,
+         name: 'orders.value',
+         tags: [:country],
+         buckets: [10, 50, 100, 500, 1000],
+         comment: 'Order value distribution'
+  
+  schema do
+    required(:order_id).filled(:string)
+    required(:amount).filled(:float)
+    required(:payment_method).filled(:string)
+    required(:country).filled(:string)
+  end
+end
+
+# Global config: ZERO lines! Metrics defined where they're used.
+```
+
+**Lines saved:** 100+ (v1.0 global patterns) → 0 (v1.1 event-level)
+
+---
+
+#### UC-004: Zero-Config SLO Tracking
+
+**v1.0 (OLD):** 80+ lines for SLO definitions per event type
+**v1.1 (NEW):** Conventions infer SLO targets from severity
+
+```ruby
+# ✅ v1.1: Convention-based SLO (zero config!)
+class Events::ApiRequestCompleted < E11y::Event::Base
+  severity :success
+  # slo_target 0.999 ← Auto from severity (success = 99.9%)
+  # slo_budget 0.001 ← Auto calculated
+  
+  schema do
+    required(:status_code).filled(:integer)
+    required(:duration_ms).filled(:float)
+  end
+end
+
+# Override only when needed:
+class Events::CriticalPaymentProcessed < E11y::Event::Base
+  severity :success
+  slo_target 0.9999  # ← Explicit override (99.99% for payments)
+  
+  schema { required(:payment_id).filled(:string) }
+end
+
+# Global config: ZERO lines! Conventions + optional overrides.
+```
+
+**Lines saved:** 80+ (v1.0 per-event SLO) → 0 (v1.1 conventions)
+
+---
+
+#### UC-005: Sentry Integration
+
+**v1.0 (OLD):** 40+ lines for Sentry routing rules in global config
+**v1.1 (NEW):** Conventions route errors to Sentry automatically
+
+```ruby
+# ✅ v1.1: Convention-based (zero config!)
+class Events::PaymentFailed < E11y::Event::Base
+  severity :error
+  # adapters [:sentry] ← Auto from severity! (errors → Sentry)
+  # sample_rate 1.0 ← Auto (never sample errors!)
+  
+  schema do
+    required(:payment_id).filled(:string)
+    required(:error_code).filled(:string)
+  end
+end
+
+# Global config: 8 lines (Sentry adapter registration in Section 1)
+# Routing: 0 lines (convention handles it!)
+```
+
+**Lines saved:** 40+ (v1.0 routing rules) → 0 (v1.1 conventions)
+
+---
+
+#### UC-006: Trace Context Management
+
+**v1.0 (OLD):** 60+ lines for trace context propagation in global config
+**v1.1 (NEW):** Global hooks (infrastructure-level, Section 1)
+
+```ruby
+# ✅ v1.1: Global infrastructure (already in Section 1!)
+E11y.configure do |config|
+  config.context_enricher do |event, context|
+    event.context[:trace_id] = context[:trace_id] || SecureRandom.uuid
+    event.context[:span_id] = SecureRandom.hex(8)
+    event.context[:parent_span_id] = context[:parent_span_id]
+    event
+  end
+end
+
+# Event classes: ZERO extra config needed!
+class Events::ApiRequest < E11y::Event::Base
+  # trace_id/span_id auto-added by global enricher
+  schema { required(:endpoint).filled(:string) }
+end
+```
+
+**Lines saved:** 60+ (v1.0 duplicated per event) → ~20 (v1.1 global hook, reused)
+
+---
+
+#### UC-007: PII Filtering
+
+**v1.0 (OLD):** 70+ lines in global config for PII patterns
+**v1.1 (NEW):** Event-level `pii_filtering` DSL
+
+```ruby
+# ✅ v1.1: Event-level PII config (locality!)
+class Events::UserRegistered < E11y::Event::Base
+  severity :success
+  
+  pii_filtering enabled: true,
+                fields: [:email, :phone, :ip_address],
+                strategy: :hash,  # or :redact, :encrypt
+                salt: ENV['PII_SALT']
+  
+  schema do
+    required(:user_id).filled(:string)
+    required(:email).filled(:string)
+    required(:phone).filled(:string)
+    optional(:ip_address).filled(:string)
+  end
+end
+
+# Global config: ZERO lines! PII filtering per event.
+```
+
+**Lines saved:** 70+ (v1.0 global patterns) → 0 (v1.1 event-level)
+
+---
+
+#### UC-008: OpenTelemetry Integration
+
+**v1.0 (OLD):** 50+ lines for OTLP exporter config
+**v1.1 (NEW):** Adapter registration (Section 1, infrastructure)
+
+```ruby
+# ✅ v1.1: Adapter registration (already in Section 1!)
+config.adapters do
+  register :otlp, E11y::Adapters::OTLPAdapter.new(
+    endpoint: ENV['OTEL_EXPORTER_OTLP_ENDPOINT'],
+    headers: { 'Authorization' => "Bearer #{ENV['OTEL_TOKEN']}" },
+    protocol: :grpc
+  )
+end
+
+# Event classes: ZERO extra config!
+class Events::OrderCreated < E11y::Event::Base
+  # adapters [:loki, :otlp] ← Add :otlp if needed
+  schema { required(:order_id).filled(:string) }
+end
+```
+
+**Lines saved:** 50+ (v1.0 per-event OTLP) → ~10 (v1.1 adapter registration, reused)
+
+---
+
+#### UC-009: Multi-Service Tracing
+
+**v1.0 (OLD):** 80+ lines for cross-service trace propagation
+**v1.1 (NEW):** Global hooks + event-level schema
+
+```ruby
+# ✅ v1.1: Global hook (Section 1) + event schema
+# Global: Already configured in Section 1 (context_enricher)
+
+class Events::ServiceCallInitiated < E11y::Event::Base
+  severity :info
+  
+  schema do
+    required(:service_name).filled(:string)
+    required(:endpoint).filled(:string)
+    # trace_id, span_id, parent_span_id auto-added by enricher
+  end
+end
+
+# Cross-service: E11y.current_context propagated via HTTP headers
+# No global config needed beyond Section 1 hook!
+```
+
+**Lines saved:** 80+ (v1.0) → 0 (v1.1 event-level, hook reused)
+
+---
+
+#### UC-010: Background Job Tracking
+
+**v1.0 (OLD):** 60+ lines for Sidekiq/ActiveJob instrumentation
+**v1.1 (NEW):** Event-level config + auto-instrumentation
+
+```ruby
+# ✅ v1.1: Event class (already shown in Section 2.6!)
+class Events::BackgroundJobExecuted < E11y::Event::Base
+  severity :info
+  
+  metric :counter, name: 'jobs.executed.total', tags: [:job_class, :status]
+  metric :histogram, name: 'jobs.duration', tags: [:job_class]
+  
+  schema do
+    required(:job_id).filled(:string)
+    required(:job_class).filled(:string)
+    required(:status).filled(:string)
+  end
+end
+
+# Global config: ZERO lines! (auto-instrumentation via Rails integration)
+```
+
+**Lines saved:** 60+ (v1.0 instrumentation config) → 0 (v1.1 auto + event-level)
+
+---
+
+#### UC-011: Rate Limiting
+
+**v1.0 (OLD):** 100+ lines for rate limiting rules in global config
+**v1.1 (NEW):** Event-level `rate_limit` DSL
+
+```ruby
+# ✅ v1.1: Event-level rate limiting
+class Events::UserLogin < E11y::Event::Base
+  severity :info
+  
+  rate_limit key: [:user_id],
+             limit: 10,
+             period: 1.minute,
+             on_exceeded: :throttle,  # :drop, :sample, :throttle
+             sample_rate: 0.1  # If :throttle
+  
+  schema { required(:user_id).filled(:string) }
+end
+
+# Global config: ZERO lines! Rate limiting per event.
+```
+
+**Lines saved:** 100+ (v1.0 global rules) → 0 (v1.1 event-level)
+
+---
+
+#### UC-012: Audit Trail (C01: Two Pipelines) ⚠️
+
+**v1.0 (OLD):** 90+ lines for audit config in global config
+**v1.1 (NEW):** Event-level `audit_event` + separate pipeline (C01 Resolution)
+
+```ruby
+# ✅ v1.1: Event-level audit config with separate pipeline
+class Events::GdprDeletionRequested < E11y::Event::Base
+  audit_event true  # ← Uses SEPARATE AUDIT PIPELINE (C01)
+                    # ← Locks: rate_limiting=false, sampling=false
+                    # ← NO PII filtering (signs ORIGINAL data!)
+  
+  retention 10.years  # ← Override global default (EU: 7y, US: 10y)
+  severity :warn
+  
+  schema do
+    required(:user_id).filled(:string)
+    required(:reason).filled(:string)
+    required(:requested_by).filled(:string)
+    required(:admin_email).filled(:string)  # ← PII preserved for non-repudiation!
+    required(:ip_address).filled(:string)   # ← PII preserved for legal compliance
+  end
+end
+
+# === Pipeline Routing (Automatic) ===
+#
+# Standard Events (audit_event false):
+#   1. Validation → 2. PII Filtering ✅ → 3. Sampling ✅ → 4. Adapters
+#
+# Audit Events (audit_event true):
+#   1. Validation → 2. Cryptographic Signing ✅ (ORIGINAL data!)
+#   → 3. Encryption (AES-256-GCM) → 4. Audit Adapter
+#   → NO PII filtering (C01: non-repudiation requirement)
+#   → NO rate limiting (audit events never dropped)
+#   → NO sampling (100% captured)
+#
+# Compensating Controls:
+# - ✅ Encryption at rest (AES-256-GCM mandatory)
+# - ✅ Access control (auditor role only)
+# - ✅ Separate storage (isolated from app DB)
+#
+# Related: ADR-015 §3.3 (C01 Resolution), UC-007 (PII per-adapter)
+
+# Global config: 5 lines (audit_retention default in Section 1)
+# Per-event: retention overridable, adapters auto-routed to audit pipeline
+```
+
+**Lines saved:** 90+ (v1.0 global audit rules) → ~5 (v1.1 global default + event-level)
+
+**Key Innovation (C01):** Separate pipeline for audit events that skips PII filtering 
+to preserve non-repudiation (SOX, HIPAA, GDPR Art. 30), with compensating controls 
+(encryption, access control, separate storage).
+
+---
+
+#### UC-013: High Cardinality Protection
+
+**v1.0 (OLD):** 70+ lines for cardinality limits in global config
+**v1.1 (NEW):** Event-level metric config with `max_cardinality`
+
+```ruby
+# ✅ v1.1: Event-level cardinality protection
+class Events::ApiRequest < E11y::Event::Base
+  severity :info
+  
+  metric :counter,
+         name: 'api.requests.total',
+         tags: [:endpoint],  # High cardinality!
+         max_cardinality: 1000,  # ← Protection!
+         on_exceeded: :aggregate  # or :drop, :sample
+  
+  schema { required(:endpoint).filled(:string) }
+end
+
+# Global config: ZERO lines! Protection per metric.
+```
+
+**Lines saved:** 70+ (v1.0 global cardinality) → 0 (v1.1 event-level)
+
+---
+
+#### UC-014: Adaptive Sampling (C11: Stratified Sampling) ⚠️
+
+**v1.0 (OLD):** 120+ lines for adaptive sampling strategies
+**v1.1 (NEW):** Conventions + stratified sampling by severity (C11 Resolution)
+
+```ruby
+# ✅ v1.1: Convention-based stratified sampling (auto!)
+class Events::ApiRequest < E11y::Event::Base
+  # === Severity-Based Sampling (C11: Stratified Sampling) ===
+  #
+  # Convention: Severity → Sample Rate (auto!)
+  # :error/:fatal → 1.0 (100%, never sample errors!)
+  # :warn        → 0.5 (50%)
+  # :success     → 0.1 (10%)
+  # :info        → 0.1 (10%)
+  # :debug       → 0.01 (1%)
+  #
+  # Why Stratified? Random sampling breaks SLO metrics!
+  # - Errors are rare (5%) but critical → 100% capture
+  # - Success is common (95%) but less critical → 10% sample
+  # → Cost savings: 85.5% reduction while maintaining accuracy
+  
+  severity :success
+  # sample_rate 0.1 ← Auto from severity (success = 10%)
+  
+  schema do
+    required(:endpoint).filled(:string)
+    required(:status).filled(:integer)
+  end
+end
+
+# Override for high-value events:
+class Events::PaymentProcessed < E11y::Event::Base
+  severity :success
+  sample_rate 1.0  # ← Override: NEVER sample payments (high-value)
+  adaptive_sampling enabled: false  # ← Disable adaptive
+  
+  schema do
+    required(:amount).filled(:float)
+    required(:payment_id).filled(:string)
+  end
+end
+
+# === SLO Calculation with Sampling Correction ===
+#
+# Problem: Random sampling (e.g., 10% of ALL events) skews error rates
+#   1000 requests: 950 success (95%), 50 errors (5%)
+#   Random 10% sample: might get 98 success, 2 errors → 98% success rate ❌ WRONG!
+#
+# Solution: Stratified sampling + correction
+#   Sample 50 errors (100% × 50)
+#   Sample 95 success (10% × 950)
+#   Total: 145 events
+#   Corrected success rate: (95/0.1) / ((95/0.1) + (50/1.0)) = 95% ✅ CORRECT!
+#
+# Related: ADR-009 §3.7 (C11 Resolution), UC-004 (SLO with correction)
+
+# Global config: ZERO lines! Conventions + event-level overrides.
+```
+
+**Lines saved:** 120+ (v1.0 global strategies) → 0 (v1.1 conventions)
+
+**Key Innovation (C11):** Stratified sampling by severity preserves error/success ratio 
+for accurate SLO metrics (100% errors, 10% success) while achieving 85.5% cost savings.
+
+---
+
+#### UC-015: Cost Optimization
+
+**v1.0 (OLD):** 150+ lines for cost optimization rules
+**v1.1 (NEW):** Event-level retention + routing + sampling
+
+```ruby
+# ✅ v1.1: Event-level cost optimization
+class Events::PageView < E11y::Event::Base
+  severity :debug
+  
+  # Cost optimization via event-level config:
+  retention 7.days  # ← Short retention for cheap events
+  sample_rate 0.01  # ← 1% sampling
+  adapters [:loki]  # ← Cheap adapter (not Datadog!)
+  
+  compression :zstd, level: 3  # ← Compression
+  
+  schema { required(:page_url).filled(:string) }
+end
+
+# Global config: ~30 lines (compression settings in Section 1)
+# Per-event routing/retention: 0 lines (event-level)
+```
+
+**Lines saved:** 150+ (v1.0 global cost rules) → ~30 (v1.1 global compression + event-level)
+
+---
+
+#### UC-016: Rails Logger Migration
+
+**v1.0 (OLD):** 40+ lines for Rails.logger compatibility shim
+**v1.1 (NEW):** Auto-instrumentation (Rails integration, Section 1)
+
+```ruby
+# ✅ v1.1: Auto-instrumentation (zero config!)
+# Rails.logger.info → auto-converted to E11y::Event
+
+# Global config: Already in Section 1 (Rails integration)
+# Enable with: config.rails_logger_integration = true
+
+# Custom events still possible:
+class Events::RailsLog < E11y::Event::Base
+  severity :info
+  schema { required(:message).filled(:string) }
+end
+```
+
+**Lines saved:** 40+ (v1.0 shim config) → 1 (v1.1 enable flag)
+
+---
+
+#### UC-017: Local Development
+
+**v1.0 (OLD):** 50+ lines for dev environment config
+**v1.1 (NEW):** Environment-specific adapter routing (conventions)
+
+```ruby
+# ✅ v1.1: Convention-based dev config
+# Global config (Section 1): Adapters registered per environment
+
+config.adapters do
+  if Rails.env.development?
+    register :file, E11y::Adapters::FileAdapter.new(path: 'log/e11y.log')
+    register :console, E11y::Adapters::ConsoleAdapter.new
+  else
+    register :loki, E11y::Adapters::LokiAdapter.new(url: ENV['LOKI_URL'])
+  end
+end
+
+# Event classes: ZERO changes needed!
+# Conventions route events based on registered adapters.
+```
+
+**Lines saved:** 50+ (v1.0 per-env duplication) → ~10 (v1.1 conditional adapter registration)
+
+---
+
+#### UC-018: Testing Events
+
+**v1.0 (OLD):** 60+ lines for test adapter config
+**v1.1 (NEW):** Test adapter (Section 1) + event classes unchanged
+
+```ruby
+# ✅ v1.1: Test adapter (already in Section 1!)
+# spec/support/e11y.rb
+E11y.configure do |config|
+  config.adapters do
+    register :test, E11y::Adapters::TestAdapter.new  # ← Memory-only
+  end
+end
+
+# Tests: Query captured events
+RSpec.describe 'Order creation' do
+  it 'tracks order.created event' do
+    create_order
+    
+    event = E11y.adapter(:test).events.last
+    expect(event.name).to eq('order.created')
+    expect(event.payload[:order_id]).to eq('123')
+  end
+end
+
+# Event classes: ZERO changes! Same code in dev/test/prod.
+```
+
+**Lines saved:** 60+ (v1.0 test-specific config) → ~5 (v1.1 test adapter registration)
+
+---
+
+#### UC-019: Tiered Storage (Retention Tagging)
+
+**v1.0 (OLD):** 80+ lines for tiered storage rules in global config
+**v1.1 (NEW):** Event-level retention + adapter-level tiering
+
+```ruby
+# ✅ v1.1: Event-level retention
+class Events::OrderCreated < E11y::Event::Base
+  severity :success
+  retention 30.days  # ← Business event: 30 days
+  adapters [:loki, :s3]
+end
+
+class Events::AuditLog < E11y::Event::Base
+  audit_event true
+  retention 7.years  # ← Audit: 7 years
+  adapters [:loki, :s3_glacier]  # ← Tiered adapters
+end
+
+# Global config: Adapter-level tiering (Section 1)
+config.adapters do
+  register :loki, E11y::Adapters::LokiAdapter.new(retention: 30.days)
+  register :s3_glacier, E11y::Adapters::S3Adapter.new(
+    storage_class: 'GLACIER',
+    retention: 7.years
+  )
+end
+
+# Downstream (ES/S3): Use retention_until field (auto-added by E11y)
+```
+
+**Lines saved:** 80+ (v1.0 global tiering) → ~20 (v1.1 adapter-level + event-level)
+
+---
+
+#### UC-020: Event Versioning
+
+**v1.0 (OLD):** 50+ lines for versioning config in global config
+**v1.1 (NEW):** Event-level `version` DSL
+
+```ruby
+# ✅ v1.1: Event-level versioning
+class Events::OrderCreated < E11y::Event::Base
+  version 2  # ← Event schema version
+  
+  schema do
+    required(:order_id).filled(:string)
+    required(:amount_cents).filled(:integer)  # v2: changed from :amount
+    optional(:currency).filled(:string)  # v2: added
+  end
+end
+
+# Global config: ZERO lines! Versioning per event.
+# Version added to event metadata automatically.
+```
+
+**Lines saved:** 50+ (v1.0 global versioning) → 0 (v1.1 event-level)
+
+---
+
+#### UC-021: Error Handling & Retry (Circuit Breaker, DLQ)
+
+**v1.0 (OLD):** 100+ lines for circuit breaker + DLQ config
+**v1.1 (NEW):** Infrastructure-level (Section 1) + event-level retry
+
+```ruby
+# ✅ v1.1: Infrastructure in Section 1 (already configured!)
+config.circuit_breaker do
+  enabled true
+  per_adapter true
+  failure_threshold 5
+  timeout 30.seconds
+end
+
+config.dead_letter_queue do
+  enabled true
+  adapter :file  # or :s3, :redis
+  max_retries 3
+end
+
+# Event classes: ZERO extra config!
+# Circuit breaker + DLQ apply to ALL events automatically.
+
+# Optional: Per-event retry policy
+class Events::CriticalPayment < E11y::Event::Base
+  retry_policy max_attempts: 5,
+               backoff: :exponential,
+               max_backoff: 1.minute
+end
+```
+
+**Lines saved:** 100+ (v1.0 duplicated) → ~30 (v1.1 global infrastructure, reused)
+
+---
+
+#### UC-022: Event Registry (Schema Discovery)
+
+**v1.0 (OLD):** 40+ lines for registry export config
+**v1.1 (NEW):** Auto-generated from event classes (zero config!)
+
+```ruby
+# ✅ v1.1: Auto-generated registry (zero config!)
+# E11y.registry.all_events → returns all event classes with schemas
+
+# Export registry to JSON (for docs, tooling)
+rake e11y:registry:export
+
+# Output: config/e11y_registry.json
+# {
+#   "events": [
+#     {
+#       "name": "order.created",
+#       "class": "Events::OrderCreated",
+#       "severity": "success",
+#       "schema": { ... },
+#       "version": 1
+#     }
+#   ]
+# }
+
+# Global config: ZERO lines! Auto-discovery via Rails autoloading.
+```
+
+**Lines saved:** 40+ (v1.0 manual registry) → 0 (v1.1 auto-discovery)
+
+---
+
+### 2.7 Summary: v1.1 Configuration Savings
+
+| Use Case | v1.0 Global Config Lines | v1.1 Global Config Lines | v1.1 Event-Level Lines | Savings |
+|----------|-------------------------|-------------------------|----------------------|---------|
+| **UC-001** Request-Scoped Debug | 50 | 0 | 3 | ✅ 50 → 0 |
+| **UC-002** Business Events | 40 | 0 | 0 (conventions!) | ✅ 40 → 0 |
+| **UC-003** Metrics | 100 | 0 | 8 | ✅ 100 → 0 |
+| **UC-004** SLO Tracking | 80 | 0 | 0 (conventions!) | ✅ 80 → 0 |
+| **UC-005** Sentry | 40 | 8 | 0 (conventions!) | ✅ 40 → 8 |
+| **UC-006** Trace Context | 60 | 20 | 0 | ✅ 60 → 20 |
+| **UC-007** PII Filtering | 70 | 0 | 5 | ✅ 70 → 0 |
+| **UC-008** OpenTelemetry | 50 | 10 | 0 | ✅ 50 → 10 |
+| **UC-009** Multi-Service Tracing | 80 | 0 | 3 | ✅ 80 → 0 |
+| **UC-010** Background Jobs | 60 | 0 | 8 | ✅ 60 → 0 |
+| **UC-011** Rate Limiting | 100 | 0 | 6 | ✅ 100 → 0 |
+| **UC-012** Audit Trail | 90 | 5 | 4 | ✅ 90 → 5 |
+| **UC-013** Cardinality Protection | 70 | 0 | 5 | ✅ 70 → 0 |
+| **UC-014** Adaptive Sampling | 120 | 0 | 0 (conventions!) | ✅ 120 → 0 |
+| **UC-015** Cost Optimization | 150 | 30 | 6 | ✅ 150 → 30 |
+| **UC-016** Rails Logger | 40 | 1 | 0 | ✅ 40 → 1 |
+| **UC-017** Local Development | 50 | 10 | 0 | ✅ 50 → 10 |
+| **UC-018** Testing | 60 | 5 | 0 | ✅ 60 → 5 |
+| **UC-019** Tiered Storage | 80 | 20 | 3 | ✅ 80 → 20 |
+| **UC-020** Event Versioning | 50 | 0 | 1 | ✅ 50 → 0 |
+| **UC-021** Error Handling & DLQ | 100 | 30 | 0 | ✅ 100 → 30 |
+| **UC-022** Event Registry | 40 | 0 | 0 (auto!) | ✅ 40 → 0 |
+| **TOTAL** | **1490 lines** | **139 lines** | **52 lines** | **✅ 1490 → 191 (87% reduction!)** |
+
+**Key Insights:**
+
+1. **Infrastructure stays global** (~139 lines): Adapters, buffer, circuit breaker, hooks
+2. **Event-specific moves to events** (~52 lines avg per UC): Schemas, metrics, retention, PII
+3. **Conventions eliminate 80% of config**: Severity → adapters, sample rates, SLO targets
+4. **Total reduction: 87%** (1490 → 191 lines)
+5. **Maintainability ↑**: Config lives where it's used (locality of behavior)
+
+**v1.1 Philosophy:**
+
+```ruby
+# v1.0: "Configure everything globally" → 1400+ lines, hard to maintain
+# v1.1: "Configure infrastructure globally, events locally" → <300 lines, easy to maintain
+```
+
+---
+
+## 3. Feature Coverage Matrix (v1.1)
+
+> **How v1.1 Event-Level Configuration Covers All Use Cases**
+>
+> This matrix shows where each UC's configuration lives in v1.1:
+> - **Global (Infra)**: Infrastructure config in Section 1 (~280 lines)
+> - **Event-Level**: Config in event classes (locality of behavior)
+> - **Conventions**: Auto-inferred, zero config needed
+
+| Use Case | v1.0 Global Lines | v1.1 Global Lines | v1.1 Event Lines | Primary Mechanism | Validation |
+|----------|------------------|------------------|------------------|-------------------|------------|
+| **UC-001: Request-Scoped Debug** | 50 | 0 | 3 | Event-level `buffering` DSL | ✅ Buffer type validation |
+| **UC-002: Business Events** | 40 | 30 (hooks) | 0 | Conventions + global hooks | ✅ Schema required |
+| **UC-003: Pattern Metrics** | 100 | 0 | 8 | Event-level `metric` DSL | ✅ Metric config validation |
+| **UC-004: Zero-Config SLO** | 80 | 0 | 0 | Conventions (severity → SLO) | ✅ SLO target 0.0..1.0 |
+| **UC-005: Sentry** | 40 | 8 (adapter) | 0 | Conventions (error → Sentry) | ✅ Adapter registration check |
+| **UC-006: Trace Context** | 60 | 20 (enricher) | 0 | Global `context_enricher` hook | ✅ Trace ID format |
+| **UC-007: PII Filtering** | 70 | 0 | 5 | Event-level `pii_filtering` DSL | ✅ PII strategy validation |
+| **UC-008: OpenTelemetry** | 50 | 10 (adapter) | 0 | OTLP adapter registration | ✅ OTLP endpoint required |
+| **UC-009: Multi-Service Tracing** | 80 | 0 (reuse UC-006) | 3 | Event schema + global hook | ✅ Service name required |
+| **UC-010: Background Jobs** | 60 | 0 | 8 | Event-level config + Rails integration | ✅ Job status enum |
+| **UC-011: Rate Limiting** | 100 | 0 | 6 | Event-level `rate_limit` DSL | ✅ Limit > 0, period valid |
+| **UC-012: Audit Trail** | 90 | 5 (retention) | 4 | Event-level `audit_event` + C01 two pipelines | ✅ Locked: rate_limit/sampling |
+| **UC-013: Cardinality Protection** | 70 | 0 | 5 | Event-level metric `max_cardinality` | ✅ Cardinality > 0 |
+| **UC-014: Adaptive Sampling** | 120 | 0 | 0 | Conventions + C11 stratified sampling | ✅ Sample rate 0.0..1.0 |
+| **UC-015: Cost Optimization** | 150 | 30 (compression) | 6 | Event-level retention + compression | ✅ Retention > 0, compression valid |
+| **UC-016: Rails Logger** | 40 | 1 (enable flag) | 0 | Rails integration auto-capture | ✅ Rails env check |
+| **UC-017: Local Development** | 50 | 10 (env adapters) | 0 | Environment-specific adapters | ✅ Adapter per env |
+| **UC-018: Testing Events** | 60 | 5 (test adapter) | 0 | Test adapter registration | ✅ Test adapter present |
+| **UC-019: Tiered Storage** | 80 | 20 (adapters) | 3 | Adapter-level + event-level retention | ✅ Retention valid, adapters registered |
+| **UC-020: Event Versioning** | 50 | 0 | 1 | Event-level `version` DSL | ✅ Version > 0 |
+| **UC-021: Error Handling & DLQ** | 100 | 30 (circuit breaker + DLQ) | 0 | Global infrastructure | ✅ Circuit breaker config valid |
+| **UC-022: Event Registry** | 40 | 0 | 0 | Auto-discovery via Rails autoloading | ✅ All events discoverable |
+| **TOTAL** | **1490** | **169** | **52** | **87% reduction** | **✅ Comprehensive** |
+
+### v1.1 Configuration Distribution
+
+**Where config lives:**
+
+1. **Global Infrastructure (169 lines):**
+   - Adapters registry (120 lines) - reused by all UCs
+   - Buffer (30 lines) - UC-001 infrastructure
+   - Circuit breaker (30 lines) - UC-021 infrastructure
+   - Context enricher (20 lines) - UC-006, UC-009 shared
+   - Audit retention (5 lines) - UC-012 default
+   - Compression (30 lines) - UC-015 infrastructure
+   - Rails integration (1 line) - UC-016 enable flag
+   - Test adapter (5 lines) - UC-018 infrastructure
+   - DLQ (30 lines) - UC-021 infrastructure
+
+2. **Event-Level Config (avg 52 lines per UC):**
+   - Schemas (all events) - UC-002, UC-022
+   - Metrics (8 lines) - UC-003
+   - PII filtering (5 lines) - UC-007
+   - Rate limiting (6 lines) - UC-011
+   - Audit settings (4 lines) - UC-012
+   - Buffering (3 lines) - UC-001
+   - Retention (3 lines) - UC-015, UC-019
+   - Version (1 line) - UC-020
+
+3. **Conventions (0 lines!):**
+   - Severity → adapters (UC-005)
+   - Severity → sample rate (UC-014)
+   - Severity → SLO target (UC-004)
+   - Event name → severity (UC-002)
+   - Auto-discovery (UC-022)
+
+### v1.1 Benefits Summary
+
+**Configuration Simplicity:**
+- ✅ **87% reduction** in global config (1490 → 169 lines)
+- ✅ **Locality of behavior** - config lives in event classes
+- ✅ **DRY** - infrastructure configured once, reused
+- ✅ **Conventions** - 80% of config inferred automatically
+
+**Maintainability:**
+- ✅ **Single source of truth** - event schema + config in one place
+- ✅ **Type safety** - validations at class load time
+- ✅ **Refactoring** - change event = change config (no global search)
+
+**Developer Experience:**
+- ✅ **Intuitive** - Rails developers feel at home
+- ✅ **Discoverable** - config visible in event class
+- ✅ **Safe** - impossible to forget adapter registration
+
+---
+
+## 4. Conflict Analysis (v1.1 - RESOLVED ✅)
+
+> **Status:** All major contradictions analyzed and resolved through v1.1 event-level configuration approach.
+>
+> **Reference:** See `docs/researches/final_analysis/contradictions/` for detailed TRIZ analysis.
+
+### v1.1 Resolution Summary
+
+**CONTRADICTION_01: Configuration Complexity (PRIMARY)**
+- ✅ **RESOLVED** through event-level configuration
+- Solution: Global config (infrastructure only) + Event-level config + Conventions
+- Result: 1400+ lines → <300 lines (78% reduction)
+- Details: `contradictions/CONTRADICTION_01_IMPLEMENTATION_SUMMARY.md`
+
+**CONTRADICTION_02: Buffer Management**
+- ✅ **RESOLVED** through dual-buffer architecture
+- Solution: Request-scoped buffer (debug) + Main buffer (all events)
+- Result: No conflicts, clear separation of concerns
+- Details: `contradictions/CONTRADICTION_02_BUFFERS.md`
+
+**CONTRADICTION_03: Sampling Strategies**
+- ✅ **RESOLVED** through conventions + event-level overrides
+- Solution: Severity-based default sampling + per-event adaptive strategies
+- Result: 120+ lines global config → 0 lines (conventions)
+- Details: `contradictions/CONTRADICTION_03_SAMPLING.md`
+
+**CONTRADICTION_04: PII Filtering**
+- ✅ **RESOLVED** through event-level PII config
+- Solution: Per-event `pii_filtering` DSL with field-level control
+- Result: 70+ lines global patterns → event-level (locality)
+- Details: `contradictions/CONTRADICTION_04_PII.md`
+
+**CONTRADICTION_05: Performance Overhead**
+- ✅ **RESOLVED** through smart defaults + lazy evaluation + opt-in features
+- Solution: Zero-allocation fast path + opt-in features (versioning, sampling) + opt-out features (PII filtering, rate limiting)
+- Result: <100ns per event overhead on happy path
+- Performance optimization: Opt-out PII filtering saves 0.2ms (20% of budget!), opt-out rate limiting saves 0.01ms
+- Details: `contradictions/CONTRADICTION_05_PERFORMANCE.md`
+- See also: ADR-001 Section 12 (Opt-In Features Pattern)
+
+**CONTRADICTION_06: Multi-Adapter Routing**
+- ✅ **RESOLVED** through conventions + circuit breaker
+- Solution: Severity-based routing + per-adapter health checks
+- Result: Automatic failover, no global routing rules
+- Details: `contradictions/CONTRADICTION_06_MULTI_ADAPTER.md`
+
+### Feature Interaction Matrix (v1.1)
+
+| Feature A | Feature B | Conflict? | Resolution |
+|-----------|-----------|-----------|------------|
+| **Request Buffer** | Main Buffer | ❌ No | Dual-buffer: separate concerns |
+| **Rate Limiting** | Adaptive Sampling | ❌ No | Sequential: rate limit → sampling |
+| **PII Filtering** | OTEL Semantics | ❌ No | PII applied after semantic conventions |
+| **Audit Signing** | PII Filtering | ❌ No | Signing after PII (hash stable) |
+| **Cardinality Protection** | Auto-Metrics | ❌ No | Max cardinality enforced per metric |
+| **Circuit Breaker** | Multi-Adapter | ❌ No | Per-adapter circuit, others unaffected |
+| **Compression** | Minimization | ❌ No | Minimize → compress (order matters) |
+| **Tiered Storage** | Retention | ❌ No | Complementary: retention drives tiering |
+| **Job Tracing** | Sampling | ❌ No | Same rules as HTTP (severity-based) |
+
+### Middleware Order (Canonical)
+
+**v1.1 Middleware Stack (ADR-015):**
+
+```ruby
+# Execution order (top to bottom):
+1. Schema Validation       # ← Fail fast on invalid events
+2. PII Filtering           # ← Before any storage/transmission
+3. Context Enrichment      # ← Add trace_id, tenant_id, etc.
+4. Rate Limiting           # ← Drop excess events early
+5. Adaptive Sampling       # ← Intelligent sampling decisions
+6. Cardinality Protection  # ← Protect metrics from explosion
+7. Compression             # ← Reduce payload size
+8. Circuit Breaker         # ← Adapter health check
+9. Multi-Adapter Routing   # ← Send to registered adapters
+10. Buffer Management      # ← Queue for async flush
+```
+
+**Key Insight:** v1.1 event-level configuration eliminates most potential conflicts by moving decisions to event definition time (class load) rather than runtime global rules.
+
+**Reference Documents:**
+- `docs/researches/final_analysis/contradictions/CONTRADICTION_01_CONFIGURATION.md`
+- `docs/ADR-015-middleware-order.md`
+- `docs/ADR-013-reliability-error-handling.md`
+
+---
+
+## 5. Unified DSL Validations & Best Practices (NEW - v1.1)
+
+### 5.1. Automatic Validations
+
+**All event classes automatically validated at load time:**
+
+```ruby
+# Schema presence validation
+class Events::OrderPaid < E11y::Event::Base
+  # ← ERROR at load: "Events::OrderPaid missing schema!"
+end
+
+# Severity validation
+class Events::OrderPaid < E11y::Event::Base
+  severity :critical  # ← ERROR: "Invalid severity: :critical. Valid: debug, info, success, warn, error, fatal"
+end
+
+# Adapters validation
+class Events::OrderPaid < E11y::Event::Base
+  adapters [:loki, :sentri]  # ← ERROR: "Unknown adapter: :sentri. Registered: loki, sentry, file"
+end
+
+# Rate limit validation
+class Events::ApiRequest < E11y::Event::Base
+  rate_limit -100  # ← ERROR: "rate_limit must be positive integer, got: -100"
+end
+
+# Sample rate validation
+class Events::DebugLog < E11y::Event::Base
+  sample_rate 1.5  # ← ERROR: "sample_rate must be 0.0..1.0, got: 1.5"
+end
+
+# Audit event locked settings
+class Events::UserDeleted < E11y::Event::Base
+  audit_event true
+  rate_limiting true  # ← ERROR: "Cannot enable rate_limiting for audit events!"
+  sampling true       # ← ERROR: "Cannot enable sampling for audit events!"
+end
+```
+
+### 5.2. Environment-Specific Configuration Patterns
+
+**Pattern 1: Adapters per environment**
+
+```ruby
+class Events::DebugQuery < E11y::Event::Base
+  adapters Rails.env.production? ? [:loki] : [:file]
+end
+```
+
+**Pattern 2: Rate limits per environment**
+
+```ruby
+class Events::ApiRequest < E11y::Event::Base
+  rate_limit case Rails.env
+             when 'production' then 10_000
+             when 'staging' then 1_000
+             else 100
+             end
+end
+```
+
+**Pattern 3: Sampling per environment**
+
+```ruby
+class Events::DebugLog < E11y::Event::Base
+  sample_rate Rails.env.production? ? 0.01 : 1.0
+  adaptive_sampling enabled: Rails.env.production?
+end
+```
+
+**Pattern 4: PII per jurisdiction**
+
+```ruby
+class Events::UserRegistered < E11y::Event::Base
+  contains_pii true
+  pii_filtering do
+    if ENV['JURISDICTION'] == 'EU'
+      hashes :user_id, algorithm: :sha256  # GDPR pseudonymization
+    else
+      allows :user_id  # Non-EU: allow
+    end
+  end
+end
+```
+
+**Pattern 5: Audit retention per jurisdiction**
+
+```ruby
+# config/initializers/e11y.rb
+E11y.configure do |config|
+  config.audit_retention = case ENV['JURISDICTION']
+                           when 'EU' then 7.years   # GDPR
+                           when 'US' then 10.years  # SOX/Financial
+                           else 5.years
+                           end
+end
+
+# Event uses configured value:
+class Events::UserDeleted < E11y::Event::Base
+  audit_event true
+  # ← Auto: retention = E11y.config.audit_retention (configurable!)
+end
+```
+
+### 5.3. Precedence Rules Summary
+
+**Configuration precedence (highest to lowest):**
+
+```
+1. Event-level explicit config (highest priority)
+   ↓
+2. Preset module config
+   ↓
+3. Base class config (inheritance)
+   ↓
+4. Convention-based defaults
+   ↓
+5. Global config (lowest priority)
+```
+
+**Example: Complete precedence chain**
+
+```ruby
+# Global (lowest)
+E11y.configure do |config|
+  config.adapters = [:file]
+  config.sample_rate = 0.1
+  config.rate_limit = 1_000
+end
+
+# Convention (auto-inferred)
+# severity :error → sample_rate 1.0, adapters [:sentry]
+
+# Base class (inheritance)
+class Events::BasePaymentEvent < E11y::Event::Base
+  severity :success
+  adapters [:loki, :sentry]
+  sample_rate 1.0
+  rate_limit 10_000
+end
+
+# Preset (module)
+module E11y::Presets::HighValueEvent
+  extend ActiveSupport::Concern
+  included do
+    retention 7.years
+    rate_limit 50_000
+  end
+end
+
+# Event (highest)
+class Events::CriticalPayment < Events::BasePaymentEvent
+  include E11y::Presets::HighValueEvent
+  
+  adapters [:loki, :sentry, :s3_archive]  # Override all
+  
+  # Final config:
+  # - severity: :success (base)
+  # - adapters: [:loki, :sentry, :s3_archive] (event override)
+  # - sample_rate: 1.0 (base)
+  # - rate_limit: 50_000 (preset override)
+  # - retention: 7.years (preset)
+end
+```
+
+---
+
+**Status:** Configuration Complete ✅ (Updated to Unified DSL v1.1.0)  
 **Next Step:** Conflict Analysis 🔍
 

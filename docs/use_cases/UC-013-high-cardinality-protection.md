@@ -75,6 +75,210 @@ end
 
 ---
 
+## 🎯 Event-Level Cardinality Protection (NEW - v1.1)
+
+> **🎯 CONTRADICTION_01 Resolution:** Move cardinality config from global initializer to event classes.
+
+**Event-level cardinality DSL:**
+
+```ruby
+# app/events/user_action.rb
+module Events
+  class UserAction < E11y::Event::Base
+    schema do
+      required(:user_id).filled(:string)
+      required(:action_type).filled(:string)
+      required(:user_segment).filled(:string)
+    end
+    
+    # ✨ Event-level cardinality protection (right next to schema!)
+    metric :counter,
+           name: 'user_actions_total',
+           tags: [:user_segment, :action_type],  # ← Safe labels
+           cardinality_limit: 100  # Max 100 series
+    
+    # Forbidden labels (high cardinality)
+    forbidden_metric_labels :user_id, :session_id
+    
+    # Safe labels (low cardinality)
+    safe_metric_labels :user_segment, :action_type, :status
+  end
+end
+```
+
+**Inheritance for cardinality protection:**
+
+```ruby
+# Base class with common cardinality rules
+module Events
+  class BaseUserEvent < E11y::Event::Base
+    # Common for ALL user events
+    forbidden_metric_labels :user_id, :email, :ip_address
+    safe_metric_labels :user_segment, :country, :plan
+    
+    # Default cardinality limit
+    default_cardinality_limit 100
+  end
+end
+
+# Inherit from base
+class Events::UserAction < Events::BaseUserEvent
+  schema do
+    required(:user_id).filled(:string)
+    required(:action_type).filled(:string)
+  end
+  
+  metric :counter,
+         name: 'user_actions_total',
+         tags: [:user_segment, :action_type]  # ← Uses safe labels
+  # ← Inherits: forbidden_metric_labels + safe_metric_labels
+end
+
+class Events::UserProfileUpdated < Events::BaseUserEvent
+  schema do
+    required(:user_id).filled(:string)
+    required(:field_name).filled(:string)
+  end
+  
+  metric :counter,
+         name: 'profile_updates_total',
+         tags: [:user_segment, :field_name]
+  # ← Inherits: forbidden_metric_labels + safe_metric_labels
+end
+```
+
+**Preset modules for cardinality protection:**
+
+```ruby
+# lib/e11y/presets/metric_safe_event.rb
+module E11y
+  module Presets
+    module MetricSafeEvent
+      extend ActiveSupport::Concern
+      included do
+        # Common forbidden labels (high cardinality)
+        forbidden_metric_labels :user_id, :order_id, :session_id,
+                                :trace_id, :request_id, :email,
+                                :ip_address, :uuid
+        
+        # Common safe labels (low cardinality)
+        safe_metric_labels :status, :severity, :country,
+                           :plan, :segment, :method
+        
+        # Default cardinality limit
+        default_cardinality_limit 100
+        
+        # Auto-aggregate on limit
+        cardinality_monitoring do
+          warn_threshold 0.7
+          auto_aggregate true
+        end
+      end
+    end
+  end
+end
+
+# Usage:
+class Events::OrderPlaced < E11y::Event::Base
+  include E11y::Presets::MetricSafeEvent  # ← Cardinality rules inherited!
+  
+  schema do
+    required(:order_id).filled(:string)
+    required(:user_id).filled(:string)
+    required(:status).filled(:string)
+  end
+  
+  metric :counter,
+         name: 'orders_total',
+         tags: [:status]  # ← Only safe labels (status)
+  # ← Inherits: forbidden_metric_labels (user_id blocked!)
+end
+```
+
+**Tag extractors (aggregation):**
+
+```ruby
+# app/events/user_action.rb
+module Events
+  class UserAction < E11y::Event::Base
+    schema do
+      required(:user_id).filled(:string)
+      required(:action_type).filled(:string)
+    end
+    
+    # ✨ Event-level tag extractors (aggregate user_id → segment)
+    metric :counter,
+           name: 'user_actions_total',
+           tags: [:user_segment, :action_type],
+           tag_extractors: {
+             user_segment: ->(event) {
+               user = User.find(event.payload[:user_id])
+               user.segment  # 'free', 'paid', 'enterprise'
+             }
+           },
+           cardinality_limit: 30  # 3 segments × 10 actions
+  end
+end
+```
+
+**Conventions for cardinality (sensible defaults):**
+
+```ruby
+# Convention: Default cardinality limit = 100 series per metric
+# Convention: Common forbidden labels auto-blocked
+
+# Zero-config event (uses conventions):
+class Events::OrderCreated < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:string)
+    required(:status).filled(:string)
+  end
+  
+  metric :counter,
+         name: 'orders_total',
+         tags: [:status]  # ← Safe (low cardinality)
+  # ← Auto: cardinality_limit = 100 (default)
+  # ← Auto: order_id blocked (common forbidden label)
+end
+
+# Override convention:
+class Events::OrderCreated < E11y::Event::Base
+  schema do; required(:order_id).filled(:string); end
+  
+  metric :counter,
+         name: 'orders_total',
+         tags: [:status],
+         cardinality_limit: 50  # ← Override: 50 (not 100)
+end
+```
+
+**Precedence (event-level overrides global):**
+
+```ruby
+# Global config (infrastructure):
+E11y.configure do |config|
+  config.cardinality_protection do
+    forbidden_labels :user_id, :order_id  # Global defaults
+    default_cardinality_limit 100
+  end
+end
+
+# Event-level config (overrides global):
+class Events::UserAction < E11y::Event::Base
+  forbidden_metric_labels :user_id, :session_id  # ← Override: adds session_id
+  default_cardinality_limit 50  # ← Override: 50 (not 100)
+end
+```
+
+**Benefits:**
+- ✅ Locality of behavior (cardinality rules next to schema)
+- ✅ DRY via inheritance/presets
+- ✅ Sensible defaults (100 series limit)
+- ✅ Easy to override when needed
+- ✅ Tag extractors co-located with metrics
+
+---
+
 ## 🎯 The 4-Layer Defense System
 
 ### Layer Processing Flow
@@ -1666,6 +1870,231 @@ end
 
 ---
 
+## 🔒 Validations (NEW - v1.1)
+
+> **🎯 Pattern:** Validate cardinality configuration at class load time.
+
+### Cardinality Limit Validation
+
+**Problem:** Invalid cardinality limits → metric explosion.
+
+**Solution:** Validate cardinality_limit is positive integer:
+
+```ruby
+# Gem implementation (automatic):
+def self.cardinality_limit(max)
+  unless max.is_a?(Integer) && max > 0 && max <= 10_000
+    raise ArgumentError, "cardinality_limit must be 1..10_000, got: #{max.inspect}"
+  end
+  self._cardinality_limit = max
+end
+
+# Result:
+class Events::UserAction < E11y::Event::Base
+  metric :counter, name: 'actions_total', cardinality_limit: -100
+  # ← ERROR: "cardinality_limit must be 1..10_000, got: -100"
+end
+```
+
+### Forbidden Labels Validation
+
+**Problem:** Using high-cardinality labels → cost explosion.
+
+**Solution:** Validate against denylist:
+
+```ruby
+# Gem implementation (automatic):
+FORBIDDEN_LABELS = [:user_id, :order_id, :session_id, :trace_id, :request_id]
+
+def self.metric(type, name:, tags:, **options)
+  forbidden = tags & FORBIDDEN_LABELS
+  if forbidden.any?
+    raise ArgumentError, "Forbidden high-cardinality labels: #{forbidden.join(', ')}. Use aggregation instead!"
+  end
+  # ...
+end
+
+# Result:
+class Events::UserAction < E11y::Event::Base
+  metric :counter, name: 'actions_total', tags: [:user_id, :action_type]
+  # ← ERROR: "Forbidden high-cardinality labels: user_id. Use aggregation instead!"
+end
+```
+
+### Tag Extractors Validation
+
+**Problem:** Tag extractors returning nil → metric gaps.
+
+**Solution:** Validate extractor return values:
+
+```ruby
+# Gem implementation (runtime):
+def extract_tag_value(event, extractor)
+  value = extractor.call(event)
+  if value.nil? || value.to_s.empty?
+    raise ArgumentError, "Tag extractor returned nil/empty for event: #{event.name}"
+  end
+  value.to_s
+end
+```
+
+---
+
+## 🌍 Environment-Specific Cardinality Protection (NEW - v1.1)
+
+> **🎯 Pattern:** Different cardinality limits per environment.
+
+### Example 1: Stricter Limits in Production
+
+```ruby
+class Events::UserAction < E11y::Event::Base
+  schema do
+    required(:user_id).filled(:string)
+    required(:action_type).filled(:string)
+  end
+  
+  # Environment-specific cardinality limits
+  metric :counter,
+         name: 'user_actions_total',
+         tags: [:user_segment, :action_type],
+         cardinality_limit: Rails.env.production? ? 100 : 1_000,
+         tag_extractors: {
+           user_segment: ->(event) {
+             if Rails.env.production?
+               # Production: strict aggregation
+               User.find(event.payload[:user_id]).segment  # 'free', 'paid', 'enterprise'
+             else
+               # Dev/test: allow user_id for debugging
+               event.payload[:user_id]
+             end
+           }
+         }
+end
+```
+
+### Example 2: Feature Flag for Cardinality Protection
+
+```ruby
+class Events::ApiRequest < E11y::Event::Base
+  schema do
+    required(:endpoint).filled(:string)
+    required(:user_id).filled(:string)
+  end
+  
+  # Enable cardinality protection only when flag is on
+  if ENV['ENABLE_CARDINALITY_PROTECTION'] == 'true'
+    metric :counter,
+           name: 'api_requests_total',
+           tags: [:endpoint_group],  # Aggregated
+           cardinality_limit: 50,
+           tag_extractors: {
+             endpoint_group: ->(event) {
+               # Group /users/123 → /users/:id
+               event.payload[:endpoint].gsub(/\/\d+/, '/:id')
+             }
+           }
+  else
+    # Dev: no aggregation
+    metric :counter,
+           name: 'api_requests_total',
+           tags: [:endpoint]  # Full endpoint
+  end
+end
+```
+
+---
+
+## 📊 Precedence Rules for Cardinality Protection (NEW - v1.1)
+
+> **🎯 Pattern:** Cardinality configuration precedence (most specific wins).
+
+### Precedence Order (Highest to Lowest)
+
+```
+1. Event-level explicit config (highest priority)
+   ↓
+2. Preset module config
+   ↓
+3. Base class config (inheritance)
+   ↓
+4. Convention-based defaults (100 series)
+   ↓
+5. Global config (lowest priority)
+```
+
+### Example: Mixing Inheritance + Presets for Cardinality
+
+```ruby
+# Global config (lowest priority)
+E11y.configure do |config|
+  config.metrics do
+    cardinality_limit 1_000  # Default for all metrics
+    forbidden_labels :user_id, :session_id
+  end
+end
+
+# Base class (medium priority)
+class Events::BaseUserEvent < E11y::Event::Base
+  # Common cardinality protection
+  metric :counter,
+         name: 'user_events_total',
+         tags: [:user_segment, :event_type],
+         cardinality_limit: 100,  # Override global (stricter)
+         tag_extractors: {
+           user_segment: ->(event) { User.find(event.payload[:user_id]).segment }
+         }
+end
+
+# Preset module (higher priority)
+module E11y::Presets::MetricSafeEvent
+  extend ActiveSupport::Concern
+  included do
+    # Override cardinality limit
+    metric :counter,
+           name: 'safe_events_total',
+           tags: [:severity],
+           cardinality_limit: 10  # Very strict!
+  end
+end
+
+# Event (highest priority)
+class Events::UserLogin < Events::BaseUserEvent
+  include E11y::Presets::MetricSafeEvent
+  
+  # Override preset (looser limit)
+  metric :counter,
+         name: 'user_logins_total',
+         tags: [:user_segment, :login_method],
+         cardinality_limit: 50  # Override preset
+  
+  # Final config:
+  # - cardinality_limit: 50 (event-level override)
+  # - tags: [:user_segment, :login_method] (event-level)
+  # - tag_extractors: inherited from base
+end
+```
+
+### Precedence Rules Table
+
+| Config | Global | Convention | Base Class | Preset | Event-Level | Winner |
+|--------|--------|------------|------------|--------|-------------|--------|
+| `cardinality_limit` | `1_000` | `100` | `100` | `10` | `50` | **`50`** (event) |
+| `tags` | - | - | `[:user_segment, :event_type]` | `[:severity]` | `[:user_segment, :login_method]` | **`[:user_segment, :login_method]`** (event) |
+| `forbidden_labels` | `[:user_id, :session_id]` | - | - | - | - | **`[:user_id, :session_id]`** (global) |
+
+### Convention-Based Defaults
+
+**Convention:** If no cardinality_limit specified → default `100 series`:
+
+```ruby
+class Events::ApiRequest < E11y::Event::Base
+  metric :counter, name: 'api_requests_total', tags: [:status]
+  # ← Auto: cardinality_limit = 100 (convention!)
+end
+```
+
+---
+
 ## 📚 Related Use Cases
 
 - **[UC-003: Pattern-Based Metrics](./UC-003-pattern-based-metrics.md)** - Auto-generate metrics
@@ -1693,6 +2122,6 @@ end
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** January 12, 2026  
-**Status:** ✅ Complete
+**Document Version:** 1.1 (Unified DSL)  
+**Last Updated:** January 16, 2026  
+**Status:** ✅ Complete - Consistent with DSL-SPECIFICATION.md v1.1.0

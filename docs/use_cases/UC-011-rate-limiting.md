@@ -78,6 +78,153 @@ end
 
 ---
 
+## 🎯 Event-Level Rate Limiting (NEW - v1.1)
+
+> **🎯 CONTRADICTION_01 Resolution:** Move rate limiting config from global initializer to event classes.
+
+**Event-level rate limiting DSL:**
+
+```ruby
+# app/events/payment_retry.rb
+module Events
+  class PaymentRetry < E11y::Event::Base
+    schema do
+      required(:order_id).filled(:string)
+      required(:attempt).filled(:integer)
+    end
+    
+    # ✨ Event-level rate limiting (right next to schema!)
+    rate_limit 100, window: 1.minute  # Max 100 retries/min
+    on_exceeded :drop  # Drop retry logs (not critical)
+  end
+end
+
+# app/events/user_login_failed.rb
+module Events
+  class UserLoginFailed < E11y::Event::Base
+    schema do
+      required(:user_id).filled(:string)
+      required(:ip_address).filled(:string)
+    end
+    
+    # ✨ Event-level rate limiting
+    rate_limit 50, window: 1.minute  # Max 50 failures/min
+    on_exceeded :sample  # Keep 20% (flattened syntax!)
+    sample_rate 0.2
+  end
+end
+```
+
+**Inheritance for rate limiting:**
+
+```ruby
+# Base class with common rate limiting
+module Events
+  class BaseDebugEvent < E11y::Event::Base
+    # Common for ALL debug events
+    severity :debug
+    rate_limit 100, window: 1.minute  # Low limit
+    on_exceeded :drop  # Drop debug logs (not critical)
+    sample_rate 0.01  # 1% sampling
+  end
+end
+
+# Inherit from base
+class Events::DebugSqlQuery < Events::BaseDebugEvent
+  schema do; required(:query).filled(:string); end
+  # ← Inherits: rate_limit 100 + on_exceeded :drop
+end
+
+class Events::DebugApiCall < Events::BaseDebugEvent
+  schema do; required(:endpoint).filled(:string); end
+  # ← Inherits: rate_limit 100 + on_exceeded :drop
+end
+```
+
+**Preset modules for rate limiting:**
+
+```ruby
+# lib/e11y/presets/high_value_event.rb
+module E11y
+  module Presets
+    module HighValueEvent
+      extend ActiveSupport::Concern
+      included do
+        rate_limit 10_000  # High limit
+        on_exceeded :throttle  # Slow down, don't drop
+        sample_rate 1.0  # Never sample
+      end
+    end
+    
+    module DebugEvent
+      extend ActiveSupport::Concern
+      included do
+        rate_limit 100  # Low limit
+        on_exceeded :drop  # Drop debug logs
+        sample_rate 0.01  # 1% sampling
+      end
+    end
+  end
+end
+
+# Usage:
+class Events::PaymentProcessed < E11y::Event::Base
+  include E11y::Presets::HighValueEvent  # ← Rate limit inherited!
+  schema do; required(:transaction_id).filled(:string); end
+end
+```
+
+**Conventions for rate limiting (sensible defaults):**
+
+```ruby
+# Convention: Default rate limit = 1000 events/sec
+# Override only for high-volume or low-volume events
+
+# Zero-config event (uses convention):
+class Events::OrderCreated < E11y::Event::Base
+  schema do; required(:order_id).filled(:string); end
+  # ← Auto: rate_limit = 1000 (default)
+end
+
+# Override for high-volume:
+class Events::PageView < E11y::Event::Base
+  rate_limit 10_000  # ← Override: high-volume
+  schema do; required(:page).filled(:string); end
+end
+
+# Override for low-volume:
+class Events::DebugQuery < E11y::Event::Base
+  rate_limit 100  # ← Override: low-volume
+  schema do; required(:query).filled(:string); end
+end
+```
+
+**Precedence (event-level overrides global):**
+
+```ruby
+# Global config (infrastructure):
+E11y.configure do |config|
+  config.rate_limiting do
+    global limit: 10_000, window: 1.minute
+    default_per_event_limit 1000  # Default for events
+  end
+end
+
+# Event-level config (overrides global):
+class Events::PaymentRetry < E11y::Event::Base
+  rate_limit 100  # ← Override: 100 (not 1000)
+  on_exceeded :drop  # ← Override: drop (not default)
+end
+```
+
+**Benefits:**
+- ✅ Locality of behavior (rate limit next to schema)
+- ✅ DRY via inheritance/presets
+- ✅ Sensible defaults (1000/sec)
+- ✅ Easy to override when needed
+
+---
+
 ## 🎯 The 3-Layer Rate Limiting System
 
 ### Layer 1: Global Rate Limiting
@@ -94,7 +241,7 @@ E11y.configure do |config|
            algorithm: :sliding_window  # OR :token_bucket, :fixed_window
     
     # What happens when exceeded:
-    on_exceeded :sample  # Options: :drop, :sample, :backpressure
+    on_exceeded :sample  # Options: :drop, :sample, :throttle
     sample_rate 0.1      # Keep 10% when over limit
     
     # Track dropped events
@@ -144,7 +291,7 @@ E11y.configure do |config|
     per_event 'api.error',
               limit: 200,
               window: 1.minute,
-              on_exceeded: :backpressure  # Slow down, don't drop
+              on_exceeded: :throttle  # Slow down, don't drop
     
     # Background job failures
     per_event 'job.failed',
@@ -193,7 +340,7 @@ E11y.configure do |config|
     per_context :tenant_id,
                 limit: 5_000,
                 window: 1.minute,
-                on_exceeded: :backpressure
+                on_exceeded: :throttle
     
     # Per session (prevent session replay attacks)
     per_context :session_id,
@@ -471,7 +618,8 @@ sample_rate 0.1  # Keep 10%
 
 # Example:
 per_event 'user.action', limit: 1000, window: 1.minute,
-          on_exceeded: :sample, sample_rate: 0.1
+          on_exceeded: :sample
+# → Sample rate: 0.1 (10%)
 # → First 1000: all kept
 # → Next 9000: 10% kept (900 events)
 # → Total: 1900 events (vs 10,000 without rate limiting)
@@ -483,7 +631,7 @@ per_event 'user.action', limit: 1000, window: 1.minute,
 
 **Slow down event production:**
 ```ruby
-on_exceeded :backpressure
+on_exceeded :throttle
 
 # Use when:
 # - Events MUST be tracked (critical)
@@ -497,7 +645,7 @@ on_exceeded :backpressure
 
 # Example:
 per_event 'order.created', limit: 100, window: 1.minute,
-          on_exceeded: :backpressure,
+          on_exceeded: :throttle,
           backpressure_delay: 10.milliseconds
 ```
 
@@ -777,7 +925,7 @@ module E11y
           drop_event(event_data, limit_type)
         when :sample
           sample_event(event_data, limit_type)
-        when :backpressure
+        when :throttle
           apply_backpressure(event_data, limit_type)
         when :aggregate
           aggregate_event(event_data, limit_type)
@@ -1529,6 +1677,222 @@ per_event 'system.error', limit: 10  # You WANT to know about ALL errors!
 
 ---
 
+## 🔒 Validations (NEW - v1.1)
+
+> **🎯 Pattern:** Validate rate limiting configuration at class load time.
+
+### Rate Limit Value Validation
+
+**Problem:** Invalid rate limit values → runtime errors.
+
+**Solution:** Validate rate limit is positive integer:
+
+```ruby
+# Gem implementation (automatic):
+def self.rate_limit(limit, window: 1.minute)
+  unless limit.is_a?(Integer) && limit > 0
+    raise ArgumentError, "rate_limit must be positive integer, got: #{limit.inspect}"
+  end
+  unless window.is_a?(ActiveSupport::Duration) && window > 0
+    raise ArgumentError, "window must be positive duration, got: #{window.inspect}"
+  end
+  self._rate_limit = limit
+  self._rate_limit_window = window
+end
+
+# Result:
+class Events::ApiRequest < E11y::Event::Base
+  rate_limit -100  # ← ERROR: "rate_limit must be positive integer, got: -100"
+end
+```
+
+### On Exceeded Strategy Validation
+
+**Problem:** Invalid on_exceeded strategies → silent failures.
+
+**Solution:** Validate strategy against whitelist:
+
+```ruby
+# Gem implementation (automatic):
+VALID_ON_EXCEEDED = [:drop, :sample, :throttle]
+
+def self.on_exceeded(strategy)
+  unless VALID_ON_EXCEEDED.include?(strategy)
+    raise ArgumentError, "Invalid on_exceeded: #{strategy}. Valid: #{VALID_ON_EXCEEDED.join(', ')}"
+  end
+  self._on_exceeded = strategy
+end
+
+# Result:
+class Events::ApiRequest < E11y::Event::Base
+  on_exceeded :backpressure  # ← ERROR: "Invalid on_exceeded: :backpressure. Valid: drop, sample, throttle"
+end
+```
+
+### Audit Event Rate Limiting Validation (LOCKED)
+
+**Problem:** Attempting to rate limit audit events → compliance violations.
+
+**Solution:** Lock rate_limiting for audit events:
+
+```ruby
+# Gem implementation (automatic):
+def self.rate_limiting(enabled)
+  if self._audit_event && enabled
+    raise ArgumentError, "Cannot enable rate_limiting for audit events! Audit events must never be rate limited."
+  end
+  self._rate_limiting = enabled
+end
+
+# Result:
+class Events::UserDeleted < E11y::Event::Base
+  audit_event true
+  rate_limit 1000  # ← ERROR: "Cannot enable rate_limiting for audit events!"
+end
+```
+
+---
+
+## 🌍 Environment-Specific Rate Limiting (NEW - v1.1)
+
+> **🎯 Pattern:** Different rate limits per environment.
+
+### Example 1: Higher Limits in Production
+
+```ruby
+class Events::ApiRequest < E11y::Event::Base
+  schema do
+    required(:endpoint).filled(:string)
+    required(:status).filled(:integer)
+  end
+  
+  # Environment-specific rate limits
+  rate_limit case Rails.env
+             when 'production' then 10_000
+             when 'staging' then 1_000
+             else 100  # Dev/test
+             end
+  
+  on_exceeded Rails.env.production? ? :sample : :drop
+  sample_rate 0.1 if Rails.env.production?
+end
+```
+
+### Example 2: Debug Events (Strict in Prod, Loose in Dev)
+
+```ruby
+class Events::DebugQuery < E11y::Event::Base
+  schema do
+    required(:query).filled(:string)
+    required(:duration_ms).filled(:integer)
+  end
+  
+  # Strict rate limiting in production
+  rate_limit Rails.env.production? ? 100 : 10_000
+  on_exceeded :drop  # Always drop debug logs
+end
+```
+
+### Example 3: Feature Flag for Rate Limiting
+
+```ruby
+class Events::ExperimentalFeature < E11y::Event::Base
+  schema do
+    required(:feature_name).filled(:string)
+  end
+  
+  # Enable rate limiting only when feature flag is on
+  if ENV['ENABLE_RATE_LIMITING'] == 'true'
+    rate_limit 1_000
+    on_exceeded :sample
+    sample_rate 0.1
+  end
+end
+```
+
+---
+
+## 📊 Precedence Rules for Rate Limiting (NEW - v1.1)
+
+> **🎯 Pattern:** Rate limiting configuration precedence (most specific wins).
+
+### Precedence Order (Highest to Lowest)
+
+```
+1. Event-level explicit config (highest priority)
+   ↓
+2. Preset module config
+   ↓
+3. Base class config (inheritance)
+   ↓
+4. Convention-based defaults (1000/sec)
+   ↓
+5. Global config (lowest priority)
+```
+
+### Example: Mixing Inheritance + Presets for Rate Limiting
+
+```ruby
+# Global config (lowest priority)
+E11y.configure do |config|
+  config.rate_limiting do
+    global limit: 10_000, window: 1.minute  # Default for all events
+    on_exceeded :drop
+  end
+end
+
+# Base class (medium priority)
+class Events::BaseDebugEvent < E11y::Event::Base
+  severity :debug
+  rate_limit 100, window: 1.minute  # Override global (stricter)
+  on_exceeded :drop
+end
+
+# Preset module (higher priority)
+module E11y::Presets::HighValueEvent
+  extend ActiveSupport::Concern
+  included do
+    rate_limit 10_000, window: 1.minute  # Override base (looser)
+    on_exceeded :throttle  # Never drop high-value events
+  end
+end
+
+# Event (highest priority)
+class Events::CriticalPayment < Events::BaseDebugEvent
+  include E11y::Presets::HighValueEvent
+  
+  rate_limit 50_000, window: 1.minute  # Override preset (even looser)
+  
+  # Final config:
+  # - severity: :debug (from base)
+  # - rate_limit: 50_000/min (event-level override)
+  # - on_exceeded: :throttle (from preset)
+end
+```
+
+### Precedence Rules Table
+
+| Config | Global | Convention | Base Class | Preset | Event-Level | Winner |
+|--------|--------|------------|------------|--------|-------------|--------|
+| `rate_limit` | `10_000` | `1_000` | `100` | `10_000` | `50_000` | **`50_000`** (event) |
+| `on_exceeded` | `:drop` | - | `:drop` | `:throttle` | - | **`:throttle`** (preset) |
+| `sample_rate` | `0.1` | - | - | `0.5` | - | **`0.5`** (preset) |
+
+### Convention-Based Defaults
+
+**Convention:** If no rate_limit specified → default `1000/sec`:
+
+```ruby
+class Events::ApiRequest < E11y::Event::Base
+  schema do
+    required(:endpoint).filled(:string)
+  end
+  # ← Auto: rate_limit = 1000 (convention!)
+end
+```
+
+---
+
 ## 📚 Related Use Cases
 
 - **[UC-002: Business Event Tracking](./UC-002-business-event-tracking.md)** - Event definitions
@@ -1537,6 +1901,6 @@ per_event 'system.error', limit: 10  # You WANT to know about ALL errors!
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** January 12, 2026  
-**Status:** ✅ Complete
+**Document Version:** 1.1 (Unified DSL)  
+**Last Updated:** January 16, 2026  
+**Status:** ✅ Complete - Consistent with DSL-SPECIFICATION.md v1.1.0
