@@ -15,34 +15,36 @@ E11y (Easy Telemetry) provides structured business event tracking with request-s
 # Gemfile
 gem "e11y"
 
-# config/initializers/e11y.rb
-E11y.configure do |config|
-  config.adapters = [:loki, :sentry]
-  config.log_level = :info
+# Define your first event
+class OrderPaidEvent < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:integer)
+    required(:amount).filled(:float)
+  end
+  
+  severity :success  # Optional - auto-detected from name
+  adapters :loki     # Optional - auto-selected based on severity
 end
 
-# Track business events
-E11y.track(Events::UserSignup.new(
-  user_id: 123,
-  source: "web",
-  plan: "premium"
-))
+# Track events (zero-allocation pattern)
+OrderPaidEvent.track(order_id: 123, amount: 99.99)
 ```
 
 ## ✨ Features
 
-- 🎯 **Request-Scoped Debug Buffering** - Buffer debug events in memory, flush only on error (reduce log noise by 90%)
-- 📊 **Zero-Config SLO Tracking** - Automatic Service Level Objective monitoring for HTTP and background jobs
-- 📈 **Pattern-Based Metrics** - Auto-generate Prometheus/Yabeda metrics from business events
-- 🔒 **GDPR/SOC2 Compliant** - Built-in PII filtering and audit trails for compliance
-- 🔌 **Pluggable Adapters** - Send to Loki, Sentry, OpenTelemetry, Elasticsearch, File, Stdout
-- 🚀 **High Performance** - Zero-allocation event tracking, lock-free ring buffers, adaptive memory limits
-- 🧵 **Thread-Safe** - Designed for multi-threaded Rails apps and Sidekiq workers
-- 🎭 **Multi-Service Tracing** - OpenTelemetry integration with automatic trace context propagation
-- 📝 **Type-Safe Events** - Declarative schemas with dry-schema validation
-- ⚡ **Rate Limiting & Sampling** - Protect production from metric storms and cost overruns
-- 🛡️ **Cardinality Protection** - Prevent metric explosions from high-cardinality data
-- 📦 **Rails Integration** - Railtie, ActiveSupport::Notifications bridge, Sidekiq middleware
+- 🎯 **Zero-Allocation Event Tracking** - Class-based pattern with zero GC pressure
+- 📐 **Convention over Configuration** - Smart defaults from event names
+- 📊 **Type-Safe Events** - Declarative schemas with dry-schema validation
+- 🔄 **Event Versioning** - Built-in version support for schema evolution
+- 🎭 **Severity Levels** - Auto-detection from event names
+- 🔌 **Pluggable Adapters** - Loki, Sentry, OpenTelemetry, File, Stdout, Memory
+- 📦 **Future Ready** - Architecture designed for Phase 2+ features:
+  - Request-Scoped Debug Buffering
+  - Pattern-Based Metrics (Prometheus/Yabeda)
+  - PII Filtering & Audit Trails (GDPR/SOC2)
+  - Rate Limiting & Cardinality Protection
+  - OpenTelemetry Integration
+  - Rails/Sidekiq Integration
 
 ## 📚 Documentation
 
@@ -74,50 +76,51 @@ $ gem install e11y
 
 ## 📖 Usage
 
-### Basic Configuration
+### Define Events
 
 ```ruby
-E11y.configure do |config|
-  # Adapters
-  config.adapters = [:loki, :stdout]
-  
-  # Buffer settings
-  config.buffer_size = 1000
-  config.memory_limit = 10.megabytes
-  
-  # PII filtering
-  config.pii_filters = [:email, :phone, :ssn]
-  
-  # Sampling
-  config.sampling_rate = 0.1 # 10%
-end
-```
-
-### Track Events
-
-```ruby
-# Define custom event
-class Events::UserSignup < E11y::Event
+# Convention-based configuration (minimal)
+class UserSignupEvent < E11y::Event::Base
   schema do
     required(:user_id).filled(:integer)
-    required(:source).filled(:string)
-    optional(:referrer).maybe(:string)
+    required(:email).filled(:string)
   end
-  
-  # Event-level adapter configuration
-  adapters :loki, :sentry
-  
-  # PII fields
-  pii_fields :email, :ip_address
+  # Severity auto-detected: :info
+  # Adapters auto-selected: [:loki]
 end
 
-# Track event
-E11y.track(Events::UserSignup.new(
-  user_id: 123,
-  source: "web",
-  email: "user@example.com" # Will be masked
-))
+# Explicit configuration
+class PaymentFailedEvent < E11y::Event::Base
+  severity :error           # Explicit severity
+  version 2                 # Event version
+  adapters :loki, :sentry   # Multiple adapters
+  
+  schema do
+    required(:payment_id).filled(:integer)
+    required(:error_code).filled(:string)
+  end
+end
+
+# Track events (class method - no instances!)
+UserSignupEvent.track(user_id: 123, email: "user@example.com")
+PaymentFailedEvent.track(payment_id: 456, error_code: "CARD_DECLINED")
 ```
+
+### Convention-Based Defaults
+
+E11y uses smart conventions to minimize configuration:
+
+**Severity from event name:**
+- `*Failed*`, `*Error*` → `:error`
+- `*Paid*`, `*Success*`, `*Completed*` → `:success`
+- `*Warn*`, `*Warning*` → `:warn`
+- Default → `:info`
+
+**Adapters from severity:**
+- `:error`, `:fatal` → `[:loki, :sentry]` (errors need both logging and alerting)
+- Others → `[:loki]` (logs only)
+
+**Result:** 90% of events need only `schema` definition!
 
 ## 🧪 Development
 
@@ -155,14 +158,22 @@ Everyone interacting in the E11y project's codebases, issue trackers, chat rooms
 
 ## 📊 Project Status
 
-**Current Version:** 0.1.0 (Phase 0: Gem Setup & Best Practices)
+**Current Version:** 0.1.0
 
-**Roadmap:**
-- ✅ Phase 0: Gem Setup & Best Practices (Week -1)
-- 🔄 Phase 1: Core Foundation (Weeks 1-4)
-- ⏳ Phase 2: Rails Integration (Weeks 5-8)
-- ⏳ Phase 3: Adapters & External Systems (Weeks 9-12)
-- ⏳ Phase 4: Advanced Features (Weeks 13-16)
-- ⏳ Phase 5: Production Readiness (Weeks 17-20)
+**Phase 1 Progress (In Development):**
+- ✅ Phase 0: Gem Setup & Best Practices
+- 🔄 Phase 1: Core Foundation (In Progress)
+  - ✅ Event::Base with zero-allocation pattern
+  - ✅ Convention-based configuration
+  - ✅ Schema validation (dry-schema)
+  - 🔄 Adaptive Buffer implementation
+  - ⏳ Middleware Pipeline
+  - ⏳ track() method with pipeline
+
+**Next Phases:**
+- ⏳ Phase 2: Core Features (PII, Adapters, Metrics)
+- ⏳ Phase 3: Rails Integration
+- ⏳ Phase 4: Production Hardening
+- ⏳ Phase 5: Scale & Optimization
 
 See [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for detailed timeline.

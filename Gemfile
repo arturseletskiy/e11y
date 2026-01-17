@@ -5,6 +5,10 @@ source "https://rubygems.org"
 # Specify your gem's dependencies in e11y.gemspec
 gemspec
 
+# Runtime dependencies (also in gemspec)
+gem "concurrent-ruby", "~> 1.2" # Thread-safe data structures
+gem "dry-schema", "~> 1.13" # Event schema validation
+
 gem "rake", "~> 13.0"
 gem "rspec", "~> 3.0"
 gem "rubocop", "~> 1.21"

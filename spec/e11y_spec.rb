@@ -52,4 +52,57 @@ RSpec.describe E11y do
         .from(:debug).to(:info)
     end
   end
+
+  describe E11y::Configuration do
+    subject(:config) { described_class.new }
+
+    describe "#adapter_mapping" do
+      it "has default mapping with adapter names" do
+        expect(config.adapter_mapping).to be_a(Hash)
+        # Mapping uses adapter NAMES (not implementations)
+        expect(config.adapter_mapping[:error]).to eq(%i[logs errors_tracker])
+        expect(config.adapter_mapping[:fatal]).to eq(%i[logs errors_tracker])
+        expect(config.adapter_mapping[:default]).to eq([:logs])
+      end
+    end
+
+    describe "#adapters_for_severity" do
+      it "returns adapter names for :error severity" do
+        # Returns NAMES, not implementations
+        expect(config.adapters_for_severity(:error)).to eq(%i[logs errors_tracker])
+      end
+
+      it "returns adapter names for :fatal severity" do
+        expect(config.adapters_for_severity(:fatal)).to eq(%i[logs errors_tracker])
+      end
+
+      it "returns default adapter names for :info severity" do
+        expect(config.adapters_for_severity(:info)).to eq([:logs])
+      end
+
+      it "returns default adapter names for :success severity" do
+        expect(config.adapters_for_severity(:success)).to eq([:logs])
+      end
+
+      it "returns default adapter names for unknown severity" do
+        expect(config.adapters_for_severity(:unknown)).to eq([:logs])
+      end
+    end
+
+    describe "#adapters_for_severity with custom mapping" do
+      before do
+        # Custom mapping uses adapter NAMES
+        config.adapter_mapping[:warn] = %i[logs errors_tracker]
+        config.adapter_mapping[:default] = [:logs]
+      end
+
+      it "uses custom mapping for :warn" do
+        expect(config.adapters_for_severity(:warn)).to eq(%i[logs errors_tracker])
+      end
+
+      it "uses custom default for unmapped severity" do
+        expect(config.adapters_for_severity(:info)).to eq([:logs])
+      end
+    end
+  end
 end

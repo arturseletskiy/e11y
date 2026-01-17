@@ -18,6 +18,7 @@ loader.setup
 # @see https://e11y.dev Documentation
 module E11y
   class Error < StandardError; end
+  class ValidationError < Error; end
 
   class << self
     # Configure E11y
@@ -71,13 +72,56 @@ module E11y
     end
   end
 
-  # Placeholder Configuration class (will be implemented in Phase 1)
+  # Configuration class for E11y
+  #
+  # Adapters are referenced by name (e.g., :logs, :errors_tracker).
+  # The actual implementation (Loki, Sentry, etc.) is configured separately.
+  #
+  # @example Configure adapters
+  #   E11y.configure do |config|
+  #     # Register adapter instances
+  #     config.adapters[:logs] = E11y::Adapters::Loki.new(url: "...")
+  #     config.adapters[:errors_tracker] = E11y::Adapters::Sentry.new(dsn: "...")
+  #   end
+  #
+  # @example Configure severity => adapter mapping
+  #   E11y.configure do |config|
+  #     config.adapter_mapping[:error] = [:logs, :errors_tracker]
+  #     config.adapter_mapping[:info] = [:logs]
+  #   end
   class Configuration
     attr_accessor :adapters, :log_level
+    attr_reader :adapter_mapping
 
     def initialize
-      @adapters = []
+      @adapters = {} # Hash of adapter_name => adapter_instance
       @log_level = :info
+      @adapter_mapping = default_adapter_mapping
+    end
+
+    # Get adapters for given severity
+    #
+    # @param severity [Symbol] Severity level
+    # @return [Array<Symbol>] Adapter names (e.g., [:logs, :errors_tracker])
+    def adapters_for_severity(severity)
+      @adapter_mapping[severity] || @adapter_mapping[:default] || []
+    end
+
+    private
+
+    # Default adapter mapping (convention-based)
+    #
+    # Adapter names represent PURPOSE, not implementation:
+    # - :logs → centralized logging (implementation: Loki, Elasticsearch, CloudWatch, etc.)
+    # - :errors_tracker → error tracking with alerting (implementation: Sentry, Rollbar, Bugsnag, etc.)
+    #
+    # @return [Hash{Symbol => Array<Symbol>}] Default mapping (severity => adapter names)
+    def default_adapter_mapping
+      {
+        error: %i[logs errors_tracker],  # Errors: both logging + alerting
+        fatal: %i[logs errors_tracker],  # Fatal: both logging + alerting
+        default: [:logs]                 # Others: logging only
+      }
     end
   end
 end

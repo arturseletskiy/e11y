@@ -47,10 +47,10 @@ Style/FrozenStringLiteralComment:
 
 # RSpec
 RSpec/ExampleLength:
-  Max: 10
+  Max: 20 # Allow longer examples for integration tests
 
 RSpec/MultipleExpectations:
-  Max: 5
+  Max: 10 # Allow more expectations for integration tests
 
 RSpec/NestedGroups:
   Max: 3

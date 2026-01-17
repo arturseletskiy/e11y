@@ -82,7 +82,8 @@ RSpec.describe "Zeitwerk Autoloading" do
     it "loads all core modules without explicit requires" do
       # Already loaded by spec_helper require 'e11y'
       # Verify we can access nested classes without manual requires
-      expect { E11y::Event::Base.new }.to raise_error(NotImplementedError, /Phase 1/)
+      # Event::Base now uses zero-allocation pattern (class methods)
+      expect(E11y::Event::Base).to respond_to(:track)
       expect { E11y::Middleware::Base.new.call(nil) }.to raise_error(NotImplementedError)
       expect { E11y::Adapters::Base.new.send_event(nil) }.to raise_error(NotImplementedError)
       expect { E11y::Buffers::BaseBuffer.new.push(nil) }.to raise_error(NotImplementedError)
