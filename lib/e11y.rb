@@ -19,6 +19,8 @@ loader.setup
 module E11y
   class Error < StandardError; end
   class ValidationError < Error; end
+  class ZoneViolationError < Error; end
+  class InvalidPipelineError < Error; end
 
   class << self
     # Configure E11y

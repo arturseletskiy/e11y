@@ -84,7 +84,11 @@ RSpec.describe "Zeitwerk Autoloading" do
       # Verify we can access nested classes without manual requires
       # Event::Base now uses zero-allocation pattern (class methods)
       expect(E11y::Event::Base).to respond_to(:track)
-      expect { E11y::Middleware::Base.new.call(nil) }.to raise_error(NotImplementedError)
+
+      # Middleware::Base requires app argument
+      dummy_app = ->(event_data) { event_data }
+      expect { E11y::Middleware::Base.new(dummy_app).call(nil) }.to raise_error(NotImplementedError)
+
       expect { E11y::Adapters::Base.new.send_event(nil) }.to raise_error(NotImplementedError)
       expect { E11y::Buffers::BaseBuffer.new.push(nil) }.to raise_error(NotImplementedError)
     end

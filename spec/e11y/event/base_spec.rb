@@ -369,7 +369,9 @@ RSpec.describe E11y::Event::Base do
       end
     end
 
+    # rubocop:disable RSpec/ContextWording
     context "zero-allocation pattern" do
+      # rubocop:enable RSpec/ContextWording
       it "does not create event objects" do
         # Track should return a Hash, not an Event object
         result = simple_event_class.track(user_id: 123, email: "test@example.com")
@@ -378,12 +380,14 @@ RSpec.describe E11y::Event::Base do
         expect(result).not_to be_a(described_class)
       end
 
+      # rubocop:disable RSpec/MessageSpies
       it "reuses class methods without instantiation" do
         # Verify we're calling class methods, not instance methods
         # Note: event_name is called multiple times internally (in validate_payload! and track)
         expect(schema_event_class).to receive(:severity).at_least(:once).and_call_original
         expect(schema_event_class).to receive(:version).at_least(:once).and_call_original
         expect(schema_event_class).to receive(:adapters).at_least(:once).and_call_original
+        # rubocop:enable RSpec/MessageSpies
 
         schema_event_class.track(user_id: 123, email: "test@example.com")
       end
@@ -581,6 +585,133 @@ RSpec.describe E11y::Event::Base do
       end
 
       expect(event_class.resolve_rate_limit).to eq(1000)
+    end
+  end
+
+  describe ".validation_mode" do
+    it "defaults to :always (safest)" do
+      event_class = Class.new(described_class) do
+        def self.name
+          "TestEvent"
+        end
+      end
+
+      expect(event_class.validation_mode).to eq(:always)
+    end
+
+    it "can be set to :sampled" do
+      event_class = Class.new(described_class) do
+        def self.name
+          "TestEvent"
+        end
+
+        validation_mode :sampled
+      end
+
+      expect(event_class.validation_mode).to eq(:sampled)
+    end
+
+    it "can be set to :never" do
+      event_class = Class.new(described_class) do
+        def self.name
+          "TestEvent"
+        end
+
+        validation_mode :never
+      end
+
+      expect(event_class.validation_mode).to eq(:never)
+    end
+
+    it "raises ArgumentError for invalid mode" do
+      expect do
+        Class.new(described_class) do
+          validation_mode :invalid
+        end
+      end.to raise_error(ArgumentError, /Invalid validation mode/)
+    end
+
+    it "accepts custom sample_rate for :sampled mode" do
+      event_class = Class.new(described_class) do
+        def self.name
+          "TestEvent"
+        end
+
+        validation_mode :sampled, sample_rate: 0.05 # 5%
+      end
+
+      expect(event_class.validation_sample_rate).to eq(0.05)
+    end
+
+    it "uses default sample_rate (1%) if not specified" do
+      event_class = Class.new(described_class) do
+        def self.name
+          "TestEvent"
+        end
+
+        validation_mode :sampled
+      end
+
+      expect(event_class.validation_sample_rate).to eq(0.01)
+    end
+  end
+
+  describe ".track with validation modes" do
+    let(:schema_event_class) do
+      Class.new(described_class) do
+        def self.name
+          "SchemaEvent"
+        end
+
+        schema do
+          required(:user_id).filled(:integer)
+          required(:email).filled(:string)
+        end
+
+        severity :info
+      end
+    end
+
+    context "with validation_mode :always" do
+      it "validates all events" do
+        schema_event_class.validation_mode :always
+
+        # Valid payload - should pass
+        expect { schema_event_class.track(user_id: 123, email: "test@example.com") }.not_to raise_error
+
+        # Invalid payload - should raise
+        expect { schema_event_class.track(user_id: "not_integer", email: "test@example.com") }
+          .to raise_error(E11y::ValidationError)
+      end
+    end
+
+    context "with validation_mode :never" do
+      it "skips validation for all events" do
+        schema_event_class.validation_mode :never
+
+        # Invalid payload - should NOT raise (validation skipped)
+        result = schema_event_class.track(user_id: "not_integer", email: "test@example.com")
+
+        expect(result[:payload][:user_id]).to eq("not_integer")
+      end
+    end
+
+    context "with validation_mode :sampled" do
+      it "validates approximately sample_rate % of events" do
+        schema_event_class.validation_mode :sampled, sample_rate: 0.5 # 50% for testability
+
+        # Track 100 events with invalid payload
+        # Approximately 50 should raise ValidationError
+        errors_count = 0
+        100.times do
+          schema_event_class.track(user_id: "invalid", email: "test@example.com")
+        rescue E11y::ValidationError
+          errors_count += 1
+        end
+
+        # Allow 30-70% range (statistical variance)
+        expect(errors_count).to be_between(30, 70)
+      end
     end
   end
 end
