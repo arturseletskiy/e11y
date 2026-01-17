@@ -1,0 +1,69 @@
+# frozen_string_literal: true
+
+# See https://rubystyle.guide/ for Ruby style guide
+# See https://docs.rubocop.org/rubocop/ for all available cops
+
+require:
+  - rubocop-rspec
+
+AllCops:
+  TargetRubyVersion: 3.2
+  NewCops: enable
+  SuggestExtensions: false
+  Exclude:
+    - 'bin/**/*'
+    - 'vendor/**/*'
+    - 'node_modules/**/*'
+    - 'tmp/**/*'
+
+# Metrics
+Metrics/BlockLength:
+  Exclude:
+    - 'spec/**/*'
+    - 'Rakefile'
+    - '*.gemspec'
+
+Metrics/MethodLength:
+  Max: 15
+  Exclude:
+    - 'spec/**/*'
+
+Metrics/ClassLength:
+  Max: 100
+  Exclude:
+    - 'spec/**/*'
+
+# Style
+Style/Documentation:
+  Enabled: true
+  Exclude:
+    - 'spec/**/*'
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+Style/FrozenStringLiteralComment:
+  Enabled: true
+
+# RSpec
+RSpec/ExampleLength:
+  Max: 10
+
+RSpec/MultipleExpectations:
+  Max: 5
+
+RSpec/NestedGroups:
+  Max: 3
+
+# Gem-specific: Development dependencies can be in gemspec
+Gemspec/DevelopmentDependencies:
+  Enabled: false
+
+# Allow integration tests without specific class
+RSpec/DescribeClass:
+  Exclude:
+    - "spec/zeitwerk_spec.rb"
+
+# Allow simple doubles for now (will improve in Phase 1)
+RSpec/VerifiedDoubles:
+  Enabled: false

@@ -1,0 +1,15 @@
+# frozen_string_literal: true
+
+# Shared examples for E11y components
+#
+# Usage in specs:
+#   RSpec.describe MyEvent do
+#     it_behaves_like "an event"
+#   end
+
+# Shared examples will be added in Phase 1+ as components are implemented
+# Examples:
+# - it_behaves_like "an event"
+# - it_behaves_like "a middleware"
+# - it_behaves_like "an adapter"
+# - it_behaves_like "a buffer"

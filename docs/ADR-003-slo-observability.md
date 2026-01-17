@@ -416,7 +416,7 @@ endpoints:
 #   $ bundle exec rake e11y:slo:validate
 #   $ bundle exec rake e11y:slo:unconfigured
 #
-# Documentation: https://github.com/e11y/e11y/docs/slo-configuration.md
+# Documentation: https://github.com/arturseletskiy/e11y/docs/slo-configuration.md
 
 version: 1
 

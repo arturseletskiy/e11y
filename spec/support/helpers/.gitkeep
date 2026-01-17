@@ -1,0 +1,14 @@
+# frozen_string_literal: true
+
+# Test helpers for E11y specs
+#
+# Usage in specs:
+#   RSpec.describe MyClass do
+#     include TestHelpers::EventHelpers
+#   end
+
+# Helpers will be added in Phase 1+ as needed
+# Examples:
+# - EventHelpers: create_event, event_attributes
+# - BufferHelpers: fill_buffer, flush_buffer
+# - AdapterHelpers: mock_adapter, stub_external_call

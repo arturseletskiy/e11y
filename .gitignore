@@ -1,2 +1,57 @@
+# Cursor
 .cursor/*
+
+# Research docs (temporary, will be removed after Phase 0)
 docs/research
+
+# Ruby/Bundler
+*.gem
+*.rbc
+/.config
+/coverage/
+/InstalledFiles
+/pkg/
+/spec/reports/
+/spec/examples.txt
+/test/tmp/
+/test/version_tmp/
+/tmp/
+.bundle/
+vendor/bundle
+
+# RSpec
+.rspec_status
+
+# YARD
+.yardoc/
+_yardoc/
+doc/
+
+# SimpleCov
+coverage/
+.resultset.json
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+
+# Gem build artifacts
+Gemfile.lock
+
+# Docker volumes
+/config/loki-data/
+/config/prometheus-data/
