@@ -318,15 +318,14 @@ module E11y
         # @return [Boolean] true if validation should run
         def should_validate?
           case validation_mode
-          when :always
-            true
           when :never
             false
           when :sampled
             # Random sampling (thread-safe, uses Kernel.rand)
             rand < validation_sample_rate
           else
-            true # Fallback to safe default
+            # :always or unknown mode - fallback to safe default
+            true
           end
         end
 
@@ -379,6 +378,114 @@ module E11y
         # @see E11y::Configuration#adapters_for_severity
         def resolved_adapters
           E11y.configuration.adapters_for_severity(severity)
+        end
+
+        # === PII Filtering DSL (ADR-006, UC-007) ===
+
+        # Declare whether event contains PII
+        #
+        # @param value [Boolean] true if event contains PII, false otherwise
+        #
+        # @example No PII (Tier 1 - Skip filtering)
+        #   class Events::HealthCheck < E11y::Event::Base
+        #     contains_pii false
+        #   end
+        #
+        # @example Contains PII (Tier 3 - Deep filtering)
+        #   class Events::UserRegistered < E11y::Event::Base
+        #     contains_pii true
+        #
+        #     pii_filtering do
+        #       masks :password
+        #       hashes :email
+        #       allows :user_id
+        #     end
+        #   end
+        def contains_pii(value = nil)
+          if value.nil?
+            # Getter
+            @contains_pii
+          else
+            # Setter
+            @contains_pii = value
+          end
+        end
+
+        # Get PII tier for this event
+        #
+        # @return [Symbol] :none, :default, :explicit
+        def pii_tier
+          case @contains_pii
+          when false
+            :none
+          when true
+            :explicit
+          else
+            :default
+          end
+        end
+
+        # Define PII filtering rules (DSL block)
+        #
+        # @yield Block for defining field strategies
+        #
+        # @example
+        #   pii_filtering do
+        #     masks :password, :token
+        #     hashes :email, :phone
+        #     allows :user_id, :amount
+        #   end
+        def pii_filtering(&)
+          @pii_filtering_config ||= { fields: {} }
+          builder = PIIFilteringBuilder.new(@pii_filtering_config)
+          builder.instance_eval(&)
+        end
+
+        # Get PII filtering configuration
+        #
+        # @return [Hash] PII filtering config
+        attr_reader :pii_filtering_config
+      end
+
+      # Builder for PII filtering DSL
+      class PIIFilteringBuilder
+        def initialize(config)
+          @config = config
+        end
+
+        # Mask fields (strategy: :mask)
+        def masks(*fields)
+          fields.each do |field|
+            @config[:fields][field] = { strategy: :mask }
+          end
+        end
+
+        # Hash fields (strategy: :hash)
+        def hashes(*fields)
+          fields.each do |field|
+            @config[:fields][field] = { strategy: :hash }
+          end
+        end
+
+        # Allow fields (strategy: :allow)
+        def allows(*fields)
+          fields.each do |field|
+            @config[:fields][field] = { strategy: :allow }
+          end
+        end
+
+        # Partial mask fields (strategy: :partial)
+        def partials(*fields)
+          fields.each do |field|
+            @config[:fields][field] = { strategy: :partial }
+          end
+        end
+
+        # Redact fields (strategy: :redact)
+        def redacts(*fields)
+          fields.each do |field|
+            @config[:fields][field] = { strategy: :redact }
+          end
         end
       end
     end

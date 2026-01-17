@@ -4,6 +4,11 @@ require "zeitwerk"
 
 # Zeitwerk autoloader setup
 loader = Zeitwerk::Loader.for_gem
+# Configure inflector for acronyms
+loader.inflector.inflect(
+  "pii" => "PII",
+  "pii_filter" => "PIIFilter"
+)
 loader.setup
 
 # E11y - Event-Driven Observability for Ruby on Rails
