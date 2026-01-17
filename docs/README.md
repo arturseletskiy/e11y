@@ -9,9 +9,29 @@ Production-ready Ruby gem для структурированных бизнес
 ## 🚀 Quick Links
 
 - **[Quick Start Guide](./QUICK-START.md)** - 5-minute setup
-- **[SLO Implementation Guide](./SLO-IMPLEMENTATION-GUIDE.md)** ⭐ NEW - Quick navigation for SLO setup
+- **[SLO Implementation Guide](./SLO-IMPLEMENTATION-GUIDE.md)** ⭐ Quick navigation for SLO setup
 - **[Configuration Reference](./COMPREHENSIVE-CONFIGURATION.md)** - All config options
 - **[ADR Coverage Check](./ADR-COVERAGE-CHECK.md)** - Architecture decisions
+
+---
+
+## 🎯 **NEW: IMPLEMENTATION PLAN (2026-01-17)** ⭐
+
+**Complete implementation plan ready for execution!**
+
+- 📄 **[IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md)** - Main plan
+  - 6 phases, 19 components, 220+ tasks with DoD
+  - Parallelization strategy, integration contracts
+
+- 📄 **[IMPLEMENTATION_PLAN_ARCHITECTURE.md](./IMPLEMENTATION_PLAN_ARCHITECTURE.md)** - Architecture decisions
+  - Critical questions & answers (Q1-Q4)
+  - Unidirectional ASN flow, overridable event classes, Phase 0
+
+**Key Metrics:**
+- **Timeline:** 23-27 weeks (includes Week -1 gem setup)
+- **Team Size:** 4-6 developers (peak: 6)
+- **Quality:** 100% ADR/UC coverage, professional Rails gem
+- **Status:** ✅ Ready for execution
 
 ---
 

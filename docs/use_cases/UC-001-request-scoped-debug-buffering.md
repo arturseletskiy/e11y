@@ -160,8 +160,9 @@ class UsersController < ApplicationController
   def index
     @users = User.all
     
-    # Auto-instrumentation (via ActiveSupport::Notifications)
-    # E11y captures all SQL queries as debug events
+    # Auto-instrumentation (via Rails Instrumentation - ASN → E11y)
+    # E11y captures all SQL queries as debug events (unidirectional flow)
+    # See: ADR-008 §4.1 for Rails Instrumentation architecture
     
     @users.each do |user|
       # N+1 query! Each iteration triggers SELECT from orders

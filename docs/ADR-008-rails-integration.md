@@ -347,33 +347,72 @@ end
 
 ## 4. ActiveSupport::Notifications Integration
 
-### 4.1. Bidirectional Bridge
+### 4.1. Unidirectional Flow (ASN → E11y)
 
-**Design Decision:** E11y events → ASN, ASN events → E11y.
+**Design Decision (Updated 2026-01-17):** **Unidirectional** flow from ActiveSupport::Notifications to E11y.
+
+**Rationale:**
+- ✅ **Avoids infinite loops**: Bidirectional bridge can create cycles (E11y → ASN → E11y → ...)
+- ✅ **Simpler reasoning**: Single direction = clear data flow
+- ✅ **Better performance**: No double overhead of publish + subscribe
+- ✅ **Separation of concerns**: ASN = Rails instrumentation, E11y = Business events + adapters
+
+**Architecture:**
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Rails Application                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  ActiveSupport::Notifications                                    │
+│  ┌──────────────────────────────────────────────────┐           │
+│  │  Rails Internal Events:                          │           │
+│  │  - sql.active_record                             │           │
+│  │  - process_action.action_controller              │           │
+│  │  - render_template.action_view                   │           │
+│  │  - enqueue.active_job                            │           │
+│  └──────────────────────────────────────────────────┘           │
+│              │                                                    │
+│              │ SUBSCRIBE ONLY (Unidirectional)                  │
+│              ▼                                                    │
+│  ┌──────────────────────────────────────────────────┐           │
+│  │  E11y::Instruments::RailsInstrumentation         │           │
+│  │  - Convert ASN events → E11y events              │           │
+│  │  - Apply event mapping (overridable!)            │           │
+│  │  - Route to E11y pipeline                        │           │
+│  └──────────────────────────────────────────────────┘           │
+│              │                                                    │
+│              ▼                                                    │
+│  ┌──────────────────────────────────────────────────┐           │
+│  │  E11y Event Pipeline                             │           │
+│  │  → Middleware → Adapters → Loki/Sentry/etc       │           │
+│  └──────────────────────────────────────────────────┘           │
+│                                                                   │
+│  ❌ NO REVERSE FLOW (E11y does NOT publish to ASN)              │
+│                                                                   │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ```ruby
-# lib/e11y/instruments/notifications_bridge.rb
+# lib/e11y/instruments/rails_instrumentation.rb
 module E11y
   module Instruments
-    class NotificationsBridge
-      # E11y → ActiveSupport::Notifications
-      def self.publish_to_asn(event_data)
-        ActiveSupport::Notifications.instrument(
-          event_data[:event_name],
-          event_data[:payload].merge(
-            trace_id: event_data[:trace_id],
-            severity: event_data[:severity]
-          )
-        )
-      end
+    class RailsInstrumentation
+      # ========================================
+      # ONLY ActiveSupport::Notifications → E11y
+      # (No reverse flow!)
+      # ========================================
       
-      # ActiveSupport::Notifications → E11y
-      def self.subscribe_from_asn
-        # Map important Rails events to E11y events
-        RAILS_EVENT_MAPPING.each do |asn_pattern, e11y_event_class|
+      def self.setup!
+        return unless E11y.config.instruments.rails_instrumentation.enabled
+        
+        # Subscribe to Rails events
+        event_mapping.each do |asn_pattern, e11y_event_class|
+          next if ignored?(asn_pattern)
+          
           ActiveSupport::Notifications.subscribe(asn_pattern) do |name, start, finish, id, payload|
             duration = (finish - start) * 1000  # Convert to ms
             
+            # Convert ASN event → E11y event
             e11y_event_class.track(
               event_name: name,
               duration: duration,
@@ -383,7 +422,7 @@ module E11y
         end
       end
       
-      # Built-in event mappings (can be overridden in config)
+      # Built-in event mappings (can be overridden in config!)
       DEFAULT_RAILS_EVENT_MAPPING = {
         'sql.active_record' => Events::Rails::Database::Query,
         'process_action.action_controller' => Events::Rails::Http::Request,
@@ -400,26 +439,106 @@ module E11y
         'perform.active_job' => Events::Rails::Job::Completed
       }.freeze
       
+      # Get final event mapping (after config overrides)
       def self.event_mapping
-        @event_mapping ||= DEFAULT_RAILS_EVENT_MAPPING.merge(
-          E11y.config.instruments.active_support_notifications.custom_mappings || {}
-        )
+        @event_mapping ||= begin
+          mapping = DEFAULT_RAILS_EVENT_MAPPING.dup
+          
+          # Apply custom mappings from config (Devise-style overrides)
+          custom_mappings = E11y.config.instruments.rails_instrumentation.custom_mappings || {}
+          mapping.merge!(custom_mappings)
+          
+          mapping
+        end
+      end
+      
+      def self.ignored?(pattern)
+        ignore_list = E11y.config.instruments.rails_instrumentation.ignore_events || []
+        ignore_list.include?(pattern)
+      end
+      
+      def self.extract_relevant_payload(payload)
+        # Extract only relevant fields (avoid PII, reduce noise)
+        # Implementation depends on event type
+        payload.slice(:controller, :action, :format, :status, :allocations, :db_runtime)
       end
     end
   end
 end
 ```
 
-### 4.2. Configuration: Enable/Disable & Selective Instrumentation
+### 4.1.1. Opt-In Reverse Flow (For Legacy Compatibility)
+
+**Use Case:** Some legacy gems expect ASN events (rare, but possible).
+
+**Solution:** Explicit opt-in at event class level:
+
+```ruby
+# app/events/order_created.rb
+class Events::OrderCreated < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:string)
+    required(:user_id).filled(:string)
+  end
+  
+  # ⚠️ OPT-IN: Publish to ASN for legacy gem compatibility
+  publish_to_asn enabled: true, name: 'order.created'
+end
+
+# Implementation in E11y::Event::Base:
+module E11y
+  module Event
+    class Base
+      def self.publish_to_asn(enabled: false, name: nil)
+        @publish_to_asn_enabled = enabled
+        @asn_event_name = name || event_name
+      end
+      
+      def self.publish_to_asn_enabled?
+        @publish_to_asn_enabled || false
+      end
+      
+      def self.track(**payload)
+        event_data = super  # E11y pipeline
+        
+        # Only if explicitly enabled for this event class
+        if publish_to_asn_enabled?
+          ActiveSupport::Notifications.instrument(
+            @asn_event_name,
+            event_data[:payload].merge(
+              trace_id: event_data[:trace_id],
+              severity: event_data[:severity]
+            )
+          )
+        end
+        
+        event_data
+      end
+    end
+  end
+end
+```
+
+**Default:** `publish_to_asn enabled: false` (opt-in, not opt-out)
+
+### 4.2. Configuration: Overridable Event Classes (Devise-Style)
+
+**Design Decision (Updated 2026-01-17):** Built-in event classes can be overridden in config (Devise-style pattern).
+
+**Rationale:**
+- ✅ **Flexibility**: Custom schema, PII rules, adapters per event type
+- ✅ **Familiar pattern**: Developers know Devise controller overrides
+- ✅ **Opt-in**: Defaults work for 90% of cases, override only when needed
+- ✅ **No monkey-patching**: Clean override mechanism
 
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
   config.instruments do
     # ========================================
-    # ActiveSupport::Notifications
+    # Rails Instrumentation (ActiveSupport::Notifications → E11y)
     # ========================================
-    active_support_notifications do
+    rails_instrumentation do
       # Enable/disable entire ASN integration
       enabled true  # Set to false to completely disable
       
@@ -427,18 +546,29 @@ E11y.configure do |config|
       # Located in Events::Rails namespace
       use_built_in_events true  # If false, no auto-mapping
       
-      # Which Rails events to track
+      # ========================================
+      # OVERRIDE EVENT CLASSES (Devise-style)
+      # ========================================
+      
+      # Override default event class for specific ASN pattern
+      event_class_for 'sql.active_record', MyApp::Events::CustomDatabaseQuery
+      event_class_for 'process_action.action_controller', MyApp::Events::CustomHttpRequest
+      
+      # Disable specific events (too noisy or not needed)
+      ignore_event 'cache_read.active_support'
+      ignore_event 'render_partial.action_view'
+      ignore_event 'SCHEMA'  # Schema queries
+      
+      # ========================================
+      # SELECTIVE INSTRUMENTATION
+      # ========================================
+      
+      # Which Rails events to track (glob patterns)
       track_patterns [
         'sql.active_record',
         'process_action.action_controller',
         'render_template.action_view',
         'cache_*.active_support'
-      ]
-      
-      # Which to ignore (too noisy)
-      ignore_patterns [
-        'render_partial.action_view',  # Too frequent
-        'SCHEMA'                        # Schema queries
       ]
       
       # Sampling for high-volume events
@@ -447,21 +577,145 @@ E11y.configure do |config|
         pattern 'cache_read.active_support', sample_rate: 0.01  # 1% of cache reads
       end
       
-      # Custom event mappings (override built-in)
-      custom_mappings do
-        map 'sql.active_record', to: MyCustom::SqlEvent
-        map 'process_action.action_controller', to: MyCustom::RequestEvent
-      end
-      
       # Enrich with custom data
       enrich do |asn_event|
         {
           controller: asn_event.payload[:controller],
           action: asn_event.payload[:action],
-          format: asn_event.payload[:format]
+          format: asn_event.payload[:format],
+          user_id: Current.user&.id  # Add context
         }
       end
     end
+    
+    # (Other integrations: Sidekiq, ActiveJob, etc.)
+  end
+end
+```
+
+### 4.2.1. Custom Event Class Example
+
+**Use Case:** Override default `Events::Rails::Database::Query` with custom schema and PII rules.
+
+```ruby
+# app/events/custom_database_query.rb
+module MyApp
+  module Events
+    class CustomDatabaseQuery < E11y::Event::Base
+      schema do
+        required(:query).filled(:string)
+        required(:duration).filled(:float)
+        required(:connection_name).filled(:string)
+        
+        # Custom field (not in default Event::Rails::Database::Query)
+        optional(:database_shard).filled(:string)
+        optional(:query_type).filled(:string)  # SELECT, INSERT, UPDATE, etc.
+      end
+      
+      # Custom severity (mark slow queries as warnings)
+      severity do |payload|
+        payload[:duration] > 1000 ? :warn : :debug
+      end
+      
+      # Custom adapter routing (also send to Elasticsearch)
+      adapters [:loki, :elasticsearch]
+      
+      # Custom PII filtering (more aggressive than default)
+      pii_filtering do
+        masks :query  # Mask entire SQL query
+        hashes :connection_name  # Hash connection name
+      end
+      
+      # Custom rate limiting (protect from query floods)
+      rate_limit 100, window: 1.second
+      
+      # Custom retention (keep only for 7 days)
+      retention 7.days
+    end
+  end
+end
+
+# config/initializers/e11y.rb
+E11y.configure do |config|
+  config.instruments.rails_instrumentation do
+    # Override default event class
+    event_class_for 'sql.active_record', MyApp::Events::CustomDatabaseQuery
+  end
+end
+
+# Now all sql.active_record events will use CustomDatabaseQuery!
+```
+
+### 4.2.2. Implementation (Configuration DSL)
+
+```ruby
+# lib/e11y/configuration/rails_instrumentation.rb
+module E11y
+  module Configuration
+    class RailsInstrumentation
+      attr_accessor :enabled, :use_built_in_events
+      
+      def initialize
+        @enabled = true
+        @use_built_in_events = true
+        @custom_event_classes = {}
+        @ignored_events = []
+        @track_patterns = []
+        @sample_patterns = {}
+        @enrich_block = nil
+      end
+      
+      # Override event class (Devise-style)
+      def event_class_for(asn_pattern, custom_event_class)
+        unless custom_event_class < E11y::Event::Base
+          raise ArgumentError, "#{custom_event_class} must inherit from E11y::Event::Base"
+        end
+        
+        @custom_event_classes[asn_pattern] = custom_event_class
+      end
+      
+      # Disable specific event
+      def ignore_event(asn_pattern)
+        @ignored_events << asn_pattern
+      end
+      
+      # Track only specific patterns
+      def track_patterns(*patterns)
+        @track_patterns = patterns.flatten
+      end
+      
+      # Sampling configuration
+      def sample_patterns(&block)
+        @sample_patterns_builder ||= SamplePatternsBuilder.new
+        @sample_patterns_builder.instance_eval(&block) if block_given?
+        @sample_patterns_builder
+      end
+      
+      # Enrich ASN events before conversion
+      def enrich(&block)
+        @enrich_block = block
+      end
+      
+      # Get final event mapping (after overrides)
+      def event_mapping
+        mapping = E11y::Instruments::RailsInstrumentation::DEFAULT_RAILS_EVENT_MAPPING.dup
+        mapping.merge!(@custom_event_classes)
+        mapping.except(*@ignored_events)
+      end
+      
+      # Check if event should be tracked
+      def track?(asn_pattern)
+        return false if @ignored_events.include?(asn_pattern)
+        return true if @track_patterns.empty?
+        
+        @track_patterns.any? do |pattern|
+          File.fnmatch(pattern, asn_pattern)
+        end
+      end
+    end
+  end
+end
+```
     
     # ========================================
     # Sidekiq
