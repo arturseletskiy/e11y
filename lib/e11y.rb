@@ -133,5 +133,8 @@ module E11y
   end
 end
 
+# Load Railtie if Rails is present
+require "e11y/railtie" if defined?(Rails::Railtie)
+
 # Eager load for production (optional - uncomment if needed)
 # loader.eager_load if ENV["RAILS_ENV"] == "production"

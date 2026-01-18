@@ -582,6 +582,158 @@ module E11y
         def requires_signing?
           audit_event? && signing_enabled?
         end
+
+        # === Metrics DSL (ADR-002, UC-003) ===
+
+        # Define metrics for this event
+        #
+        # Metrics are automatically registered in E11y::Metrics::Registry
+        # and validated for label conflicts at boot time.
+        #
+        # @yield Block for defining metrics
+        #
+        # @example Counter metric
+        #   class Events::OrderCreated < E11y::Event::Base
+        #     metrics do
+        #       counter :orders_total, tags: [:currency, :status]
+        #     end
+        #   end
+        #
+        # @example Histogram metric
+        #   class Events::OrderPaid < E11y::Event::Base
+        #     metrics do
+        #       histogram :order_amount,
+        #                 value: :amount,
+        #                 tags: [:currency],
+        #                 buckets: [10, 50, 100, 500, 1000]
+        #     end
+        #   end
+        #
+        # @example Gauge metric
+        #   class Events::QueueSize < E11y::Event::Base
+        #     metrics do
+        #       gauge :queue_depth, value: :size, tags: [:queue_name]
+        #     end
+        #   end
+        #
+        # @example Multiple metrics
+        #   class Events::OrderPaid < E11y::Event::Base
+        #     metrics do
+        #       counter :orders_total, tags: [:currency, :status]
+        #       histogram :order_amount, value: :amount, tags: [:currency]
+        #     end
+        #   end
+        def metrics(&block)
+          return @metrics_config unless block
+
+          @metrics_config ||= []
+          builder = MetricsBuilder.new(@metrics_config, event_name)
+          builder.instance_eval(&block)
+
+          # Register metrics in global registry
+          register_metrics_in_registry!
+        end
+
+        # Get metrics configuration
+        #
+        # @return [Array<Hash>] Metrics configuration
+        def metrics_config
+          @metrics_config || []
+        end
+
+        private
+
+        # Register metrics in global registry
+        #
+        # This is called after metrics DSL block is evaluated.
+        # Validates for label conflicts at boot time.
+        def register_metrics_in_registry!
+          return if @metrics_config.nil? || @metrics_config.empty?
+
+          registry = E11y::Metrics::Registry.instance
+          @metrics_config.each do |metric_config|
+            registry.register(metric_config.merge(
+                                pattern: event_name, # Exact match for event-level metrics
+                                source: "#{name}.metrics"
+                              ))
+          end
+        end
+
+        # Metrics DSL Builder
+        #
+        # Internal helper class for building metrics configuration.
+        # Used by {metrics} DSL method.
+        #
+        # @private
+        # @api private
+        class MetricsBuilder
+          def initialize(config, event_name)
+            @config = config
+            @event_name = event_name
+          end
+
+          # Define a counter metric
+          #
+          # Counter metrics track the number of times an event occurs.
+          #
+          # @param name [Symbol] Metric name (e.g., :orders_total)
+          # @param tags [Array<Symbol>] Labels to extract from event data
+          #
+          # @example
+          #   counter :orders_total, tags: [:currency, :status]
+          def counter(name, tags: [])
+            @config << {
+              type: :counter,
+              name: name,
+              tags: tags
+            }
+          end
+
+          # Define a histogram metric
+          #
+          # Histogram metrics track the distribution of values.
+          #
+          # @param name [Symbol] Metric name (e.g., :order_amount)
+          # @param value [Symbol, Proc] Value extractor (field name or lambda)
+          # @param tags [Array<Symbol>] Labels to extract from event data
+          # @param buckets [Array<Numeric>] Histogram buckets (optional)
+          #
+          # @example With field name
+          #   histogram :order_amount, value: :amount, tags: [:currency]
+          #
+          # @example With lambda
+          #   histogram :order_amount,
+          #             value: ->(event) { event[:payload][:amount] },
+          #             tags: [:currency]
+          def histogram(name, value:, tags: [], buckets: nil)
+            @config << {
+              type: :histogram,
+              name: name,
+              value: value,
+              tags: tags,
+              buckets: buckets
+            }.compact
+          end
+
+          # Define a gauge metric
+          #
+          # Gauge metrics track the current value of something.
+          #
+          # @param name [Symbol] Metric name (e.g., :queue_depth)
+          # @param value [Symbol, Proc] Value extractor (field name or lambda)
+          # @param tags [Array<Symbol>] Labels to extract from event data
+          #
+          # @example
+          #   gauge :queue_depth, value: :size, tags: [:queue_name]
+          def gauge(name, value:, tags: [])
+            @config << {
+              type: :gauge,
+              name: name,
+              value: value,
+              tags: tags
+            }
+          end
+        end
       end
 
       # Builder for PII filtering DSL

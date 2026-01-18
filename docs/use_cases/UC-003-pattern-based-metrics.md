@@ -1,9 +1,11 @@
 # UC-003: Pattern-Based Metrics
 
-**Status:** Core Feature (Phase 2)  
+**Status:** Implemented (2026-01-20)  
 **Complexity:** Intermediate  
 **Setup Time:** 15-30 minutes  
 **Target Users:** DevOps, SRE, Backend Developers
+
+**Implementation:** Rails Way with Event::Base DSL - see [IMPLEMENTATION_NOTES.md](../IMPLEMENTATION_NOTES.md#2026-01-20-metrics-architecture-refactoring---rails-way-)
 
 ---
 
@@ -26,11 +28,27 @@ OrderMetrics.observe('orders.paid.amount', order.amount, tags: { currency: 'USD'
 # - Maintenance burden (update both places)
 ```
 
-### E11y Solution
+### E11y Solution (Rails Way)
 
-**Pattern-based auto-metrics:**
+**Option 1: Event-Level Metrics (Recommended)**
 ```ruby
-# 1. Track event ONCE
+# Define metrics directly in event class
+class Events::OrderPaid < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:string)
+    required(:amount).filled(:float)
+    required(:currency).filled(:string)
+    required(:payment_method).filled(:string)
+  end
+
+  # Metrics DSL - defined once, validated at boot
+  metrics do
+    counter :orders_paid_total, tags: [:currency, :payment_method]
+    histogram :orders_paid_amount, value: :amount, tags: [:currency], buckets: [10, 50, 100, 500, 1000, 5000]
+  end
+end
+
+# Track event - metrics automatically updated
 Events::OrderPaid.track(
   order_id: '123',
   amount: 99.99,
@@ -38,26 +56,48 @@ Events::OrderPaid.track(
   payment_method: 'stripe'
 )
 
-# 2. Configure patterns ONCE (global config)
-E11y.configure do |config|
-  config.metrics do
-    # Auto-create counter
-    counter_for pattern: 'order.paid',
-                name: 'orders.paid.total',
-                tags: [:currency, :payment_method]
-    
-    # Auto-create histogram
-    histogram_for pattern: 'order.paid',
-                  name: 'orders.paid.amount',
-                  value: ->(e) { e.payload[:amount] },
-                  tags: [:currency],
-                  buckets: [10, 50, 100, 500, 1000, 5000]
+# Result:
+# ✅ orders_paid_total{currency="USD",payment_method="stripe"} = 1
+# ✅ orders_paid_amount_bucket{currency="USD",le="100"} = 1
+```
+
+**Option 2: Global Pattern-Based Metrics**
+```ruby
+# config/initializers/e11y.rb
+E11y::Metrics::Registry.instance.register(
+  type: :counter,
+  pattern: 'order.paid',  # Exact match
+  name: :orders_paid_total,
+  tags: [:currency, :payment_method],
+  source: 'config/initializers/e11y.rb'
+)
+
+E11y::Metrics::Registry.instance.register(
+  type: :histogram,
+  pattern: 'order.paid',
+  name: :orders_paid_amount,
+  value: :amount,
+  tags: [:currency],
+  buckets: [10, 50, 100, 500, 1000, 5000],
+  source: 'config/initializers/e11y.rb'
+)
+```
+
+**Option 3: Base Class for Shared Metrics**
+```ruby
+# Shared metric for all order events
+class BaseOrderEvent < E11y::Event::Base
+  metrics do
+    counter :orders_total, tags: [:currency, :status]
   end
 end
 
-# 3. Get metrics automatically
-# ✅ orders_paid_total{currency="USD",payment_method="stripe"} = 1
-# ✅ orders_paid_amount_bucket{currency="USD",le="100"} = 1
+class Events::OrderPaid < BaseOrderEvent
+  # Inherits orders_total + adds own metric
+  metrics do
+    histogram :order_amount, value: :amount, tags: [:currency]
+  end
+end
 ```
 
 ---

@@ -1,9 +1,11 @@
 # ADR-002: Metrics & Yabeda Integration
 
-**Status:** Draft  
-**Date:** January 12, 2026  
+**Status:** Implemented  
+**Date:** January 12, 2026 (Updated: January 20, 2026)  
 **Covers:** UC-003 (Pattern-Based Metrics), UC-013 (High Cardinality Protection)  
 **Depends On:** ADR-001 (Core Architecture)
+
+**Implementation Notes:** Refactored to "Rails Way" architecture (January 20, 2026) - see [IMPLEMENTATION_NOTES.md](./IMPLEMENTATION_NOTES.md#2026-01-20-metrics-architecture-refactoring---rails-way-)
 
 ---
 
@@ -26,6 +28,146 @@
 9. [Testing](#9-testing)
 10. [Trade-offs](#10-trade-offs)
 11. [FAQ & Critical Clarifications](#11-faq--critical-clarifications)
+
+---
+
+## 0. Rails Way Implementation (2026-01-20)
+
+> **🎯 Quick Start:** This section describes the implemented "Rails Way" architecture. For historical context and detailed design decisions, see sections below.
+
+### 0.1. Metrics DSL in Event::Base
+
+**Define metrics directly in event classes:**
+
+```ruby
+class Events::OrderCreated < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:string)
+    required(:currency).filled(:string)
+    required(:status).filled(:string)
+    required(:amount).filled(:float)
+  end
+
+  # Define metrics for this event
+  metrics do
+    counter :orders_total, tags: [:currency, :status]
+    histogram :order_amount, value: :amount, tags: [:currency]
+  end
+end
+
+# Track event - metrics automatically updated
+Events::OrderCreated.track(
+  order_id: "123",
+  currency: "USD",
+  status: "pending",
+  amount: 99.99
+)
+
+# Prometheus metrics:
+# orders_total{currency="USD",status="pending"} 1
+# order_amount_bucket{currency="USD",le="100"} 1
+```
+
+### 0.2. Singleton Registry with Boot-Time Validation
+
+**All metrics registered in singleton Registry:**
+
+```ruby
+# Automatic registration from Event::Base DSL
+registry = E11y::Metrics::Registry.instance
+
+# Find metrics for event
+metrics = registry.find_matching("Events::OrderCreated")
+# => [{ type: :counter, name: :orders_total, tags: [:currency, :status] }, ...]
+
+# Boot-time validation catches conflicts:
+class Events::OrderPaid < E11y::Event::Base
+  metrics do
+    counter :orders_total, tags: [:currency] # ❌ LabelConflictError!
+    # Different labels than OrderCreated - caught at boot time
+  end
+end
+```
+
+### 0.3. Yabeda Adapter with Integrated Cardinality Protection
+
+**Replaces middleware, integrates protection:**
+
+```ruby
+# config/initializers/e11y.rb
+E11y.configure do |config|
+  # Yabeda adapter with cardinality protection
+  config.adapters[:metrics] = E11y::Adapters::Yabeda.new(
+    cardinality_limit: 1000,
+    forbidden_labels: [:custom_id]
+  )
+end
+
+# Adapter automatically:
+# 1. Finds matching metrics from Registry
+# 2. Extracts labels from event data
+# 3. Applies 3-layer cardinality protection
+# 4. Updates Yabeda metrics
+```
+
+### 0.4. Metric Inheritance and Composition
+
+**Base classes for shared metrics:**
+
+```ruby
+class BaseOrderEvent < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:string)
+    required(:currency).filled(:string)
+    required(:status).filled(:string)
+  end
+
+  # Shared metric for all order events
+  metrics do
+    counter :orders_total, tags: [:currency, :status]
+  end
+end
+
+class Events::OrderCreated < BaseOrderEvent
+  # Inherits orders_total metric
+end
+
+class Events::OrderPaid < BaseOrderEvent
+  # Inherits orders_total + adds own metric
+  metrics do
+    histogram :order_amount, value: :amount, tags: [:currency]
+  end
+end
+```
+
+### 0.5. Global Metrics via Registry
+
+**Pattern-based metrics for multiple events:**
+
+```ruby
+# config/initializers/e11y.rb
+E11y.configure do |config|
+  # Global metric for all order.* events
+  E11y::Metrics::Registry.instance.register(
+    type: :counter,
+    pattern: 'order.*',  # Matches order.created, order.paid, etc.
+    name: :orders_total,
+    tags: [:currency, :status],
+    source: 'config/initializers/e11y.rb'
+  )
+end
+```
+
+### 0.6. Key Benefits
+
+| Feature | Old (Middleware) | New (Rails Way) |
+|---------|------------------|-----------------|
+| **Metric Definition** | Config file | Event class DSL |
+| **Validation** | Runtime | Boot time |
+| **Cardinality Protection** | Separate class | Yabeda adapter |
+| **Inheritance** | Not supported | Full support |
+| **Conflict Detection** | Runtime errors | Boot-time errors |
+| **Complexity** | 4 layers | 3 layers |
 
 ---
 
@@ -82,41 +224,43 @@
 
 ## 2. Architecture Overview
 
+> **🔄 Architecture Update (2026-01-20):** Refactored to "Rails Way" - metrics defined in Event::Base DSL, singleton Registry, Yabeda adapter replaces middleware.
+
 ### 2.1. System Context
 
 ```mermaid
 C4Context
-    title Metrics System Context
+    title Metrics System Context (Rails Way)
     
-    Person(dev, "Developer", "Tracks business events")
+    Person(dev, "Developer", "Defines metrics in Event classes")
     
-    System(e11y, "E11y Gem", "Event tracking with auto-metrics")
+    System(e11y, "E11y Gem", "Event tracking with DSL-based metrics")
     System(yabeda, "Yabeda", "Metrics DSL & collection")
     System_Ext(prometheus, "Prometheus", "Metrics storage & queries")
     System_Ext(grafana, "Grafana", "Visualization")
     
-    Rel(dev, e11y, "Tracks events", "Events::OrderPaid.track(...)")
-    Rel(e11y, yabeda, "Auto-creates metrics", "Yabeda.orders.increment(...)")
+    Rel(dev, e11y, "Defines metrics", "class Event::Base { metrics { counter :orders_total } }")
+    Rel(e11y, yabeda, "Auto-updates metrics", "Yabeda.e11y.orders_total.increment(...)")
     Rel(yabeda, prometheus, "Exposes metrics", "/metrics endpoint")
     Rel(grafana, prometheus, "Queries", "PromQL")
     Rel(prometheus, grafana, "Returns data", "JSON")
 ```
 
-### 2.2. Component Architecture
+### 2.2. Component Architecture (Rails Way)
 
 ```mermaid
 graph TB
-    subgraph "E11y Pipeline"
-        Event[Event.track]
-        Pipeline[Middleware Chain]
-        Metrics[Metrics Middleware]
+    subgraph "Event Definition (Boot Time)"
+        EventClass[Event::Base Class]
+        MetricsDSL[metrics DSL Block]
+        Registry[Singleton Registry]
     end
     
-    subgraph "Metrics Engine"
+    subgraph "Runtime (Event Tracking)"
+        Event[Event.track]
+        YabedaAdapter[Yabeda Adapter]
         Matcher[Pattern Matcher]
-        Extractor[Label Extractor]
         Cardinality[Cardinality Protection]
-        Registry[Metrics Registry]
     end
     
     subgraph "Yabeda"
@@ -125,34 +269,33 @@ graph TB
         Gauge[Yabeda Gauges]
     end
     
-    subgraph "Protection Layers"
+    subgraph "Protection (3-Layer)"
         L1[Layer 1: Denylist]
-        L2[Layer 2: Allowlist]
-        L3[Layer 3: Per-Metric Limits]
-        L4[Layer 4: Dynamic Monitoring]
+        L2[Layer 2: Per-Metric Limits]
+        L3[Layer 3: Monitoring]
     end
     
-    Event --> Pipeline
-    Pipeline --> Metrics
-    Metrics --> Matcher
+    EventClass -->|defines| MetricsDSL
+    MetricsDSL -->|registers| Registry
+    Registry -->|validates conflicts| Registry
     
-    Matcher -->|pattern matched| Extractor
-    Extractor --> Cardinality
+    Event -->|writes to| YabedaAdapter
+    YabedaAdapter --> Matcher
+    Matcher -->|finds metrics| Registry
+    Matcher --> Cardinality
     
     Cardinality --> L1
     L1 -->|pass| L2
     L2 -->|pass| L3
-    L3 -->|pass| L4
-    L4 -->|safe| Registry
+    L3 -->|safe labels| Counter
+    L3 -->|safe labels| Histogram
+    L3 -->|safe labels| Gauge
     
-    Registry --> Counter
-    Registry --> Histogram
-    Registry --> Gauge
-    
+    style Registry fill:#d1ecf1
     style Cardinality fill:#f8d7da
     style L1 fill:#fff3cd
-    style L2 fill:#d4edda
-    style Registry fill:#d1ecf1
+    style L2 fill:#fff3cd
+    style L3 fill:#d4edda
 ```
 
 ### 2.3. Data Flow
@@ -351,16 +494,17 @@ Events::OrderPaid.track(
 
 ## 4. Cardinality Protection
 
-### 4.1. Four-Layer Defense
+> **🔄 Simplified (2026-01-20):** Reduced from 4 layers to 3 layers. Removed "Safe Allowlist" (Layer 2) as overengineering for MVP.
+
+### 4.1. Three-Layer Defense
 
 **🔑 Critical: Layer Flow Logic**
 
 Layers are applied **sequentially** (not simultaneously):
 
-1. **Layer 1 (Denylist):** If label in denylist → DROP, stop processing
-2. **Layer 2 (Allowlist):** If label in allowlist → KEEP, skip Layers 3-4
-3. **Layer 3 (Cardinality Limit):** If under limit → KEEP, else go to Layer 4
-4. **Layer 4 (Dynamic Action):** Apply configured action (hash/drop/aggregate/alert)
+1. **Layer 1 (Universal Denylist):** If label in denylist → DROP, stop processing
+2. **Layer 2 (Per-Metric Limits):** Track unique values per label, drop if exceeded
+3. **Layer 3 (Monitoring):** Log warnings when limits exceeded
 
 **Example Flow:**
 

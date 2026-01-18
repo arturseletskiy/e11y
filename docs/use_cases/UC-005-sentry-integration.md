@@ -1,9 +1,18 @@
 # UC-005: Sentry Integration
 
-**Status:** MVP Feature  
+**Status:** ✅ Implemented (2026-01-19)  
 **Complexity:** Low  
 **Setup Time:** 10 minutes  
 **Target Users:** All developers
+
+**Implementation:**
+- ✅ `E11y::Adapters::Sentry` - Implemented with full Sentry SDK integration
+- ✅ Automatic error reporting (severity-based filtering)
+- ✅ Breadcrumb tracking for context
+- ✅ Trace context propagation (trace_id, span_id)
+- ✅ User context support
+- ✅ 39 comprehensive tests
+- 📖 See [ADR-004 §4.4](../ADR-004-adapter-architecture.md#44-sentry-adapter) for technical details
 
 ---
 
@@ -65,23 +74,31 @@ end
 
 > **Implementation:** See [ADR-004 Section 4.4: Sentry Adapter](../ADR-004-adapter-architecture.md#44-sentry-adapter) for technical details.
 
-**Configuration:**
+**Configuration (2026-01-19 - Actual Implementation):**
 ```ruby
 # config/initializers/e11y.rb
-E11y.configure do |config|
-  config.sentry do
-    # Auto-send events with :error/:fatal to Sentry
-    enabled true
-    
-    # Which severities trigger Sentry
-    capture_severities [:error, :fatal]
-    
-    # Send event payload as Sentry context
-    include_payload true
-    
-    # Max payload size (prevent huge Sentry events)
-    max_payload_size 10.kilobytes
+require 'e11y'
+
+# Register Sentry adapter
+E11y::Adapters::Registry.register(
+  :sentry,
+  E11y::Adapters::Sentry.new(
+    dsn: ENV['SENTRY_DSN'],
+    environment: Rails.env,
+    severity_threshold: :warn,  # Send :warn, :error, :fatal to Sentry
+    breadcrumbs: true           # Track all events as breadcrumbs
+  )
+)
+
+# Use in events
+class Events::PaymentFailed < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:string)
+    required(:error_message).filled(:string)
   end
+
+  severity :error
+  adapters [:sentry, :loki]  # Send to both Sentry and Loki
 end
 ```
 
@@ -666,6 +683,77 @@ sample_rate_for 'api.slow_request', 0.1  # 10%
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** January 12, 2026  
-**Status:** ✅ Complete
+## 📦 Implementation Details (2026-01-19)
+
+### Actual SentryAdapter Implementation
+
+The implemented `E11y::Adapters::Sentry` provides:
+
+**Features:**
+- ✅ **Severity-based filtering**: Configurable `severity_threshold` (default: `:warn`)
+- ✅ **Error reporting**: Automatic `Sentry.capture_message` for `:error` and `:fatal` events
+- ✅ **Exception handling**: Direct `Sentry.capture_exception` when exception object provided
+- ✅ **Breadcrumbs**: All non-error events tracked as `Sentry.add_breadcrumb`
+- ✅ **Context propagation**: Tags, extras, user context, and trace context
+- ✅ **Severity mapping**: E11y severities → Sentry levels (debug/info/warning/error/fatal)
+
+**Usage Example:**
+```ruby
+# Register adapter
+E11y::Adapters::Registry.register(
+  :sentry,
+  E11y::Adapters::Sentry.new(
+    dsn: ENV['SENTRY_DSN'],
+    environment: 'production',
+    severity_threshold: :warn,
+    breadcrumbs: true
+  )
+)
+
+# Track error event
+Events::PaymentFailed.track(
+  order_id: 'ORD-123',
+  error_message: 'Card declined',
+  user: { id: 456, email: 'user@example.com' },
+  trace_id: 'trace-abc-123',
+  span_id: 'span-def-456'
+)
+
+# Result in Sentry:
+# - Message: "Card declined"
+# - Tags: { event_name: "payment.failed", severity: "error" }
+# - Extras: { order_id: "ORD-123", ... }
+# - User: { id: 456, email: "user@example.com" }
+# - Context: { trace: { trace_id: "trace-abc-123", span_id: "span-def-456" } }
+```
+
+**Testing:**
+```ruby
+# spec/e11y/adapters/sentry_spec.rb - 39 tests
+RSpec.describe E11y::Adapters::Sentry do
+  it 'sends errors to Sentry' do
+    expect(::Sentry).to receive(:capture_message).with(
+      "Payment processing failed",
+      level: :error
+    )
+
+    adapter.write(error_event)
+  end
+
+  it 'sends breadcrumbs for non-error events' do
+    expect(::Sentry).to receive(:add_breadcrumb)
+    adapter.write(warn_event)
+  end
+end
+```
+
+**See Also:**
+- Implementation: `lib/e11y/adapters/sentry.rb` (211 lines)
+- Tests: `spec/e11y/adapters/sentry_spec.rb` (39 tests)
+- ADR: [ADR-004 §4.4](../ADR-004-adapter-architecture.md#44-sentry-adapter)
+
+---
+
+**Document Version:** 2.0  
+**Last Updated:** January 19, 2026  
+**Status:** ✅ Implemented & Tested
