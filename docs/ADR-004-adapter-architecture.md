@@ -1,9 +1,22 @@
 # ADR-004: Adapter Architecture
 
-**Status:** Draft  
-**Date:** January 12, 2026  
-**Covers:** UC-005 (Sentry Integration), All Adapters (Loki, File, Stdout, Elasticsearch)  
+**Status:** ✅ Implemented (Phase L2.5 Complete)  
+**Date:** January 12, 2026 | **Updated:** January 19, 2026  
+**Covers:** UC-005 (Sentry Integration), All Adapters (Loki, File, Stdout, InMemory, AuditEncrypted)  
 **Depends On:** ADR-001 (Core Architecture), ADR-002 (Metrics)
+
+**Implementation Status:**
+- ✅ §3.1: Base Adapter Contract - Implemented
+- ✅ §4.1: Stdout Adapter - Implemented (29 tests)
+- ✅ §4.2: File Adapter - Implemented (35 tests)
+- ✅ §4.3: Loki Adapter - Implemented (34 tests)
+- ✅ §4.4: Sentry Adapter - Implemented (39 tests)
+- ❌ §4.5: Elasticsearch Adapter - Cancelled (not needed now)
+- ✅ §5: Adapter Registry - Implemented (26 tests)
+- ✅ §9.1: InMemory Test Adapter - Implemented (51 tests)
+- ✅ AuditEncrypted Adapter - Updated to new contract (13 tests)
+
+**Test Coverage:** 249/249 adapter tests passing
 
 ---
 
@@ -2162,6 +2175,206 @@ class Events::CriticalPayment < Events::BasePaymentEvent
   adapters [:loki, :sentry, :s3_archive, :datadog]  # Add Datadog
   
   # Final: [:loki, :sentry, :s3_archive, :datadog] (event-level wins)
+end
+```
+
+---
+
+## 13. Implementation Examples (2026-01-19)
+
+### 13.1. Production Setup with All Adapters
+
+```ruby
+# config/initializers/e11y.rb
+require 'e11y'
+
+E11y.configure do |config|
+  # Register Loki for centralized logging
+  E11y::Adapters::Registry.register(
+    :loki,
+    E11y::Adapters::Loki.new(
+      url: ENV['LOKI_URL'] || 'http://loki:3100',
+      labels: {
+        app: 'my_app',
+        env: Rails.env,
+        host: Socket.gethostname
+      },
+      batch_size: 100,
+      batch_timeout: 5,
+      compress: true,
+      tenant_id: ENV['LOKI_TENANT_ID']
+    )
+  )
+
+  # Register Sentry for error tracking
+  E11y::Adapters::Registry.register(
+    :sentry,
+    E11y::Adapters::Sentry.new(
+      dsn: ENV['SENTRY_DSN'],
+      environment: Rails.env,
+      severity_threshold: :warn,
+      breadcrumbs: true
+    )
+  )
+
+  # Register File adapter for local development
+  E11y::Adapters::Registry.register(
+    :file,
+    E11y::Adapters::File.new(
+      path: Rails.root.join('log', 'e11y.log'),
+      rotation: :daily,
+      max_size: 100 * 1024 * 1024, # 100MB
+      compress: true
+    )
+  )
+
+  # Register Stdout for console output
+  E11y::Adapters::Registry.register(
+    :stdout,
+    E11y::Adapters::Stdout.new(
+      pretty: Rails.env.development?,
+      colorize: true
+    )
+  )
+
+  # Register InMemory for testing
+  if Rails.env.test?
+    E11y::Adapters::Registry.register(
+      :test,
+      E11y::Adapters::InMemory.new(
+        max_events: 1000,
+        max_batches: 100
+      )
+    )
+  end
+end
+```
+
+### 13.2. Event Examples with Adapters
+
+```ruby
+# Business event - goes to Loki
+class Events::OrderPlaced < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:string)
+    required(:amount).filled(:integer)
+    required(:currency).filled(:string)
+  end
+
+  severity :info
+  adapters [:loki]
+end
+
+# Error event - goes to Sentry and Loki
+class Events::PaymentFailed < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:string)
+    required(:error_message).filled(:string)
+    optional(:exception).filled
+  end
+
+  severity :error
+  adapters [:sentry, :loki]
+end
+
+# Debug event - only in development
+class Events::DebugQuery < E11y::Event::Base
+  schema do
+    required(:query).filled(:string)
+    required(:duration_ms).filled(:integer)
+  end
+
+  severity :debug
+  adapters Rails.env.development? ? [:stdout] : []
+end
+
+# Usage
+Events::OrderPlaced.track(
+  order_id: 'ORD-123',
+  amount: 10000,
+  currency: 'USD'
+)
+
+Events::PaymentFailed.track(
+  order_id: 'ORD-456',
+  error_message: 'Card declined',
+  exception: StandardError.new('Payment gateway error')
+)
+```
+
+### 13.3. Testing with InMemory Adapter
+
+```ruby
+# spec/events/order_placed_spec.rb
+RSpec.describe Events::OrderPlaced do
+  let(:adapter) { E11y::Adapters::Registry.resolve(:test) }
+
+  before do
+    adapter.clear!
+  end
+
+  it 'tracks order placement' do
+    described_class.track(
+      order_id: 'ORD-123',
+      amount: 10000,
+      currency: 'USD'
+    )
+
+    expect(adapter.event_count).to eq(1)
+    
+    event = adapter.events.first
+    expect(event[:event_name]).to eq('order.placed')
+    expect(event[:order_id]).to eq('ORD-123')
+    expect(event[:amount]).to eq(10000)
+  end
+
+  it 'finds events by pattern' do
+    Events::OrderPlaced.track(order_id: 'ORD-1', amount: 100, currency: 'USD')
+    Events::OrderPlaced.track(order_id: 'ORD-2', amount: 200, currency: 'USD')
+
+    order_events = adapter.find_events(/order\.placed/)
+    expect(order_events.size).to eq(2)
+  end
+end
+```
+
+### 13.4. Adapter Capabilities Check
+
+```ruby
+# Check adapter capabilities before using
+loki = E11y::Adapters::Registry.resolve(:loki)
+puts loki.capabilities
+# => {
+#   batching: true,
+#   compression: true,
+#   async: true,
+#   streaming: false
+# }
+
+# Use batching if supported
+if loki.capabilities[:batching]
+  events = [event1, event2, event3]
+  loki.write_batch(events)
+else
+  events.each { |e| loki.write(e) }
+end
+```
+
+### 13.5. Health Checks
+
+```ruby
+# config/initializers/health_check.rb
+HealthCheck.setup do |config|
+  config.add_custom_check('e11y_adapters') do
+    adapters = E11y::Adapters::Registry.all
+    unhealthy = adapters.reject { |name, adapter| adapter.healthy? }
+
+    if unhealthy.any?
+      "Unhealthy adapters: #{unhealthy.keys.join(', ')}"
+    else
+      ''
+    end
+  end
 end
 ```
 

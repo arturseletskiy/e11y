@@ -380,6 +380,8 @@ module E11y
           E11y.configuration.adapters_for_severity(severity)
         end
 
+        public # Make PII and Audit DSL methods public
+
         # === PII Filtering DSL (ADR-006, UC-007) ===
 
         # Declare whether event contains PII
@@ -411,17 +413,13 @@ module E11y
           end
         end
 
-        # Get PII tier for this event
-        #
-        # @return [Symbol] :none, :default, :explicit
+        # Determine the PII filtering tier for this event.
+        # @return [Symbol] :tier1, :tier2, or :tier3
         def pii_tier
-          case @contains_pii
-          when false
-            :none
-          when true
-            :explicit
-          else
-            :default
+          case contains_pii
+          when false then :tier1
+          when true then :tier3
+          else :tier2 # Default if not explicitly declared
           end
         end
 
@@ -445,6 +443,145 @@ module E11y
         #
         # @return [Hash] PII filtering config
         attr_reader :pii_filtering_config
+
+        # PII Filtering DSL Builder
+        #
+        # Internal helper class for building PII filtering configuration.
+        # Used by {pii_filtering} DSL method.
+        #
+        # @private
+        # @api private
+        class PIIFilteringBuilder
+          def initialize(config)
+            @config = config
+          end
+
+          # Mask fields (replace with [FILTERED])
+          #
+          # @param fields [Array<Symbol>] Field names to mask
+          def masks(*fields)
+            fields.each { |field| @config[:fields][field] = { strategy: :mask } }
+          end
+
+          # Hash fields (one-way hash with SHA256)
+          #
+          # @param fields [Array<Symbol>] Field names to hash
+          def hashes(*fields)
+            fields.each { |field| @config[:fields][field] = { strategy: :hash } }
+          end
+
+          # Partial mask fields (show first/last chars)
+          #
+          # @param fields [Array<Symbol>] Field names to partially mask
+          def partials(*fields)
+            fields.each { |field| @config[:fields][field] = { strategy: :partial } }
+          end
+
+          # Redact fields (remove completely)
+          #
+          # @param fields [Array<Symbol>] Field names to redact
+          def redacts(*fields)
+            fields.each { |field| @config[:fields][field] = { strategy: :redact } }
+          end
+
+          # Allow fields (no filtering)
+          #
+          # @param fields [Array<Symbol>] Field names to allow
+          def allows(*fields)
+            fields.each { |field| @config[:fields][field] = { strategy: :allow } }
+          end
+        end
+
+        # === Audit Event DSL (ADR-006, UC-012) ===
+
+        # Mark event as audit event
+        #
+        # Audit events use separate pipeline:
+        # - Sign ORIGINAL data (before PII filtering)
+        # - Never sampled or rate-limited
+        # - Stored in encrypted audit storage
+        #
+        # @param value [Boolean] true if audit event
+        #
+        # @example
+        #   class Events::UserDeleted < E11y::Event::Base
+        #     audit_event true
+        #
+        #     schema do
+        #       required(:user_id).filled(:integer)
+        #       required(:deleted_by).filled(:integer)
+        #     end
+        #   end
+        def audit_event(value = nil)
+          if value.nil?
+            # Getter
+            @audit_event
+          else
+            # Setter
+            @audit_event = value
+          end
+        end
+
+        # Check if event is audit event
+        #
+        # @return [Boolean] true if audit event
+        def audit_event?
+          @audit_event == true
+        end
+
+        # Configure cryptographic signing for audit event
+        #
+        # By default, all audit events are signed with HMAC-SHA256.
+        # Use `signing enabled: false` to disable signing for specific events.
+        #
+        # **DESIGN CONSISTENCY**: Matches `E11y.configure { config.audit_trail { signing enabled: true } }`
+        #
+        # @param options [Hash] Signing configuration
+        # @option options [Boolean] :enabled (true) Enable/disable signing for this event
+        #
+        # @example Disable signing for low-severity audit event
+        #   class Events::AuditLogViewed < E11y::Event::Base
+        #     audit_event true
+        #     signing enabled: false  # ← No cryptographic signing
+        #
+        #     schema do
+        #       required(:log_id).filled(:integer)
+        #       required(:viewed_by).filled(:integer)
+        #     end
+        #   end
+        #
+        # @example Signing enabled (default)
+        #   class Events::UserDeleted < E11y::Event::Base
+        #     audit_event true
+        #     # signing enabled: true (default) - signing enabled
+        #
+        #     schema do
+        #       required(:user_id).filled(:integer)
+        #     end
+        #   end
+        def signing(options = nil)
+          if options.nil?
+            # Getter: return current config
+            @signing_config ||= { enabled: true }
+          else
+            # Setter: merge with defaults
+            @signing_config = { enabled: true }.merge(options)
+          end
+        end
+
+        # Check if signing is enabled for this event
+        #
+        # @return [Boolean] true if signing enabled (default: true)
+        def signing_enabled?
+          signing[:enabled] != false
+        end
+
+        # Check if event requires signing
+        #
+        # @return [Boolean] true if event requires signing
+        def requires_signing?
+          audit_event? && signing_enabled?
+        end
       end
 
       # Builder for PII filtering DSL

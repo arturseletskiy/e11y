@@ -2753,6 +2753,66 @@ module E11y
 end
 ```
 
+**Per-Event Signing Configuration:**
+
+For fine-grained control, individual audit events can override signing behavior:
+
+```ruby
+# Disable signing for low-severity audit events
+class Events::AuditLogViewed < E11y::Event::Base
+  audit_event true
+  signing enabled: false  # ⚠️ No cryptographic signing
+  
+  schema do
+    required(:log_id).filled(:integer)
+    required(:viewed_by).filled(:integer)
+  end
+end
+
+# Explicitly enable signing (default behavior)
+class Events::UserDeleted < E11y::Event::Base
+  audit_event true
+  signing enabled: true  # ✅ Cryptographic signing (default)
+  
+  schema do
+    required(:user_id).filled(:integer)
+    required(:deleted_by).filled(:integer)
+  end
+end
+```
+
+**DSL Consistency:**
+
+The `signing enabled:` DSL matches the global configuration pattern:
+
+```ruby
+# Global config (affects ALL audit events)
+E11y.configure do |config|
+  config.audit_trail do
+    signing enabled: true,  # ← Same DSL pattern
+            algorithm: 'HMAC-SHA256'
+  end
+end
+
+# Per-event override (affects ONE event class)
+class Events::SomeEvent < E11y::Event::Base
+  signing enabled: false  # ← Same DSL pattern
+end
+```
+
+**When to disable signing:**
+- Low-severity audit events (e.g., log views)
+- High-volume events with performance constraints
+- Internal monitoring (non-compliance use cases)
+
+**When signing is REQUIRED:**
+- Financial transactions (SOX)
+- User data deletion (GDPR Art. 17)
+- Permission changes (access control)
+- Any event requiring non-repudiation
+
+**Default:** All audit events are signed (`signing enabled: true`) unless explicitly disabled.
+
 **Signature Chain Visualization:**
 
 ```mermaid

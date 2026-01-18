@@ -149,6 +149,45 @@ Events::PageView.track(
   page_url: '/dashboard',
   ip_address: request.remote_ip  # ❌ IP filtered (standard pipeline)
 )
+```
+
+**Conditional Signing for Low-Severity Audit Events:**
+
+For low-overhead audit events (e.g., audit log views, non-critical actions), you can disable cryptographic signing:
+
+```ruby
+# app/events/audit_log_viewed.rb
+class Events::AuditLogViewed < E11y::Event::Base
+  audit_event true
+  signing enabled: false  # ⚠️ Disable signing for low-severity audit
+  
+  schema do
+    required(:log_id).filled(:integer)
+    required(:viewed_by).filled(:integer)
+    required(:timestamp).filled(:time)
+  end
+end
+
+# ✅ DSL Consistency: matches global config
+# E11y.configure do |config|
+#   config.audit_trail do
+#     signing enabled: true  # ← Same DSL pattern
+#   end
+# end
+```
+
+**When to disable signing (`signing enabled: false`):**
+- ✅ **Low-severity audit events** (e.g., log views, session starts)
+- ✅ **High-volume events** where signing overhead is prohibitive
+- ✅ **Non-legal-compliance events** (internal monitoring only)
+
+**When signing is REQUIRED (`signing enabled: true` - default):**
+- ⚠️ **Financial transactions** (SOX compliance)
+- ⚠️ **User data deletion** (GDPR Art. 17)
+- ⚠️ **Permission changes** (access control audit)
+- ⚠️ **Any event requiring non-repudiation**
+
+**Default behavior:** All audit events are signed by default (`signing enabled: true`).
 
 # Pipeline flow for standard events:
 # 1. ✅ PII Filtering (filters IP → '[FILTERED]')

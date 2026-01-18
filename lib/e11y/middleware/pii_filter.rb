@@ -28,7 +28,7 @@ module E11y
     # @example Tier 3: Explicit PII (Deep Filtering)
     #   class Events::UserRegistered < E11y::Event::Base
     #     contains_pii true
-    #     
+    #
     #     pii_filtering do
     #       masks :password
     #       hashes :email
@@ -84,17 +84,10 @@ module E11y
       # @return [Symbol] :tier1, :tier2, or :tier3
       def determine_tier(event_data)
         event_class = event_data[:event_class]
-        return :tier2 unless event_class&.respond_to?(:pii_tier)
+        return :tier2 unless event_class.respond_to?(:pii_tier)
 
-        # Check explicit declaration
-        case event_class.pii_tier
-        when :none
-          :tier1
-        when :explicit
-          :tier3
-        else
-          :tier2
-        end
+        # Return tier directly from event class
+        event_class.pii_tier
       end
 
       # Apply Rails filter_parameters (Tier 2)
@@ -102,8 +95,6 @@ module E11y
       # @param event_data [Hash] Event data
       # @return [Hash] Filtered event data
       def apply_rails_filters(event_data)
-        return event_data unless defined?(Rails)
-
         # Clone to avoid modifying original
         filtered_data = deep_dup(event_data)
 
@@ -158,7 +149,7 @@ module E11y
 
           filtered[key] = case strategy
                           when :mask
-                            '[FILTERED]'
+                            "[FILTERED]"
                           when :hash
                             hash_value(value)
                           when :partial
@@ -201,7 +192,7 @@ module E11y
 
         # Apply all PII patterns
         E11y::PII::Patterns::ALL.each do |pattern|
-          result = result.gsub(pattern, '[FILTERED]')
+          result = result.gsub(pattern, "[FILTERED]")
         end
 
         result
@@ -212,9 +203,9 @@ module E11y
       # @param value [Object] Value to hash
       # @return [String] Hashed value
       def hash_value(value)
-        return '[FILTERED]' if value.nil?
+        return "[FILTERED]" if value.nil?
 
-        require 'digest'
+        require "digest"
         "hashed_#{Digest::SHA256.hexdigest(value.to_s)[0..15]}"
       end
 
@@ -223,16 +214,16 @@ module E11y
       # @param value [String] Value to mask
       # @return [String] Partially masked value
       def partial_mask(value)
-        return '[FILTERED]' unless value.is_a?(String)
-        return '[FILTERED]' if value.length < 4
+        return "[FILTERED]" unless value.is_a?(String)
+        return "[FILTERED]" if value.length < 4
 
-        if value.include?('@')
-          # Email: show first 2 chars before @, last 2 after @
-          local, domain = value.split('@', 2)
-          "#{local[0..1]}***@#{domain[-3..-1]}"
+        if value.include?("@")
+          # Email: show first 2 chars before @, last 3 chars after @
+          local, domain = value.split("@", 2)
+          "#{local[0..1]}***#{domain[-3..]}"
         else
           # Generic: show first/last 2 chars
-          "#{value[0..1]}***#{value[-2..-1]}"
+          "#{value[0..1]}***#{value[-2..]}"
         end
       end
 
@@ -249,7 +240,11 @@ module E11y
         when String, Symbol, Integer, Float, TrueClass, FalseClass, NilClass
           data
         else
-          data.dup rescue data
+          begin
+            data.dup
+          rescue StandardError
+            data
+          end
         end
       end
 

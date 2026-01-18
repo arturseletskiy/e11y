@@ -63,5 +63,12 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "rubocop-rake", "~> 0.6"
   spec.add_development_dependency "rubocop-rspec", "~> 2.22"
   spec.add_development_dependency "simplecov", "~> 0.22"
+  spec.add_development_dependency "webmock", "~> 3.19" # For HTTP adapter testing
   spec.add_development_dependency "yard", "~> 0.9"
+
+  # Optional adapter dependencies (install only if using specific adapters)
+  # LokiAdapter: gem install faraday
+  # SentryAdapter: gem install sentry-ruby
+  spec.add_development_dependency "faraday", "~> 2.7" # For LokiAdapter
+  spec.add_development_dependency "sentry-ruby", "~> 5.15" # For SentryAdapter
 end

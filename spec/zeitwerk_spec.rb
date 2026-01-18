@@ -89,7 +89,7 @@ RSpec.describe "Zeitwerk Autoloading" do
       dummy_app = ->(event_data) { event_data }
       expect { E11y::Middleware::Base.new(dummy_app).call(nil) }.to raise_error(NotImplementedError)
 
-      expect { E11y::Adapters::Base.new.send_event(nil) }.to raise_error(NotImplementedError)
+      expect { E11y::Adapters::Base.new.write(nil) }.to raise_error(NotImplementedError)
       expect { E11y::Buffers::BaseBuffer.new.push(nil) }.to raise_error(NotImplementedError)
     end
   end
