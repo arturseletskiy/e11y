@@ -1,6 +1,19 @@
 # frozen_string_literal: true
 
-require "sentry-ruby"
+# Check if Sentry SDK is available
+begin
+  require "sentry-ruby"
+rescue LoadError
+  raise LoadError, <<~ERROR
+    Sentry SDK not available!
+
+    To use E11y::Adapters::Sentry, add to your Gemfile:
+
+      gem 'sentry-ruby'
+
+    Then run: bundle install
+  ERROR
+end
 
 module E11y
   module Adapters

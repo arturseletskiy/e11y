@@ -3,6 +3,19 @@
 require "spec_helper"
 require "time"
 
+# Skip Sentry tests if Sentry SDK not available
+begin
+  require "e11y/adapters/sentry"
+rescue LoadError
+  RSpec.describe "E11y::Adapters::Sentry (skipped)" do
+    it "requires Sentry SDK to be available" do
+      skip "Sentry SDK not available in test environment"
+    end
+  end
+
+  return
+end
+
 RSpec.describe E11y::Adapters::Sentry do
   let(:sentry_dsn) { "https://public@sentry.test/1" }
   let(:config) do

@@ -1,0 +1,322 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+require_relative "../../../lib/e11y/reliability/retry_handler"
+
+RSpec.describe E11y::Reliability::RetryHandler do
+  let(:config) do
+    {
+      max_attempts: 3,
+      base_delay_ms: 10, # Short delay for tests
+      max_delay_ms: 100,
+      jitter_factor: 0.1,
+      fail_on_error: true
+    }
+  end
+  let(:retry_handler) { described_class.new(config: config) }
+  let(:adapter) { double("Adapter", class: double(name: "TestAdapter")) }
+  let(:event_data) { { event_name: "test.event", severity: :info } }
+
+  describe "#with_retry" do
+    context "when block succeeds immediately" do
+      it "returns result without retry" do
+        result = retry_handler.with_retry(adapter: adapter, event: event_data) do
+          "success"
+        end
+
+        expect(result).to eq("success")
+      end
+
+      it "does not sleep" do
+        expect(retry_handler).not_to receive(:sleep)
+
+        retry_handler.with_retry(adapter: adapter, event: event_data) do
+          "success"
+        end
+      end
+    end
+
+    context "when block fails with retriable error" do
+      it "retries on Timeout::Error" do
+        attempt = 0
+
+        result = retry_handler.with_retry(adapter: adapter, event: event_data) do
+          attempt += 1
+          raise Timeout::Error if attempt < 2
+
+          "recovered"
+        end
+
+        expect(result).to eq("recovered")
+        expect(attempt).to eq(2)
+      end
+
+      it "retries on ECONNREFUSED" do
+        attempt = 0
+
+        result = retry_handler.with_retry(adapter: adapter, event: event_data) do
+          attempt += 1
+          raise Errno::ECONNREFUSED if attempt < 2
+
+          "recovered"
+        end
+
+        expect(result).to eq("recovered")
+        expect(attempt).to eq(2)
+      end
+
+      it "retries on 5xx HTTP errors" do
+        http_error = StandardError.new("Server Error")
+        response = double(code: 503)
+        allow(http_error).to receive(:response).and_return(response)
+
+        attempt = 0
+
+        result = retry_handler.with_retry(adapter: adapter, event: event_data) do
+          attempt += 1
+          raise http_error if attempt < 2
+
+          "recovered"
+        end
+
+        expect(result).to eq("recovered")
+        expect(attempt).to eq(2)
+      end
+
+      it "uses exponential backoff with jitter" do
+        attempt = 0
+        sleep_durations = []
+
+        allow(retry_handler).to receive(:sleep) do |duration|
+          sleep_durations << duration
+        end
+
+        retry_handler.with_retry(adapter: adapter, event: event_data) do
+          attempt += 1
+          raise Timeout::Error if attempt < 3
+
+          "recovered"
+        end
+
+        # Should have 2 sleeps (before attempts 2 and 3)
+        expect(sleep_durations.size).to eq(2)
+
+        # First delay: ~10ms (base_delay_ms)
+        expect(sleep_durations[0]).to be_within(0.002).of(0.01)
+
+        # Second delay: ~20ms (base_delay_ms * 2^1)
+        expect(sleep_durations[1]).to be_within(0.004).of(0.02)
+      end
+    end
+
+    context "when block fails with permanent error" do
+      it "does not retry on ArgumentError" do
+        attempt = 0
+
+        expect do
+          retry_handler.with_retry(adapter: adapter, event: event_data) do
+            attempt += 1
+            raise ArgumentError, "bad argument"
+          end
+        end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError)
+
+        expect(attempt).to eq(1) # No retries
+      end
+
+      it "does not retry on 4xx HTTP errors" do
+        http_error = StandardError.new("Bad Request")
+        response = double(code: 400)
+        allow(http_error).to receive(:response).and_return(response)
+
+        attempt = 0
+
+        expect do
+          retry_handler.with_retry(adapter: adapter, event: event_data) do
+            attempt += 1
+            raise http_error
+          end
+        end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError)
+
+        expect(attempt).to eq(1)
+      end
+    end
+
+    context "when max attempts exceeded" do
+      it "raises RetryExhaustedError" do
+        attempt = 0
+
+        expect do
+          retry_handler.with_retry(adapter: adapter, event: event_data) do
+            attempt += 1
+            raise Timeout::Error, "always fails"
+          end
+        end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError) do |error|
+          expect(error.retry_count).to eq(3)
+          expect(error.original_error).to be_a(Timeout::Error)
+        end
+
+        expect(attempt).to eq(3)
+      end
+
+      it "includes original error in message" do
+        expect do
+          retry_handler.with_retry(adapter: adapter, event: event_data) do
+            raise Timeout::Error, "connection timeout"
+          end
+        end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError, /connection timeout/)
+      end
+    end
+
+    context "with fail_on_error: false" do
+      let(:config) { { max_attempts: 2, base_delay_ms: 1, fail_on_error: false } }
+
+      it "returns nil instead of raising on max retries" do
+        attempt = 0
+
+        result = retry_handler.with_retry(adapter: adapter, event: event_data) do
+          attempt += 1
+          raise Timeout::Error
+        end
+
+        expect(result).to be_nil
+        expect(attempt).to eq(2)
+      end
+
+      it "returns nil instead of raising on permanent error" do
+        result = retry_handler.with_retry(adapter: adapter, event: event_data) do
+          raise ArgumentError
+        end
+
+        expect(result).to be_nil
+      end
+    end
+  end
+
+  describe "backoff calculation" do
+    it "calculates exponential backoff correctly" do
+      delays = []
+
+      allow(retry_handler).to receive(:sleep) do |duration|
+        delays << (duration * 1000).round # Convert to ms
+      end
+
+      retry_handler.with_retry(adapter: adapter, event: event_data) do
+        raise Timeout::Error if delays.size < 2
+
+        "success"
+      end
+
+      # Attempt 1: 10ms * 2^0 = 10ms
+      expect(delays[0]).to be_within(2).of(10)
+
+      # Attempt 2: 10ms * 2^1 = 20ms
+      expect(delays[1]).to be_within(3).of(20)
+    end
+
+    it "caps delay at max_delay_ms" do
+      config_with_cap = config.merge(base_delay_ms: 50, max_delay_ms: 60, max_attempts: 5)
+      handler = described_class.new(config: config_with_cap)
+
+      delays = []
+      allow(handler).to receive(:sleep) do |duration|
+        delays << (duration * 1000).round
+      end
+
+      handler.with_retry(adapter: adapter, event: event_data) do
+        raise Timeout::Error if delays.size < 4
+
+        "success"
+      end
+
+      # All delays should be <= max_delay_ms
+      expect(delays).to all(be <= 70) # Allow jitter margin
+    end
+
+    it "adds random jitter to prevent thundering herd" do
+      delays1 = []
+      delays2 = []
+
+      # First run
+      handler1 = described_class.new(config: config)
+      allow(handler1).to receive(:sleep) { |d| delays1 << d }
+
+      handler1.with_retry(adapter: adapter, event: event_data) do
+        raise Timeout::Error if delays1.size < 2
+
+        "success"
+      end
+
+      # Second run
+      handler2 = described_class.new(config: config)
+      allow(handler2).to receive(:sleep) { |d| delays2 << d }
+
+      handler2.with_retry(adapter: adapter, event: event_data) do
+        raise Timeout::Error if delays2.size < 2
+
+        "success"
+      end
+
+      # Delays should be different due to jitter
+      expect(delays1).not_to eq(delays2)
+    end
+  end
+
+  describe "real-world scenario: transient network failure" do
+    it "recovers from temporary network issues" do
+      # Simulate flaky network: fail twice, then succeed
+      attempt = 0
+
+      result = retry_handler.with_retry(adapter: adapter, event: event_data) do
+        attempt += 1
+
+        case attempt
+        when 1
+          raise Errno::ECONNREFUSED, "connection refused"
+        when 2
+          raise Timeout::Error, "timeout"
+        when 3
+          { sent: true, duration_ms: 45 }
+        end
+      end
+
+      expect(result).to eq({ sent: true, duration_ms: 45 })
+      expect(attempt).to eq(3)
+    end
+
+    it "gives up after persistent failures" do
+      # Simulate complete outage
+      attempt = 0
+
+      expect do
+        retry_handler.with_retry(adapter: adapter, event: event_data) do
+          attempt += 1
+          raise Errno::EHOSTUNREACH, "host unreachable"
+        end
+      end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError)
+
+      expect(attempt).to eq(3) # All attempts exhausted
+    end
+  end
+
+  describe "thread safety" do
+    it "handles concurrent retries safely" do
+      threads = 5.times.map do |i|
+        Thread.new do
+          adapter_i = double("Adapter#{i}", class: double(name: "Adapter#{i}"))
+
+          begin
+            retry_handler.with_retry(adapter: adapter_i, event: event_data) do
+              raise Timeout::Error if rand < 0.3
+
+              "success"
+            end
+          rescue E11y::Reliability::RetryHandler::RetryExhaustedError
+            # Expected
+          end
+        end
+      end
+
+      expect { threads.each(&:join) }.not_to raise_error
+    end
+  end
+end

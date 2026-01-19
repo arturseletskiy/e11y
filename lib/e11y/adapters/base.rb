@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../reliability/retry_handler"
+require_relative "../reliability/circuit_breaker"
+
 module E11y
   module Adapters
     # Base class for all E11y adapters
@@ -45,11 +48,18 @@ module E11y
     #
     # @see ADR-004 Section 3.1 (Base Adapter Contract)
     class Base
+      attr_reader :config
+
       # Initialize adapter with config
       #
       # @param config [Hash] Adapter-specific configuration
+      # @option config [Hash] :reliability Reliability settings (retry, circuit_breaker, dlq)
       def initialize(config = {})
         @config = config
+        @reliability_enabled = config.fetch(:reliability, {}).fetch(:enabled, true)
+
+        setup_reliability_layer if @reliability_enabled
+
         validate_config!
       end
 
@@ -79,6 +89,34 @@ module E11y
       #   end
       def write(_event_data)
         raise NotImplementedError, "#{self.class}#write must be implemented"
+      end
+
+      # Write event with reliability layer (retry, circuit breaker, DLQ).
+      #
+      # This is the recommended public API for sending events.
+      # Automatically handles failures, retries, and DLQ.
+      #
+      # Respects `E11y.config.error_handling.fail_on_error` setting (C18 Resolution):
+      # - `true`: Raises exceptions (fast feedback for web requests)
+      # - `false`: Swallows exceptions, saves to DLQ (don't fail background jobs)
+      #
+      # @param event_data [Hash] Event payload
+      # @return [Boolean] true on success
+      # @raise [RetryExhaustedError, CircuitOpenError] if fail_on_error=true
+      def write_with_reliability(event_data)
+        return write(event_data) unless @reliability_enabled
+
+        @retry_handler.with_retry(adapter: self, event: event_data) do
+          @circuit_breaker.call do
+            write(event_data)
+          end
+        end
+
+        true
+      rescue E11y::Reliability::RetryHandler::RetryExhaustedError => e
+        handle_reliability_error(event_data, e, :retry_exhausted)
+      rescue E11y::Reliability::CircuitBreaker::CircuitOpenError => e
+        handle_reliability_error(event_data, e, :circuit_open)
       end
 
       # Write a batch of events (preferred for performance)
@@ -405,6 +443,76 @@ module E11y
       # @api private
       def circuit_timeout_expired?(timeout)
         @circuit_last_failure_time && (Time.now - @circuit_last_failure_time) >= timeout
+      end
+
+      # Setup reliability layer (Retry + CircuitBreaker + DLQ).
+      #
+      # @api private
+      def setup_reliability_layer
+        reliability_config = @config.fetch(:reliability, {})
+
+        # Setup RetryHandler
+        retry_config = reliability_config.fetch(:retry, {})
+        @retry_handler = E11y::Reliability::RetryHandler.new(config: retry_config)
+
+        # Setup CircuitBreaker
+        circuit_breaker_config = reliability_config.fetch(:circuit_breaker, {})
+        @circuit_breaker = E11y::Reliability::CircuitBreaker.new(
+          adapter_name: self.class.name,
+          config: circuit_breaker_config
+        )
+
+        # Setup DLQ components (will be initialized from E11y.config later)
+        @dlq_filter = nil
+        @dlq_storage = nil
+      end
+
+      # Handle reliability error (retry exhausted / circuit breaker open).
+      #
+      # Behavior depends on `E11y.config.error_handling.fail_on_error` (C18 Resolution):
+      # - `true`: Re-raises exception (fast feedback for web requests)
+      # - `false`: Swallows exception, saves to DLQ (don't fail background jobs)
+      #
+      # @param event_data [Hash] Event payload
+      # @param error [StandardError] Error that occurred
+      # @param reason [Symbol] Error reason (:retry_exhausted, :circuit_open)
+      # @return [Boolean] false (event failed)
+      # @raise [StandardError] Re-raises if fail_on_error=true
+      #
+      # @api private
+      def handle_reliability_error(event_data, error, reason)
+        # Save to DLQ if filter allows
+        save_to_dlq_if_needed(event_data, error, reason)
+
+        # Log warning
+        warn "[E11y] #{self.class.name} #{reason} for event #{event_data[:event_name]}: #{error.message}"
+
+        # Check fail_on_error setting (C18 Resolution)
+        raise error if E11y.config.error_handling.fail_on_error
+
+        # Web request context: RAISE (fast feedback)
+
+        # Background job context: SWALLOW (don't fail business logic)
+        # TODO: Track metric e11y.event.tracking_failed_silent
+        false
+      end
+
+      # Save event to DLQ if filter allows.
+      #
+      # @api private
+      def save_to_dlq_if_needed(event_data, error, reason)
+        return unless @dlq_filter&.should_save?(event_data, error)
+
+        @dlq_storage&.save(event_data, metadata: {
+                             error: error.message,
+                             error_class: error.class.name,
+                             reason: reason,
+                             adapter: self.class.name,
+                             timestamp: Time.now.utc.iso8601
+                           })
+      rescue StandardError => e
+        # C18: Don't fail if DLQ save fails
+        warn "[E11y] Failed to save event to DLQ: #{e.message}"
       end
     end
 

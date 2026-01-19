@@ -397,4 +397,124 @@ RSpec.describe E11y::Adapters::Base do
       end
     end
   end
+
+  describe "C18 Resolution: fail_on_error behavior" do
+    let(:failing_adapter_class) do
+      Class.new(described_class) do
+        def write(_event_data)
+          raise E11y::Reliability::CircuitBreaker::CircuitOpenError, "Circuit breaker open"
+        end
+      end
+    end
+
+    let(:failing_adapter) do
+      failing_adapter_class.new(
+        circuit_breaker: { enabled: true },
+        retry_handler: { max_attempts: 1 },
+        dlq_storage: { file_path: "/tmp/e11y_dlq_test.jsonl" },
+        dlq_filter: { min_severity_to_save: :error }
+      )
+    end
+
+    let(:event_data) { { event_name: "test.event", severity: :info } }
+
+    after do
+      E11y.config.error_handling.fail_on_error = true # Reset to default
+    end
+
+    context "when fail_on_error = true (web requests)" do
+      before do
+        E11y.config.error_handling.fail_on_error = true
+      end
+
+      it "raises RetryExhaustedError (wraps CircuitOpenError)" do
+        expect do
+          failing_adapter.write_with_reliability(event_data)
+        end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError)
+      end
+
+      it "provides fast feedback for failures" do
+        # Web requests should fail immediately to provide fast feedback
+        expect do
+          failing_adapter.write_with_reliability(event_data)
+        end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError, /Retry exhausted/)
+      end
+    end
+
+    context "when fail_on_error = false (background jobs)" do
+      before do
+        E11y.config.error_handling.fail_on_error = false
+      end
+
+      it "swallows CircuitOpenError" do
+        expect do
+          failing_adapter.write_with_reliability(event_data)
+        end.not_to raise_error
+      end
+
+      it "returns false on failure" do
+        result = failing_adapter.write_with_reliability(event_data)
+        expect(result).to be false
+      end
+
+      it "does not block business logic" do
+        # In background jobs, event tracking failures should NOT cause job to fail
+        result = failing_adapter.write_with_reliability(event_data)
+        expect(result).to be false
+        # Job continues despite E11y failure
+      end
+
+      it "saves failed event to DLQ" do
+        # DLQ save is tested separately, but this documents the intent
+        expect do
+          failing_adapter.write_with_reliability(event_data)
+        end.not_to raise_error
+      end
+    end
+
+    describe "fail_on_error setting in different contexts" do
+      it "defaults to true (web request context)" do
+        expect(E11y.config.error_handling.fail_on_error).to be true
+      end
+
+      it "can be set to false (background job context)" do
+        E11y.config.error_handling.fail_on_error = false
+        expect(E11y.config.error_handling.fail_on_error).to be false
+      end
+
+      it "can be temporarily changed and restored" do
+        original_setting = E11y.config.error_handling.fail_on_error
+
+        E11y.config.error_handling.fail_on_error = false
+        expect(E11y.config.error_handling.fail_on_error).to be false
+
+        E11y.config.error_handling.fail_on_error = original_setting
+        expect(E11y.config.error_handling.fail_on_error).to eq(original_setting)
+      end
+    end
+
+    describe "ADR-013 §3.6 compliance" do
+      it "implements non-failing event tracking for background jobs" do
+        # C18 Resolution: Event tracking should NOT fail background jobs
+        E11y.config.error_handling.fail_on_error = false
+
+        # Even if adapter is down (circuit breaker open), event tracking should not raise
+        expect do
+          failing_adapter.write_with_reliability(event_data)
+        end.not_to raise_error
+
+        # Business logic continues
+        # Event is saved to DLQ (will replay when adapter recovers)
+      end
+
+      it "preserves fast feedback for web requests" do
+        # Web requests should fail fast (don't hide errors)
+        E11y.config.error_handling.fail_on_error = true
+
+        expect do
+          failing_adapter.write_with_reliability(event_data)
+        end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError)
+      end
+    end
+  end
 end

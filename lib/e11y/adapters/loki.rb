@@ -1,7 +1,22 @@
 # frozen_string_literal: true
 
-require "faraday"
-require "faraday/retry" # Retry middleware
+# Check if Faraday is available
+begin
+  require "faraday"
+  require "faraday/retry" # Retry middleware
+rescue LoadError
+  raise LoadError, <<~ERROR
+    Faraday not available!
+
+    To use E11y::Adapters::Loki, add to your Gemfile:
+
+      gem 'faraday'
+      gem 'faraday-retry'
+
+    Then run: bundle install
+  ERROR
+end
+
 require "json"
 require "zlib"
 

@@ -4,6 +4,22 @@ require "e11y/adapters/base"
 require "e11y/metrics/cardinality_protection"
 require "e11y/metrics/registry"
 
+# Check if Yabeda is available
+begin
+  require "yabeda"
+rescue LoadError
+  raise LoadError, <<~ERROR
+    Yabeda not available!
+
+    To use E11y::Adapters::Yabeda, add to your Gemfile:
+
+      gem 'yabeda'
+      gem 'yabeda-prometheus'  # For Prometheus exporter
+
+    Then run: bundle install
+  ERROR
+end
+
 module E11y
   module Adapters
     # Yabeda adapter for E11y metrics.
@@ -110,6 +126,70 @@ module E11y
         }
       end
 
+      # Track a counter metric (for E11y::Metrics facade).
+      #
+      # @param name [Symbol] Metric name
+      # @param labels [Hash] Metric labels
+      # @param value [Integer] Increment value (default: 1)
+      # @return [void]
+      def increment(name, labels = {}, value: 1)
+        return unless healthy?
+
+        # Apply cardinality protection
+        safe_labels = @cardinality_protection.filter(labels, name)
+
+        # Register metric if not exists
+        register_metric_if_needed(name, :counter, safe_labels.keys)
+
+        # Update Yabeda metric
+        ::Yabeda.e11y.send(name).increment(safe_labels, by: value)
+      rescue StandardError => e
+        E11y.logger.warn("Failed to increment Yabeda metric #{name}: #{e.message}", error: e.class.name)
+      end
+
+      # Track a histogram metric (for E11y::Metrics facade).
+      #
+      # @param name [Symbol] Metric name
+      # @param value [Numeric] Observed value
+      # @param labels [Hash] Metric labels
+      # @param buckets [Array<Numeric>, nil] Optional histogram buckets
+      # @return [void]
+      def histogram(name, value, labels = {}, buckets: nil)
+        return unless healthy?
+
+        # Apply cardinality protection
+        safe_labels = @cardinality_protection.filter(labels, name)
+
+        # Register metric if not exists
+        register_metric_if_needed(name, :histogram, safe_labels.keys, buckets: buckets)
+
+        # Update Yabeda metric
+        ::Yabeda.e11y.send(name).observe(value, safe_labels)
+      rescue StandardError => e
+        E11y.logger.warn("Failed to observe Yabeda histogram #{name}: #{e.message}", error: e.class.name)
+      end
+
+      # Track a gauge metric (for E11y::Metrics facade).
+      #
+      # @param name [Symbol] Metric name
+      # @param value [Numeric] Current value
+      # @param labels [Hash] Metric labels
+      # @return [void]
+      def gauge(name, value, labels = {})
+        return unless healthy?
+
+        # Apply cardinality protection
+        safe_labels = @cardinality_protection.filter(labels, name)
+
+        # Register metric if not exists
+        register_metric_if_needed(name, :gauge, safe_labels.keys)
+
+        # Update Yabeda metric
+        ::Yabeda.e11y.send(name).set(value, safe_labels)
+      rescue StandardError => e
+        E11y.logger.warn("Failed to set Yabeda gauge #{name}: #{e.message}", error: e.class.name)
+      end
+
       # Validate configuration
       #
       # @raise [ArgumentError] if configuration is invalid
@@ -195,6 +275,38 @@ module E11y
       rescue StandardError => e
         # Metric might already be registered - that's OK
         warn "E11y Yabeda: Could not register metric #{metric_name}: #{e.message}"
+      end
+
+      # Register a metric if it doesn't exist yet (for direct metric calls).
+      #
+      # @param name [Symbol] Metric name
+      # @param type [Symbol] Metric type (:counter, :histogram, :gauge)
+      # @param tags [Array<Symbol>] Metric tags (labels)
+      # @param buckets [Array<Numeric>, nil] Optional histogram buckets
+      # @return [void]
+      # @api private
+      def register_metric_if_needed(name, type, tags, buckets: nil)
+        # Check if metric already exists
+        return if ::Yabeda.metrics.key?(:"e11y_#{name}")
+
+        ::Yabeda.configure do
+          group :e11y do
+            case type
+            when :counter
+              counter name, tags: tags, comment: "E11y self-monitoring: #{name}"
+            when :histogram
+              histogram name,
+                        tags: tags,
+                        buckets: buckets || [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10],
+                        comment: "E11y self-monitoring: #{name}"
+            when :gauge
+              gauge name, tags: tags, comment: "E11y self-monitoring: #{name}"
+            end
+          end
+        end
+      rescue StandardError => e
+        # Metric might already be registered - that's OK
+        E11y.logger.debug("Could not register Yabeda metric #{name}: #{e.message}")
       end
 
       # Update a single metric based on event data

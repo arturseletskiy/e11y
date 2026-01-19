@@ -41,44 +41,89 @@ module E11y
       # Server-side middleware: Set up job-scoped context when executing job
       #
       # **C17 Hybrid Tracing**: Creates NEW trace_id for job, but preserves parent link.
+      # **C18 Non-Failing**: E11y errors don't fail jobs (observability is secondary to business logic).
       class ServerMiddleware
         # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
         def call(_worker, job, _queue)
-          # Extract parent trace context from job metadata (C17 Hybrid Tracing)
-          parent_trace_id = job["e11y_parent_trace_id"]
+          # C18: Disable fail_on_error for jobs (observability should not block business logic)
+          original_fail_on_error = E11y.config.error_handling.fail_on_error
+          E11y.config.error_handling.fail_on_error = false
 
-          # Generate NEW trace_id for this job (not reuse parent!) - C17 Resolution
-          trace_id = generate_trace_id
-          span_id = generate_span_id
+          setup_job_context(job)
+          setup_job_buffer
 
-          # Set job-scoped context (same E11y::Current as for HTTP requests)
-          E11y::Current.trace_id = trace_id
-          E11y::Current.span_id = span_id
-          E11y::Current.parent_trace_id = parent_trace_id # ✅ Link to parent request
-          E11y::Current.request_id = job["jid"] # Use Sidekiq job ID as request_id
-
-          # Start job-scoped buffer (for debug events)
-          E11y::Buffers::RequestScopedBuffer.start! if E11y.config.request_buffer&.enabled
-
-          # Execute job
+          # Execute job (business logic)
           yield
-        rescue StandardError
-          # Flush buffer on error (includes debug events)
-          E11y::Buffers::RequestScopedBuffer.flush_on_error! if E11y.config.request_buffer&.enabled
+        rescue StandardError => e
+          # Check if this is E11y error (circuit breaker, retry exhausted, etc.)
+          handle_job_error(e)
 
-          raise # Re-raise original exception
+          raise # Always re-raise original exception
         ensure
-          # Flush buffer on success (not on error, already flushed in rescue)
-          if !$ERROR_INFO && E11y.config.request_buffer&.enabled # No exception occurred
-            E11y::Buffers::RequestScopedBuffer.flush!
-          end
+          cleanup_job_context
 
-          # Reset context
-          E11y::Current.reset
+          # Restore original setting
+          E11y.config.error_handling.fail_on_error = original_fail_on_error
         end
         # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
 
         private
+
+        # Setup job-scoped context (C17 Hybrid Tracing)
+        def setup_job_context(job)
+          # Extract parent trace context from job metadata
+          parent_trace_id = job["e11y_parent_trace_id"]
+
+          # Generate NEW trace_id for this job (not reuse parent!)
+          trace_id = generate_trace_id
+          span_id = generate_span_id
+
+          # Set job-scoped context
+          E11y::Current.trace_id = trace_id
+          E11y::Current.span_id = span_id
+          E11y::Current.parent_trace_id = parent_trace_id
+          E11y::Current.request_id = job["jid"]
+        end
+
+        # Setup job-scoped buffer
+        def setup_job_buffer
+          return unless E11y.config.request_buffer&.enabled
+
+          E11y::Buffers::RequestScopedBuffer.start!
+        rescue StandardError => e
+          # C18: Don't fail job if buffer setup fails
+          warn "[E11y] Failed to start job buffer: #{e.message}"
+        end
+
+        # Handle job error (C18: Non-Failing Event Tracking)
+        def handle_job_error(error)
+          # Flush buffer on error (includes debug events)
+          return unless E11y.config.request_buffer&.enabled
+
+          E11y::Buffers::RequestScopedBuffer.flush_on_error!
+        rescue StandardError => e
+          # C18: Don't fail job if buffer flush fails
+          warn "[E11y] Failed to flush job buffer on error: #{e.message}"
+        end
+
+        # Cleanup job-scoped context
+        def cleanup_job_context
+          # Flush buffer on success (not on error, already flushed in rescue)
+          if !$ERROR_INFO && E11y.config.request_buffer&.enabled
+            begin
+              E11y::Buffers::RequestScopedBuffer.flush!
+            rescue StandardError => e
+              # C18: Don't fail job if buffer flush fails
+              warn "[E11y] Failed to flush job buffer: #{e.message}"
+            end
+          end
+
+          # Reset context (always, even if flush failed)
+          E11y::Current.reset
+        rescue StandardError => e
+          # C18: Absolutely don't fail job on context cleanup
+          warn "[E11y] Failed to reset job context: #{e.message}"
+        end
 
         # Generate new trace_id (32-character hex)
         # @return [String]

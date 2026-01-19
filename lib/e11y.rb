@@ -104,7 +104,8 @@ module E11y
   #   end
   class Configuration
     attr_accessor :adapters, :log_level, :enabled, :environment, :service_name
-    attr_reader :adapter_mapping, :pipeline, :rails_instrumentation, :logger_bridge, :request_buffer
+    attr_reader :adapter_mapping, :pipeline, :rails_instrumentation, :logger_bridge, :request_buffer, :error_handling,
+                :dlq_storage, :dlq_filter, :rate_limiting
 
     def initialize
       @adapters = {} # Hash of adapter_name => adapter_instance
@@ -117,6 +118,10 @@ module E11y
       @rails_instrumentation = RailsInstrumentationConfig.new
       @logger_bridge = LoggerBridgeConfig.new
       @request_buffer = RequestBufferConfig.new
+      @error_handling = ErrorHandlingConfig.new # ✅ C18 Resolution
+      @dlq_storage = nil # Set by user (e.g., DLQ::FileStorage instance)
+      @dlq_filter = nil # Set by user (e.g., DLQ::Filter instance)
+      @rate_limiting = RateLimitingConfig.new
       configure_default_pipeline
     end
 
@@ -216,6 +221,38 @@ module E11y
 
     def initialize
       @enabled = false # Disabled by default
+    end
+  end
+
+  # Error Handling configuration (C18 Resolution)
+  #
+  # Controls whether event tracking failures should raise exceptions.
+  # Default: true (for web requests - fast feedback)
+  # Exception: false (for background jobs - don't fail business logic)
+  #
+  # @see ADR-013 §3.6 (Event Tracking in Background Jobs)
+  class ErrorHandlingConfig
+    attr_accessor :fail_on_error
+
+    def initialize
+      @fail_on_error = true # Default: raise errors (fast feedback for web requests)
+    end
+  end
+
+  # Rate Limiting configuration (UC-011, C02 Resolution)
+  #
+  # Protects adapters from event floods using token bucket algorithm.
+  #
+  # @see UC-011 (Rate Limiting - DoS Protection)
+  # @see ADR-013 §4.6 (C02 Resolution)
+  class RateLimitingConfig
+    attr_accessor :enabled, :global_limit, :per_event_limit, :window
+
+    def initialize
+      @enabled = false # Opt-in (enable explicitly)
+      @global_limit = 10_000 # Max 10K events/sec globally
+      @per_event_limit = 1_000 # Max 1K events/sec per event type
+      @window = 1.0 # 1 second window
     end
   end
 end

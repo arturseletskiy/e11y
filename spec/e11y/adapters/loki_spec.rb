@@ -3,6 +3,19 @@
 require "spec_helper"
 require "time"
 
+# Skip Loki tests if Faraday not available
+begin
+  require "e11y/adapters/loki"
+rescue LoadError
+  RSpec.describe "E11y::Adapters::Loki (skipped)" do
+    it "requires Faraday to be available" do
+      skip "Faraday not available in test environment"
+    end
+  end
+
+  return
+end
+
 RSpec.describe E11y::Adapters::Loki do
   let(:loki_url) { "http://loki.test:3100" }
   let(:config) do

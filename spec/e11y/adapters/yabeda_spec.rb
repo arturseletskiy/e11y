@@ -2,6 +2,19 @@
 
 require "spec_helper"
 
+# Skip Yabeda tests if Yabeda not available
+begin
+  require "e11y/adapters/yabeda"
+rescue LoadError
+  RSpec.describe "E11y::Adapters::Yabeda (skipped)" do
+    it "requires Yabeda to be available" do
+      skip "Yabeda not available in test environment"
+    end
+  end
+
+  return
+end
+
 RSpec.describe E11y::Adapters::Yabeda do
   let(:adapter) { described_class.new(auto_register: false) }
   let(:registry) { E11y::Metrics::Registry.instance }

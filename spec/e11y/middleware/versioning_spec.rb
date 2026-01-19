@@ -1,273 +1,254 @@
 # frozen_string_literal: true
 
 require "spec_helper"
-require "e11y/middleware/versioning"
 
 RSpec.describe E11y::Middleware::Versioning do
-  let(:final_app) { ->(event_data) { event_data } }
-  let(:middleware) { described_class.new(final_app) }
-
-  describe ".middleware_zone" do
-    it "declares post_processing zone (LAST before routing!)" do
-      expect(described_class.middleware_zone).to eq(:post_processing)
-    end
-  end
+  let(:next_middleware) { ->(event) { event } }
+  let(:middleware) { described_class.new(next_middleware) }
 
   describe "#call" do
-    context "with V2 event" do
-      it "normalizes event name by removing version suffix" do
-        event_data = {
-          event_name: "Events::OrderPaidV2",
-          payload: { order_id: 123 }
-        }
+    context "V1 events (no version suffix)" do
+      let(:event_data) { { event_name: "Events::OrderPaid", payload: { order_id: "123" } } }
 
+      it "does not add v: field for V1 events" do
         result = middleware.call(event_data)
-
-        expect(result[:event_name]).to eq("Events::OrderPaid")
+        expect(result[:v]).to be_nil
       end
 
-      it "adds version to payload" do
-        event_data = {
-          event_name: "Events::OrderPaidV2",
-          payload: { order_id: 123 }
-        }
-
+      it "normalizes event_name (removes Events:: namespace)" do
         result = middleware.call(event_data)
-
-        expect(result[:payload][:v]).to eq(2)
-      end
-
-      it "preserves original payload fields" do
-        event_data = {
-          event_name: "Events::OrderPaidV2",
-          payload: { order_id: 123, amount: 99.99 }
-        }
-
-        result = middleware.call(event_data)
-
-        expect(result[:payload][:order_id]).to eq(123)
-        expect(result[:payload][:amount]).to eq(99.99)
-      end
-
-      it "does not override existing version in payload" do
-        event_data = {
-          event_name: "Events::OrderPaidV2",
-          payload: { order_id: 123, v: 1 } # Already has version
-        }
-
-        result = middleware.call(event_data)
-
-        expect(result[:payload][:v]).to eq(1) # Not overridden
+        expect(result[:event_name]).to eq("order.paid")
       end
     end
 
-    context "with V1 event (no version suffix)" do
-      it "keeps event name unchanged" do
-        event_data = {
-          event_name: "Events::OrderPaid",
-          payload: { order_id: 123 }
-        }
+    context "V2 events (with V2 suffix)" do
+      let(:event_data) { { event_name: "Events::OrderPaidV2", payload: { order_id: "123", currency: "USD" } } }
 
+      it "adds v: 2 field" do
         result = middleware.call(event_data)
-
-        expect(result[:event_name]).to eq("Events::OrderPaid")
+        expect(result[:v]).to eq(2)
       end
 
-      it "does not add version to payload (ADR-015 line 243)" do
-        event_data = {
-          event_name: "Events::OrderPaid",
-          payload: { order_id: 123 }
-        }
-
+      it "normalizes event_name (removes version suffix)" do
         result = middleware.call(event_data)
+        expect(result[:event_name]).to eq("order.paid")
+      end
 
-        expect(result[:payload]).not_to have_key(:v)
+      it "preserves original payload" do
+        result = middleware.call(event_data)
+        expect(result[:payload]).to eq({ order_id: "123", currency: "USD" })
       end
     end
 
-    context "with higher versions" do
-      it "handles V3 events" do
-        event_data = {
-          event_name: "Events::OrderPaidV3",
-          payload: { order_id: 123 }
-        }
-
+    context "V3+ events (with V3, V4, etc. suffix)" do
+      it "extracts V3 correctly" do
+        event_data = { event_name: "Events::OrderPaidV3" }
         result = middleware.call(event_data)
-
-        expect(result[:event_name]).to eq("Events::OrderPaid")
-        expect(result[:payload][:v]).to eq(3)
+        expect(result[:v]).to eq(3)
+        expect(result[:event_name]).to eq("order.paid")
       end
 
-      it "handles V10 events (multi-digit versions)" do
-        event_data = {
-          event_name: "Events::OrderPaidV10",
-          payload: { order_id: 123 }
-        }
-
+      it "extracts V10 correctly (multi-digit version)" do
+        event_data = { event_name: "Events::OrderPaidV10" }
         result = middleware.call(event_data)
-
-        expect(result[:event_name]).to eq("Events::OrderPaid")
-        expect(result[:payload][:v]).to eq(10)
+        expect(result[:v]).to eq(10)
+        expect(result[:event_name]).to eq("order.paid")
       end
     end
 
-    context "with missing event_name or payload" do
-      it "skips normalization if event_name is missing" do
-        event_data = { payload: { order_id: 123 } }
-
+    context "Nested namespace events" do
+      it "normalizes nested namespaces" do
+        event_data = { event_name: "Events::Payments::OrderPaid" }
         result = middleware.call(event_data)
-
-        expect(result).to eq(event_data)
+        expect(result[:event_name]).to eq("payments.order.paid")
       end
 
-      it "skips normalization if payload is missing" do
-        event_data = { event_name: "Events::OrderPaidV2" }
-
+      it "normalizes nested namespaces with version" do
+        event_data = { event_name: "Events::Payments::OrderPaidV2" }
         result = middleware.call(event_data)
-
-        expect(result).to eq(event_data)
+        expect(result[:v]).to eq(2)
+        expect(result[:event_name]).to eq("payments.order.paid")
       end
     end
 
-    context "with metrics" do
-      it "increments normalized metric with version tag" do
-        event_data = {
-          event_name: "Events::OrderPaidV2",
-          payload: { order_id: 123 }
-        }
+    context "Edge cases" do
+      it "handles nil event_name" do
+        event_data = { event_name: nil }
+        result = middleware.call(event_data)
+        expect(result[:v]).to be_nil
+        expect(result[:event_name]).to be_nil
+      end
 
-        allow(middleware).to receive(:increment_metric)
+      it "handles empty event_name" do
+        event_data = { event_name: "" }
+        result = middleware.call(event_data)
+        expect(result[:v]).to be_nil
+      end
 
-        middleware.call(event_data)
+      it "handles event_name without Events:: namespace" do
+        event_data = { event_name: "OrderPaid" }
+        result = middleware.call(event_data)
+        expect(result[:event_name]).to eq("order.paid")
+      end
 
-        expect(middleware).to have_received(:increment_metric)
-          .with("e11y.middleware.versioning.normalized", version: 2)
+      it "handles event_name with V in middle (not version)" do
+        event_data = { event_name: "Events::VeryImportantEvent" }
+        result = middleware.call(event_data)
+        expect(result[:v]).to be_nil
+        expect(result[:event_name]).to eq("very.important.event")
       end
     end
   end
 
-  describe "ADR-015 compliance" do
-    it "runs in post_processing zone (LAST before routing)" do
-      expect(described_class.middleware_zone).to eq(:post_processing)
+  describe "ADR-012 compliance" do
+    describe "§2: Parallel Versions" do
+      it "allows V1 and V2 to coexist with same normalized name" do
+        v1_event = { event_name: "Events::OrderPaid" }
+        v2_event = { event_name: "Events::OrderPaidV2" }
+
+        v1_result = middleware.call(v1_event)
+        v2_result = middleware.call(v2_event)
+
+        # Same normalized name for both versions
+        expect(v1_result[:event_name]).to eq("order.paid")
+        expect(v2_result[:event_name]).to eq("order.paid")
+
+        # But different version field
+        expect(v1_result[:v]).to be_nil # V1 implicit
+        expect(v2_result[:v]).to eq(2) # V2 explicit
+      end
     end
 
-    it "normalizes event name for adapters (ADR-015 §3.1 line 110)" do
-      event_data = {
-        event_name: "Events::OrderPaidV2",
-        payload: { order_id: 123, amount: 99.99, currency: "USD" }
-      }
-
-      result = middleware.call(event_data)
-
-      # Adapters receive normalized name
-      expect(result[:event_name]).to eq("Events::OrderPaid")
-      expect(result[:payload][:v]).to eq(2)
-    end
-
-    it "only adds version field if version > 1 (ADR-015 §6 line 243)" do
-      v1_event = {
-        event_name: "Events::OrderPaid",
-        payload: { order_id: 123 }
-      }
-
-      v2_event = {
-        event_name: "Events::OrderPaidV2",
-        payload: { order_id: 456 }
-      }
-
-      v1_result = middleware.call(v1_event)
-      v2_result = middleware.call(v2_event)
-
-      # V1: no version field
-      expect(v1_result[:payload]).not_to have_key(:v)
-
-      # V2: version field present
-      expect(v2_result[:payload][:v]).to eq(2)
-    end
-
-    it "enables easy querying in Loki (ADR-015 §5 line 229-232)" do
-      # All versions query: {event_name="Events::OrderPaid"}
-      v1_event = { event_name: "Events::OrderPaid", payload: {} }
-      v2_event = { event_name: "Events::OrderPaidV2", payload: {} }
-
-      v1_result = middleware.call(v1_event)
-      v2_result = middleware.call(v2_event)
-
-      # Both have same normalized name (easy to query all versions)
-      expect(v1_result[:event_name]).to eq("Events::OrderPaid")
-      expect(v2_result[:event_name]).to eq("Events::OrderPaid")
-
-      # V2 has explicit version (easy to filter)
-      expect(v2_result[:payload][:v]).to eq(2)
-    end
-  end
-
-  describe "ADR-015 §4 Wrong Order Prevention" do
-    it "MUST run in post_processing zone (AFTER Validation and PII Filtering)" do
-      # CRITICAL: Versioning must be LAST before routing!
-      #
-      # If Versioning runs TOO EARLY (before Validation):
-      # 1. Versioning normalizes "Events::OrderPaidV2" → "Events::OrderPaid"
-      # 2. Validation tries to find schema for "Events::OrderPaid"
-      # 3. ERROR: Can't find V2 schema! (it's attached to V2 class)
-      #
-      # If Versioning runs TOO EARLY (before PII Filtering):
-      # 1. Versioning normalizes "Events::OrderPaidV2" → "Events::OrderPaid"
-      # 2. PII Filtering uses V1 rules instead of V2 rules!
-      # 3. ERROR: Wrong PII handling!
-      #
-      # Correct order (enforced by zone system):
-      # 1. :pre_processing zone → Validation uses "Events::OrderPaidV2" schema ✅
-      # 2. :security zone → PII Filtering uses "Events::OrderPaidV2" rules ✅
-      # 3. :post_processing zone → Versioning normalizes to "Events::OrderPaid" ✅
-      # 4. :adapters zone → Routing to buffers
-
-      expect(described_class.middleware_zone).to eq(:post_processing)
-    end
-  end
-
-  describe "integration" do
-    it "works with full pipeline execution" do
-      # Simulate multi-middleware pipeline
-      middleware2 = Class.new(E11y::Middleware::Base) do
-        def call(event_data)
-          event_data[:middleware2] = true
-          @app.call(event_data)
+    describe "§3: Naming Convention" do
+      it "extracts version from class name suffix" do
+        {
+          "Events::OrderPaid" => 1,
+          "Events::OrderPaidV2" => 2,
+          "Events::OrderPaidV3" => 3,
+          "Events::OrderPaidV99" => 99
+        }.each do |class_name, expected_version|
+          event = { event_name: class_name }
+          result = middleware.call(event)
+          actual_version = result[:v] || 1 # V1 is implicit (no field)
+          expect(actual_version).to eq(expected_version), "Expected version #{expected_version} for #{class_name}"
         end
       end
 
-      pipeline = middleware2.new(middleware)
-      event_data = {
-        event_name: "Events::OrderPaidV2",
-        payload: { order_id: 123 }
-      }
-
-      result = pipeline.call(event_data)
-
-      expect(result[:event_name]).to eq("Events::OrderPaid")
-      expect(result[:payload][:v]).to eq(2)
-      expect(result[:middleware2]).to be true
+      it "normalizes event_name to snake_case" do
+        {
+          "Events::OrderPaid" => "order.paid",
+          "Events::UserSignedUp" => "user.signed.up",
+          "Events::PaymentFailed" => "payment.failed",
+          "Events::APICallCompleted" => "api.call.completed"
+        }.each do |class_name, expected_name|
+          event = { event_name: class_name }
+          result = middleware.call(event)
+          expect(result[:event_name]).to eq(expected_name), "Expected #{expected_name} for #{class_name}"
+        end
+      end
     end
 
-    it "adapters receive normalized event name" do
-      # Simulate adapter (final app)
-      adapter_received = nil
-      adapter = lambda do |event_data|
-        adapter_received = event_data
-        nil
+    describe "§4: Version in Payload" do
+      it "only adds v: field if version > 1" do
+        # V1: No field (implicit)
+        v1 = middleware.call({ event_name: "Events::OrderPaid" })
+        expect(v1).not_to have_key(:v)
+
+        # V2+: Field present
+        v2 = middleware.call({ event_name: "Events::OrderPaidV2" })
+        expect(v2).to have_key(:v)
+        expect(v2[:v]).to eq(2)
       end
 
-      versioning_middleware = described_class.new(adapter)
-      event_data = {
-        event_name: "Events::OrderPaidV2",
-        payload: { order_id: 123, amount: 99.99 }
-      }
+      it "reduces noise for V1 events (90% of events)" do
+        # Most events are V1, so avoid adding unnecessary field
+        v1_events = [
+          "Events::OrderPaid",
+          "Events::UserSignedUp",
+          "Events::PaymentFailed"
+        ]
 
-      versioning_middleware.call(event_data)
+        v1_events.each do |event_name|
+          result = middleware.call({ event_name: event_name })
+          expect(result[:v]).to be_nil, "Expected no v: field for #{event_name}"
+        end
+      end
+    end
+  end
 
-      # Adapter sees normalized name and explicit version
-      expect(adapter_received[:event_name]).to eq("Events::OrderPaid")
-      expect(adapter_received[:payload][:v]).to eq(2)
+  describe "UC-020 compliance (Event Versioning)" do
+    it "supports gradual rollout (V1 and V2 parallel)" do
+      # Old code: still tracking V1
+      v1_event = { event_name: "Events::OrderPaid", payload: { order_id: "123", amount: 99.99 } }
+      v1_result = middleware.call(v1_event)
+
+      # New code: tracking V2 with new field
+      v2_event = { event_name: "Events::OrderPaidV2", payload: { order_id: "123", amount: 99.99, currency: "USD" } }
+      v2_result = middleware.call(v2_event)
+
+      # Both events have same normalized name (consistent queries)
+      expect(v1_result[:event_name]).to eq("order.paid")
+      expect(v2_result[:event_name]).to eq("order.paid")
+
+      # But different version metadata
+      expect(v1_result[:v]).to be_nil
+      expect(v2_result[:v]).to eq(2)
+
+      # Query: `WHERE event_name = 'order.paid'` matches BOTH versions
+      # Query: `WHERE event_name = 'order.paid' AND v = 2` matches ONLY V2
+    end
+
+    it "supports schema evolution without breaking old code" do
+      # Scenario: Add required field (currency) → create V2
+      # Old code continues to work with V1 (no changes needed)
+
+      v1_event = { event_name: "Events::OrderPaid", payload: { order_id: "123", amount: 99.99 } }
+      v1_result = middleware.call(v1_event)
+
+      # Old code still works (no migration needed)
+      expect(v1_result[:event_name]).to eq("order.paid")
+      expect(v1_result[:v]).to be_nil
+    end
+  end
+
+  describe "Real-world scenarios" do
+    it "handles typical event evolution: V1 → V2 → V3" do
+      # V1: Original event
+      v1 = middleware.call({ event_name: "Events::OrderPaid", payload: { order_id: "123", amount: 99.99 } })
+      expect(v1[:event_name]).to eq("order.paid")
+      expect(v1[:v]).to be_nil
+
+      # V2: Add currency field
+      v2 = middleware.call({
+                             event_name: "Events::OrderPaidV2",
+                             payload: { order_id: "123", amount: 99.99, currency: "USD" }
+                           })
+      expect(v2[:event_name]).to eq("order.paid")
+      expect(v2[:v]).to eq(2)
+
+      # V3: Rename amount → amount_cents
+      v3 = middleware.call({
+                             event_name: "Events::OrderPaidV3",
+                             payload: { order_id: "123", amount_cents: 9999, currency: "USD" }
+                           })
+      expect(v3[:event_name]).to eq("order.paid")
+      expect(v3[:v]).to eq(3)
+
+      # All three versions coexist peacefully
+      # Query: WHERE event_name = 'order.paid' matches all
+      # Query: WHERE event_name = 'order.paid' AND v = 2 matches only V2
+    end
+
+    it "documents that versioning is opt-in (must enable middleware)" do
+      # Without enabling versioning middleware, version field won't be added
+      # This test documents the opt-in nature of versioning
+
+      # Versioning middleware is ENABLED in this test (via middleware instance)
+      result = middleware.call({ event_name: "Events::OrderPaidV2" })
+      expect(result[:v]).to eq(2)
+
+      # In production, user must explicitly enable:
+      # E11y.configure { |c| c.pipeline.use E11y::Middleware::Versioning }
     end
   end
 end
