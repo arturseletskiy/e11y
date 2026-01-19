@@ -387,8 +387,6 @@ end
 │  │  → Middleware → Adapters → Loki/Sentry/etc       │           │
 │  └──────────────────────────────────────────────────┘           │
 │                                                                   │
-│  ❌ NO REVERSE FLOW (E11y does NOT publish to ASN)              │
-│                                                                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -399,7 +397,6 @@ module E11y
     class RailsInstrumentation
       # ========================================
       # ONLY ActiveSupport::Notifications → E11y
-      # (No reverse flow!)
       # ========================================
       
       def self.setup!
@@ -466,60 +463,6 @@ module E11y
   end
 end
 ```
-
-### 4.1.1. Opt-In Reverse Flow (For Legacy Compatibility)
-
-**Use Case:** Some legacy gems expect ASN events (rare, but possible).
-
-**Solution:** Explicit opt-in at event class level:
-
-```ruby
-# app/events/order_created.rb
-class Events::OrderCreated < E11y::Event::Base
-  schema do
-    required(:order_id).filled(:string)
-    required(:user_id).filled(:string)
-  end
-  
-  # ⚠️ OPT-IN: Publish to ASN for legacy gem compatibility
-  publish_to_asn enabled: true, name: 'order.created'
-end
-
-# Implementation in E11y::Event::Base:
-module E11y
-  module Event
-    class Base
-      def self.publish_to_asn(enabled: false, name: nil)
-        @publish_to_asn_enabled = enabled
-        @asn_event_name = name || event_name
-      end
-      
-      def self.publish_to_asn_enabled?
-        @publish_to_asn_enabled || false
-      end
-      
-      def self.track(**payload)
-        event_data = super  # E11y pipeline
-        
-        # Only if explicitly enabled for this event class
-        if publish_to_asn_enabled?
-          ActiveSupport::Notifications.instrument(
-            @asn_event_name,
-            event_data[:payload].merge(
-              trace_id: event_data[:trace_id],
-              severity: event_data[:severity]
-            )
-          )
-        end
-        
-        event_data
-      end
-    end
-  end
-end
-```
-
-**Default:** `publish_to_asn enabled: false` (opt-in, not opt-out)
 
 ### 4.2. Configuration: Overridable Event Classes (Devise-Style)
 

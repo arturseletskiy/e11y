@@ -54,23 +54,41 @@ RSpec.describe E11y::Middleware::TraceContext do
     end
 
     describe "trace_id propagation" do
-      it "uses trace_id from Thread.current if present" do
+      it "uses trace_id from E11y::Current if present (priority)" do
+        E11y::Current.reset
+        Thread.current[:e11y_trace_id] = "thread-trace-id"
+        E11y::Current.trace_id = "current-trace-id"
+
+        result = middleware.call(event_data)
+
+        expect(result[:trace_id]).to eq("current-trace-id")
+      ensure
+        E11y::Current.reset
+        Thread.current[:e11y_trace_id] = nil
+      end
+
+      it "uses trace_id from Thread.current if E11y::Current is not set" do
+        E11y::Current.reset
         Thread.current[:e11y_trace_id] = "custom-trace-id-from-request"
 
         result = middleware.call(event_data)
 
         expect(result[:trace_id]).to eq("custom-trace-id-from-request")
       ensure
+        E11y::Current.reset
         Thread.current[:e11y_trace_id] = nil
       end
 
       it "generates new trace_id if Thread.current[:e11y_trace_id] is nil" do
+        E11y::Current.reset
         Thread.current[:e11y_trace_id] = nil
 
         result = middleware.call(event_data)
 
         expect(result[:trace_id]).to be_a(String)
         expect(result[:trace_id].length).to eq(32)
+      ensure
+        E11y::Current.reset
       end
 
       it "does not override existing trace_id in event_data" do
@@ -99,6 +117,52 @@ RSpec.describe E11y::Middleware::TraceContext do
       end
     end
 
+    describe "parent_trace_id propagation (C17 Resolution)" do
+      it "does not add parent_trace_id if not present in E11y::Current" do
+        E11y::Current.reset
+        E11y::Current.trace_id = "current-trace"
+
+        result = middleware.call(event_data)
+
+        expect(result[:parent_trace_id]).to be_nil
+      end
+
+      it "adds parent_trace_id from E11y::Current if present" do
+        E11y::Current.reset
+        E11y::Current.trace_id = "child-trace"
+        E11y::Current.parent_trace_id = "parent-trace-123"
+
+        result = middleware.call(event_data)
+
+        expect(result[:parent_trace_id]).to eq("parent-trace-123")
+      end
+
+      it "does not override existing parent_trace_id in event_data" do
+        E11y::Current.reset
+        E11y::Current.parent_trace_id = "context-parent"
+        event_data[:parent_trace_id] = "existing-parent"
+
+        result = middleware.call(event_data)
+
+        expect(result[:parent_trace_id]).to eq("existing-parent")
+      end
+
+      it "supports hybrid job tracing (new trace + parent link)" do
+        # Simulate HTTP request trace
+        E11y::Current.reset
+        E11y::Current.trace_id = "http-request-trace"
+
+        # Simulate background job trace (new trace, parent link)
+        E11y::Current.trace_id = "job-trace-xyz"
+        E11y::Current.parent_trace_id = "http-request-trace"
+
+        result = middleware.call(event_data)
+
+        expect(result[:trace_id]).to eq("job-trace-xyz")
+        expect(result[:parent_trace_id]).to eq("http-request-trace")
+      end
+    end
+
     describe "timestamp handling" do
       it "uses existing timestamp if present" do
         existing_timestamp = "2025-01-01T00:00:00.000Z"
@@ -120,10 +184,15 @@ RSpec.describe E11y::Middleware::TraceContext do
 
     describe "OpenTelemetry compatibility" do
       it "generates trace_id compatible with OTel format (16 bytes)" do
+        E11y::Current.reset
+        Thread.current[:e11y_trace_id] = nil
+
         result = middleware.call(event_data)
         trace_id_bytes = [result[:trace_id]].pack("H*")
 
         expect(trace_id_bytes.bytesize).to eq(16)
+      ensure
+        E11y::Current.reset
       end
 
       it "generates span_id compatible with OTel format (8 bytes)" do

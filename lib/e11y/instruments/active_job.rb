@@ -23,21 +23,27 @@ module E11y
         extend ActiveSupport::Concern
 
         included do
-          # Inject trace context before enqueueing
+          # Inject trace context before enqueueing (C17 Hybrid Tracing)
+          # Store parent trace context for job to link back to originating request
           before_enqueue do |job|
-            job.e11y_trace_id = E11y::Current.trace_id if E11y::Current.trace_id
-            job.e11y_span_id = E11y::Current.span_id if E11y::Current.span_id
+            # Store current trace as parent (job will create NEW trace)
+            job.e11y_parent_trace_id = E11y::Current.trace_id if E11y::Current.trace_id
+            job.e11y_parent_span_id = E11y::Current.span_id if E11y::Current.span_id
           end
 
-          # Set up job-scoped context around job execution
+          # Set up job-scoped context around job execution (C17 Hybrid Tracing)
           around_perform do |job, block|
-            # Extract trace context from job metadata (propagated from enqueue)
-            trace_id = job.e11y_trace_id || generate_trace_id
-            span_id = generate_span_id # Always generate new span for job execution
+            # Extract parent trace context from job metadata
+            parent_trace_id = job.e11y_parent_trace_id
+
+            # Generate NEW trace_id for this job (not reuse parent!) - C17 Resolution
+            trace_id = generate_trace_id
+            span_id = generate_span_id
 
             # Set job-scoped context (same E11y::Current as for HTTP requests)
             E11y::Current.trace_id = trace_id
             E11y::Current.span_id = span_id
+            E11y::Current.parent_trace_id = parent_trace_id # ✅ Link to parent request
             E11y::Current.request_id = job.job_id # Use ActiveJob ID as request_id
 
             # Start job-scoped buffer (for debug events)
@@ -76,8 +82,26 @@ module E11y
         end
       end
 
-      # Custom attribute accessors for trace context
+      # Custom attribute accessors for trace context (C17 Hybrid Tracing)
       module TraceAttributes
+        def e11y_parent_trace_id
+          @e11y_parent_trace_id
+        end
+
+        def e11y_parent_trace_id=(value)
+          @e11y_parent_trace_id = value
+        end
+
+        def e11y_parent_span_id
+          @e11y_parent_span_id
+        end
+
+        def e11y_parent_span_id=(value)
+          @e11y_parent_span_id = value
+        end
+
+        # Deprecated: Jobs should create NEW trace_id (C17)
+        # These are kept for backward compatibility but should not be used.
         def e11y_trace_id
           @e11y_trace_id
         end

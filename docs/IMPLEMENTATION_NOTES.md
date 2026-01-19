@@ -1752,6 +1752,124 @@ end
 
 ---
 
+### 2026-01-20: Hybrid Background Job Tracing - `parent_trace_id` Support (C17 Resolution)
+
+**Phase/Task**: L3.9.3 - Hybrid Background Job Tracing (C17 Resolution)
+
+**Change Type**: Feature (Critical for Multi-Service Tracing)
+
+**Problem**: 
+Background jobs need **NEW `trace_id`** (for bounded traces) but must **link to parent request** for full observability.
+
+**C17 Resolution** (from ADR-005 §8.3):
+- **Hybrid Model**: Job gets NEW trace_id, but stores `parent_trace_id` link
+- **Why?**: 
+  - Jobs may run for hours/days (not same as 100ms request)
+  - Request SLO (P99 200ms) ≠ Job SLO (P99 5 minutes)
+  - Separate timelines for sync (request) vs async (job) operations
+  - Link preserved: `parent_trace_id` allows reconstructing full flow
+
+**Solution**: 
+Implemented full `parent_trace_id` support across the stack:
+
+1. **`E11y::Current`** - Added `parent_trace_id` attribute
+   ```ruby
+   E11y::Current.trace_id = "job-trace-xyz"         # NEW trace for job
+   E11y::Current.parent_trace_id = "request-abc"    # Link to parent
+   ```
+
+2. **`E11y::Middleware::TraceContext`** - Propagates `parent_trace_id` to all events
+   ```ruby
+   event_data[:parent_trace_id] ||= current_parent_trace_id if current_parent_trace_id
+   ```
+
+3. **`E11y::Instruments::Sidekiq`** - Hybrid tracing for Sidekiq jobs
+   - **ClientMiddleware**: Stores `job["e11y_parent_trace_id"] = E11y::Current.trace_id`
+   - **ServerMiddleware**: Creates NEW trace_id, sets `E11y::Current.parent_trace_id`
+
+4. **`E11y::Instruments::ActiveJob`** - Hybrid tracing for ActiveJob
+   - **before_enqueue**: Stores `job.e11y_parent_trace_id = E11y::Current.trace_id`
+   - **around_perform**: Creates NEW trace_id, sets `E11y::Current.parent_trace_id`
+
+**Example Flow**:
+```ruby
+# HTTP Request (trace_id: "abc-123")
+POST /orders
+Events::OrderCreated.track(order_id: 42)  # trace_id=abc-123, parent_trace_id=nil
+
+ProcessOrderJob.perform_later(42)        # Enqueue job with parent=abc-123
+
+# Background Job (NEW trace_id: "xyz-789")
+ProcessOrderJob#perform
+Events::OrderProcessingStarted.track(...)  # trace_id=xyz-789, parent_trace_id=abc-123
+Events::PaymentCharged.track(...)          # trace_id=xyz-789, parent_trace_id=abc-123
+
+# Query to see full flow:
+# Loki: {trace_id="abc-123"} OR {parent_trace_id="abc-123"}
+# → Shows BOTH request trace AND linked job trace!
+```
+
+**Benefits**:
+- ✅ **Bounded traces**: Job traces don't inflate request SLO metrics
+- ✅ **Full visibility**: Query by `trace_id` OR `parent_trace_id` sees request + jobs
+- ✅ **SLO accuracy**: Request P99 ≠ Job P99 (different timelines)
+- ✅ **Multi-service tracing**: Jobs can spawn multiple service calls with same parent link
+- ✅ **Audit trail**: Complete causal chain from request → job → sub-jobs
+
+**Impact**:
+- ✅ **Non-breaking**: `parent_trace_id` is optional (nil for HTTP requests)
+- ✅ **C17 Resolution**: Fully implements ADR-005 §8.3 hybrid tracing model
+- ✅ **All 990 tests pass** (added 4 new tests for parent_trace_id)
+- ✅ **Zero regressions**: Existing trace_id behavior unchanged
+
+**Status**: ✅ Implemented and tested (L3.9.3 Complete)
+
+**Affected Docs**:
+- [ ] ADR-005 §8.3 - Already documented (C17 Resolution)
+- [ ] ADR-008 (Rails Integration) - Update §9 (Sidekiq) and §10 (ActiveJob) with parent_trace_id examples
+- [ ] UC-009 (Multi-Service Tracing) - Update §3 with parent_trace_id query examples
+- [ ] UC-010 (Background Job Tracking) - Update §6 with hybrid tracing examples
+
+---
+
+### 2026-01-20: Removal of `publish_to_asn` (Reverse Flow) - Устаревшее Требование
+
+**Phase/Task**: L3.8.2 - Rails Instrumentation
+
+**Change Type**: Removal (Deprecated Feature)
+
+**Decision**: 
+Удалена поддержка **opt-in reverse flow** (`publish_to_asn enabled: true`), так как это устаревшее требование.
+
+**Rationale**:
+1. **Unidirectional design**: E11y использует **только ASN → E11y** (подписка на Rails события)
+2. **No reverse flow**: E11y события НЕ публикуются обратно в ASN (избежание циклов)
+3. **Separation of concerns**: ASN = Rails internal events, E11y = Business events + adapters
+4. **Simplicity**: Нет двунаправленной синхронизации, clear data flow
+
+**What was removed**:
+- ❌ `publish_to_asn enabled: true, name: 'order.created'` DSL из `Event::Base`
+- ❌ `Event::Base#publish_to_asn_enabled?` метод
+- ❌ Автоматическая публикация E11y событий в ASN после pipeline
+
+**What remains**:
+- ✅ **ASN → E11y** (подписка на Rails события): `sql.active_record`, `process_action.action_controller`, etc.
+- ✅ **E11y → Adapters** (отправка в Loki, Sentry, etc.)
+
+**Impact**:
+- ✅ **Non-breaking**: Функция `publish_to_asn` не была реализована (была только в плане)
+- ✅ **Simpler architecture**: Убрали потенциальный источник циклов и сложности
+- ✅ **All 990 tests pass**: Нет регрессий
+
+**Status**: ✅ Removed from documentation (ADR-008, IMPLEMENTATION_PLAN, IMPLEMENTATION_PLAN_ARCHITECTURE)
+
+**Affected Docs**:
+- [x] ADR-008 (Rails Integration) - Removed §4.1.1 (Opt-In Reverse Flow)
+- [x] IMPLEMENTATION_PLAN.md - Removed task #4 from L3.8.2
+- [x] IMPLEMENTATION_PLAN_ARCHITECTURE.md - Removed Q1 details about `publish_to_asn`
+
+---
+
 ## Notes
 
 - **Always update this file** when deviating from original plan

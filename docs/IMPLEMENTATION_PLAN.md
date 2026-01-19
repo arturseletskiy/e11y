@@ -1067,7 +1067,6 @@ PHASE 5: SCALE & OPTIMIZATION (Weeks 21-26)
 1. **Rails Instrumentation Setup**
    - File: `lib/e11y/instruments/rails_instrumentation.rb`
    - ONLY subscribe to ActiveSupport::Notifications (ASN → E11y)
-   - NO reverse flow (E11y does NOT publish to ASN)
    - Subscribe to `*.action_controller`, `*.active_record`, `*.active_job`
    - Convert Rails events to E11y events
    - Selective instrumentation (configure which events to track)
@@ -1088,16 +1087,9 @@ PHASE 5: SCALE & OPTIMIZATION (Weeks 21-26)
    - `ignore_event` method for disabling specific events
    - ✅ DoD: Event classes can be overridden in config
 
-4. **Opt-In Reverse Flow (Legacy Compatibility)**
-   - Event class method: `publish_to_asn enabled: true, name: 'order.created'`
-   - Only if explicitly enabled for specific event classes
-   - Default: `enabled: false` (opt-in, not opt-out)
-   - ✅ DoD: Legacy gems can receive E11y events via ASN (opt-in)
-
 **Verification (L6):**
 - Integration tests: Rails app with E11y tracking Rails events
 - Override test: Custom event class used instead of default
-- Opt-in test: Event published to ASN when enabled
 - ADR Compliance: ADR-008 §4 (Rails Instrumentation, Updated)
 
 ---

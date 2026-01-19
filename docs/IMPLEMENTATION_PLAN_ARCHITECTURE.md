@@ -20,22 +20,9 @@
 
 #### 🤔 ANALYSIS:
 
-**Bidirectional Design (Current ADR):**
-```ruby
-# E11y → ASN (публикация E11y событий в ASN)
-E11y.publish_to_asn(event_data)
-# → ActiveSupport::Notifications.instrument(...)
-
-# ASN → E11y (подписка на Rails события)
-ActiveSupport::Notifications.subscribe('sql.active_record') do |...|
-  Events::Rails::Database::Query.track(...)
-end
-```
-
-**Unidirectional Design (Альтернатива):**
+**Unidirectional Design:**
 ```ruby
 # ТОЛЬКО ASN → E11y (подписка на Rails события)
-# E11y НЕ публикует обратно в ASN
 ActiveSupport::Notifications.subscribe('sql.active_record') do |...|
   Events::Rails::Database::Query.track(...)
 end
@@ -43,31 +30,22 @@ end
 # E11y события идут ТОЛЬКО в adapters, не в ASN
 Events::OrderCreated.track(...)
 # → Middleware Pipeline → Adapters (Loki, Sentry)
-# ❌ НЕ публикуется в ASN
 ```
 
 ---
 
-#### ✅ RECOMMENDATION: **UNIDIRECTIONAL FLOW (ASN → E11y)**
+#### ✅ DESIGN: **UNIDIRECTIONAL FLOW (ASN → E11y)**
 
 **Причины:**
 
 1. **Избежание циклов:**
-   ```ruby
-   # ❌ ПЛОХО (Bidirectional):
-   Events::OrderCreated.track(order_id: 123)
-     → E11y Pipeline
-     → publish_to_asn('order.created')
-     → ActiveSupport::Notifications.instrument('order.created')
-     → Subscribe handler catches it
-     → Events::OrderCreated.track(order_id: 123) AGAIN!
-     → Infinite loop! 💥
-   ```
-
-2. **Простота рассуждений (Single Direction):**
    - ASN → E11y (ТОЛЬКО захват Rails internal events)
    - E11y → Adapters (ТОЛЬКО отправка в бэкенды)
+   - Нет обратного пути (no cycles)
+
+2. **Простота рассуждений (Single Direction):**
    - Нет двунаправленной синхронизации
+   - Clear data flow
 
 3. **Separation of Concerns:**
    - ASN = Rails instrumentation (database, views, controllers)
@@ -75,30 +53,24 @@ Events::OrderCreated.track(...)
    - Нет пересечения (clear boundary)
 
 4. **Performance:**
-   - Bidirectional = 2x overhead (publish to ASN + subscribe from ASN)
    - Unidirectional = 1x overhead (only subscribe from ASN)
 
 ---
 
-#### 📋 PROPOSED CHANGE TO PLAN:
+#### 📋 IMPLEMENTATION:
 
-**BEFORE (Bidirectional):**
+**Unidirectional:**
 ```ruby
-# lib/e11y/instruments/notifications_bridge.rb
-class NotificationsBridge
-  # E11y → ActiveSupport::Notifications ❌ REMOVE THIS!
-  def self.publish_to_asn(event_data)
-    ActiveSupport::Notifications.instrument(...)
-  end
-  
-  # ActiveSupport::Notifications → E11y ✅ KEEP THIS
+# lib/e11y/instruments/rails_instrumentation.rb
+class RailsInstrumentation
+  # ActiveSupport::Notifications → E11y ✅
   def self.subscribe_from_asn
     ...
   end
 end
 ```
 
-**AFTER (Unidirectional):**
+**Implementation:**
 ```ruby
 # lib/e11y/instruments/rails_instrumentation.rb
 class RailsInstrumentation
@@ -111,49 +83,7 @@ class RailsInstrumentation
     end
   end
 end
-
-# NO publish_to_asn method!
 ```
-
----
-
-#### ⚠️ EDGE CASE: Что если нужна интеграция с gems, которые слушают ASN?
-
-**Scenario:**
-```ruby
-# Some gem expects ASN events:
-ActiveSupport::Notifications.subscribe('order.created') do |...|
-  SomeGem.handle_order(...)
-end
-
-# But E11y events don't go to ASN (unidirectional)
-Events::OrderCreated.track(...)  # ← SomeGem won't see this!
-```
-
-**Solution:** Explicit opt-in (NOT default)
-```ruby
-class Events::OrderCreated < E11y::Event::Base
-  # Opt-in: publish to ASN (for legacy gem compatibility)
-  publish_to_asn enabled: true, name: 'order.created'
-end
-
-# Implementation:
-# AFTER E11y pipeline, IF publish_to_asn enabled:
-def track(**payload)
-  event_data = super  # E11y pipeline
-  
-  if self.class.publish_to_asn_enabled?
-    ActiveSupport::Notifications.instrument(
-      self.class.asn_event_name,
-      event_data[:payload]
-    )
-  end
-  
-  event_data
-end
-```
-
-**Default:** `publish_to_asn enabled: false` (opt-in, not opt-out)
 
 ---
 
@@ -602,11 +532,9 @@ Rails.logger = E11y::Logger::Bridge.new(Rails.logger)
 
 ### ✅ APPROVED CHANGES:
 
-1. **Q1: Unidirectional Flow (ASN → E11y)**
-   - Change bidirectional bridge to unidirectional
-   - Add opt-in `publish_to_asn` for legacy compatibility
-   - **Files to update:**
-     - `docs/IMPLEMENTATION_PLAN_6_LEVELS.md` §L3.8.2
+1. **Q1: Unidirectional Flow (ASN → E11y)** ✅ COMPLETED
+   - Changed bidirectional bridge to unidirectional
+   - **Files updated:**
      - `docs/ADR-008-rails-integration.md` §4
 
 2. **Q2: Overridable Event Classes (Devise-style)**

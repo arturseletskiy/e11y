@@ -42,17 +42,26 @@ module E11y
 
       # Adds tracing metadata to event data.
       #
+      # **Hybrid Tracing (C17 Resolution)**:
+      # - trace_id: Current trace (from E11y::Current or generated)
+      # - span_id: Always new for each event
+      # - parent_trace_id: Link to parent trace (for background jobs)
+      #
       # @param event_data [Hash] The event data to enrich
       # @option event_data [String] :trace_id Existing trace ID (optional)
       # @option event_data [String] :span_id Existing span ID (optional)
+      # @option event_data [String] :parent_trace_id Parent trace ID (optional)
       # @option event_data [Time,String] :timestamp Existing timestamp (optional)
       # @return [Hash, nil] Enriched event data, or nil if dropped
       def call(event_data)
-        # Add trace_id (propagate from Thread.current or generate new)
+        # Add trace_id (propagate from E11y::Current or Thread.current or generate new)
         event_data[:trace_id] ||= current_trace_id || generate_trace_id
 
         # Add span_id (always generate new for this event)
         event_data[:span_id] ||= generate_span_id
+
+        # Add parent_trace_id (if job has parent trace) - C17 Resolution
+        event_data[:parent_trace_id] ||= current_parent_trace_id if current_parent_trace_id
 
         # Add timestamp (use existing or current time)
         event_data[:timestamp] ||= format_timestamp(Time.now.utc)
@@ -65,11 +74,22 @@ module E11y
 
       private
 
-      # Get current trace ID from thread-local storage (request context).
+      # Get current trace ID from E11y::Current or thread-local storage (request context).
+      #
+      # Priority: E11y::Current > Thread.current
       #
       # @return [String, nil] Current trace ID if set, nil otherwise
       def current_trace_id
-        Thread.current[:e11y_trace_id]
+        E11y::Current.trace_id || Thread.current[:e11y_trace_id]
+      end
+
+      # Get current parent trace ID from E11y::Current (background job context).
+      #
+      # Only set for background jobs that have a parent request trace.
+      #
+      # @return [String, nil] Parent trace ID if set, nil otherwise
+      def current_parent_trace_id
+        E11y::Current.parent_trace_id
       end
 
       # Generate a new trace ID (32-character hexadecimal).
