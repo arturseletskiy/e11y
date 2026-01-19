@@ -48,6 +48,7 @@ module E11y
     def configuration
       @configuration ||= Configuration.new
     end
+    alias config configuration
 
     # Track an event
     #
@@ -102,14 +103,20 @@ module E11y
   #     config.pipeline.use E11y::Middleware::Sampling, default_sample_rate: 0.1
   #   end
   class Configuration
-    attr_accessor :adapters, :log_level
-    attr_reader :adapter_mapping, :pipeline
+    attr_accessor :adapters, :log_level, :enabled, :environment, :service_name
+    attr_reader :adapter_mapping, :pipeline, :rails_instrumentation, :logger_bridge, :request_buffer
 
     def initialize
       @adapters = {} # Hash of adapter_name => adapter_instance
       @log_level = :info
       @adapter_mapping = default_adapter_mapping
       @pipeline = E11y::Pipeline::Builder.new
+      @enabled = true
+      @environment = nil
+      @service_name = nil
+      @rails_instrumentation = RailsInstrumentationConfig.new
+      @logger_bridge = LoggerBridgeConfig.new
+      @request_buffer = RequestBufferConfig.new
       configure_default_pipeline
     end
 
@@ -164,6 +171,51 @@ module E11y
 
       # Zone: :adapters
       @pipeline.use E11y::Middleware::Routing
+    end
+  end
+
+  # Rails Instrumentation configuration
+  class RailsInstrumentationConfig
+    attr_accessor :enabled, :custom_mappings, :ignore_events
+
+    def initialize
+      @enabled = false # Disabled by default, enabled by Railtie
+      @custom_mappings = {}
+      @ignore_events = []
+    end
+
+    # Override event class for specific ASN pattern (Devise-style)
+    # @param pattern [String] ActiveSupport::Notifications pattern
+    # @param event_class [Class] E11y event class
+    # @return [void]
+    def event_class_for(pattern, event_class)
+      @custom_mappings[pattern] = event_class
+    end
+
+    # Ignore specific ASN event
+    # @param pattern [String] ActiveSupport::Notifications pattern
+    # @return [void]
+    def ignore_event(pattern)
+      @ignore_events << pattern
+    end
+  end
+
+  # Logger Bridge configuration
+  class LoggerBridgeConfig
+    attr_accessor :enabled, :dual_logging
+
+    def initialize
+      @enabled = false # Opt-in
+      @dual_logging = true # Keep writing to original Rails.logger
+    end
+  end
+
+  # Request Buffer configuration
+  class RequestBufferConfig
+    attr_accessor :enabled
+
+    def initialize
+      @enabled = false # Disabled by default
     end
   end
 end
