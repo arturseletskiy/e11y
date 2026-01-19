@@ -1,9 +1,16 @@
 # UC-014: Adaptive Sampling
 
-**Status:** v1.1 Enhancement  
+**Status:** Partially Implemented (Basic Sampling - 2026-01-20)  
 **Complexity:** Advanced  
 **Setup Time:** 45-60 minutes  
 **Target Users:** SRE, DevOps, Engineering Managers
+
+**Implementation Status:**
+- ✅ **Basic Sampling** - `E11y::Middleware::Sampling` with trace-aware logic (L2.7)
+- ✅ **Event-level DSL** - `sample_rate` and `adaptive_sampling` in `Event::Base`
+- ✅ **Pipeline Integration** - Sampling middleware in default pipeline
+- ⏳ **Adaptive Strategies** - Deferred (error-based, load-based, value-based)
+- ⏳ **Stratified Sampling** - Deferred (SLO accuracy)
 
 ---
 
@@ -83,9 +90,69 @@ end
 
 ---
 
-## 🎯 Adaptive Sampling Strategies
+## 🚀 Current Implementation (2026-01-20)
+
+### Basic Sampling (L2.7) ✅
+
+**What's Implemented:**
+
+```ruby
+# 1. Event-level sample rate (explicit)
+class HighFrequencyEvent < E11y::Event::Base
+  sample_rate 0.01  # 1% sampling
+end
+
+# 2. Severity-based defaults (automatic)
+class ErrorEvent < E11y::Event::Base
+  severity :error  # → 100% sampling (SEVERITY_SAMPLE_RATES[:error])
+end
+
+class DebugEvent < E11y::Event::Base
+  severity :debug  # → 1% sampling (SEVERITY_SAMPLE_RATES[:debug])
+end
+
+# 3. Trace-aware sampling (C05 resolution)
+# All events in same trace_id get same sampling decision
+OrderCreated.track(order_id: 123, trace_id: "abc")  # Sampled
+PaymentProcessed.track(order_id: 123, trace_id: "abc")  # Also sampled (same trace)
+
+# 4. Audit event exemption
+class AuditEvent < E11y::Event::Base
+  audit_event true  # Never sampled, always processed
+end
+
+# 5. Middleware configuration
+E11y.configure do |config|
+  # Sampling middleware is automatically added to default pipeline
+  # Can override with custom config:
+  config.pipeline.use E11y::Middleware::Sampling,
+                      default_sample_rate: 0.1,
+                      trace_aware: true
+end
+```
+
+**Precedence:**
+1. Explicit `sample_rate` (highest priority)
+2. Severity-based defaults (`SEVERITY_SAMPLE_RATES`)
+3. Middleware `default_sample_rate` (fallback)
+
+**What's NOT Implemented Yet:**
+- ⏳ Adaptive strategies (error-based, load-based, value-based)
+- ⏳ Stratified sampling (SLO accuracy)
+- ⏳ `adaptive_sampling` DSL block (placeholder only)
+
+**See:**
+- Middleware: `lib/e11y/middleware/sampling.rb`
+- Event DSL: `lib/e11y/event/base.rb` (`.sample_rate`, `.resolve_sample_rate`)
+- Tests: `spec/e11y/middleware/sampling_spec.rb`, `spec/e11y/event/base_spec.rb`
+
+---
+
+## 🎯 Adaptive Sampling Strategies (Future)
 
 > **Implementation:** See [ADR-009 Section 3: Adaptive Sampling](../ADR-009-cost-optimization.md#3-adaptive-sampling) for complete architecture, including error-based, load-based, value-based, and content-based strategies with cost reduction analysis.
+
+**Note:** The examples below describe **future** functionality that is not yet implemented.
 
 ---
 

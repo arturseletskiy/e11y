@@ -28,7 +28,7 @@ module E11y
     # @example Tier 3: Explicit PII (Deep Filtering)
     #   class Events::UserRegistered < E11y::Event::Base
     #     contains_pii true
-    #     
+    #
     #     pii_filtering do
     #       masks :password
     #       hashes :email
@@ -163,7 +163,7 @@ module E11y
 
           filtered[key] = case strategy
                           when :mask
-                            '[FILTERED]'
+                            "[FILTERED]"
                           when :hash
                             hash_value(value)
                           when :partial
@@ -206,7 +206,7 @@ module E11y
 
         # Apply all PII patterns
         E11y::PII::Patterns::ALL.each do |pattern|
-          result = result.gsub(pattern, '[FILTERED]')
+          result = result.gsub(pattern, "[FILTERED]")
         end
 
         result
@@ -217,9 +217,9 @@ module E11y
       # @param value [Object] Value to hash
       # @return [String] Hashed value
       def hash_value(value)
-        return '[FILTERED]' if value.nil?
+        return "[FILTERED]" if value.nil?
 
-        require 'digest'
+        require "digest"
         "hashed_#{Digest::SHA256.hexdigest(value.to_s)[0..15]}"
       end
 
@@ -228,12 +228,12 @@ module E11y
       # @param value [String] Value to mask
       # @return [String] Partially masked value
       def partial_mask(value)
-        return '[FILTERED]' unless value.is_a?(String)
-        return '[FILTERED]' if value.length < 4
+        return "[FILTERED]" unless value.is_a?(String)
+        return "[FILTERED]" if value.length < 4
 
-        if value.include?('@')
+        if value.include?("@")
           # Email: show first 2 chars before @, last 2 after @
-          local, domain = value.split('@', 2)
+          local, domain = value.split("@", 2)
           "#{local[0..1]}***@#{domain[-3..-1]}"
         else
           # Generic: show first/last 2 chars
@@ -254,7 +254,11 @@ module E11y
         when String, Symbol, Integer, Float, TrueClass, FalseClass, NilClass
           data
         else
-          data.dup rescue data
+          begin
+            data.dup
+          rescue StandardError
+            data
+          end
         end
       end
 

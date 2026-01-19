@@ -127,13 +127,9 @@ module E11y
         # @param adapter [Object] Adapter instance
         # @raise [ArgumentError] if adapter invalid
         def validate_adapter!(adapter)
-          unless adapter.respond_to?(:write)
-            raise ArgumentError, "Adapter must respond to #write"
-          end
+          raise ArgumentError, "Adapter must respond to #write" unless adapter.respond_to?(:write)
 
-          unless adapter.respond_to?(:write_batch)
-            raise ArgumentError, "Adapter must respond to #write_batch"
-          end
+          raise ArgumentError, "Adapter must respond to #write_batch" unless adapter.respond_to?(:write_batch)
 
           return if adapter.respond_to?(:healthy?)
 

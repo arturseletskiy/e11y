@@ -7,7 +7,7 @@
 
 ## 📊 CREATED PLANS SUMMARY
 
-### **6 Root Tasks (Phases):**
+### **7 Root Tasks (Phases):**
 
 1. **FEAT-4711:** PHASE 0: Gem Setup & Best Practices (Week -1)  
    - 3 L3 components + 20 L4 subtasks  
@@ -21,15 +21,20 @@
    - 4 L3 components + 12 L4 subtasks  
    - Root task (created separately)
 
-4. **FEAT-4792:** PHASE 3: Rails Integration (Weeks 11-14)  
+4. **FEAT-4837:** PHASE 2.8: Advanced Sampling Strategies ⚡ *NEW*  
+   - 5 L3 components + 14 L4 subtasks  
+   - Root task (created 2026-01-20)
+   - **Deferred from L2.7** - Advanced adaptive sampling (error-based, load-based, value-based, stratified)
+
+5. **FEAT-4792:** PHASE 3: Rails Integration (Weeks 11-14)  
    - 3 L3 components + 6 L4 subtasks  
    - Root task (created separately)
 
-5. **FEAT-4805:** PHASE 4: Production Hardening (Weeks 15-20)  
+6. **FEAT-4805:** PHASE 4: Production Hardening (Weeks 15-20)  
    - 4 L3 components + 8 L4 subtasks  
    - Root task (created separately)
 
-6. **FEAT-4822:** PHASE 5: Scale & Optimization (Weeks 21-26)  
+7. **FEAT-4822:** PHASE 5: Scale & Optimization (Weeks 21-26)  
    - 4 L3 components + 8 L4 subtasks  
    - Root task (created separately)
 
@@ -38,10 +43,10 @@
 ## 📈 STATISTICS
 
 **Total Created:**
-- **6 root tasks** (phases)
-- **24 L3 components** (main subtasks)
-- **73 L4 subtasks** (detailed tasks)
-- **~100+ L5-L6 verification tasks** (in task descriptions)
+- **7 root tasks** (phases) - *+1 added 2026-01-20*
+- **29 L3 components** (main subtasks) - *+5 from Phase 2.8*
+- **87 L4 subtasks** (detailed tasks) - *+14 from Phase 2.8*
+- **~120+ L5-L6 verification tasks** (in task descriptions)
 
 **Timeline:**
 - Week -1: Phase 0 (Research & Setup)
@@ -74,7 +79,15 @@
 - PII Filtering & Security (3-tier, audit pipeline)
 - Adapter Architecture (6 adapters: Stdout, File, Loki, Sentry, Elasticsearch, InMemory)
 - Metrics & Yabeda (pattern-based, cardinality protection)
-- Sampling & Cost Optimization
+- Sampling & Cost Optimization (Basic - L2.7)
+
+### **Phase 2.8: Advanced Sampling Strategies** ⚡ *NEW* ⏳
+- Error-Based Adaptive Sampling (↑ rate during incidents)
+- Load-Based Adaptive Sampling (↓ rate during overload)
+- Value-Based Sampling (↑ rate for high-value events)
+- Stratified Sampling for SLO Accuracy (C11)
+- **Status:** Planned (2026-01-20), awaiting approval to start
+- **Depends On:** L2.7 (Basic Sampling - completed)
 
 ### **Phase 3: Rails Integration** ✅
 - Railtie & Auto-Configuration
@@ -110,10 +123,16 @@
 
 ## 🚀 NEXT STEPS
 
-1. **Review plans:** Check structure in TeamTab UI
-2. **Approve plans:** Approve each phase (or request changes)
-3. **Start execution:** Use `task_get_next` to begin work
-4. **Track progress:** Monitor via TeamTab dashboard
+### **Current Status (2026-01-20):**
+- ✅ **L2.7 (Basic Sampling)** - COMPLETED
+- ⏳ **FEAT-4837 (Phase 2.8)** - AWAITING APPROVAL
+  - Plan created for advanced sampling strategies
+  - Need human approval to start execution
+
+### **To Continue:**
+1. **Return to main plan:** Continue with original Phase 2 tasks (L2.8+)
+2. **Approve Phase 2.8:** Review and approve FEAT-4837 when ready to implement advanced sampling
+3. **Track progress:** Monitor via TeamTab dashboard
 
 ---
 

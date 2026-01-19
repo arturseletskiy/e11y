@@ -202,6 +202,213 @@ module E11y
       def format_event(event_data)
         event_data
       end
+
+      # Execute block with retry logic for transient errors
+      #
+      # Implements exponential backoff with jitter for network/transient errors.
+      # Use this helper in adapter write methods to handle temporary failures.
+      #
+      # @param max_attempts [Integer] Maximum retry attempts (default: 3)
+      # @param base_delay [Float] Initial retry delay in seconds (default: 1.0)
+      # @param max_delay [Float] Maximum retry delay in seconds (default: 16.0)
+      # @param jitter [Float] Jitter factor (0.0-1.0, default: 0.2 for ±20%)
+      # @yield Block to execute with retry
+      # @return [Object] Block result
+      # @raise Last exception if all retries exhausted
+      #
+      # @example Retry HTTP request
+      #   def write(event_data)
+      #     with_retry(max_attempts: 5) do
+      #       http_client.post(event_data)
+      #     end
+      #     true
+      #   rescue => e
+      #     warn "Failed after retries: #{e.message}"
+      #     false
+      #   end
+      #
+      # @see ADR-004 Section 7.1 (Retry Policy)
+      def with_retry(max_attempts: 3, base_delay: 1.0, max_delay: 16.0, jitter: 0.2)
+        attempt = 0
+
+        begin
+          attempt += 1
+          yield
+        rescue StandardError => e
+          raise unless retriable_error?(e) && attempt < max_attempts
+
+          delay = calculate_backoff_delay(attempt, base_delay, max_delay, jitter)
+          warn "[E11y] #{self.class.name} retry #{attempt}/#{max_attempts} after #{delay.round(2)}s: #{e.message}"
+          sleep(delay)
+          retry
+        end
+      end
+
+      # Check if error is retriable (network/transient errors)
+      #
+      # Override in subclasses to customize retriable error detection.
+      # Default implementation handles common network errors.
+      #
+      # @param error [Exception] Error to check
+      # @return [Boolean] true if error is retriable
+      #
+      # @example Add custom retriable errors
+      #   def retriable_error?(error)
+      #     super || error.is_a?(CustomTransientError)
+      #   end
+      def retriable_error?(error)
+        # Network timeout errors
+        return true if error.is_a?(Timeout::Error)
+        return true if defined?(Net::ReadTimeout) && error.is_a?(Net::ReadTimeout)
+        return true if defined?(Net::OpenTimeout) && error.is_a?(Net::OpenTimeout)
+
+        # Connection errors
+        return true if defined?(Errno::ECONNREFUSED) && error.is_a?(Errno::ECONNREFUSED)
+        return true if defined?(Errno::ECONNRESET) && error.is_a?(Errno::ECONNRESET)
+        return true if defined?(Errno::ETIMEDOUT) && error.is_a?(Errno::ETIMEDOUT)
+        return true if defined?(Errno::EHOSTUNREACH) && error.is_a?(Errno::EHOSTUNREACH)
+
+        # HTTP client errors (Faraday)
+        if defined?(Faraday::TimeoutError)
+          return true if error.is_a?(Faraday::TimeoutError)
+          return true if error.is_a?(Faraday::ConnectionFailed)
+        end
+
+        # HTTP 5xx errors (server errors are retriable)
+        if error.respond_to?(:response) && error.response.is_a?(Hash)
+          status = error.response[:status]
+          return true if status && status >= 500 && status < 600
+        end
+
+        false
+      end
+
+      # Calculate exponential backoff delay with jitter
+      #
+      # @param attempt [Integer] Current attempt number (1-based)
+      # @param base_delay [Float] Base delay in seconds
+      # @param max_delay [Float] Maximum delay in seconds
+      # @param jitter [Float] Jitter factor (0.0-1.0)
+      # @return [Float] Delay in seconds
+      #
+      # @api private
+      def calculate_backoff_delay(attempt, base_delay, max_delay, jitter)
+        # Exponential: 1s, 2s, 4s, 8s, 16s...
+        exponential_delay = base_delay * (2**(attempt - 1))
+        delay = [exponential_delay, max_delay].min
+
+        # Add jitter: ±20% by default
+        jitter_amount = delay * jitter * ((rand * 2) - 1) # Random between -jitter and +jitter
+        delay + jitter_amount
+      end
+
+      # Execute block with circuit breaker pattern
+      #
+      # Prevents cascading failures by opening circuit after threshold failures.
+      # Use this helper to wrap write operations that may fail.
+      #
+      # Note: This is a simplified circuit breaker for single adapter instance.
+      # For distributed systems, use external circuit breaker (e.g., semian gem).
+      #
+      # @param failure_threshold [Integer] Failures before opening circuit (default: 5)
+      # @param timeout [Integer] Seconds before testing half-open (default: 60)
+      # @yield Block to execute
+      # @return [Object] Block result
+      # @raise [CircuitOpenError] if circuit is open
+      #
+      # @example Wrap HTTP calls
+      #   def write(event_data)
+      #     with_circuit_breaker do
+      #       http_client.post(event_data)
+      #     end
+      #     true
+      #   rescue CircuitOpenError => e
+      #     warn "Circuit open: #{e.message}"
+      #     false
+      #   end
+      #
+      # @see ADR-004 Section 7.2 (Circuit Breaker)
+      def with_circuit_breaker(failure_threshold: 5, timeout: 60)
+        init_circuit_breaker! unless @circuit_state
+
+        @circuit_mutex.synchronize do
+          if @circuit_state == :open
+            unless circuit_timeout_expired?(timeout)
+              raise CircuitOpenError, "Circuit breaker open for #{self.class.name}"
+            end
+
+            @circuit_state = :half_open
+            @circuit_success_count = 0
+
+          end
+        end
+
+        begin
+          result = yield
+          on_circuit_success
+          result
+        rescue StandardError
+          on_circuit_failure(failure_threshold)
+          raise
+        end
+      end
+
+      # Initialize circuit breaker state
+      #
+      # @api private
+      def init_circuit_breaker!
+        @circuit_mutex = Mutex.new
+        @circuit_state = :closed
+        @circuit_failure_count = 0
+        @circuit_success_count = 0
+        @circuit_last_failure_time = nil
+      end
+
+      # Handle successful circuit execution
+      #
+      # @api private
+      def on_circuit_success
+        @circuit_mutex.synchronize do
+          @circuit_failure_count = 0
+
+          if @circuit_state == :half_open
+            @circuit_success_count += 1
+            if @circuit_success_count >= 2 # 2 successes → close
+              @circuit_state = :closed
+              warn "[E11y] #{self.class.name} circuit breaker closed (recovered)"
+            end
+          end
+        end
+      end
+
+      # Handle failed circuit execution
+      #
+      # @param threshold [Integer] Failure threshold
+      # @api private
+      def on_circuit_failure(threshold)
+        @circuit_mutex.synchronize do
+          @circuit_failure_count += 1
+          @circuit_success_count = 0
+          @circuit_last_failure_time = Time.now
+
+          if @circuit_failure_count >= threshold && @circuit_state == :closed
+            @circuit_state = :open
+            warn "[E11y] #{self.class.name} circuit breaker opened (#{@circuit_failure_count} failures)"
+          end
+        end
+      end
+
+      # Check if circuit timeout has expired
+      #
+      # @param timeout [Integer] Timeout in seconds
+      # @return [Boolean]
+      # @api private
+      def circuit_timeout_expired?(timeout)
+        @circuit_last_failure_time && (Time.now - @circuit_last_failure_time) >= timeout
+      end
     end
+
+    # Circuit breaker open error
+    class CircuitOpenError < Error; end
   end
 end

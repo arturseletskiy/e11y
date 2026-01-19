@@ -1,9 +1,60 @@
 # ADR-009: Cost Optimization
 
-**Status:** Draft  
+**Status:** Partially Implemented (Basic Sampling - 2026-01-20)  
 **Date:** January 12, 2026  
+**Last Updated:** January 20, 2026  
 **Covers:** UC-014 (Adaptive Sampling), UC-015 (Cost Optimization), UC-019 (Tiered Storage)  
 **Depends On:** ADR-001 (Core), ADR-004 (Adapters), ADR-014 (Adaptive Sampling)
+
+**Implementation Status:**
+- ✅ **Basic Sampling** (L2.7) - `E11y::Middleware::Sampling` with trace-aware logic
+- ✅ **Event-level DSL** - `sample_rate` and `adaptive_sampling` in `Event::Base`
+- ✅ **Pipeline Integration** - Sampling middleware in default pipeline
+- ⏳ **Adaptive Strategies** - Deferred (error-based, load-based, value-based)
+- ⏳ **Stratified Sampling** - Deferred (C11 resolution)
+- ⏳ **Compression** - Not started
+- ⏳ **Tiered Storage** - Not started
+
+---
+
+## 🚀 Implementation Summary (2026-01-20)
+
+### Basic Sampling (L2.7) ✅
+
+**Implemented:**
+1. **`E11y::Middleware::Sampling`** - Core sampling logic:
+   - Trace-aware sampling (C05) - consistent decisions per `trace_id`
+   - Audit event exemption - audit events never sampled
+   - Sample rate metadata - adds `sample_rate` to event data
+   - Cache cleanup - prevents memory leaks
+
+2. **Event-level DSL** in `Event::Base`:
+   ```ruby
+   class HighFrequencyEvent < E11y::Event::Base
+     sample_rate 0.01  # 1% sampling
+   end
+
+   class OrderEvent < E11y::Event::Base
+     adaptive_sampling enabled: true,
+                       error_rate_threshold: 0.05,
+                       load_threshold: 50_000
+   end
+   ```
+
+3. **Pipeline Integration**:
+   - Sampling middleware added to default pipeline (zone: `:routing`)
+   - Automatic configuration in `E11y::Configuration#setup_default_pipeline`
+
+**Deferred** (L2.7 continuation):
+- Adaptive Sampling Strategies (§3.2-3.4: error-based, load-based, value-based)
+- Stratified Sampling (§3.7: SLO accuracy, C11 resolution)
+- Advanced features (content-based, ML-based)
+
+**See:**
+- Implementation details: `docs/IMPLEMENTATION_NOTES.md` (2026-01-20 entry)
+- Middleware code: `lib/e11y/middleware/sampling.rb`
+- Tests: `spec/e11y/middleware/sampling_spec.rb` (22 tests)
+- Event DSL tests: `spec/e11y/event/base_spec.rb` (15 tests)
 
 ---
 

@@ -66,7 +66,7 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
         protection.filter({ status: "paid" }, "orders.total")
         protection.filter({ status: "failed" }, "orders.total")
 
-        expect(protection.cardinality("orders.total:status")).to eq(3)
+        expect(protection.tracker.cardinality("orders.total", :status)).to eq(3)
       end
 
       it "allows existing values without increasing cardinality" do
@@ -74,7 +74,7 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
         protection.filter({ status: "paid" }, "orders.total")
         protection.filter({ status: "paid" }, "orders.total")
 
-        expect(protection.cardinality("orders.total:status")).to eq(1)
+        expect(protection.tracker.cardinality("orders.total", :status)).to eq(1)
       end
 
       it "blocks new values when limit is exceeded" do
@@ -97,16 +97,16 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
         protection.filter({ status: "paid" }, "orders.total")
         protection.filter({ status: "active" }, "users.total")
 
-        expect(protection.cardinality("orders.total:status")).to eq(1)
-        expect(protection.cardinality("users.total:status")).to eq(1)
+        expect(protection.tracker.cardinality("orders.total", :status)).to eq(1)
+        expect(protection.tracker.cardinality("users.total", :status)).to eq(1)
       end
 
       it "tracks cardinality separately per label" do
         protection.filter({ status: "paid", currency: "USD" }, "orders.total")
         protection.filter({ status: "pending", currency: "EUR" }, "orders.total")
 
-        expect(protection.cardinality("orders.total:status")).to eq(2)
-        expect(protection.cardinality("orders.total:currency")).to eq(2)
+        expect(protection.tracker.cardinality("orders.total", :status)).to eq(2)
+        expect(protection.tracker.cardinality("orders.total", :currency)).to eq(2)
       end
     end
 
@@ -151,7 +151,7 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
     it "returns false when below limit" do
       protection.filter({ status: "paid" }, "orders.total")
 
-      expect(protection.cardinality_exceeded?("orders.total:status")).to be false
+      expect(protection.cardinality_exceeded?("orders.total")).to be false
     end
 
     it "returns true when at limit" do
@@ -160,21 +160,22 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
       small_limit_protection.filter({ status: "paid" }, "orders.total")
       small_limit_protection.filter({ status: "pending" }, "orders.total")
 
-      expect(small_limit_protection.cardinality_exceeded?("orders.total:status")).to be true
+      expect(small_limit_protection.cardinality_exceeded?("orders.total")).to be true
     end
   end
 
   describe "#cardinality" do
-    it "returns 0 for untracked metric" do
-      expect(protection.cardinality("unknown.metric")).to eq(0)
+    it "returns empty hash for untracked metric" do
+      expect(protection.cardinality("unknown.metric")).to eq({})
     end
 
-    it "returns current cardinality for tracked metric" do
+    it "returns hash of label cardinalities for tracked metric" do
       protection.filter({ status: "paid" }, "orders.total")
       protection.filter({ status: "pending" }, "orders.total")
       protection.filter({ status: "failed" }, "orders.total")
 
-      expect(protection.cardinality("orders.total:status")).to eq(3)
+      cardinalities = protection.cardinality("orders.total")
+      expect(cardinalities[:status]).to eq(3)
     end
   end
 
@@ -186,8 +187,8 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
 
       cardinalities = protection.cardinalities
 
-      expect(cardinalities["orders.total:status"]).to eq(2)
-      expect(cardinalities["orders.total:currency"]).to eq(1)
+      expect(cardinalities["orders.total"][:status]).to eq(2)
+      expect(cardinalities["orders.total"][:currency]).to eq(1)
     end
 
     it "returns empty hash when no metrics tracked" do
@@ -200,11 +201,11 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
       protection.filter({ status: "paid" }, "orders.total")
       protection.filter({ status: "pending" }, "orders.total")
 
-      expect(protection.cardinality("orders.total:status")).to eq(2)
+      expect(protection.tracker.cardinality("orders.total", :status)).to eq(2)
 
       protection.reset!
 
-      expect(protection.cardinality("orders.total:status")).to eq(0)
+      expect(protection.tracker.cardinality("orders.total", :status)).to eq(0)
       expect(protection.cardinalities).to be_empty
     end
   end
@@ -220,7 +221,7 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
       threads.each(&:join)
 
       # Should have 10 unique status values
-      expect(protection.cardinality("orders.total:status")).to eq(10)
+      expect(protection.tracker.cardinality("orders.total", :status)).to eq(10)
     end
 
     it "handles concurrent reads and writes" do
@@ -236,13 +237,13 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
       # Readers
       50.times do
         threads << Thread.new do
-          protection.cardinality("orders.total:status")
+          protection.tracker.cardinality("orders.total", :status)
         end
       end
 
       threads.each(&:join)
 
-      expect(protection.cardinality("orders.total:status")).to eq(5)
+      expect(protection.tracker.cardinality("orders.total", :status)).to eq(5)
     end
   end
 
@@ -255,6 +256,50 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
       expect do
         small_limit_protection.filter({ status: "pending" }, "orders.total")
       end.to output(/Cardinality limit exceeded/).to_stderr
+    end
+  end
+
+  describe "relabeling integration" do
+    it "applies relabeling before cardinality tracking" do
+      protection.relabel(:http_status) { |v| "#{v.to_i / 100}xx" }
+
+      protection.filter({ http_status: 200 }, "http.requests")
+      protection.filter({ http_status: 201 }, "http.requests")
+      protection.filter({ http_status: 404 }, "http.requests")
+
+      # 200 and 201 both become '2xx', so cardinality is 2 (2xx, 4xx)
+      expect(protection.tracker.cardinality("http.requests", :http_status)).to eq(2)
+    end
+
+    it "reduces cardinality explosion via relabeling" do
+      small_limit_protection = described_class.new(cardinality_limit: 3)
+      small_limit_protection.relabel(:path) { |v| v.gsub(%r{/\d+}, "/:id") }
+
+      # Without relabeling, these would be 3 different paths
+      # With relabeling, all become '/users/:id'
+      small_limit_protection.filter({ path: "/users/123" }, "api.requests")
+      small_limit_protection.filter({ path: "/users/456" }, "api.requests")
+      small_limit_protection.filter({ path: "/users/789" }, "api.requests")
+
+      # All 3 paths relabeled to same value, cardinality is 1
+      expect(small_limit_protection.tracker.cardinality("api.requests", :path)).to eq(1)
+    end
+
+    it "can disable relabeling via config" do
+      protection_no_relabel = described_class.new(relabeling_enabled: false)
+      protection_no_relabel.relabel(:http_status) { |v| "#{v.to_i / 100}xx" }
+
+      protection_no_relabel.filter({ http_status: 200 }, "http.requests")
+      protection_no_relabel.filter({ http_status: 201 }, "http.requests")
+
+      # Relabeling disabled, so cardinality is 2 (200, 201)
+      expect(protection_no_relabel.tracker.cardinality("http.requests", :http_status)).to eq(2)
+    end
+
+    it "exposes relabeler for direct access" do
+      protection.relabel(:http_status) { |v| "#{v.to_i / 100}xx" }
+
+      expect(protection.relabeler.apply(:http_status, 200)).to eq("2xx")
     end
   end
 end

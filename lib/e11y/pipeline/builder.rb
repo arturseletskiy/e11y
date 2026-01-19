@@ -117,6 +117,8 @@ module E11y
       # Ensures middlewares are ordered correctly according to their declared zones.
       # This prevents zone violations like PII filtering running after custom middleware.
       #
+      # Delegates to {E11y::Pipeline::ZoneValidator} for validation logic.
+      #
       # @return [void]
       # @raise [E11y::InvalidPipelineError] if zone ordering is invalid
       #
@@ -125,38 +127,12 @@ module E11y
       #     E11y.pipeline_builder.validate_zones!
       #   end
       #
+      # @see E11y::Pipeline::ZoneValidator
       # @see ADR-015 §3.4.5 Zone Validation
-      # rubocop:disable Metrics/MethodLength
       def validate_zones!
-        return if @middlewares.empty?
-
-        previous_zone_index = -1
-
-        @middlewares.each do |entry|
-          middleware_zone = entry.middleware_class.middleware_zone
-
-          # Skip middlewares without declared zone (optional)
-          next unless middleware_zone
-
-          current_zone_index = zone_index(middleware_zone)
-
-          # Validate zone progression (must be non-decreasing)
-          if current_zone_index < previous_zone_index
-            previous_middleware = @middlewares[@middlewares.index(entry) - 1]
-            previous_zone = previous_middleware.middleware_class.middleware_zone
-
-            raise E11y::InvalidPipelineError,
-                  "Invalid middleware zone order: " \
-                  "#{entry.middleware_class} (zone: #{middleware_zone}) " \
-                  "cannot follow #{previous_middleware.middleware_class} (zone: #{previous_zone}). " \
-                  "Valid order: pre_processing → security → routing → post_processing → adapters. " \
-                  "See ADR-015 §3.4 for details."
-          end
-
-          previous_zone_index = current_zone_index
-        end
+        validator = E11y::Pipeline::ZoneValidator.new(@middlewares)
+        validator.validate_boot_time!
       end
-      # rubocop:enable Metrics/MethodLength
 
       # Clear all registered middlewares.
       #

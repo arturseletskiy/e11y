@@ -56,7 +56,7 @@ module E11y
         @mutex = Mutex.new
         @current_date = nil
 
-        super(config)
+        super
 
         ensure_directory!
         open_file!

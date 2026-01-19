@@ -291,7 +291,7 @@ RSpec.describe E11y::Pipeline::Builder do
         builder.use pre_processing_middleware # Goes backward!
 
         expect { builder.validate_zones! }
-          .to raise_error(E11y::InvalidPipelineError, /pre_processing.*cannot follow.*security/)
+          .to raise_error(E11y::Pipeline::ZoneValidator::ZoneOrderError, /pre_processing.*cannot follow.*security/m)
       end
 
       it "provides detailed error message" do
@@ -299,7 +299,7 @@ RSpec.describe E11y::Pipeline::Builder do
         builder.use security_middleware # security after routing = wrong!
 
         expect { builder.validate_zones! }
-          .to raise_error(E11y::InvalidPipelineError, /zone: security.*zone: routing.*Valid order/)
+          .to raise_error(E11y::Pipeline::ZoneValidator::ZoneOrderError, /security.*cannot follow.*routing.*Valid zone order/m)
       end
 
       it "rejects adapters before post_processing" do

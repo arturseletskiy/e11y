@@ -125,7 +125,7 @@ module E11y
           metrics_by_name = @metrics.group_by { |m| m[:name] }
 
           # Check each group for conflicts
-          metrics_by_name.each do |name, metrics|
+          metrics_by_name.each_value do |metrics|
             next if metrics.size == 1 # No conflicts possible
 
             # Compare first metric with all others

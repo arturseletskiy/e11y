@@ -89,6 +89,42 @@ class Events::OrderPaid < E11y::Event::Base
 end
 ```
 
+**Rails Integration (Automatic Validation):**
+
+```ruby
+# lib/e11y/railtie.rb - Automatic validation on Rails boot
+class Railtie < Rails::Railtie
+  initializer "e11y.validate_metrics", after: :load_config_initializers do
+    Rails.application.config.after_initialize do
+      E11y::Metrics::Registry.instance.validate_all!
+      Rails.logger.info "E11y: Metrics validated successfully (#{registry.size} metrics)"
+    end
+  end
+end
+
+# Result on boot:
+# E11y: Metrics validated successfully (42 metrics)
+#
+# Or if conflict:
+# E11y::Metrics::Registry::LabelConflictError:
+#   Metric "orders_total" label conflict!
+#   
+#   Existing: [:currency, :status] (from Events::OrderCreated.metrics)
+#   New:      [:currency] (from Events::OrderPaid.metrics)
+#   
+#   Fix: Use the same labels everywhere or rename the metric.
+```
+
+**Non-Rails Projects (Manual Validation):**
+
+```ruby
+# config/boot.rb or similar
+require 'e11y'
+
+# After loading all event classes
+E11y::Metrics::Registry.instance.validate_all!
+```
+
 ### 0.3. Yabeda Adapter with Integrated Cardinality Protection
 
 **Replaces middleware, integrates protection:**

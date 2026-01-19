@@ -102,6 +102,82 @@ end
 
 ---
 
+## 🚀 Rails Integration & Boot-Time Validation
+
+### Automatic Validation on Rails Boot
+
+**E11y automatically validates metrics when Rails starts:**
+
+```ruby
+# lib/e11y/railtie.rb (built-in, no configuration needed)
+class Railtie < Rails::Railtie
+  initializer "e11y.validate_metrics", after: :load_config_initializers do
+    Rails.application.config.after_initialize do
+      E11y::Metrics::Registry.instance.validate_all!
+      Rails.logger.info "E11y: Metrics validated successfully (#{registry.size} metrics)"
+    end
+  end
+end
+```
+
+**What gets validated:**
+1. **Metric type conflicts**: Same metric name with different types (counter vs histogram)
+2. **Label conflicts**: Same metric name with different labels
+3. **Bucket conflicts**: Same histogram with different buckets (warning only)
+
+**Example: Catching conflicts at boot time**
+
+```ruby
+# app/events/order_created.rb
+class Events::OrderCreated < E11y::Event::Base
+  metrics do
+    counter :orders_total, tags: [:currency, :status]
+  end
+end
+
+# app/events/order_paid.rb
+class Events::OrderPaid < E11y::Event::Base
+  metrics do
+    counter :orders_total, tags: [:currency] # ❌ Different labels!
+  end
+end
+
+# Rails boot output:
+# E11y::Metrics::Registry::LabelConflictError:
+#   Metric "orders_total" label conflict!
+#   
+#   Existing: [:currency, :status] (from Events::OrderCreated.metrics)
+#   New:      [:currency] (from Events::OrderPaid.metrics)
+#   
+#   Fix: Use the same labels everywhere or rename the metric.
+#   
+#   Example:
+#     # Event 1
+#     counter :orders_total, tags: [:currency, :status]
+#     
+#     # Event 2 (must match!)
+#     counter :orders_total, tags: [:currency, :status]
+```
+
+**Benefits:**
+- ✅ **Fail-fast**: Errors caught at boot time, not in production
+- ✅ **Clear error messages**: Shows conflicting definitions with source locations
+- ✅ **Zero runtime overhead**: Validation happens once at boot
+- ✅ **Automatic**: No manual validation calls needed in Rails
+
+**Non-Rails Projects:**
+
+```ruby
+# config/boot.rb or similar
+require 'e11y'
+
+# After loading all event classes
+E11y::Metrics::Registry.instance.validate_all!
+puts "E11y: Metrics validated successfully"
+```
+
+---
+
 ## 🎯 Use Case Scenarios
 
 ### Scenario 1: Multi-Domain Metrics

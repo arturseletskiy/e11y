@@ -165,11 +165,13 @@ module E11y
         # @deprecated Use {validation_mode} instead
         # @param value [Boolean] true to skip validation
         # @return [Boolean] Current skip_validation status
+        # rubocop:disable Naming/PredicateMethod
         def skip_validation(value = nil)
           warn "[DEPRECATION] skip_validation is deprecated. Use validation_mode :never instead."
           @validation_mode = :never if value
           @validation_mode == :never
         end
+        # rubocop:enable Naming/PredicateMethod
 
         # Define event schema using dry-schema
         #
@@ -278,17 +280,88 @@ module E11y
           @event_name = class_name.sub(/V\d+$/, "")
         end
 
+        # Set or get explicit sample rate for this event
+        #
+        # Sample rate determines what percentage of events to process (0.0-1.0).
+        # If not explicitly set, falls back to severity-based defaults.
+        #
+        # @param value [Float, nil] Sample rate (0.0-1.0)
+        # @return [Float, nil] Explicitly set sample rate (nil if using severity-based default)
+        #
+        # @example Explicit sample rate
+        #   class HighFrequencyEvent < E11y::Event::Base
+        #     sample_rate 0.01  # 1% sampling
+        #   end
+        #
+        # @example Disable sampling (always process)
+        #   class CriticalEvent < E11y::Event::Base
+        #     sample_rate 1.0  # 100% sampling
+        #   end
+        # rubocop:disable Metrics/CyclomaticComplexity
+        def sample_rate(value = nil)
+          if value
+            unless value.is_a?(Numeric) && value >= 0.0 && value <= 1.0
+              raise ArgumentError, "Sample rate must be between 0.0 and 1.0, got: #{value.inspect}"
+            end
+
+            @sample_rate = value.to_f
+          end
+
+          # Return explicitly set sample_rate OR inherit from parent (if set) OR nil (use resolve_sample_rate)
+          return @sample_rate if @sample_rate
+          if superclass != E11y::Event::Base && superclass.instance_variable_get(:@sample_rate)
+            return superclass.sample_rate
+          end
+
+          nil
+        end
+        # rubocop:enable Metrics/CyclomaticComplexity
+
         # Resolve sample rate for this event
         #
         # Sample rate determines what percentage of events to process (0.0-1.0)
+        # Precedence: explicit sample_rate > severity-based defaults
         # Convention: error/fatal = 1.0 (all), success = 0.1 (10%), debug = 0.01 (1%)
         #
         # Optimized: Uses inline lookup table instead of case statement
         #
         # @return [Float] Sample rate (0.0-1.0)
         def resolve_sample_rate
-          # Inline lookup (faster than case statement)
+          # 1. Explicit sample_rate (highest priority)
+          return sample_rate if sample_rate
+
+          # 2. Severity-based defaults (inline lookup, faster than case statement)
           SEVERITY_SAMPLE_RATES[severity] || 0.1
+        end
+
+        # Configure adaptive sampling for this event
+        #
+        # Adaptive sampling adjusts sample rate dynamically based on conditions.
+        # This is a placeholder for future implementation (L2.7 continuation).
+        #
+        # @param enabled [Boolean] Enable adaptive sampling
+        # @param options [Hash] Adaptive sampling options
+        # @option options [Float] :error_rate_threshold (0.05) Error rate to trigger 100% sampling
+        # @option options [Integer] :load_threshold (50000) Events/sec to trigger reduced sampling
+        # @option options [Float] :high_load_sample_rate (0.01) Sample rate during high load
+        # @return [Hash, nil] Adaptive sampling configuration
+        #
+        # @example Enable adaptive sampling
+        #   class OrderEvent < E11y::Event::Base
+        #     adaptive_sampling enabled: true,
+        #                       error_rate_threshold: 0.05,
+        #                       load_threshold: 50_000
+        #   end
+        def adaptive_sampling(enabled: false, **options)
+          @adaptive_sampling = { enabled: true }.merge(options) if enabled
+
+          # Return explicitly set config OR inherit from parent (if set) OR nil
+          return @adaptive_sampling if @adaptive_sampling
+          if superclass != E11y::Event::Base && superclass.instance_variable_get(:@adaptive_sampling)
+            return superclass.adaptive_sampling
+          end
+
+          nil
         end
 
         # Resolve rate limit for this event (events per second)

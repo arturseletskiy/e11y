@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "faraday"
+require "faraday/retry" # Retry middleware
 require "json"
 require "zlib"
 
@@ -138,9 +139,34 @@ module E11y
         raise ArgumentError, "batch_timeout must be positive" if @batch_timeout <= 0
       end
 
-      # Build Faraday connection
+      # Build Faraday connection with retry middleware
+      #
+      # Uses Faraday's built-in retry middleware for exponential backoff
+      # on transient network errors and 5xx responses.
+      #
+      # Note: Connection pooling is handled at HTTP client level (Net::HTTP persistent).
+      # Faraday reuses persistent connections by default. For advanced pooling,
+      # configure Faraday adapter (e.g., :net_http_persistent, :typhoeus).
+      #
+      # @see ADR-004 Section 7.1 (Retry Policy via gem-level middleware)
+      # @see ADR-004 Section 6.1 (Connection pooling via HTTP client)
       def build_connection!
         @connection = Faraday.new(url: @url) do |f|
+          # Retry middleware (exponential backoff: 1s, 2s, 4s)
+          f.request :retry,
+                    max: 3,
+                    interval: 1.0,
+                    backoff_factor: 2,
+                    interval_randomness: 0.2, # ±20% jitter
+                    retry_statuses: [429, 500, 502, 503, 504],
+                    methods: [:post],
+                    exceptions: [
+                      Faraday::TimeoutError,
+                      Faraday::ConnectionFailed,
+                      Errno::ECONNREFUSED,
+                      Errno::ETIMEDOUT
+                    ]
+
           f.request :json
           f.response :raise_error
           f.adapter Faraday.default_adapter

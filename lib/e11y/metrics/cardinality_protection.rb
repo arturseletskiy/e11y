@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "cardinality_tracker"
+require_relative "relabeling"
+
 module E11y
   module Metrics
     # Cardinality protection for metrics labels.
@@ -9,11 +12,20 @@ module E11y
     # 2. Per-Metric Limits - Track unique values per metric, drop if exceeded
     # 3. Dynamic Monitoring - Alert when approaching limits
     #
+    # Now supports optional relabeling to reduce cardinality while preserving signal.
+    #
     # @example Basic usage
     #   protection = E11y::Metrics::CardinalityProtection.new
     #   labels = { user_id: '123', status: 'paid', currency: 'USD' }
     #   safe_labels = protection.filter(labels, 'orders.total')
     #   # => { status: 'paid', currency: 'USD' } (user_id dropped)
+    #
+    # @example With relabeling
+    #   protection = E11y::Metrics::CardinalityProtection.new
+    #   protection.relabel(:http_status) { |v| "#{v.to_i / 100}xx" }
+    #   labels = { http_status: 200, path: '/api/users' }
+    #   safe_labels = protection.filter(labels, 'http.requests')
+    #   # => { http_status: '2xx', path: '/api/users' }
     #
     # @see ADR-002 §4 (Cardinality Protection)
     # @see UC-013 (High Cardinality Protection)
@@ -43,20 +55,48 @@ module E11y
       # Default per-metric cardinality limit
       DEFAULT_CARDINALITY_LIMIT = 1000
 
+      attr_reader :tracker, :relabeler
+
       # Initialize cardinality protection
       # @param config [Hash] Configuration options
       # @option config [Integer] :cardinality_limit (1000) Max unique label combinations per metric
       # @option config [Array<Symbol>] :additional_denylist Additional fields to deny
       # @option config [Boolean] :enabled (true) Enable/disable protection
+      # @option config [Boolean] :relabeling_enabled (true) Enable/disable relabeling
       def initialize(config = {})
         @cardinality_limit = config.fetch(:cardinality_limit, DEFAULT_CARDINALITY_LIMIT)
         @enabled = config.fetch(:enabled, true)
+        @relabeling_enabled = config.fetch(:relabeling_enabled, true)
         @denylist = Set.new(UNIVERSAL_DENYLIST + (config[:additional_denylist] || []))
-        @cardinality_tracker = Hash.new { |h, k| h[k] = Set.new }
-        @mutex = Mutex.new
+
+        # Use extracted components
+        @tracker = CardinalityTracker.new(limit: @cardinality_limit)
+        @relabeler = Relabeling.new
+      end
+
+      # Define relabeling rule for a label
+      #
+      # @param label_key [Symbol, String] Label key to relabel
+      # @yield [value] Block that transforms label value
+      # @return [void]
+      #
+      # @example HTTP status to class
+      #   protection.relabel(:http_status) { |v| "#{v.to_i / 100}xx" }
+      #
+      # @example Path normalization
+      #   protection.relabel(:path) { |v| v.gsub(/\/\d+/, '/:id') }
+      def relabel(label_key, &)
+        @relabeler.define(label_key, &)
       end
 
       # Filter labels to prevent cardinality explosions
+      #
+      # Applies 3-layer defense + optional relabeling:
+      # 1. Relabel high-cardinality values (if enabled)
+      # 2. Drop denylisted fields
+      # 3. Track and limit per-metric cardinality
+      # 4. Alert on limit exceeded
+      #
       # @param labels [Hash] Raw labels from event
       # @param metric_name [String] Metric name for tracking
       # @return [Hash] Filtered safe labels
@@ -66,14 +106,17 @@ module E11y
         safe_labels = {}
 
         labels.each do |key, value|
-          # Layer 1: Denylist - drop high-cardinality fields
+          # Step 1: Relabel if rule exists (reduces cardinality)
+          relabeled_value = @relabeling_enabled ? @relabeler.apply(key, value) : value
+
+          # Step 2: Denylist - drop high-cardinality fields
           next if should_deny?(key)
 
-          # Layer 2: Per-Metric Cardinality Limit
-          if within_cardinality_limit?(metric_name, key, value)
-            safe_labels[key] = value
+          # Step 3: Per-Metric Cardinality Limit
+          if @tracker.track(metric_name, key, relabeled_value)
+            safe_labels[key] = relabeled_value
           else
-            # Layer 3: Alert when limit exceeded
+            # Step 4: Alert when limit exceeded
             warn_cardinality_exceeded(metric_name, key)
           end
         end
@@ -83,38 +126,30 @@ module E11y
 
       # Check if cardinality limit is exceeded for a metric
       # @param metric_name [String] Metric name
-      # @return [Boolean] True if limit exceeded
+      # @return [Boolean] True if ANY label exceeded limit
       def cardinality_exceeded?(metric_name)
-        @mutex.synchronize do
-          @cardinality_tracker[metric_name].size >= @cardinality_limit
-        end
+        # Check if any label has exceeded limit
+        @tracker.cardinalities(metric_name).values.any? { |count| count >= @cardinality_limit }
       end
 
-      # Get current cardinality for a metric
+      # Get current cardinality for a metric (all labels)
       # @param metric_name [String] Metric name
-      # @return [Integer] Number of unique label combinations
+      # @return [Hash{Symbol => Integer}] Label key => cardinality
       def cardinality(metric_name)
-        @mutex.synchronize do
-          @cardinality_tracker[metric_name].size
-        end
+        @tracker.cardinalities(metric_name)
       end
 
       # Get all metrics with their cardinalities
-      # @return [Hash<String, Integer>] Metric name => cardinality
+      # @return [Hash{String => Hash{Symbol => Integer}}] Metric => Label => cardinality
       def cardinalities
-        @mutex.synchronize do
-          @cardinality_tracker.each_with_object({}) do |(key, values), result|
-            result[key] = values.size if values.any?
-          end
-        end
+        @tracker.all_cardinalities
       end
 
       # Reset cardinality tracking (for testing)
       # @return [void]
       def reset!
-        @mutex.synchronize do
-          @cardinality_tracker = Hash.new { |h, k| h[k] = Set.new }
-        end
+        @tracker.reset_all!
+        @relabeler.reset!
       end
 
       private
@@ -124,28 +159,6 @@ module E11y
       # @return [Boolean] True if should be denied
       def should_deny?(key)
         @denylist.include?(key)
-      end
-
-      # Check if adding this label value would exceed cardinality limit (Layer 2)
-      # @param metric_name [String] Metric name
-      # @param key [Symbol] Label key
-      # @param value [String] Label value
-      # @return [Boolean] True if within limit
-      def within_cardinality_limit?(metric_name, key, value)
-        @mutex.synchronize do
-          tracker_key = "#{metric_name}:#{key}"
-          current_values = @cardinality_tracker[tracker_key]
-
-          # If value already exists, it's safe
-          return true if current_values.include?(value)
-
-          # If adding would exceed limit, deny
-          return false if current_values.size >= @cardinality_limit
-
-          # Track new value
-          current_values.add(value)
-          true
-        end
       end
 
       # Warn about cardinality limit exceeded (Layer 3: Monitoring)

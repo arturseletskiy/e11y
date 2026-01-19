@@ -714,4 +714,241 @@ RSpec.describe E11y::Event::Base do
       end
     end
   end
+
+  describe ".sample_rate" do
+    context "when explicitly set" do
+      it "returns the set sample rate" do
+        event_class = Class.new(described_class) do
+          def self.name
+            "TestEvent"
+          end
+
+          sample_rate 0.5
+        end
+
+        expect(event_class.sample_rate).to eq(0.5)
+      end
+
+      it "validates sample rate is between 0.0 and 1.0" do
+        event_class = Class.new(described_class) do
+          def self.name
+            "TestEvent"
+          end
+        end
+
+        expect { event_class.sample_rate(-0.1) }.to raise_error(ArgumentError, /between 0.0 and 1.0/)
+        expect { event_class.sample_rate(1.5) }.to raise_error(ArgumentError, /between 0.0 and 1.0/)
+        expect { event_class.sample_rate("invalid") }.to raise_error(ArgumentError, /between 0.0 and 1.0/)
+      end
+
+      it "converts integer to float" do
+        event_class = Class.new(described_class) do
+          def self.name
+            "TestEvent"
+          end
+
+          sample_rate 1
+        end
+
+        expect(event_class.sample_rate).to eq(1.0)
+        expect(event_class.sample_rate).to be_a(Float)
+      end
+    end
+
+    context "when not set" do
+      it "returns nil" do
+        event_class = Class.new(described_class) do
+          def self.name
+            "TestEvent"
+          end
+        end
+
+        expect(event_class.sample_rate).to be_nil
+      end
+    end
+
+    context "with inheritance" do
+      it "inherits sample_rate from parent" do
+        parent_class = Class.new(described_class) do
+          def self.name
+            "ParentEvent"
+          end
+
+          sample_rate 0.1
+        end
+
+        child_class = Class.new(parent_class) do
+          def self.name
+            "ChildEvent"
+          end
+        end
+
+        expect(child_class.sample_rate).to eq(0.1)
+      end
+
+      it "allows child to override parent's sample_rate" do
+        parent_class = Class.new(described_class) do
+          def self.name
+            "ParentEvent"
+          end
+
+          sample_rate 0.1
+        end
+
+        child_class = Class.new(parent_class) do
+          def self.name
+            "ChildEvent"
+          end
+
+          sample_rate 0.5
+        end
+
+        expect(child_class.sample_rate).to eq(0.5)
+        expect(parent_class.sample_rate).to eq(0.1) # Parent unchanged
+      end
+    end
+  end
+
+  describe ".resolve_sample_rate" do
+    context "with explicit sample_rate" do
+      it "returns explicit sample_rate (highest priority)" do
+        event_class = Class.new(described_class) do
+          def self.name
+            "ErrorEvent"
+          end
+
+          severity :error  # Would default to 1.0
+          sample_rate 0.1  # Explicit override
+        end
+
+        expect(event_class.resolve_sample_rate).to eq(0.1)
+      end
+    end
+
+    context "without explicit sample_rate" do
+      it "returns severity-based default for error" do
+        event_class = Class.new(described_class) do
+          def self.name
+            "ErrorEvent"
+          end
+
+          severity :error
+        end
+
+        expect(event_class.resolve_sample_rate).to eq(1.0)
+      end
+
+      it "returns severity-based default for debug" do
+        event_class = Class.new(described_class) do
+          def self.name
+            "DebugEvent"
+          end
+
+          severity :debug
+        end
+
+        expect(event_class.resolve_sample_rate).to eq(0.01)
+      end
+
+      it "returns 0.1 for unknown severity" do
+        event_class = Class.new(described_class) do
+          def self.name
+            "CustomEvent"
+          end
+
+          severity :info
+        end
+
+        expect(event_class.resolve_sample_rate).to eq(0.1)
+      end
+    end
+  end
+
+  describe ".adaptive_sampling" do
+    context "when enabled" do
+      it "returns configuration hash" do
+        event_class = Class.new(described_class) do
+          def self.name
+            "TestEvent"
+          end
+
+          adaptive_sampling enabled: true,
+                            error_rate_threshold: 0.05,
+                            load_threshold: 50_000
+        end
+
+        config = event_class.adaptive_sampling
+        expect(config).to be_a(Hash)
+        expect(config[:enabled]).to be true
+        expect(config[:error_rate_threshold]).to eq(0.05)
+        expect(config[:load_threshold]).to eq(50_000)
+      end
+    end
+
+    context "when not enabled" do
+      it "returns nil" do
+        event_class = Class.new(described_class) do
+          def self.name
+            "TestEvent"
+          end
+        end
+
+        expect(event_class.adaptive_sampling).to be_nil
+      end
+
+      it "returns nil when explicitly disabled" do
+        event_class = Class.new(described_class) do
+          def self.name
+            "TestEvent"
+          end
+
+          adaptive_sampling enabled: false
+        end
+
+        expect(event_class.adaptive_sampling).to be_nil
+      end
+    end
+
+    context "with inheritance" do
+      it "inherits adaptive_sampling from parent" do
+        parent_class = Class.new(described_class) do
+          def self.name
+            "ParentEvent"
+          end
+
+          adaptive_sampling enabled: true, error_rate_threshold: 0.1
+        end
+
+        child_class = Class.new(parent_class) do
+          def self.name
+            "ChildEvent"
+          end
+        end
+
+        expect(child_class.adaptive_sampling[:enabled]).to be true
+        expect(child_class.adaptive_sampling[:error_rate_threshold]).to eq(0.1)
+      end
+
+      it "allows child to override parent's adaptive_sampling" do
+        parent_class = Class.new(described_class) do
+          def self.name
+            "ParentEvent"
+          end
+
+          adaptive_sampling enabled: true, error_rate_threshold: 0.1
+        end
+
+        child_class = Class.new(parent_class) do
+          def self.name
+            "ChildEvent"
+          end
+
+          adaptive_sampling enabled: true, error_rate_threshold: 0.05
+        end
+
+        expect(child_class.adaptive_sampling[:error_rate_threshold]).to eq(0.05)
+        expect(parent_class.adaptive_sampling[:error_rate_threshold]).to eq(0.1) # Parent unchanged
+      end
+    end
+  end
 end

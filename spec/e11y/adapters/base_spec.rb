@@ -230,5 +230,171 @@ RSpec.describe E11y::Adapters::Base do
         end
       end
     end
+
+    context "Section 7.1: Retry Logic (with_retry helper)" do
+      let(:retry_adapter_class) do
+        Class.new(described_class) do
+          attr_accessor :attempt_count, :should_fail
+
+          def initialize(config = {})
+            super
+            @attempt_count = 0
+            @should_fail = config.fetch(:should_fail, 0)
+          end
+
+          def write(event_data)
+            with_retry(max_attempts: 3, base_delay: 0.01, max_delay: 0.1) do
+              @attempt_count += 1
+              raise Timeout::Error, "Network timeout" if @attempt_count <= @should_fail
+
+              true
+            end
+          end
+        end
+      end
+
+      it "succeeds on first attempt when no errors" do
+        adapter = retry_adapter_class.new(should_fail: 0)
+        expect(adapter.write({})).to be true
+        expect(adapter.attempt_count).to eq(1)
+      end
+
+      it "retries on retriable errors (network timeout)" do
+        adapter = retry_adapter_class.new(should_fail: 2)
+        expect(adapter.write({})).to be true
+        expect(adapter.attempt_count).to eq(3) # Initial + 2 retries
+      end
+
+      it "raises after max retries exhausted" do
+        adapter = retry_adapter_class.new(should_fail: 10)
+        expect { adapter.write({}) }.to raise_error(Timeout::Error)
+        expect(adapter.attempt_count).to eq(3) # Max attempts
+      end
+
+      it "does not retry non-retriable errors" do
+        adapter_class = Class.new(described_class) do
+          attr_accessor :attempt_count
+
+          def initialize(config = {})
+            super
+            @attempt_count = 0
+          end
+
+          def write(_event_data)
+            with_retry(max_attempts: 3) do
+              @attempt_count += 1
+              raise ArgumentError, "Invalid argument"
+            end
+          end
+        end
+
+        adapter = adapter_class.new
+        expect { adapter.write({}) }.to raise_error(ArgumentError)
+        expect(adapter.attempt_count).to eq(1) # No retries
+      end
+
+      it "uses exponential backoff with jitter" do
+        adapter = retry_adapter_class.new(should_fail: 2)
+        allow(adapter).to receive(:sleep) # Don't actually sleep in tests
+
+        adapter.write({})
+
+        # Should have called sleep twice (for retry 1 and 2)
+        expect(adapter).to have_received(:sleep).twice
+      end
+    end
+
+    context "Section 7.2: Circuit Breaker (with_circuit_breaker helper)" do
+      let(:circuit_adapter_class) do
+        Class.new(described_class) do
+          attr_accessor :call_count, :should_fail
+
+          def initialize(config = {})
+            super
+            @call_count = 0
+            @should_fail = config.fetch(:should_fail, false)
+          end
+
+          def write(event_data)
+            with_circuit_breaker(failure_threshold: 3, timeout: 0.1) do
+              @call_count += 1
+              raise StandardError, "Service unavailable" if @should_fail
+
+              true
+            end
+          end
+        end
+      end
+
+      it "allows calls when circuit is closed" do
+        adapter = circuit_adapter_class.new(should_fail: false)
+        expect(adapter.write({})).to be true
+        expect(adapter.call_count).to eq(1)
+      end
+
+      it "opens circuit after failure threshold" do
+        adapter = circuit_adapter_class.new(should_fail: true)
+
+        # First 3 calls should execute (and fail)
+        3.times do
+          expect { adapter.write({}) }.to raise_error(StandardError)
+        end
+
+        expect(adapter.call_count).to eq(3)
+
+        # 4th call should fail with CircuitOpenError (circuit is open)
+        expect { adapter.write({}) }.to raise_error(E11y::Adapters::CircuitOpenError)
+        expect(adapter.call_count).to eq(3) # No execution, circuit open
+      end
+
+      it "transitions to half-open after timeout" do
+        adapter = circuit_adapter_class.new(should_fail: true)
+
+        # Open the circuit
+        3.times { expect { adapter.write({}) }.to raise_error(StandardError) }
+
+        # Wait for timeout
+        sleep(0.15)
+
+        # Next call should execute (half-open state)
+        adapter.should_fail = false
+        expect(adapter.write({})).to be true
+        expect(adapter.call_count).to eq(4) # Circuit tested
+      end
+
+      it "closes circuit after successful half-open attempts" do
+        adapter = circuit_adapter_class.new(should_fail: true)
+
+        # Open the circuit
+        3.times { expect { adapter.write({}) }.to raise_error(StandardError) }
+
+        sleep(0.15)
+
+        # Successful attempts in half-open state
+        adapter.should_fail = false
+        2.times { adapter.write({}) } # 2 successes → close
+
+        # Circuit should be closed now, calls execute normally
+        expect(adapter.write({})).to be true
+      end
+
+      it "resets failure count on success in closed state" do
+        adapter = circuit_adapter_class.new(should_fail: true)
+
+        # 2 failures (below threshold)
+        2.times { expect { adapter.write({}) }.to raise_error(StandardError) }
+
+        # Success resets counter
+        adapter.should_fail = false
+        adapter.write({})
+
+        # Can fail 3 more times before opening
+        adapter.should_fail = true
+        3.times { expect { adapter.write({}) }.to raise_error(StandardError) }
+
+        # Now circuit should be open
+        expect { adapter.write({}) }.to raise_error(E11y::Adapters::CircuitOpenError)
+      end
+    end
   end
 end

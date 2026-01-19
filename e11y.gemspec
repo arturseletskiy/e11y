@@ -67,8 +67,9 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "yard", "~> 0.9"
 
   # Optional adapter dependencies (install only if using specific adapters)
-  # LokiAdapter: gem install faraday
+  # LokiAdapter: gem install faraday faraday-retry
   # SentryAdapter: gem install sentry-ruby
   spec.add_development_dependency "faraday", "~> 2.7" # For LokiAdapter
+  spec.add_development_dependency "faraday-retry", "~> 2.2" # For LokiAdapter retry middleware
   spec.add_development_dependency "sentry-ruby", "~> 5.15" # For SentryAdapter
 end

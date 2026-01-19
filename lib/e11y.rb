@@ -96,14 +96,21 @@ module E11y
   #     config.adapter_mapping[:error] = [:logs, :errors_tracker]
   #     config.adapter_mapping[:info] = [:logs]
   #   end
+  #
+  # @example Configure middleware pipeline
+  #   E11y.configure do |config|
+  #     config.pipeline.use E11y::Middleware::Sampling, default_sample_rate: 0.1
+  #   end
   class Configuration
     attr_accessor :adapters, :log_level
-    attr_reader :adapter_mapping
+    attr_reader :adapter_mapping, :pipeline
 
     def initialize
       @adapters = {} # Hash of adapter_name => adapter_instance
       @log_level = :info
       @adapter_mapping = default_adapter_mapping
+      @pipeline = E11y::Pipeline::Builder.new
+      configure_default_pipeline
     end
 
     # Get adapters for given severity
@@ -129,6 +136,34 @@ module E11y
         fatal: %i[logs errors_tracker],  # Fatal: both logging + alerting
         default: [:logs]                 # Others: logging only
       }
+    end
+
+    # Setup default middleware pipeline
+    #
+    # Default pipeline order (per ADR-015):
+    # 1. TraceContext - Add trace_id, span_id, timestamp (zone: :pre_processing)
+    # 2. Validation - Schema validation (zone: :pre_processing)
+    # 3. PIIFilter - PII filtering (zone: :security)
+    # 4. AuditSigning - Audit event signing (zone: :security)
+    # 5. Sampling - Adaptive sampling (zone: :routing)
+    # 6. Routing - Buffer routing (zone: :adapters)
+    #
+    # @return [void]
+    # @see ADR-015 Middleware Execution Order
+    def configure_default_pipeline
+      # Zone: :pre_processing
+      @pipeline.use E11y::Middleware::TraceContext
+      @pipeline.use E11y::Middleware::Validation
+
+      # Zone: :security
+      @pipeline.use E11y::Middleware::PIIFilter
+      @pipeline.use E11y::Middleware::AuditSigning
+
+      # Zone: :routing
+      @pipeline.use E11y::Middleware::Sampling
+
+      # Zone: :adapters
+      @pipeline.use E11y::Middleware::Routing
     end
   end
 end
