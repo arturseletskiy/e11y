@@ -101,12 +101,12 @@ module E11y
         warn "[E11y] Rate limit exceeded (#{limit_type}) for event: #{event_name}"
 
         # C02 Resolution: Check if event should be saved to DLQ
-        if should_save_to_dlq?(event_data)
-          save_to_dlq(event_data, limit_type)
-        else
-          # Non-critical event → drop
-          # TODO: Track metric e11y.rate_limiter.dropped
-        end
+        return unless should_save_to_dlq?(event_data)
+
+        save_to_dlq(event_data, limit_type)
+
+        # Non-critical events are dropped (no DLQ)
+        # TODO: Track metric e11y.rate_limiter.dropped
       end
 
       # Check if rate-limited event should be saved to DLQ (C02 Resolution)

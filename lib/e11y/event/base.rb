@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "dry-schema"
+require "e11y/slo/event_driven"
 
 module E11y
   module Event
@@ -29,6 +30,8 @@ module E11y
     # @see UC-002 Business Event Tracking
     # rubocop:disable Metrics/ClassLength
     class Base
+      extend SLO::EventDriven::DSL
+
       # Severity levels (ordered by importance)
       SEVERITIES = %i[debug info success warn error fatal].freeze
 

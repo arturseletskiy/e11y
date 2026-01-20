@@ -446,4 +446,78 @@ RSpec.describe E11y::Adapters::Loki do
       expect(WebMock).to have_requested(:post, "#{loki_url}/loki/api/v1/push").at_least_times(3)
     end
   end
+
+  describe "C04 Resolution: Optional Cardinality Protection" do
+    context "when disabled (default)" do
+      let(:adapter_default) do
+        described_class.new(
+          url: loki_url,
+          labels: { app: "test" },
+          batch_size: 1
+        )
+      end
+
+      it "does not filter high-cardinality labels" do
+        event_with_user_id = {
+          event_name: "user.action",
+          severity: :info,
+          user_id: "12345", # High-cardinality label
+          order_id: "67890"
+        }
+
+        stub_request(:post, "#{loki_url}/loki/api/v1/push")
+
+        adapter_default.write(event_with_user_id)
+        adapter_default.close
+
+        # Labels should NOT be filtered (cardinality protection disabled)
+        expect(WebMock).to have_requested(:post, "#{loki_url}/loki/api/v1/push")
+      end
+    end
+
+    context "when enabled (enterprise use case)" do
+      let(:adapter_protected) do
+        described_class.new(
+          url: loki_url,
+          labels: { app: "test" },
+          batch_size: 1,
+          enable_cardinality_protection: true,
+          max_label_cardinality: 100
+        )
+      end
+
+      it "filters high-cardinality labels" do
+        event_with_user_id = {
+          event_name: "user.action",
+          severity: :info,
+          user_id: "12345", # Should be filtered (high-cardinality)
+          status: "active"  # Low-cardinality, should pass
+        }
+
+        stub_request(:post, "#{loki_url}/loki/api/v1/push")
+
+        adapter_protected.write(event_with_user_id)
+        adapter_protected.close
+
+        # user_id should be filtered by CardinalityProtection
+        expect(WebMock).to have_requested(:post, "#{loki_url}/loki/api/v1/push").once
+      end
+
+      it "preserves low-cardinality labels" do
+        event = {
+          event_name: "http.request",
+          severity: :info,
+          status: "success", # Low-cardinality
+          env: "production"  # Low-cardinality
+        }
+
+        stub_request(:post, "#{loki_url}/loki/api/v1/push")
+
+        adapter_protected.write(event)
+        adapter_protected.close
+
+        expect(WebMock).to have_requested(:post, "#{loki_url}/loki/api/v1/push").once
+      end
+    end
+  end
 end
