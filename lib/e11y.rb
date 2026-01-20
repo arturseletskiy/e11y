@@ -105,7 +105,7 @@ module E11y
   class Configuration
     attr_accessor :adapters, :log_level, :enabled, :environment, :service_name
     attr_reader :adapter_mapping, :pipeline, :rails_instrumentation, :logger_bridge, :request_buffer, :error_handling,
-                :dlq_storage, :dlq_filter, :rate_limiting
+                :dlq_storage, :dlq_filter, :rate_limiting, :slo_tracking
 
     def initialize
       @adapters = {} # Hash of adapter_name => adapter_instance
@@ -122,6 +122,7 @@ module E11y
       @dlq_storage = nil # Set by user (e.g., DLQ::FileStorage instance)
       @dlq_filter = nil # Set by user (e.g., DLQ::Filter instance)
       @rate_limiting = RateLimitingConfig.new
+      @slo_tracking = SLOTrackingConfig.new # ✅ L3.14.1
       configure_default_pipeline
     end
 
@@ -253,6 +254,24 @@ module E11y
       @global_limit = 10_000 # Max 10K events/sec globally
       @per_event_limit = 1_000 # Max 1K events/sec per event type
       @window = 1.0 # 1 second window
+    end
+  end
+
+  # SLO Tracking configuration (UC-004, ADR-003)
+  #
+  # Zero-config SLO tracking for HTTP requests and background jobs.
+  # Automatically emits SLO metrics (availability, latency, success rate).
+  #
+  # @see UC-004 (Zero-Config SLO Tracking)
+  # @see ADR-003 (SLO & Observability)
+  #
+  # @note C11 Resolution (Sampling Correction): Requires Phase 2.8 (Stratified Sampling).
+  #   Without stratified sampling, SLO metrics may be inaccurate when adaptive sampling is enabled.
+  class SLOTrackingConfig
+    attr_accessor :enabled
+
+    def initialize
+      @enabled = false # Opt-in (enable explicitly)
     end
   end
 end

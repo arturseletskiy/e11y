@@ -52,8 +52,14 @@ module E11y
         # Start request-scoped buffer (for debug events)
         E11y::Buffers::RequestScopedBuffer.start! if E11y.config.request_buffer&.enabled
 
+        # Track request start time for SLO
+        start_time = Time.now
+
         # Call next middleware/app
         status, headers, body = @app.call(env)
+
+        # Track SLO metrics (if enabled)
+        track_http_request_slo(env, status, start_time)
 
         # Add trace headers to response
         headers["X-E11y-Trace-Id"] = trace_id
@@ -123,6 +129,34 @@ module E11y
 
         # Rack session
         env["rack.session"]&.[]("user_id")
+      end
+
+      # Track HTTP request for SLO metrics (if enabled).
+      #
+      # @param env [Hash] Rack environment
+      # @param status [Integer] HTTP status code
+      # @param start_time [Time] Request start time
+      # @return [void]
+      # @api private
+      def track_http_request_slo(env, status, start_time)
+        return unless E11y.config.slo_tracking&.enabled
+
+        duration_ms = ((Time.now - start_time) * 1000).round(2)
+
+        # Extract controller and action from Rails routing
+        controller = env["action_controller.instance"]&.controller_name || "unknown"
+        action = env["action_controller.instance"]&.action_name || "unknown"
+
+        require "e11y/slo/tracker"
+        E11y::SLO::Tracker.track_http_request(
+          controller: controller,
+          action: action,
+          status: status,
+          duration_ms: duration_ms
+        )
+      rescue StandardError => e
+        # Don't fail if SLO tracking fails
+        warn "[E11y] SLO tracking error: #{e.message}"
       end
     end
   end

@@ -106,17 +106,24 @@ module E11y
       def write_with_reliability(event_data)
         return write(event_data) unless @reliability_enabled
 
-        @retry_handler.with_retry(adapter: self, event: event_data) do
-          @circuit_breaker.call do
-            write(event_data)
+        start_time = Time.now
+        begin
+          @retry_handler.with_retry(adapter: self, event: event_data) do
+            @circuit_breaker.call do
+              write(event_data)
+            end
           end
-        end
 
-        true
-      rescue E11y::Reliability::RetryHandler::RetryExhaustedError => e
-        handle_reliability_error(event_data, e, :retry_exhausted)
-      rescue E11y::Reliability::CircuitBreaker::CircuitOpenError => e
-        handle_reliability_error(event_data, e, :circuit_open)
+          # Track successful write
+          track_adapter_success(event_data, start_time)
+          true
+        rescue E11y::Reliability::RetryHandler::RetryExhaustedError => e
+          track_adapter_failure(event_data, e, start_time)
+          handle_reliability_error(event_data, e, :retry_exhausted)
+        rescue E11y::Reliability::CircuitBreaker::CircuitOpenError => e
+          track_adapter_failure(event_data, e, start_time)
+          handle_reliability_error(event_data, e, :circuit_open)
+        end
       end
 
       # Write a batch of events (preferred for performance)
@@ -513,6 +520,57 @@ module E11y
       rescue StandardError => e
         # C18: Don't fail if DLQ save fails
         warn "[E11y] Failed to save event to DLQ: #{e.message}"
+      end
+
+      # Track successful adapter write (self-monitoring).
+      #
+      # @api private
+      def track_adapter_success(_event_data, start_time)
+        duration_ms = ((Time.now - start_time) * 1000).round(2)
+
+        require "e11y/self_monitoring/performance_monitor"
+        require "e11y/self_monitoring/reliability_monitor"
+
+        # Use class name or "AnonymousAdapter" for anonymous classes
+        adapter_name = self.class.name || "AnonymousAdapter"
+
+        E11y::SelfMonitoring::PerformanceMonitor.track_adapter_latency(
+          adapter_name,
+          duration_ms
+        )
+
+        E11y::SelfMonitoring::ReliabilityMonitor.track_adapter_success(
+          adapter_name: adapter_name
+        )
+      rescue StandardError => e
+        # Don't fail if monitoring fails
+        warn "[E11y] Self-monitoring error: #{e.message}"
+      end
+
+      # Track failed adapter write (self-monitoring).
+      #
+      # @api private
+      def track_adapter_failure(_event_data, error, start_time)
+        duration_ms = ((Time.now - start_time) * 1000).round(2)
+
+        require "e11y/self_monitoring/performance_monitor"
+        require "e11y/self_monitoring/reliability_monitor"
+
+        # Use class name or "AnonymousAdapter" for anonymous classes
+        adapter_name = self.class.name || "AnonymousAdapter"
+
+        E11y::SelfMonitoring::PerformanceMonitor.track_adapter_latency(
+          adapter_name,
+          duration_ms
+        )
+
+        E11y::SelfMonitoring::ReliabilityMonitor.track_adapter_failure(
+          adapter_name: adapter_name,
+          error_class: error.class.name
+        )
+      rescue StandardError => e
+        # Don't fail if monitoring fails
+        warn "[E11y] Self-monitoring error: #{e.message}"
       end
     end
 

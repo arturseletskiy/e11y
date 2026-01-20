@@ -44,7 +44,7 @@ module E11y
       # **C18 Non-Failing**: E11y errors don't fail jobs (observability is secondary to business logic).
       class ServerMiddleware
         # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
-        def call(_worker, job, _queue)
+        def call(_worker, job, queue)
           # C18: Disable fail_on_error for jobs (observability should not block business logic)
           original_fail_on_error = E11y.config.error_handling.fail_on_error
           E11y.config.error_handling.fail_on_error = false
@@ -52,14 +52,22 @@ module E11y
           setup_job_context(job)
           setup_job_buffer
 
+          # Track job start time for SLO
+          start_time = Time.now
+          job_status = :success
+
           # Execute job (business logic)
           yield
         rescue StandardError => e
+          job_status = :failed
           # Check if this is E11y error (circuit breaker, retry exhausted, etc.)
           handle_job_error(e)
 
           raise # Always re-raise original exception
         ensure
+          # Track SLO metrics
+          track_job_slo(job, queue, job_status, start_time)
+
           cleanup_job_context
 
           # Restore original setting
@@ -135,6 +143,31 @@ module E11y
         # @return [String]
         def generate_span_id
           SecureRandom.hex(8)
+        end
+
+        # Track Sidekiq job for SLO metrics (if enabled).
+        #
+        # @param job [Hash] Sidekiq job hash
+        # @param queue [String] Queue name
+        # @param status [Symbol] Job status (:success or :failed)
+        # @param start_time [Time] Job start time
+        # @return [void]
+        # @api private
+        def track_job_slo(job, queue, status, start_time)
+          return unless E11y.config.slo_tracking&.enabled
+
+          duration_ms = ((Time.now - start_time) * 1000).round(2)
+
+          require "e11y/slo/tracker"
+          E11y::SLO::Tracker.track_background_job(
+            job_class: job["class"],
+            status: status,
+            duration_ms: duration_ms,
+            queue: queue
+          )
+        rescue StandardError => e
+          # C18: Don't fail if SLO tracking fails
+          warn "[E11y] SLO tracking error: #{e.message}"
         end
       end
     end

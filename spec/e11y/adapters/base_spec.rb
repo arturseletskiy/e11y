@@ -242,7 +242,7 @@ RSpec.describe E11y::Adapters::Base do
             @should_fail = config.fetch(:should_fail, 0)
           end
 
-          def write(event_data)
+          def write(_event_data)
             with_retry(max_attempts: 3, base_delay: 0.01, max_delay: 0.1) do
               @attempt_count += 1
               raise Timeout::Error, "Network timeout" if @attempt_count <= @should_fail
@@ -315,7 +315,7 @@ RSpec.describe E11y::Adapters::Base do
             @should_fail = config.fetch(:should_fail, false)
           end
 
-          def write(event_data)
+          def write(_event_data)
             with_circuit_breaker(failure_threshold: 3, timeout: 0.1) do
               @call_count += 1
               raise StandardError, "Service unavailable" if @should_fail
@@ -514,6 +514,116 @@ RSpec.describe E11y::Adapters::Base do
         expect do
           failing_adapter.write_with_reliability(event_data)
         end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError)
+      end
+    end
+  end
+
+  describe "Self-Monitoring Integration" do
+    let(:event_data) { { event_name: "test.event", severity: :info, message: "Test" } }
+
+    let(:successful_adapter) do
+      Class.new(E11y::Adapters::Base) do
+        def write(_event_data)
+          sleep 0.01 # Simulate 10ms latency
+          true
+        end
+      end.new(reliability_enabled: true)
+    end
+
+    let(:failing_adapter) do
+      Class.new(E11y::Adapters::Base) do
+        def write(_event_data)
+          sleep 0.005 # Simulate 5ms latency before failure
+          raise StandardError, "Adapter error"
+        end
+      end.new(reliability_enabled: true)
+    end
+
+    before do
+      E11y::Metrics.reset_backend!
+      allow(E11y::Reliability::RetryHandler).to receive(:new).and_return(
+        instance_double(E11y::Reliability::RetryHandler, with_retry: nil)
+      )
+      allow(E11y::Reliability::CircuitBreaker).to receive(:new).and_return(
+        instance_double(E11y::Reliability::CircuitBreaker, call: nil)
+      )
+    end
+
+    context "on successful write" do
+      it "tracks adapter latency" do
+        expect(E11y::SelfMonitoring::PerformanceMonitor).to receive(:track_adapter_latency) do |adapter_name, duration_ms|
+          expect(adapter_name).to eq("AnonymousAdapter") # Anonymous class in test
+          expect(duration_ms).to be >= 0
+          expect(duration_ms).to be < 100 # Less than 100ms
+        end
+
+        allow(E11y::SelfMonitoring::ReliabilityMonitor).to receive(:track_adapter_success)
+
+        successful_adapter.send(:track_adapter_success, event_data, Time.now - 0.01)
+      end
+
+      it "tracks adapter success" do
+        allow(E11y::SelfMonitoring::PerformanceMonitor).to receive(:track_adapter_latency)
+
+        expect(E11y::SelfMonitoring::ReliabilityMonitor).to receive(:track_adapter_success).with(
+          adapter_name: "AnonymousAdapter"
+        )
+
+        successful_adapter.send(:track_adapter_success, event_data, Time.now - 0.01)
+      end
+
+      it "doesn't fail if monitoring fails" do
+        allow(E11y::SelfMonitoring::PerformanceMonitor).to receive(:track_adapter_latency).and_raise(StandardError,
+                                                                                                     "Monitor error")
+
+        expect do
+          successful_adapter.send(:track_adapter_success, event_data, Time.now)
+        end.not_to raise_error
+      end
+    end
+
+    context "on failed write" do
+      let(:error) { StandardError.new("Write failed") }
+
+      it "tracks adapter latency even on failure" do
+        expect(E11y::SelfMonitoring::PerformanceMonitor).to receive(:track_adapter_latency) do |adapter_name, duration_ms|
+          expect(adapter_name).to eq("AnonymousAdapter")
+          expect(duration_ms).to be >= 0
+        end
+
+        allow(E11y::SelfMonitoring::ReliabilityMonitor).to receive(:track_adapter_failure)
+
+        failing_adapter.send(:track_adapter_failure, event_data, error, Time.now - 0.005)
+      end
+
+      it "tracks adapter failure with error class" do
+        allow(E11y::SelfMonitoring::PerformanceMonitor).to receive(:track_adapter_latency)
+
+        expect(E11y::SelfMonitoring::ReliabilityMonitor).to receive(:track_adapter_failure).with(
+          adapter_name: "AnonymousAdapter",
+          error_class: "StandardError"
+        )
+
+        failing_adapter.send(:track_adapter_failure, event_data, error, Time.now - 0.005)
+      end
+
+      it "doesn't fail if monitoring fails" do
+        allow(E11y::SelfMonitoring::ReliabilityMonitor).to receive(:track_adapter_failure).and_raise(StandardError,
+                                                                                                     "Monitor error")
+
+        expect do
+          failing_adapter.send(:track_adapter_failure, event_data, error, Time.now)
+        end.not_to raise_error
+      end
+    end
+
+    context "ADR-016 compliance" do
+      it "tracks internal metrics for E11y self-monitoring" do
+        allow(E11y::SelfMonitoring::PerformanceMonitor).to receive(:track_adapter_latency)
+
+        expect(E11y::SelfMonitoring::ReliabilityMonitor).to receive(:track_adapter_success)
+
+        successful_adapter.send(:track_adapter_success, event_data, Time.now - 0.01)
       end
     end
   end
