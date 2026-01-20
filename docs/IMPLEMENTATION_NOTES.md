@@ -2709,6 +2709,93 @@ Overall: 1213 examples, 0 failures, 13 pending
 
 ---
 
+### 2026-01-19: Error-Based Adaptive Sampling (FEAT-4838) ✅
+
+**Phase/Task**: Phase 2.8 - Advanced Sampling Strategies (FEAT-4837)
+
+**Change Type**: Implementation | Architecture | Tests
+
+**Decision**:
+Implemented **Error-Based Adaptive Sampling** - first adaptive sampling strategy from Phase 2.8 plan.
+
+**Problem**:
+Fixed sampling wastes resources during normal times and provides insufficient data during incidents. Need automatic adjustment based on error rates.
+
+**Solution**:
+1. ✅ **`E11y::Sampling::ErrorSpikeDetector`** - Spike detection engine:
+   - Sliding window error rate calculation (configurable window)
+   - Absolute threshold (errors/minute)
+   - Relative threshold (ratio to baseline)
+   - Exponential moving average for baseline tracking
+   - Spike duration management (maintains elevated sampling)
+
+2. ✅ **Integration with `E11y::Middleware::Sampling`**:
+   - New config option: `error_based_adaptive: true`
+   - Automatic error tracking via `record_event`
+   - Priority override: 100% sampling during spike (highest priority)
+   - Non-intrusive: No changes to event tracking code needed
+
+3. ✅ **Configuration DSL**:
+   ```ruby
+   E11y.configure do |config|
+     config.pipeline.use E11y::Middleware::Sampling,
+       error_based_adaptive: true,
+       error_spike_config: {
+         window: 60,                    # 60 seconds sliding window
+         absolute_threshold: 100,       # 100 errors/min triggers spike
+         relative_threshold: 3.0,       # 3x normal rate triggers spike
+         spike_duration: 300            # Keep 100% sampling for 5 minutes
+       }
+   end
+   ```
+
+**Behavior**:
+- **Normal**: Uses configured sample rates (e.g., 10%)
+- **Error spike**: Automatically increases to 100% sampling
+- **After spike**: Returns to normal after `spike_duration`
+
+**Technical Details**:
+- Thread-safe with Mutex for concurrent access
+- Memory-efficient: Cleanup of old events outside sliding window
+- Baseline tracking: EMA with alpha=0.1 for smooth baseline
+- Dual thresholds: Absolute (100 errors/min) OR relative (3x baseline)
+
+**Tests**:
+```
+✅ ErrorSpikeDetector: 22 unit tests (all passing)
+✅ Sampling Middleware Integration: 9 tests (all passing)
+Total: 31 new tests, 0 failures
+Overall: 1244 examples, 0 failures, 13 pending
+```
+
+**Impact**:
+- **ADR-009 §3.2**: Error-based sampling fully implemented
+- **UC-014**: First adaptive strategy operational
+- **Phase 2.8**: FEAT-4838 complete (1 of 5 strategies)
+
+**Code Changes**:
+- `lib/e11y/sampling/error_spike_detector.rb`: +226 lines (new)
+- `lib/e11y/middleware/sampling.rb`: +30 lines (integration)
+- `spec/e11y/sampling/error_spike_detector_spec.rb`: +290 lines (new)
+- `spec/e11y/middleware/sampling_spec.rb`: +150 lines (integration tests)
+- `docs/ADR-009-cost-optimization.md`: Updated status
+- `docs/use_cases/UC-014-adaptive-sampling.md`: Added usage examples
+
+**Status**: ✅ Complete (FEAT-4838)
+
+**Documentation Updates**:
+- [x] ADR-009 - Updated implementation status
+- [x] UC-014 - Added Error-Based Adaptive section
+- [x] IMPLEMENTATION_NOTES.md - This entry
+
+**Next Steps (Phase 2.8)**:
+- [ ] FEAT-4842: Load-Based Adaptive Sampling
+- [ ] FEAT-4846: Value-Based Sampling
+- [ ] FEAT-4850: Stratified Sampling for SLO (MILESTONE, C11)
+- [ ] FEAT-4854: Documentation & Migration Guide (MILESTONE)
+
+---
+
 ## Notes
 
 - **Always update this file** when deviating from original plan

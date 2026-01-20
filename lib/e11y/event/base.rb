@@ -317,6 +317,41 @@ module E11y
         end
         # rubocop:enable Metrics/CyclomaticComplexity
 
+        # Configure value-based sampling (FEAT-4849)
+        #
+        # Prioritize high-value events for sampling based on payload values.
+        # Events matching any configured rule will be sampled at 100%.
+        #
+        # @param field [String, Symbol] Field to extract value from
+        # @param comparisons [Hash] Comparison rules
+        # @option comparisons [Numeric] :greater_than (>) Sample if value > threshold
+        # @option comparisons [Numeric] :less_than (<) Sample if value < threshold
+        # @option comparisons [Object] :equals (==) Sample if value == threshold
+        # @option comparisons [Range] :in_range Sample if value in range
+        # @return [void]
+        #
+        # @example High-value payments
+        #   class PaymentEvent < E11y::Event::Base
+        #     sample_by_value :amount, greater_than: 1000
+        #   end
+        #
+        # @example Range-based sampling
+        #   class OrderEvent < E11y::Event::Base
+        #     sample_by_value :total, in_range: 100..500
+        #   end
+        def sample_by_value(field, comparisons)
+          require "e11y/event/value_sampling_config"
+          @value_sampling_configs ||= []
+          @value_sampling_configs << ValueSamplingConfig.new(field, comparisons)
+        end
+
+        # Get value-based sampling configurations
+        #
+        # @return [Array<ValueSamplingConfig>] Configured sampling rules
+        def value_sampling_configs
+          @value_sampling_configs || []
+        end
+
         # Resolve sample rate for this event
         #
         # Sample rate determines what percentage of events to process (0.0-1.0)

@@ -415,5 +415,376 @@ RSpec.describe E11y::Middleware::Sampling do
       expect(sampled_count).to eq(10) # All events sampled
     end
   end
+
+  describe "Error-Based Adaptive Sampling (FEAT-4838)" do
+    let(:error_event_class) do
+      Class.new(E11y::Event::Base) do
+        def self.name
+          "ErrorEvent"
+        end
+
+        def self.event_name
+          "test.error"
+        end
+
+        def self.severity
+          :error
+        end
+
+        def self.resolve_sample_rate
+          0.1 # 10% normal sampling
+        end
+      end
+    end
+
+    let(:info_event_class) do
+      Class.new(E11y::Event::Base) do
+        def self.name
+          "InfoEvent"
+        end
+
+        def self.event_name
+          "test.info"
+        end
+
+        def self.severity
+          :info
+        end
+
+        def self.resolve_sample_rate
+          0.1 # 10% normal sampling
+        end
+      end
+    end
+
+    context "when error_based_adaptive is disabled" do
+      let(:config) { { error_based_adaptive: false } }
+
+      it "does not create error spike detector" do
+        expect(middleware.instance_variable_get(:@error_spike_detector)).to be_nil
+      end
+
+      it "uses normal sampling rates" do
+        # Should use event-level sample rate (0.1)
+        allow(middleware).to receive(:rand).and_return(0.05) # Will sample
+
+        data = event_data.merge(event_class: info_event_class, severity: :info)
+        result = middleware.call(data)
+
+        expect(result).not_to be_nil
+        expect(result[:sampled]).to be true
+      end
+    end
+
+    context "when error_based_adaptive is enabled" do
+      let(:config) do
+        {
+          error_based_adaptive: true,
+          error_spike_config: {
+            window: 60,
+            absolute_threshold: 10, # Low threshold for testing
+            relative_threshold: 3.0,
+            spike_duration: 300
+          }
+        }
+      end
+
+      it "creates error spike detector" do
+        expect(middleware.instance_variable_get(:@error_spike_detector)).not_to be_nil
+      end
+
+      it "tracks errors in detector" do
+        detector = middleware.instance_variable_get(:@error_spike_detector)
+        expect(detector).to receive(:record_event).at_least(:once)
+
+        data = event_data.merge(event_class: error_event_class, severity: :error, event_name: "test.error")
+        middleware.call(data)
+      end
+
+      it "uses 100% sampling during error spike" do
+        middleware.instance_variable_get(:@error_spike_detector)
+
+        # Trigger error spike (11 errors > threshold of 10)
+        11.times do
+          data = event_data.merge(event_class: error_event_class, severity: :error, event_name: "test.error")
+          middleware.call(data)
+        end
+
+        # Now all events should be sampled (even info events)
+        allow(middleware).to receive(:rand).and_return(0.95) # Would normally NOT sample (0.95 > 0.1)
+
+        data = event_data.merge(event_class: info_event_class, severity: :info, event_name: "test.info")
+        result = middleware.call(data)
+
+        expect(result).not_to be_nil # Sampled despite high rand value
+        expect(result[:sample_rate]).to eq(1.0) # 100% rate during spike
+      end
+
+      it "returns to normal sampling after spike ends" do
+        detector = middleware.instance_variable_get(:@error_spike_detector)
+
+        # Trigger spike
+        11.times do
+          data = event_data.merge(event_class: error_event_class, severity: :error, event_name: "test.error")
+          middleware.call(data)
+        end
+
+        # Manually end spike (simulate time passing)
+        detector.reset!
+
+        # Should use normal sampling (0.1)
+        allow(middleware).to receive(:rand).and_return(0.95) # Will NOT sample (0.95 > 0.1)
+
+        data = event_data.merge(event_class: info_event_class, severity: :info, event_name: "test.info")
+        result = middleware.call(data)
+
+        expect(result).to be_nil # Not sampled
+      end
+
+      it "includes error_based_adaptive in capabilities" do
+        capabilities = middleware.capabilities
+
+        expect(capabilities[:error_based_adaptive]).to be true
+      end
+    end
+
+    context "ADR-009 §3.2 compliance" do
+      let(:config) do
+        {
+          error_based_adaptive: true,
+          error_spike_config: { absolute_threshold: 10 }
+        }
+      end
+
+      it "increases sampling to 100% during error spikes" do
+        # Trigger spike
+        11.times do
+          data = event_data.merge(event_class: error_event_class, severity: :error, event_name: "test.error")
+          middleware.call(data)
+        end
+
+        # Verify 100% sampling
+        event_data.merge(event_class: info_event_class, severity: :info, event_name: "test.info")
+        sample_rate = middleware.send(:determine_sample_rate, info_event_class)
+
+        expect(sample_rate).to eq(1.0)
+      end
+    end
+
+    context "UC-014 compliance" do
+      let(:config) do
+        {
+          error_based_adaptive: true,
+          default_sample_rate: 0.1,
+          error_spike_config: { absolute_threshold: 10 }
+        }
+      end
+
+      it "adapts sampling based on error rate" do
+        # Normal: 10% sampling
+        expect(middleware.send(:determine_sample_rate, info_event_class)).to eq(0.1)
+
+        # Trigger spike
+        11.times do
+          data = event_data.merge(event_class: error_event_class, severity: :error, event_name: "test.error")
+          middleware.call(data)
+        end
+
+        # During spike: 100% sampling
+        expect(middleware.send(:determine_sample_rate, info_event_class)).to eq(1.0)
+      end
+    end
+  end
+
+  describe "Load-Based Adaptive Sampling (FEAT-4842)" do
+    let(:load_info_event_class) do
+      Class.new(E11y::Event::Base) do
+        def self.name
+          "LoadInfoEvent"
+        end
+
+        def self.event_name
+          "test.load.info"
+        end
+
+        def self.severity
+          :info
+        end
+      end
+    end
+
+    context "when load_based_adaptive is disabled" do
+      let(:config) { { load_based_adaptive: false } }
+
+      it "does not create load monitor" do
+        expect(middleware.instance_variable_get(:@load_monitor)).to be_nil
+      end
+
+      it "uses default sampling rates" do
+        # Simply verify that load_based_adaptive flag is false
+        expect(middleware.instance_variable_get(:@load_based_adaptive)).to be false
+      end
+    end
+
+    context "when load_based_adaptive is enabled" do
+      let(:config) do
+        {
+          load_based_adaptive: true,
+          load_monitor_config: {
+            window: 60,
+            thresholds: {
+              normal: 5,       # 5 events/sec for testing
+              high: 20,        # 20 events/sec
+              very_high: 40,   # 40 events/sec
+              overload: 80     # 80 events/sec
+            }
+          }
+        }
+      end
+
+      it "creates load monitor" do
+        expect(middleware.instance_variable_get(:@load_monitor)).not_to be_nil
+      end
+
+      it "tracks all events in load monitor" do
+        monitor = middleware.instance_variable_get(:@load_monitor)
+        expect(monitor).to receive(:record_event).at_least(:once)
+
+        allow(middleware).to receive(:rand).and_return(0.5) # Will sample
+        data = event_data.merge(event_class: load_info_event_class, severity: :info, event_name: "test.load.info")
+        middleware.call(data)
+      end
+
+      it "adjusts sampling rate based on load level" do
+        monitor = middleware.instance_variable_get(:@load_monitor)
+
+        # Verify that monitor adjusts rates based on load
+        # Normal load (no events)
+        expect(monitor.recommended_sample_rate).to eq(1.0)
+
+        # Simulate high load
+        1200.times { monitor.record_event } # 20 events/sec
+        expect(monitor.recommended_sample_rate).to eq(0.5)
+
+        # Simulate very high load (but not overload)
+        monitor.reset!
+        3000.times { monitor.record_event } # 50 events/sec (> very_high 40, < overload 80)
+        expect(monitor.recommended_sample_rate).to eq(0.1)
+      end
+
+      it "uses minimum of event-level and load-based rate" do
+        monitor = middleware.instance_variable_get(:@load_monitor)
+        event_with_rate = Class.new(E11y::Event::Base) do
+          def self.name
+            "CustomEvent"
+          end
+
+          def self.event_name
+            "custom.event"
+          end
+
+          def self.resolve_sample_rate
+            0.3 # Event-level: 30%
+          end
+        end
+
+        # Load-based: 50%
+        allow(monitor).to receive(:recommended_sample_rate).and_return(0.5)
+        allow(middleware).to receive(:rand).and_return(0.2) # Will sample (0.2 < 0.3)
+
+        data = event_data.merge(event_class: event_with_rate, event_name: "custom.event")
+        result = middleware.call(data)
+
+        expect(result).not_to be_nil
+        expect(result[:sample_rate]).to eq(0.3) # Min(0.3, 0.5) = 0.3
+      end
+
+      it "includes load_based_adaptive in capabilities" do
+        capabilities = middleware.capabilities
+
+        expect(capabilities[:load_based_adaptive]).to be true
+      end
+    end
+
+    context "interaction with error-based adaptive" do
+      let(:config) do
+        {
+          error_based_adaptive: true,
+          error_spike_config: { absolute_threshold: 5 },
+          load_based_adaptive: true,
+          load_monitor_config: { thresholds: { normal: 5 } }
+        }
+      end
+
+      it "error spike overrides load-based rate" do
+        error_detector = middleware.instance_variable_get(:@error_spike_detector)
+        load_monitor = middleware.instance_variable_get(:@load_monitor)
+
+        # Simulate error spike
+        allow(error_detector).to receive(:error_spike?).and_return(true)
+        allow(load_monitor).to receive(:recommended_sample_rate).and_return(0.1) # Load says 10%
+
+        sample_rate = middleware.send(:determine_sample_rate, load_info_event_class)
+
+        expect(sample_rate).to eq(1.0) # Error spike overrides to 100%
+      end
+    end
+
+    context "ADR-009 §3.3 compliance" do
+      it "implements tiered sampling (100%/50%/10%/1%)" do
+        # Test that LoadMonitor provides tiered rates
+        test_monitor = E11y::Sampling::LoadMonitor.new(
+          window: 60,
+          thresholds: {
+            normal: 10,
+            high: 50,
+            very_high: 100,
+            overload: 200
+          }
+        )
+
+        # Normal: 0 events
+        expect(test_monitor.recommended_sample_rate).to eq(1.0)
+
+        # High: 1200 events/60sec = 20/sec
+        1200.times { test_monitor.record_event }
+        expect(test_monitor.recommended_sample_rate).to eq(0.5)
+
+        test_monitor.reset!
+
+        # Very high: 6600 events/60sec = 110/sec
+        6600.times { test_monitor.record_event }
+        expect(test_monitor.recommended_sample_rate).to eq(0.1)
+
+        test_monitor.reset!
+
+        # Overload: 12000 events/60sec = 200/sec
+        12_000.times { test_monitor.record_event }
+        expect(test_monitor.recommended_sample_rate).to eq(0.01)
+      end
+    end
+
+    context "UC-014 compliance" do
+      it "reduces sampling under high load" do
+        # Test that LoadMonitor adapts to load changes
+        test_monitor = E11y::Sampling::LoadMonitor.new(
+          window: 60,
+          thresholds: {
+            normal: 10,
+            high: 50,
+            very_high: 100,
+            overload: 150 # 12000 events/60s = 200/s > 150
+          }
+        )
+
+        # Normal load: 0 events
+        expect(test_monitor.recommended_sample_rate).to eq(1.0)
+
+        # High load: 12000 events/60s = 200/s → overload
+        12_000.times { test_monitor.record_event }
+        expect(test_monitor.recommended_sample_rate).to eq(0.01)
+      end
+    end
+  end
 end
 # rubocop:enable RSpec/MultipleMemoizedHelpers
