@@ -160,20 +160,27 @@ Everyone interacting in the E11y project's codebases, issue trackers, chat rooms
 
 **Current Version:** 0.1.0
 
-**Phase 1 Progress (In Development):**
+**Development Progress:**
 - ✅ Phase 0: Gem Setup & Best Practices
-- 🔄 Phase 1: Core Foundation (In Progress)
-  - ✅ Event::Base with zero-allocation pattern
-  - ✅ Convention-based configuration
-  - ✅ Schema validation (dry-schema)
-  - 🔄 Adaptive Buffer implementation
-  - ⏳ Middleware Pipeline
-  - ⏳ track() method with pipeline
-
-**Next Phases:**
-- ⏳ Phase 2: Core Features (PII, Adapters, Metrics)
-- ⏳ Phase 3: Rails Integration
-- ⏳ Phase 4: Production Hardening
-- ⏳ Phase 5: Scale & Optimization
+- ✅ Phase 1: Core Foundation
+- ✅ Phase 2: Core Features (PII, Adapters, Metrics)
+- ✅ Phase 3: Rails Integration
+- ✅ Phase 4: Production Hardening
+- 🔄 Phase 5: Scale & Optimization (In Progress)
+  - ✅ High Cardinality Protection (4-layer defense)
+  - ✅ Tiered Storage Migration (hot/warm/cold)
+  - ✅ Performance Benchmarks (1K/10K/100K events/sec)
+  - 🔄 Documentation & Testing
+  - ⏳ Gem Release
 
 See [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for detailed timeline.
+
+## 📚 Additional Documentation
+
+- [Architecture Decisions (ADR Index)](docs/ADR-INDEX.md)
+- [API Reference](docs/API.md)
+- [Guides](docs/guides/):
+  - [Migrating from Rails.logger](docs/guides/rails-logger-migration.md)
+  - [Custom Middleware Guide](docs/guides/custom-middleware.md)
+  - [Custom Adapter Guide](docs/guides/custom-adapter.md)
+  - [Performance Tuning](docs/guides/performance-tuning.md)

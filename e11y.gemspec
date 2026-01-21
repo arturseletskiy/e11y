@@ -57,6 +57,8 @@ Gem::Specification.new do |spec|
   spec.add_dependency "zeitwerk", "~> 2.6"
 
   # Development dependencies
+  spec.add_development_dependency "benchmark-ips", "~> 2.13" # For performance benchmarks
+  spec.add_development_dependency "memory_profiler", "~> 1.0" # For memory profiling
   spec.add_development_dependency "rack", "~> 3.0" # For Rack middleware testing
   spec.add_development_dependency "rake", "~> 13.0"
   spec.add_development_dependency "rspec", "~> 3.12"

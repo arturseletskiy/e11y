@@ -178,6 +178,64 @@ RSpec.describe E11y::Event::Base do
     end
   end
 
+  describe ".retention_period" do
+    context "when explicitly set" do
+      it "returns the set retention period" do
+        event_class = Class.new(described_class) do
+          retention_period 7.days
+        end
+
+        expect(event_class.retention_period).to eq(7.days)
+      end
+
+      it "supports long retention (years)" do
+        event_class = Class.new(described_class) do
+          retention_period 7.years
+        end
+
+        expect(event_class.retention_period).to eq(7.years)
+      end
+    end
+
+    context "when not explicitly set" do
+      it "uses config default_retention_period" do
+        allow(E11y.configuration).to receive(:default_retention_period).and_return(90.days)
+
+        expect(simple_event_class.retention_period).to eq(90.days)
+      end
+
+      it "falls back to 30 days if config not set" do
+        allow(E11y.configuration).to receive(:default_retention_period).and_return(nil)
+
+        expect(simple_event_class.retention_period).to eq(30.days)
+      end
+    end
+
+    context "with inheritance" do
+      it "inherits from parent class" do
+        parent_class = Class.new(described_class) do
+          retention_period 1.year
+        end
+
+        child_class = Class.new(parent_class)
+
+        expect(child_class.retention_period).to eq(1.year)
+      end
+
+      it "can override parent retention" do
+        parent_class = Class.new(described_class) do
+          retention_period 1.year
+        end
+
+        child_class = Class.new(parent_class) do
+          retention_period 7.days
+        end
+
+        expect(child_class.retention_period).to eq(7.days)
+      end
+    end
+  end
+
   describe ".adapters" do
     context "when explicitly set" do
       it "returns the set adapters" do
@@ -346,6 +404,58 @@ RSpec.describe E11y::Event::Base do
 
         # Verify it's parseable
         expect { Time.iso8601(result[:timestamp]) }.not_to raise_error
+      end
+
+      it "calculates retention_until from retention_period" do
+        event_class = Class.new(described_class) do
+          def self.name
+            "RetentionEvent"
+          end
+
+          retention_period 30.days
+        end
+
+        result = event_class.track(data: "test")
+
+        expect(result[:retention_until]).not_to be_nil
+        expect(result[:retention_until]).to match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/)
+
+        # Verify retention_until is ~30 days from now
+        retention_time = Time.parse(result[:retention_until])
+        expected_time = Time.now + 30.days
+        expect(retention_time).to be_within(5.seconds).of(expected_time)
+      end
+
+      it "includes audit_event flag" do
+        audit_class = Class.new(described_class) do
+          def self.name
+            "AuditEvent"
+          end
+
+          audit_event true
+        end
+
+        result = audit_class.track(data: "test")
+
+        expect(result[:audit_event]).to be true
+      end
+
+      it "calculates long retention for audit events" do
+        audit_class = Class.new(described_class) do
+          def self.name
+            "UserDeletedEvent"
+          end
+
+          audit_event true
+          retention_period 7.years
+        end
+
+        result = audit_class.track(user_id: 123)
+
+        retention_time = Time.parse(result[:retention_until])
+        expected_time = Time.now + 7.years
+
+        expect(retention_time).to be_within(5.seconds).of(expected_time)
       end
     end
 

@@ -6,28 +6,16 @@
 # Run all benchmarks:
 #   bundle exec ruby benchmarks/run_all.rb
 #
-# Run with specific iterations:
-#   ITERATIONS=10000 bundle exec ruby benchmarks/run_all.rb
+# Run with specific scale:
+#   SCALE=small bundle exec ruby benchmarks/run_all.rb
+#   SCALE=medium bundle exec ruby benchmarks/run_all.rb
+#   SCALE=large bundle exec ruby benchmarks/run_all.rb
 
 require "bundler/setup"
-require "benchmark"
-require "e11y"
 
-ITERATIONS = (ENV["ITERATIONS"] || 1000).to_i
+# Load main benchmark suite
+load File.expand_path("e11y_benchmarks.rb", __dir__)
 
-puts "🚀 E11y Benchmarks (#{ITERATIONS} iterations)"
-puts "=" * 60
-
-# Benchmarks will be implemented in Phase 1+
-# Examples:
-# - Event creation (zero-allocation goal)
-# - Buffer operations (push/flush)
-# - Middleware chain execution
-# - Adapter send performance
-
-puts "\n⚠️  Benchmarks will be implemented in Phase 1+"
-puts "Expected metrics (from ADR-009):"
-puts "  - Event creation: < 10µs per event (zero-allocation)"
-puts "  - Buffer push: < 1µs (lock-free)"
-puts "  - Middleware: < 5µs per middleware"
-puts "  - Memory: < 100KB baseline, < 10MB under load"
+puts "\n✅ All benchmarks completed"
+puts "\nFor detailed benchmarks, run:"
+puts "  bundle exec ruby benchmarks/e11y_benchmarks.rb"

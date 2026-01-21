@@ -222,7 +222,11 @@ RSpec.describe E11y::Adapters::Yabeda do
 
     it "applies cardinality protection" do
       # Register metric with cardinality limit
-      adapter_with_limit = described_class.new(cardinality_limit: 2, auto_register: false)
+      adapter_with_limit = described_class.new(
+        cardinality_limit: 2,
+        auto_register: false,
+        overflow_strategy: :alert # Alert strategy produces warnings
+      )
 
       event_template = {
         event_name: "order.created",

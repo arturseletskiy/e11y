@@ -2380,6 +2380,253 @@ end
 
 ---
 
+## 14. Retention-Based Routing (Phase 5 Extension)
+
+**Status:** ✅ Proposed (2026-01-21)  
+**Covers:** UC-019 (Retention-Based Event Routing), ADR-009 (Cost Optimization)  
+**Replaces:** TieredStorage adapter (routing handles all use cases)
+
+### 14.1. Problem Statement
+
+Events have different retention requirements, but no automatic routing:
+
+- **Audit logs:** 7 years (GDPR, SOX)
+- **Business events:** 90 days (analytics)
+- **Debug logs:** 7 days (troubleshooting)
+- **Metrics:** 30 days (monitoring)
+
+**Current Issues:**
+1. Manual adapter selection per event
+2. No enforcement of retention policies
+3. Cost inefficiency (debug logs stored for years)
+4. Compliance risk (audit logs deleted early)
+
+### 14.2. Solution: Declarative Retention + Lambda Routing
+
+```ruby
+# Event declares retention intent
+class UserDeletedEvent < E11y::Event::Base
+  audit_event true
+  retention_period 7.years  # ← Declarative
+end
+
+# Config defines routing logic
+E11y.configure do |config|
+  config.routing_rules = [
+    ->(event) { :audit_encrypted if event[:audit_event] },
+    ->(event) {
+      days = (Time.parse(event[:retention_until]) - Time.now) / 86400
+      days > 90 ? :s3_glacier : :loki
+    }
+  ]
+end
+```
+
+### 14.3. Event::Base Extension
+
+```ruby
+module E11y
+  module Event
+    class Base
+      # DSL: declare retention period
+      def retention_period(value = nil)
+        @retention_period = value if value
+        @retention_period || 
+          superclass.retention_period || 
+          E11y.configuration.default_retention_period || 
+          30.days
+      end
+      
+      def track(**payload)
+        event_hash = {
+          # ... existing fields ...
+          retention_until: (Time.now + retention_period).iso8601,  # ← Auto-calculated
+          audit_event: audit_event?  # ← For routing
+        }
+        
+        E11y::Pipeline.process(event_hash)
+      end
+    end
+  end
+end
+```
+
+### 14.4. Routing Middleware
+
+```ruby
+module E11y
+  module Middleware
+    class Routing < Base
+      def initialize(rules: [], fallback_adapters: [])
+        @rules = rules
+        @fallback_adapters = fallback_adapters
+      end
+      
+      def call(event_hash)
+        # 1. Explicit adapters bypass routing
+        target_adapters = if event_hash[:adapters]&.any?
+          event_hash[:adapters]
+        else
+          # 2. Apply routing rules (lambdas)
+          apply_routing_rules(event_hash)
+        end
+        
+        # 3. Write to selected adapters
+        target_adapters.each do |adapter_name|
+          adapter = E11y.configuration.adapters[adapter_name]
+          adapter&.write(event_hash)
+        end
+        
+        next_middleware&.call(event_hash)
+      end
+      
+      private
+      
+      def apply_routing_rules(event_hash)
+        matched = []
+        @rules.each do |rule|
+          result = rule.call(event_hash)
+          matched.concat(Array(result)) if result
+        end
+        matched.any? ? matched.uniq : @fallback_adapters
+      end
+    end
+  end
+end
+```
+
+### 14.5. Configuration
+
+```ruby
+E11y.configure do |config|
+  config.default_retention_period = 30.days
+  
+  config.routing_rules = [
+    # Rule 1: Audit → encrypted storage
+    ->(event) { :audit_encrypted if event[:audit_event] },
+    
+    # Rule 2: Long retention → cold storage
+    ->(event) {
+      days = (Time.parse(event[:retention_until]) - Time.now) / 86400
+      :s3_glacier if days > 90
+    },
+    
+    # Rule 3: Medium retention → warm storage
+    ->(event) {
+      days = (Time.parse(event[:retention_until]) - Time.now) / 86400
+      :s3_standard if days.between?(30, 90)
+    },
+    
+    # Rule 4: Short retention → hot storage
+    ->(event) {
+      days = (Time.parse(event[:retention_until]) - Time.now) / 86400
+      :loki if days <= 30
+    },
+    
+    # Rule 5: Errors → also to Sentry
+    ->(event) { :sentry if event[:severity] == :error }
+  ]
+  
+  config.fallback_adapters = [:stdout]
+end
+```
+
+### 14.6. Usage Examples
+
+```ruby
+# Default retention (30 days from config)
+class OrderEvent < E11y::Event::Base
+  schema { required(:order_id).filled(:integer) }
+end
+
+# Explicit retention (7 years audit)
+class UserDeletedEvent < E11y::Event::Base
+  audit_event true
+  retention_period 7.years
+end
+
+# Short retention (7 days debug)
+class DebugEvent < E11y::Event::Base
+  retention_period 7.days
+end
+
+# Explicit adapters (bypass routing)
+class PaymentEvent < E11y::Event::Base
+  retention_period 1.year
+  adapters :audit_encrypted, :loki  # Explicit
+end
+```
+
+### 14.7. Cost Optimization
+
+**Before:** All events → Loki (30 days default)
+- Debug logs: $500/month
+- Total: $500/month
+
+**After:** Automatic routing
+- Debug logs (7 days) → stdout: $0/month
+- Business (30 days) → Loki: $100/month
+- Audit (7 years) → S3 Glacier: $5/month
+- **Total: $105/month (80% savings!)**
+
+### 14.8. Advantages vs TieredStorage
+
+| Aspect | TieredStorage Adapter | Retention Routing |
+|--------|---------------------|------------------|
+| **Flexibility** | Fixed 3 tiers (hot/warm/cold) | Unlimited adapters via lambdas |
+| **Configuration** | Adapter-specific | Centralized rules |
+| **Migration** | Background jobs | No migration needed |
+| **Cost** | All events go through same adapter | Events routed to optimal storage |
+| **Compliance** | Manual tier selection | Automatic audit routing |
+
+**Decision:** Remove TieredStorage, use Retention Routing instead.
+
+### 14.9. Migration Path
+
+1. ✅ Add `retention_period` DSL to Event::Base
+2. ✅ Add `routing_rules` to Configuration
+3. ✅ Implement Routing middleware
+4. ✅ Update existing events:
+   ```ruby
+   # Before
+   class OrderEvent < E11y::Event::Base
+     adapters :loki
+   end
+   
+   # After
+   class OrderEvent < E11y::Event::Base
+     retention_period 30.days  # Routing handles adapter selection
+   end
+   ```
+5. ✅ Remove TieredStorage adapter + tests
+
+### 14.10. Testing
+
+```ruby
+RSpec.describe E11y::Middleware::Routing do
+  it 'routes audit events to audit_encrypted' do
+    event = { audit_event: true, retention_until: 7.years.from_now.iso8601 }
+    expect(adapters[:audit_encrypted]).to receive(:write)
+    routing.call(event)
+  end
+  
+  it 'routes short retention to loki' do
+    event = { retention_until: 20.days.from_now.iso8601 }
+    expect(adapters[:loki]).to receive(:write)
+    routing.call(event)
+  end
+  
+  it 'respects explicit adapters' do
+    event = { adapters: [:sentry], retention_until: 1.year.from_now.iso8601 }
+    expect(adapters[:sentry]).to receive(:write)
+    expect(adapters[:s3_glacier]).not_to receive(:write)
+    routing.call(event)
+  end
+end
+```
+
+---
+
 **Status:** ✅ Draft Complete (Updated to Unified DSL v1.1.0)  
 **Next:** ADR-006 (Security & Compliance) or ADR-008 (Rails Integration)  
 **Estimated Implementation:** 2 weeks

@@ -50,13 +50,15 @@ module E11y
       # @param config [Hash] Configuration options
       # @option config [Integer] :cardinality_limit (1000) Max unique values per label per metric
       # @option config [Array<Symbol>] :forbidden_labels ([]) Additional labels to denylist
+      # @option config [Symbol] :overflow_strategy (:drop) Strategy on overflow - :drop, :alert, or :relabel
       # @option config [Boolean] :auto_register (true) Automatically register metrics from Registry
       def initialize(config = {})
         super
 
         @cardinality_protection = E11y::Metrics::CardinalityProtection.new(
           cardinality_limit: config.fetch(:cardinality_limit, 1000),
-          forbidden_labels: config.fetch(:forbidden_labels, [])
+          additional_denylist: config.fetch(:forbidden_labels, []),
+          overflow_strategy: config.fetch(:overflow_strategy, :drop)
         )
 
         # Auto-register metrics from Registry

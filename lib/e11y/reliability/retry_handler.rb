@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "securerandom"
+require "timeout"
 
 module E11y
   module Reliability

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "zeitwerk"
+require "active_support/core_ext/numeric/time" # For 30.days, 7.years, etc.
 
 # Zeitwerk autoloader setup
 loader = Zeitwerk::Loader.for_gem
@@ -103,7 +104,8 @@ module E11y
   #     config.pipeline.use E11y::Middleware::Sampling, default_sample_rate: 0.1
   #   end
   class Configuration
-    attr_accessor :adapters, :log_level, :enabled, :environment, :service_name
+    attr_accessor :adapters, :log_level, :enabled, :environment, :service_name, :default_retention_period,
+                  :routing_rules, :fallback_adapters
     attr_reader :adapter_mapping, :pipeline, :rails_instrumentation, :logger_bridge, :request_buffer, :error_handling,
                 :dlq_storage, :dlq_filter, :rate_limiting, :slo_tracking
 
@@ -115,6 +117,9 @@ module E11y
       @enabled = true
       @environment = nil
       @service_name = nil
+      @default_retention_period = 30.days # Default: 30 days retention
+      @routing_rules = [] # Array of lambdas for retention-based routing
+      @fallback_adapters = [:stdout] # Fallback if no routing rule matches
       @rails_instrumentation = RailsInstrumentationConfig.new
       @logger_bridge = LoggerBridgeConfig.new
       @request_buffer = RequestBufferConfig.new

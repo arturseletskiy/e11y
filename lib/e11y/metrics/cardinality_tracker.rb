@@ -54,6 +54,23 @@ module E11y
         end
       end
 
+      # Force-track a label value, bypassing limit checks
+      #
+      # Used for special aggregate values like "[OTHER]" that need to be tracked
+      # even when limit is exceeded.
+      # Thread-safe operation.
+      #
+      # @param metric_name [String] Metric name
+      # @param label_key [Symbol, String] Label key
+      # @param label_value [Object] Label value to track
+      # @return [void]
+      def force_track(metric_name, label_key, label_value)
+        @mutex.synchronize do
+          value_set = @tracker[metric_name][label_key]
+          value_set.add(label_value) unless value_set.include?(label_value)
+        end
+      end
+
       # Check if metric+label has exceeded cardinality limit
       #
       # @param metric_name [String] Metric name

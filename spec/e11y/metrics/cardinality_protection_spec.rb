@@ -249,7 +249,10 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
 
   describe "warning messages" do
     it "warns when cardinality limit exceeded" do
-      small_limit_protection = described_class.new(cardinality_limit: 1)
+      small_limit_protection = described_class.new(
+        cardinality_limit: 1,
+        overflow_strategy: :alert # Alert strategy produces warnings
+      )
 
       small_limit_protection.filter({ status: "paid" }, "orders.total")
 
@@ -300,6 +303,189 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
       protection.relabel(:http_status) { |v| "#{v.to_i / 100}xx" }
 
       expect(protection.relabeler.apply(:http_status, 200)).to eq("2xx")
+    end
+  end
+
+  describe "Layer 4: Dynamic Actions" do
+    context "with drop strategy (default)" do
+      let(:protection_drop) { described_class.new(cardinality_limit: 2, overflow_strategy: :drop) }
+
+      it "silently drops labels when limit exceeded" do
+        protection_drop.filter({ status: "paid" }, "orders.total")
+        protection_drop.filter({ status: "pending" }, "orders.total")
+
+        # Third value should be dropped
+        result = protection_drop.filter({ status: "failed" }, "orders.total")
+
+        expect(result).to be_empty
+        expect(protection_drop.tracker.cardinality("orders.total", :status)).to eq(2)
+      end
+
+      it "logs drop at debug level" do
+        allow(Rails).to receive(:logger).and_return(double(debug?: true, debug: nil)) if defined?(Rails)
+
+        protection_drop.filter({ status: "paid" }, "orders.total")
+        protection_drop.filter({ status: "pending" }, "orders.total")
+        protection_drop.filter({ status: "failed" }, "orders.total")
+
+        expect(protection_drop.tracker.cardinality("orders.total", :status)).to eq(2)
+      end
+    end
+
+    context "with alert strategy" do
+      let(:alert_callback) { instance_double(Proc) }
+      let(:protection_alert) do
+        described_class.new(
+          cardinality_limit: 2,
+          overflow_strategy: :alert,
+          alert_callback: alert_callback
+        )
+      end
+
+      it "calls alert callback when limit exceeded" do
+        allow(alert_callback).to receive(:call)
+
+        protection_alert.filter({ status: "paid" }, "orders.total")
+        protection_alert.filter({ status: "pending" }, "orders.total")
+
+        # Third value triggers alert
+        expect(alert_callback).to receive(:call).with(
+          hash_including(
+            metric_name: "orders.total",
+            label_key: :status,
+            message: "Cardinality limit exceeded"
+          )
+        )
+
+        protection_alert.filter({ status: "failed" }, "orders.total")
+      end
+
+      it "warns to stderr when limit exceeded" do
+        allow(alert_callback).to receive(:call)
+
+        protection_alert.filter({ status: "paid" }, "orders.total")
+        protection_alert.filter({ status: "pending" }, "orders.total")
+
+        expect do
+          protection_alert.filter({ status: "failed" }, "orders.total")
+        end.to output(/Cardinality limit exceeded/).to_stderr
+      end
+
+      it "drops label after alerting" do
+        allow(alert_callback).to receive(:call)
+
+        protection_alert.filter({ status: "paid" }, "orders.total")
+        protection_alert.filter({ status: "pending" }, "orders.total")
+
+        result = protection_alert.filter({ status: "failed" }, "orders.total")
+
+        expect(result).to be_empty
+        expect(protection_alert.tracker.cardinality("orders.total", :status)).to eq(2)
+      end
+    end
+
+    context "with relabel strategy" do
+      let(:protection_relabel) do
+        described_class.new(
+          cardinality_limit: 2,
+          overflow_strategy: :relabel
+        )
+      end
+
+      it "relabels overflow values to [OTHER]" do
+        protection_relabel.filter({ status: "paid" }, "orders.total")
+        protection_relabel.filter({ status: "pending" }, "orders.total")
+
+        # Third value gets relabeled to [OTHER]
+        result = protection_relabel.filter({ status: "failed" }, "orders.total")
+
+        expect(result[:status]).to eq("[OTHER]")
+        expect(protection_relabel.tracker.cardinality("orders.total", :status)).to eq(3)
+      end
+
+      it "preserves [OTHER] label for multiple overflow values" do
+        protection_relabel.filter({ status: "paid" }, "orders.total")
+        protection_relabel.filter({ status: "pending" }, "orders.total")
+
+        # Both overflow values get same [OTHER] label
+        result1 = protection_relabel.filter({ status: "failed" }, "orders.total")
+        result2 = protection_relabel.filter({ status: "cancelled" }, "orders.total")
+
+        expect(result1[:status]).to eq("[OTHER]")
+        expect(result2[:status]).to eq("[OTHER]")
+        expect(protection_relabel.tracker.cardinality("orders.total", :status)).to eq(3)
+      end
+    end
+
+    context "with alert threshold" do
+      let(:alert_callback) { instance_double(Proc) }
+      let(:protection_threshold) do
+        described_class.new(
+          cardinality_limit: 10,
+          alert_threshold: 0.8,
+          alert_callback: alert_callback
+        )
+      end
+
+      it "alerts when approaching threshold (80%)" do
+        allow(alert_callback).to receive(:call)
+
+        # Add 7 values (70%, below threshold)
+        7.times { |i| protection_threshold.filter({ status: "status_#{i}" }, "orders.total") }
+
+        # 8th value triggers threshold alert (80%)
+        expect(alert_callback).to receive(:call).with(
+          hash_including(
+            message: "Cardinality approaching limit",
+            severity: :warn
+          )
+        )
+
+        protection_threshold.filter({ status: "status_8" }, "orders.total")
+      end
+
+      it "only alerts once per threshold crossing" do
+        allow(alert_callback).to receive(:call).once
+
+        # Add 8 values (80%, triggers threshold)
+        8.times { |i| protection_threshold.filter({ status: "status_#{i}" }, "orders.total") }
+
+        # 9th value should not trigger another alert
+        protection_threshold.filter({ status: "status_9" }, "orders.total")
+      end
+    end
+
+    context "with invalid configuration" do
+      it "raises error for invalid overflow_strategy" do
+        expect do
+          described_class.new(overflow_strategy: :invalid)
+        end.to raise_error(ArgumentError, /Invalid overflow_strategy/)
+      end
+
+      it "raises error for invalid alert_threshold" do
+        expect do
+          described_class.new(alert_threshold: 1.5)
+        end.to raise_error(ArgumentError, /Invalid alert_threshold/)
+
+        expect do
+          described_class.new(alert_threshold: -0.1)
+        end.to raise_error(ArgumentError, /Invalid alert_threshold/)
+      end
+    end
+
+    describe "#reset!" do
+      it "clears overflow counters" do
+        protection_drop = described_class.new(cardinality_limit: 1, overflow_strategy: :drop)
+
+        protection_drop.filter({ status: "paid" }, "orders.total")
+        protection_drop.filter({ status: "pending" }, "orders.total") # Overflow
+
+        protection_drop.reset!
+
+        # After reset, can add values again
+        result = protection_drop.filter({ status: "pending" }, "orders.total")
+        expect(result).to eq({ status: "pending" })
+      end
     end
   end
 end

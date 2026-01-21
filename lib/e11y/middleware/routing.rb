@@ -2,141 +2,172 @@
 
 module E11y
   module Middleware
-    # Routing middleware routes events to appropriate buffers/adapters.
+    # Routing middleware routes events to appropriate adapters based on retention policies.
     #
     # This is the FINAL middleware in the pipeline (adapters zone),
     # running AFTER all processing (TraceContext, Validation, PII Filtering,
     # Rate Limiting, Sampling, Versioning).
     #
-    # **Phase 1 Implementation:**
-    # - Determines target adapters from event configuration
-    # - Logs routing decisions for debugging
-    # - Increments metrics for observability
-    # - Does NOT actually send events (Phase 2: Collector will handle delivery)
+    # **Routing Logic (Priority Order):**
+    # 1. **Explicit adapters** - event_data[:adapters] bypasses routing rules
+    # 2. **Routing rules** - lambdas from config.routing_rules
+    # 3. **Fallback adapters** - config.fallback_adapters if no rule matches
     #
-    # **Routing Logic:**
-    # 1. Get adapters from event_data[:adapters] (configured in Event class)
-    # 2. Determine buffer type based on severity/flags
-    # 3. Log/metric routing decision
-    # 4. Pass event_data to next app (Collector in Phase 2)
+    # **Routing Rules (Lambdas):**
+    # Rules are evaluated in order. Each rule receives event_data hash and returns:
+    # - Symbol (adapter name) - route to this adapter
+    # - Array<Symbol> (adapter names) - route to multiple adapters
+    # - nil - rule doesn't match, try next rule
     #
-    # @see ADR-015 §3.1 Pipeline Flow (line 113-117)
-    # @see ADR-001 §3 Adapter Architecture
-    # @see UC-001 Request-Scoped Debug Buffering
+    # @see ADR-004 §14 (Retention-Based Routing)
+    # @see ADR-009 §6 (Cost Optimization via Routing)
+    # @see UC-019 (Retention-Based Event Routing)
     #
-    # @example Standard event routing
+    # @example Explicit adapters (bypass routing)
     #   event_data = {
-    #     event_name: 'Events::OrderPaid',
-    #     severity: :info,
-    #     adapters: [:logs, :errors_tracker],
-    #     payload: { ... }
+    #     event_name: 'payment.completed',
+    #     adapters: [:audit_encrypted, :loki],  # ← Explicit
+    #     retention_until: '2027-01-21T...'
     #   }
+    #   # Routes to: [:audit_encrypted, :loki] (ignores routing rules)
     #
-    #   # Routes to: main buffer → [:logs, :errors_tracker] adapters
-    #
-    # @example Debug event routing (request-scoped)
+    # @example Audit event routing (via rules)
     #   event_data = {
-    #     event_name: 'Events::DebugInfo',
-    #     severity: :debug,
-    #     adapters: [:logs],
-    #     payload: { ... }
-    #   }
-    #
-    #   # Routes to: request-scoped buffer (buffered, flushed on error)
-    #
-    # @example Audit event routing
-    #   event_data = {
-    #     event_name: 'Events::PermissionChanged',
-    #     severity: :warn,
+    #     event_name: 'user.deleted',
     #     audit_event: true,
-    #     adapters: [:audit_encrypted],
-    #     payload: { ... }
+    #     retention_until: '2033-01-21T...'
     #   }
+    #   # Rule: ->(e) { :audit_encrypted if e[:audit_event] }
+    #   # Routes to: [:audit_encrypted]
     #
-    #   # Routes to: audit buffer → [:audit_encrypted] adapter
+    # @example Retention-based routing
+    #   event_data = {
+    #     event_name: 'order.placed',
+    #     retention_until: '2026-04-21T...'  # 90 days
+    #   }
+    #   # Rule: ->(e) { days > 30 ? :s3_standard : :loki }
+    #   # Routes to: [:s3_standard]
     class Routing < Base
       middleware_zone :adapters
 
-      # Routes event to appropriate buffer/adapters.
+      # Routes event to appropriate adapters based on retention policies.
       #
       # @param event_data [Hash] The event data to route
-      # @option event_data [Array<Symbol>] :adapters Target adapter names (required)
-      # @option event_data [Symbol] :severity Event severity (required)
-      # @option event_data [Boolean] :audit_event Audit event flag (optional)
-      # @return [Hash, nil] Event data (passed to Collector in Phase 2), or nil if dropped
+      # @option event_data [Array<Symbol>] :adapters Explicit adapter names (optional, bypasses routing)
+      # @option event_data [String] :retention_until ISO8601 timestamp (optional, for routing rules)
+      # @option event_data [Boolean] :audit_event Audit event flag (optional, for routing rules)
+      # @option event_data [Symbol] :severity Event severity (optional, for routing rules)
+      # @return [Hash, nil] Event data (passed to next middleware), or nil if dropped
       # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
       def call(event_data)
-        # Skip if no adapters or severity
-        unless event_data[:adapters] && event_data[:severity]
-          increment_metric("e11y.middleware.routing.skipped")
-          return @app.call(event_data)
+        # 1. Determine target adapters (explicit or via routing rules)
+        target_adapters = if event_data[:adapters]&.any?
+          # Explicit adapters bypass routing rules
+          event_data[:adapters]
+        else
+          # Apply routing rules from configuration
+          apply_routing_rules(event_data)
         end
 
-        adapters = event_data[:adapters]
-        severity = event_data[:severity]
-        audit_event = event_data[:audit_event] || false
+        # 2. Write to selected adapters
+        target_adapters.each do |adapter_name|
+          adapter = E11y.configuration.adapters[adapter_name]
+          next unless adapter
 
-        # Determine buffer type
-        buffer_type = determine_buffer_type(severity, audit_event)
+          begin
+            adapter.write(event_data)
+            increment_metric("e11y.middleware.routing.write_success", adapter: adapter_name)
+          rescue StandardError => e
+            # Log routing error but don't fail pipeline
+            warn "E11y routing error for adapter #{adapter_name}: #{e.message}"
+            increment_metric("e11y.middleware.routing.write_error", adapter: adapter_name)
+          end
+        end
 
-        # Add routing metadata to event_data
+        # 3. Add routing metadata to event_data
         event_data[:routing] = {
-          buffer_type: buffer_type,
-          adapters: adapters,
-          routed_at: Time.now.utc
+          adapters: target_adapters,
+          routed_at: Time.now.utc,
+          routing_type: event_data[:adapters]&.any? ? :explicit : :rules
         }
 
-        # Increment metrics
+        # 4. Increment metrics
         increment_metric("e11y.middleware.routing.routed",
-                         buffer: buffer_type,
-                         severity: severity,
-                         adapters_count: adapters.size)
+                         adapters_count: target_adapters.size,
+                         routing_type: event_data[:routing][:routing_type])
 
-        # Log routing decision (for Phase 1 debugging)
-        log_routing_decision(event_data, buffer_type, adapters) if debug_enabled?
+        # 5. Log routing decision (for debugging)
+        log_routing_decision(event_data, target_adapters) if debug_enabled?
 
-        # Pass to next app (Collector in Phase 2)
-        @app.call(event_data)
+        # 6. Pass to next app (if any)
+        @app&.call(event_data)
       end
       # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
       private
 
-      # Determine which buffer type to use based on severity and flags.
+      # Apply routing rules from configuration.
       #
-      # @param severity [Symbol] Event severity
-      # @param audit_event [Boolean] Audit event flag
-      # @return [Symbol] Buffer type (:main, :request_scoped, :audit)
+      # Evaluates routing rules in order until a match is found.
+      # Each rule is a lambda that receives event_data and returns:
+      # - Symbol (adapter name) - route to this adapter
+      # - Array<Symbol> (adapter names) - route to multiple adapters
+      # - nil - rule doesn't match, try next rule
       #
-      # Routing rules:
-      # - Audit events → :audit buffer (separate pipeline, no PII filtering)
-      # - Debug events → :request_scoped buffer (buffered, flushed on error)
-      # - Other events → :main buffer (immediate sending)
-      def determine_buffer_type(severity, audit_event)
-        return :audit if audit_event
-        return :request_scoped if severity == :debug
+      # @param event_data [Hash] Event data with retention_until, audit_event, severity, etc.
+      # @return [Array<Symbol>] Target adapter names
+      #
+      # @example
+      #   rules = [
+      #     ->(event) { :audit_encrypted if event[:audit_event] },
+      #     ->(event) {
+      #       days = (Time.parse(event[:retention_until]) - Time.now) / 86400
+      #       days > 90 ? :s3_glacier : :loki
+      #     }
+      #   ]
+      #
+      #   apply_routing_rules(event_data)
+      #   # => [:audit_encrypted] or [:loki] or [:s3_glacier]
+      def apply_routing_rules(event_data)
+        matched_adapters = []
 
-        :main
+        # Apply each rule, collect matched adapters
+        rules = E11y.configuration.routing_rules || []
+        rules.each do |rule|
+          begin
+            result = rule.call(event_data)
+            matched_adapters.concat(Array(result)) if result
+          rescue StandardError => e
+            # Log rule evaluation error but continue
+            warn "E11y routing rule error: #{e.message}"
+          end
+        end
+
+        # Return unique adapters or fallback
+        if matched_adapters.any?
+          matched_adapters.uniq
+        else
+          E11y.configuration.fallback_adapters || [:stdout]
+        end
       end
 
-      # Log routing decision for debugging (Phase 1).
+      # Log routing decision for debugging.
       #
       # @param event_data [Hash] Event data
-      # @param buffer_type [Symbol] Determined buffer type
       # @param adapters [Array<Symbol>] Target adapters
       # @return [void]
-      def log_routing_decision(event_data, buffer_type, adapters)
-        # TODO: Replace with structured logging in Phase 2
-        # Rails.logger.debug "[E11y] Routing: #{event_data[:event_name]} → #{buffer_type} → #{adapters.inspect}"
+      def log_routing_decision(event_data, adapters)
+        # TODO: Replace with structured logging
+        # Rails.logger.debug "[E11y] Routing: #{event_data[:event_name]} → #{adapters.inspect}"
       end
 
       # Check if debug logging is enabled.
       #
       # @return [Boolean]
       def debug_enabled?
-        # TODO: Read from configuration in Phase 2
+        # TODO: Read from configuration
         # E11y.configuration.debug_enabled
-        false # Disabled in Phase 1
+        false # Disabled for now
       end
 
       # Placeholder for metrics instrumentation.
@@ -145,12 +176,8 @@ module E11y
       # @param tags [Hash] Metric tags
       # @return [void]
       def increment_metric(_metric_name, **_tags)
-        # TODO: Integrate with Yabeda/Prometheus in Phase 2
-        # Yabeda.e11y.middleware_routing_routed.increment(
-        #   buffer: buffer,
-        #   severity: severity,
-        #   adapters_count: adapters_count
-        # )
+        # TODO: Integrate with Yabeda/Prometheus
+        # Yabeda.e11y.middleware_routing_routed.increment(tags)
       end
     end
   end
