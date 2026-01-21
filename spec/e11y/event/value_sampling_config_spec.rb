@@ -15,27 +15,27 @@ RSpec.describe E11y::Event::ValueSamplingConfig do
     end
 
     it "raises error for empty comparisons" do
-      expect {
+      expect do
         described_class.new(:amount, {})
-      }.to raise_error(ArgumentError, "At least one comparison required")
+      end.to raise_error(ArgumentError, "At least one comparison required")
     end
 
     it "raises error for invalid comparison type" do
-      expect {
+      expect do
         described_class.new(:amount, invalid_type: 100)
-      }.to raise_error(ArgumentError, /Invalid comparison type/)
+      end.to raise_error(ArgumentError, /Invalid comparison type/)
     end
 
     it "raises error for non-Range in_range" do
-      expect {
+      expect do
         described_class.new(:amount, in_range: 100)
-      }.to raise_error(ArgumentError, "in_range requires a Range")
+      end.to raise_error(ArgumentError, "in_range requires a Range")
     end
 
     it "raises error for non-Numeric greater_than" do
-      expect {
+      expect do
         described_class.new(:amount, greater_than: "not a number")
-      }.to raise_error(ArgumentError, "greater_than requires a Numeric threshold")
+      end.to raise_error(ArgumentError, "greater_than requires a Numeric threshold")
     end
   end
 
@@ -147,7 +147,7 @@ RSpec.describe E11y::Event::ValueSamplingConfig do
       end
     end
 
-    context "ADR-009 §3.4 compliance" do
+    context "when testing ADR-009 §3.4 compliance" do
       let(:config) { described_class.new(:amount, greater_than: 1000) }
 
       it "implements value-based sampling for high-value events" do

@@ -2,6 +2,8 @@
 
 require "spec_helper"
 
+# rubocop:disable RSpec/DescribeClass
+# Integration test for boot-time validation, tests cross-cutting concern
 RSpec.describe "E11y::Metrics Boot-Time Validation" do
   let(:registry) { E11y::Metrics::Registry.instance }
 
@@ -107,7 +109,7 @@ RSpec.describe "E11y::Metrics Boot-Time Validation" do
             tags: [:currency],
             source: "Events::OrderPaid.metrics"
           )
-        end.to raise_error do |error|
+        end.to raise_error do |error| # rubocop:todo Style/MultilineBlockChain
           expect(error.message).to include("Events::OrderCreated.metrics")
           expect(error.message).to include("Events::OrderPaid.metrics")
         end
@@ -167,6 +169,8 @@ RSpec.describe "E11y::Metrics Boot-Time Validation" do
     end
 
     context "with complex scenarios" do
+      # rubocop:disable RSpec/ExampleLength
+      # Integration test requires multiple metric registrations for validation
       it "validates multiple metric groups" do
         # Group 1: orders_total (valid)
         registry.register(
@@ -206,7 +210,10 @@ RSpec.describe "E11y::Metrics Boot-Time Validation" do
 
         expect { registry.validate_all! }.not_to raise_error
       end
+      # rubocop:enable RSpec/ExampleLength
 
+      # rubocop:disable RSpec/ExampleLength
+      # Integration test requires multiple metric registrations for conflict detection
       it "detects conflict immediately during registration" do
         # Group 1: orders_total (valid)
         registry.register(
@@ -245,6 +252,7 @@ RSpec.describe "E11y::Metrics Boot-Time Validation" do
           )
         end.to raise_error(E11y::Metrics::Registry::LabelConflictError)
       end
+      # rubocop:enable RSpec/ExampleLength
     end
   end
 
@@ -302,3 +310,4 @@ RSpec.describe "E11y::Metrics Boot-Time Validation" do
     end
   end
 end
+# rubocop:enable RSpec/DescribeClass

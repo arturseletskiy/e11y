@@ -2,6 +2,8 @@
 
 require "spec_helper"
 
+# Rate limiting integration tests require time-sensitive scenarios,
+# token bucket state management, and multiple test configurations.
 RSpec.describe E11y::Middleware::RateLimiting do
   let(:next_middleware) { ->(event) { event } }
   let(:middleware) { described_class.new(next_middleware, global_limit: 10, per_event_limit: 5, window: 1.0) }
@@ -99,7 +101,7 @@ RSpec.describe E11y::Middleware::RateLimiting do
       end
     end
 
-    context "token refill" do
+    context "when testing token refill" do
       it "refills tokens after window passes" do
         # Exhaust limit
         5.times { middleware.call(event_data) }
@@ -122,8 +124,7 @@ RSpec.describe E11y::Middleware::RateLimiting do
     let(:dlq_storage) { double("DLQStorage") }
 
     before do
-      allow(E11y.config).to receive(:dlq_filter).and_return(dlq_filter)
-      allow(E11y.config).to receive(:dlq_storage).and_return(dlq_storage)
+      allow(E11y.config).to receive_messages(dlq_filter: dlq_filter, dlq_storage: dlq_storage)
     end
 
     context "when rate-limited critical event" do
@@ -261,8 +262,7 @@ RSpec.describe E11y::Middleware::RateLimiting do
     let(:dlq_storage) { double("DLQStorage") }
 
     before do
-      allow(E11y.config).to receive(:dlq_filter).and_return(dlq_filter)
-      allow(E11y.config).to receive(:dlq_storage).and_return(dlq_storage)
+      allow(E11y.config).to receive_messages(dlq_filter: dlq_filter, dlq_storage: dlq_storage)
     end
 
     it "implements 'Rate Limiter Respects DLQ Filter' pattern" do

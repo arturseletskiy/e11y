@@ -17,6 +17,8 @@ module E11y
     #
     # @see ADR-013 §5 (Circuit Breaker)
     # @see UC-021 §4 (Circuit Breaker for Adapters)
+    # rubocop:disable Metrics/ClassLength
+    # Circuit breaker is a cohesive state machine with complex state transitions and recovery logic
     class CircuitBreaker
       # Circuit is closed (healthy) - all requests pass through
       STATE_CLOSED = :closed
@@ -212,5 +214,6 @@ module E11y
         # E11y::Metrics.increment(metric_name, tags.merge(adapter: @adapter_name, state: @state))
       end
     end
+    # rubocop:enable Metrics/ClassLength
   end
 end

@@ -135,14 +135,23 @@ E11y has two types of tests:
 bundle exec rspec  # Runs unit tests only (~2 minutes)
 ```
 
-**2. Integration Tests** - Full tests with Rails 8.0, OpenTelemetry SDK, and docker-compose services:
+**2. Integration Tests** - Full tests with real gems (Rails 8.0, OpenTelemetry SDK, Yabeda, etc.):
 ```bash
-# Install integration dependencies
+# Install integration dependencies (Rails, OpenTelemetry, Yabeda, etc.)
 bundle install --with integration
 
 # Run integration tests (starts docker-compose automatically)
 bin/test-integration  # Runs with Loki, Prometheus, Elasticsearch, Redis (~5 minutes)
+
+# Run specific integration tests
+INTEGRATION=true bundle exec rspec --tag integration spec/e11y/adapters/yabeda_integration_spec.rb
 ```
+
+Integration tests include:
+- Rails 8.0 integration (request-scoped buffers, SLO tracking, instrumentation)
+- OpenTelemetry SDK integration (log exporter, trace context propagation)
+- Yabeda integration (real Prometheus metrics, cardinality protection)
+- Adapter integration (Loki, Sentry with real services via docker-compose)
 
 See [Integration Testing Guide](docs/testing/integration-tests.md) for detailed instructions.
 

@@ -123,7 +123,7 @@ RSpec.describe E11y::Sampling::ErrorSpikeDetector do
       end
     end
 
-    context "spike duration" do
+    context "when testing spike duration" do
       it "maintains spike state for configured duration" do
         # Trigger spike
         101.times do

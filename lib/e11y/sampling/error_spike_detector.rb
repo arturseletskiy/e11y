@@ -29,6 +29,8 @@ module E11y
     #   end
     #
     #   detector.record_event(event_name: "payment.processed", severity: :error)
+    # rubocop:disable Metrics/ClassLength
+    # Error spike detector is a cohesive sliding window algorithm with state management
     class ErrorSpikeDetector
       # Default configuration
       DEFAULT_WINDOW = 60              # 60 seconds sliding window
@@ -64,6 +66,8 @@ module E11y
       # Check if currently in error spike state
       #
       # @return [Boolean] true if error spike detected
+      # rubocop:disable Metrics/MethodLength
+      # Error spike detection requires checking active spike, expiration, and new spike detection
       def error_spike?
         @mutex.synchronize do
           # Check if spike is still active (within spike_duration)
@@ -90,6 +94,7 @@ module E11y
           false
         end
       end
+      # rubocop:enable Metrics/MethodLength
 
       # Record an event for error rate tracking
       #
@@ -221,5 +226,6 @@ module E11y
         @all_errors.reject! { |ts| ts < cutoff }
       end
     end
+    # rubocop:enable Metrics/ClassLength
   end
 end

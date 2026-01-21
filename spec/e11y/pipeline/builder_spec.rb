@@ -4,7 +4,6 @@ require "spec_helper"
 require "e11y/pipeline/builder"
 require "e11y/middleware/base"
 
-# rubocop:disable RSpec/MultipleMemoizedHelpers
 RSpec.describe E11y::Pipeline::Builder do
   let(:builder) { described_class.new }
 
@@ -299,7 +298,8 @@ RSpec.describe E11y::Pipeline::Builder do
         builder.use security_middleware # security after routing = wrong!
 
         expect { builder.validate_zones! }
-          .to raise_error(E11y::Pipeline::ZoneValidator::ZoneOrderError, /security.*cannot follow.*routing.*Valid zone order/m)
+          .to raise_error(E11y::Pipeline::ZoneValidator::ZoneOrderError,
+                          /security.*cannot follow.*routing.*Valid zone order/m)
       end
 
       it "rejects adapters before post_processing" do
@@ -383,4 +383,3 @@ RSpec.describe E11y::Pipeline::Builder do
     end
   end
 end
-# rubocop:enable RSpec/MultipleMemoizedHelpers

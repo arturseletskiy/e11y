@@ -165,62 +165,6 @@ module E11y
       def size
         @mutex.synchronize { @rules.size }
       end
-
-      # Predefined common relabeling rules
-      module CommonRules
-        # HTTP status code to status class (1xx, 2xx, 3xx, 4xx, 5xx)
-        #
-        # @param value [Integer, String] HTTP status code
-        # @return [String] Status class
-        def self.http_status_class(value)
-          code = value.to_i
-          return "unknown" if code < 100 || code >= 600
-
-          "#{code / 100}xx"
-        end
-
-        # Path normalization - replace numeric IDs and UUIDs with placeholders
-        #
-        # @param value [String] URL path
-        # @return [String] Normalized path
-        def self.normalize_path(value)
-          value.to_s
-               .gsub(%r{/[a-f0-9-]{36}}, "/:uuid") # UUIDs (must be before :id to avoid partial match)
-               .gsub(%r{/[a-f0-9]{32}}, "/:hash") # MD5 hashes (must be before :id)
-               .gsub(%r{/\d+}, "/:id") # /users/123 -> /users/:id
-        end
-
-        # Region to region group (us-east-1 -> us, eu-west-2 -> eu)
-        #
-        # @param value [String] AWS-style region
-        # @return [String] Region group
-        def self.region_group(value)
-          case value.to_s
-          when /^us-/ then "us"
-          when /^eu-/ then "eu"
-          when /^ap-/ then "ap"
-          when /^sa-/ then "sa"
-          when /^ca-/ then "ca"
-          when /^af-/ then "af"
-          when /^me-/ then "me"
-          else "other"
-          end
-        end
-
-        # Duration classification (ms to fast/medium/slow)
-        #
-        # @param value [Numeric] Duration in milliseconds
-        # @return [String] Classification
-        def self.duration_class(value)
-          ms = value.to_f
-          case ms
-          when 0..100 then "fast"
-          when 101..1000 then "medium"
-          when 1001..5000 then "slow"
-          else "very_slow"
-          end
-        end
-      end
     end
   end
 end

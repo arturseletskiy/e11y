@@ -110,16 +110,31 @@ module E11y
                 :dlq_storage, :dlq_filter, :rate_limiting, :slo_tracking
 
     def initialize
+      initialize_basic_config
+      initialize_routing_config
+      initialize_feature_configs
+      configure_default_pipeline
+    end
+
+    private
+
+    def initialize_basic_config
       @adapters = {} # Hash of adapter_name => adapter_instance
       @log_level = :info
-      @adapter_mapping = default_adapter_mapping
       @pipeline = E11y::Pipeline::Builder.new
       @enabled = true
       @environment = nil
       @service_name = nil
+    end
+
+    def initialize_routing_config
+      @adapter_mapping = default_adapter_mapping
       @default_retention_period = 30.days # Default: 30 days retention
       @routing_rules = [] # Array of lambdas for retention-based routing
       @fallback_adapters = [:stdout] # Fallback if no routing rule matches
+    end
+
+    def initialize_feature_configs
       @rails_instrumentation = RailsInstrumentationConfig.new
       @logger_bridge = LoggerBridgeConfig.new
       @request_buffer = RequestBufferConfig.new
@@ -128,8 +143,9 @@ module E11y
       @dlq_filter = nil # Set by user (e.g., DLQ::Filter instance)
       @rate_limiting = RateLimitingConfig.new
       @slo_tracking = SLOTrackingConfig.new # ✅ L3.14.1
-      configure_default_pipeline
     end
+
+    public
 
     # Get adapters for given severity
     #

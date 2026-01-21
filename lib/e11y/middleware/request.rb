@@ -32,6 +32,8 @@ module E11y
       # Process request
       # @param env [Hash] Rack environment
       # @return [Array] Rack response [status, headers, body]
+      # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # Rack middleware request processing requires sequential setup of tracing, context, buffer, and SLO tracking
       def call(env)
         request = Rack::Request.new(env)
 
@@ -82,6 +84,7 @@ module E11y
         # Reset context
         E11y::Current.reset
       end
+      # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
 
       private
 
@@ -138,6 +141,8 @@ module E11y
       # @param start_time [Time] Request start time
       # @return [void]
       # @api private
+      # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity
+      # SLO tracking requires extracting controller/action, calculating duration, and error handling
       def track_http_request_slo(env, status, start_time)
         return unless E11y.config.slo_tracking&.enabled
 
@@ -158,6 +163,7 @@ module E11y
         # Don't fail if SLO tracking fails
         warn "[E11y] SLO tracking error: #{e.message}"
       end
+      # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity
     end
   end
 end

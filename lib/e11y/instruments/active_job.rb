@@ -139,6 +139,8 @@ module E11y
         # @param start_time [Time] Job start time
         # @return [void]
         # @api private
+        # rubocop:disable Metrics/AbcSize
+        # SLO tracking requires config check, duration calculation, method call, and error handling
         def track_job_slo_active_job(job, status, start_time)
           return unless E11y.config.slo_tracking&.enabled
 
@@ -155,6 +157,7 @@ module E11y
           # C18: Don't fail if SLO tracking fails
           E11y.logger.warn("[E11y] SLO tracking error: #{e.message}", error: e.class.name)
         end
+        # rubocop:enable Metrics/AbcSize
       end
 
       # Custom attribute accessors for trace context (C17 Hybrid Tracing)

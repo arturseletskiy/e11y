@@ -64,6 +64,9 @@ module E11y
       # @option config [Hash] :error_spike_config ({}) Configuration for ErrorSpikeDetector
       # @option config [Boolean] :load_based_adaptive (false) Enable load-based adaptive sampling (FEAT-4842)
       # @option config [Hash] :load_monitor_config ({}) Configuration for LoadMonitor
+      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+      # Sampling initialization requires extracting config, setting up trace cache,
+      # and conditionally initializing adaptive samplers
       def initialize(config = {})
         # Extract config before calling super (which sets @config)
         config ||= {}
@@ -92,6 +95,7 @@ module E11y
         # Call super to set @config and other base middleware state
         super
       end
+      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
       # Process event through sampling filter
       #
@@ -168,6 +172,9 @@ module E11y
       # @param event_class [Class] The event class
       # @param event_data [Hash] Event payload (for value-based sampling)
       # @return [Float] Sample rate (0.0-1.0)
+      # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # Sample rate determination follows priority chain: error spike → value-based →
+      # load-based → severity → event-level → default
       def determine_sample_rate(event_class, event_data = nil)
         # 0. Error-based adaptive sampling (FEAT-4838) - highest priority!
         if @error_based_adaptive && @error_spike_detector&.error_spike?
@@ -210,6 +217,7 @@ module E11y
         # 4. Default/load-based rate
         base_rate
       end
+      # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
 
       # Trace-aware sampling decision (C05 Resolution)
       #

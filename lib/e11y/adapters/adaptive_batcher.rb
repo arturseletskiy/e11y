@@ -74,6 +74,8 @@ module E11y
       #
       # @param event_data [Hash] Event to add to buffer
       # @return [Boolean] true if added successfully
+      # rubocop:disable Naming/PredicateMethod
+      # This is an action method (add to buffer), not a predicate (is added?)
       def add(event_data)
         return false if @closed
 
@@ -85,6 +87,7 @@ module E11y
 
         true
       end
+      # rubocop:enable Naming/PredicateMethod
 
       # Flush buffer immediately
       #

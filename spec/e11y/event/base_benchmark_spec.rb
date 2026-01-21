@@ -153,3 +153,4 @@ RSpec.describe E11y::Event::Base, ".track performance" do
     end
   end
 end
+# rubocop:enable RSpec/FilePath, RSpec/SpecFilePathFormat

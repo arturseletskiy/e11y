@@ -349,15 +349,17 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
         protection_alert.filter({ status: "pending" }, "orders.total")
 
         # Third value triggers alert
-        expect(alert_callback).to receive(:call).with(
+        allow(alert_callback).to receive(:call)
+
+        protection_alert.filter({ status: "failed" }, "orders.total")
+
+        expect(alert_callback).to have_received(:call).with(
           hash_including(
             metric_name: "orders.total",
             label_key: :status,
             message: "Cardinality limit exceeded"
           )
         )
-
-        protection_alert.filter({ status: "failed" }, "orders.total")
       end
 
       it "warns to stderr when limit exceeded" do
@@ -434,24 +436,29 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
         7.times { |i| protection_threshold.filter({ status: "status_#{i}" }, "orders.total") }
 
         # 8th value triggers threshold alert (80%)
-        expect(alert_callback).to receive(:call).with(
+        allow(alert_callback).to receive(:call)
+
+        protection_threshold.filter({ status: "status_8" }, "orders.total")
+
+        expect(alert_callback).to have_received(:call).with(
           hash_including(
             message: "Cardinality approaching limit",
             severity: :warn
           )
         )
-
-        protection_threshold.filter({ status: "status_8" }, "orders.total")
       end
 
       it "only alerts once per threshold crossing" do
-        allow(alert_callback).to receive(:call).once
+        allow(alert_callback).to receive(:call)
 
         # Add 8 values (80%, triggers threshold)
         8.times { |i| protection_threshold.filter({ status: "status_#{i}" }, "orders.total") }
 
         # 9th value should not trigger another alert
         protection_threshold.filter({ status: "status_9" }, "orders.total")
+
+        # Should have been called exactly once (on 8th value, not 9th)
+        expect(alert_callback).to have_received(:call).once
       end
     end
 

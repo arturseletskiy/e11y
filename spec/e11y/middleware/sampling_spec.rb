@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-# rubocop:disable RSpec/MultipleMemoizedHelpers
-
 require "spec_helper"
 
 RSpec.describe E11y::Middleware::Sampling do
@@ -495,10 +493,12 @@ RSpec.describe E11y::Middleware::Sampling do
 
       it "tracks errors in detector" do
         detector = middleware.instance_variable_get(:@error_spike_detector)
-        expect(detector).to receive(:record_event).at_least(:once)
+        allow(detector).to receive(:record_event)
 
         data = event_data.merge(event_class: error_event_class, severity: :error, event_name: "test.error")
         middleware.call(data)
+
+        expect(detector).to have_received(:record_event).at_least(:once)
       end
 
       it "uses 100% sampling during error spike" do
@@ -548,7 +548,7 @@ RSpec.describe E11y::Middleware::Sampling do
       end
     end
 
-    context "ADR-009 §3.2 compliance" do
+    context "when testing ADR-009 §3.2 compliance" do
       let(:config) do
         {
           error_based_adaptive: true,
@@ -571,7 +571,7 @@ RSpec.describe E11y::Middleware::Sampling do
       end
     end
 
-    context "UC-014 compliance" do
+    context "when testing UC-014 compliance" do
       let(:config) do
         {
           error_based_adaptive: true,
@@ -648,11 +648,13 @@ RSpec.describe E11y::Middleware::Sampling do
 
       it "tracks all events in load monitor" do
         monitor = middleware.instance_variable_get(:@load_monitor)
-        expect(monitor).to receive(:record_event).at_least(:once)
+        allow(monitor).to receive(:record_event)
 
         allow(middleware).to receive(:rand).and_return(0.5) # Will sample
         data = event_data.merge(event_class: load_info_event_class, severity: :info, event_name: "test.load.info")
         middleware.call(data)
+
+        expect(monitor).to have_received(:record_event).at_least(:once)
       end
 
       it "adjusts sampling rate based on load level" do
@@ -706,7 +708,7 @@ RSpec.describe E11y::Middleware::Sampling do
       end
     end
 
-    context "interaction with error-based adaptive" do
+    context "when testing interaction with error-based adaptive" do
       let(:config) do
         {
           error_based_adaptive: true,
@@ -730,7 +732,7 @@ RSpec.describe E11y::Middleware::Sampling do
       end
     end
 
-    context "ADR-009 §3.3 compliance" do
+    context "when testing ADR-009 §3.3 compliance" do
       it "implements tiered sampling (100%/50%/10%/1%)" do
         # Test that LoadMonitor provides tiered rates
         test_monitor = E11y::Sampling::LoadMonitor.new(
@@ -764,7 +766,7 @@ RSpec.describe E11y::Middleware::Sampling do
       end
     end
 
-    context "UC-014 compliance" do
+    context "when testing UC-014 compliance" do
       it "reduces sampling under high load" do
         # Test that LoadMonitor adapts to load changes
         test_monitor = E11y::Sampling::LoadMonitor.new(
@@ -787,4 +789,3 @@ RSpec.describe E11y::Middleware::Sampling do
     end
   end
 end
-# rubocop:enable RSpec/MultipleMemoizedHelpers

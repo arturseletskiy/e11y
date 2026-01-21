@@ -134,7 +134,7 @@ RSpec.describe E11y::SelfMonitoring::ReliabilityMonitor do
     end
   end
 
-  context "ADR-016 §3.2 compliance" do
+  context "when testing ADR-016 §3.2 compliance" do
     it "tracks 99.9% success rate SLO" do
       # Simulate 999 successes
       999.times do

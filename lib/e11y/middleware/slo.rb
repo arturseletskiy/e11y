@@ -68,7 +68,7 @@ module E11y
       def call(event_data)
         # Skip if SLO not enabled for this event
         event_class = resolve_event_class(event_data)
-        return event_data unless event_class&.respond_to?(:slo_config)
+        return event_data unless event_class.respond_to?(:slo_config)
         return event_data unless event_class.slo_config&.enabled
 
         # Compute slo_status from payload
@@ -151,9 +151,7 @@ module E11y
         }
 
         # Add custom SLO name if configured
-        if event_class.slo_config.contributes_to
-          labels[:slo_name] = event_class.slo_config.contributes_to
-        end
+        labels[:slo_name] = event_class.slo_config.contributes_to if event_class.slo_config.contributes_to
 
         # Add group_by field if configured
         if event_class.slo_config.group_by_field

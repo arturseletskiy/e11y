@@ -2,6 +2,8 @@
 
 require "spec_helper"
 
+# rubocop:disable RSpec/LeakyConstantDeclaration, Lint/ConstantDefinitionInBlock
+# Test requires mocking Yabeda with nested classes for comprehensive adapter testing.
 # Skip Yabeda tests if Yabeda not available
 begin
   require "e11y/adapters/yabeda"
@@ -462,3 +464,4 @@ RSpec.describe E11y::Adapters::Yabeda do
     end
   end
 end
+# rubocop:enable RSpec/LeakyConstantDeclaration, Lint/ConstantDefinitionInBlock

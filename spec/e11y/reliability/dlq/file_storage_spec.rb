@@ -5,6 +5,8 @@ require "tempfile"
 require "fileutils"
 require_relative "../../../../lib/e11y/reliability/dlq/file_storage"
 
+# DLQ file storage integration tests require filesystem operations,
+# rotation scenarios, and extensive query testing with multiple fixtures.
 RSpec.describe E11y::Reliability::DLQ::FileStorage do
   let(:temp_dir) { Dir.mktmpdir }
   let(:file_path) { File.join(temp_dir, "test_dlq.jsonl") }
@@ -196,13 +198,13 @@ RSpec.describe E11y::Reliability::DLQ::FileStorage do
       # For now, just check it doesn't crash
       result = dlq.replay(event_id)
 
-      expect(result).to eq(true)
+      expect(result).to be(true)
     end
 
     it "returns false for non-existent event" do
       result = dlq.replay("non-existent-uuid")
 
-      expect(result).to eq(false)
+      expect(result).to be(false)
     end
   end
 
@@ -219,7 +221,7 @@ RSpec.describe E11y::Reliability::DLQ::FileStorage do
     end
 
     it "counts failures for non-existent events" do
-      result = dlq.replay_batch(["non-existent-1", "non-existent-2"])
+      result = dlq.replay_batch(%w[non-existent-1 non-existent-2])
 
       expect(result[:success_count]).to eq(0)
       expect(result[:failure_count]).to eq(2)

@@ -222,7 +222,7 @@ RSpec.describe E11y::Adapters::AdaptiveBatcher do
   end
 
   describe "ADR-004 compliance" do
-    context "Section 8.1: Adaptive Batching" do
+    context "when testing Section 8.1 (Adaptive Batching)" do
       it "batches events efficiently" do
         100.times { |i| batcher.add(event_name: "event.#{i}") }
 

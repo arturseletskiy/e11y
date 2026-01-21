@@ -7,15 +7,11 @@ require "json"
 require "time"
 require "zlib"
 
+# File adapter integration tests require extensive filesystem mocking,
+# compression testing, and rotation scenarios with multiple fixtures.
 RSpec.describe E11y::Adapters::File do
   let(:temp_dir) { Dir.mktmpdir("e11y_file_adapter_test") }
-  let(:log_path) { ::File.join(temp_dir, "test.log") }
-
-  after do
-    FileUtils.rm_rf(temp_dir) if ::File.directory?(temp_dir)
-  end
-
-  let(:event1) do
+  let(:login_event) do
     {
       event_name: "user.login",
       severity: :info,
@@ -23,14 +19,18 @@ RSpec.describe E11y::Adapters::File do
       user_id: 123
     }
   end
-
-  let(:event2) do
+  let(:logout_event) do
     {
       event_name: "user.logout",
       severity: :info,
       timestamp: Time.now.iso8601,
       user_id: 123
     }
+  end
+  let(:log_path) { File.join(temp_dir, "test.log") }
+
+  after do
+    FileUtils.rm_rf(temp_dir) if File.directory?(temp_dir)
   end
 
   describe "ADR-004 compliance" do
@@ -45,12 +45,12 @@ RSpec.describe E11y::Adapters::File do
 
       it "implements #write" do
         expect(adapter).to respond_to(:write)
-        expect(adapter.write(event1)).to be(true).or(be(false))
+        expect(adapter.write(login_event)).to be(true).or(be(false))
       end
 
       it "implements #write_batch" do
         expect(adapter).to respond_to(:write_batch)
-        expect(adapter.write_batch([event1, event2])).to be(true).or(be(false))
+        expect(adapter.write_batch([login_event, logout_event])).to be(true).or(be(false))
       end
 
       it "implements #healthy?" do
@@ -74,10 +74,10 @@ RSpec.describe E11y::Adapters::File do
     describe "Section 4.2: File Adapter Specification" do
       it "writes events in JSONL format" do
         adapter = described_class.new(path: log_path)
-        adapter.write(event1)
+        adapter.write(login_event)
         adapter.close
 
-        content = ::File.read(log_path)
+        content = File.read(log_path)
         parsed = JSON.parse(content, symbolize_names: true)
 
         expect(parsed[:event_name]).to eq("user.login")
@@ -86,10 +86,10 @@ RSpec.describe E11y::Adapters::File do
 
       it "supports batch writes" do
         adapter = described_class.new(path: log_path)
-        adapter.write_batch([event1, event2])
+        adapter.write_batch([login_event, logout_event])
         adapter.close
 
-        lines = ::File.readlines(log_path)
+        lines = File.readlines(log_path)
         expect(lines.size).to eq(2)
 
         parsed1 = JSON.parse(lines[0], symbolize_names: true)
@@ -101,10 +101,10 @@ RSpec.describe E11y::Adapters::File do
 
       it "flushes after each write" do
         adapter = described_class.new(path: log_path)
-        adapter.write(event1)
+        adapter.write(login_event)
 
         # Should be readable immediately without closing
-        content = ::File.read(log_path)
+        content = File.read(log_path)
         expect(content).not_to be_empty
 
         adapter.close
@@ -146,10 +146,10 @@ RSpec.describe E11y::Adapters::File do
     end
 
     it "creates directory if it doesn't exist" do
-      nested_path = ::File.join(temp_dir, "nested", "dir", "test.log")
+      nested_path = File.join(temp_dir, "nested", "dir", "test.log")
       adapter = described_class.new(path: nested_path)
 
-      expect(::File.directory?(::File.dirname(nested_path))).to be true
+      expect(File.directory?(File.dirname(nested_path))).to be true
 
       adapter.close
     end
@@ -161,26 +161,26 @@ RSpec.describe E11y::Adapters::File do
     after { adapter.close }
 
     it "writes single event successfully" do
-      result = adapter.write(event1)
+      result = adapter.write(login_event)
 
       expect(result).to be true
-      expect(::File.exist?(log_path)).to be true
+      expect(File.exist?(log_path)).to be true
     end
 
     it "writes multiple events" do
-      adapter.write(event1)
-      adapter.write(event2)
+      adapter.write(login_event)
+      adapter.write(logout_event)
 
-      lines = ::File.readlines(log_path)
+      lines = File.readlines(log_path)
       expect(lines.size).to eq(2)
     end
 
     it "writes batch of events" do
-      result = adapter.write_batch([event1, event2])
+      result = adapter.write_batch([login_event, logout_event])
 
       expect(result).to be true
 
-      lines = ::File.readlines(log_path)
+      lines = File.readlines(log_path)
       expect(lines.size).to eq(2)
     end
 
@@ -193,7 +193,7 @@ RSpec.describe E11y::Adapters::File do
     it "returns false on write error" do
       adapter.close # Close file to cause error
 
-      result = adapter.write(event1)
+      result = adapter.write(login_event)
 
       expect(result).to be false
     end
@@ -206,19 +206,19 @@ RSpec.describe E11y::Adapters::File do
       after { adapter.close }
 
       it "rotates file when date changes" do
-        adapter.write(event1)
+        adapter.write(login_event)
 
         # Simulate date change
         allow(Date).to receive(:today).and_return(Date.today + 1)
 
-        adapter.write(event2)
+        adapter.write(logout_event)
 
         # Should have rotated file
         rotated_files = Dir.glob("#{log_path}.*")
         expect(rotated_files.size).to eq(1)
 
         # New file should have only second event
-        lines = ::File.readlines(log_path)
+        lines = File.readlines(log_path)
         expect(lines.size).to eq(1)
 
         parsed = JSON.parse(lines[0], symbolize_names: true)
@@ -226,13 +226,13 @@ RSpec.describe E11y::Adapters::File do
       end
 
       it "does not rotate on same day" do
-        adapter.write(event1)
-        adapter.write(event2)
+        adapter.write(login_event)
+        adapter.write(logout_event)
 
         rotated_files = Dir.glob("#{log_path}.*")
         expect(rotated_files.size).to eq(0)
 
-        lines = ::File.readlines(log_path)
+        lines = File.readlines(log_path)
         expect(lines.size).to eq(2)
       end
     end
@@ -255,7 +255,7 @@ RSpec.describe E11y::Adapters::File do
       end
 
       it "does not rotate if size not exceeded" do
-        adapter.write(event1)
+        adapter.write(login_event)
 
         rotated_files = Dir.glob("#{log_path}.*")
         expect(rotated_files.size).to eq(0)
@@ -268,17 +268,17 @@ RSpec.describe E11y::Adapters::File do
       after { adapter.close }
 
       it "never rotates" do
-        adapter.write(event1)
+        adapter.write(login_event)
 
         # Simulate date change
         allow(Date).to receive(:today).and_return(Date.today + 1)
 
-        adapter.write(event2)
+        adapter.write(logout_event)
 
         rotated_files = Dir.glob("#{log_path}.*")
         expect(rotated_files.size).to eq(0)
 
-        lines = ::File.readlines(log_path)
+        lines = File.readlines(log_path)
         expect(lines.size).to eq(2)
       end
     end
@@ -291,12 +291,12 @@ RSpec.describe E11y::Adapters::File do
       after { adapter.close }
 
       it "compresses rotated files" do
-        adapter.write(event1)
+        adapter.write(login_event)
 
         # Simulate date change to trigger rotation
         allow(Date).to receive(:today).and_return(Date.today + 1)
 
-        adapter.write(event2)
+        adapter.write(logout_event)
 
         # Should have .gz file
         gz_files = Dir.glob("#{log_path}.*.gz")
@@ -308,11 +308,11 @@ RSpec.describe E11y::Adapters::File do
       end
 
       it "compressed file contains original data" do
-        adapter.write(event1)
+        adapter.write(login_event)
 
         allow(Date).to receive(:today).and_return(Date.today + 1)
 
-        adapter.write(event2)
+        adapter.write(logout_event)
 
         gz_file = Dir.glob("#{log_path}.*.gz").first
         expect(gz_file).not_to be_nil
@@ -332,11 +332,11 @@ RSpec.describe E11y::Adapters::File do
       after { adapter.close }
 
       it "does not compress rotated files" do
-        adapter.write(event1)
+        adapter.write(login_event)
 
         allow(Date).to receive(:today).and_return(Date.today + 1)
 
-        adapter.write(event2)
+        adapter.write(logout_event)
 
         # Should have uncompressed rotated file
         rotated_files = Dir.glob("#{log_path}.*").reject { |f| f.end_with?(".gz") }
@@ -369,7 +369,7 @@ RSpec.describe E11y::Adapters::File do
   describe "#close" do
     it "closes file handle" do
       adapter = described_class.new(path: log_path)
-      adapter.write(event1)
+      adapter.write(login_event)
 
       adapter.close
 
@@ -423,7 +423,7 @@ RSpec.describe E11y::Adapters::File do
 
       threads.each(&:join)
 
-      lines = ::File.readlines(log_path)
+      lines = File.readlines(log_path)
       expect(lines.size).to eq(10)
 
       # All lines should be valid JSON

@@ -65,6 +65,8 @@ module E11y
       # @yield Block to execute (adapter send)
       # @return [Object] Result of block execution
       # @raise [RetryExhaustedError] if all retries fail and fail_on_error is true
+      # rubocop:disable Metrics/MethodLength
+      # Retry logic requires error handling, retriability check, backoff calculation, and callbacks
       def with_retry(adapter:, event:)
         attempt = 0
 
@@ -101,6 +103,7 @@ module E11y
           end
         end
       end
+      # rubocop:enable Metrics/MethodLength
 
       private
 

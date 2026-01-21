@@ -8,7 +8,7 @@ RSpec.describe E11y::Middleware::PIIFilter do
   let(:middleware) { described_class.new(app) }
 
   describe "PII Filtering - 3-Tier Strategy" do
-    context "Tier 1: No PII (contains_pii false)" do
+    context "when using Tier 1: No PII (contains_pii false)" do
       let(:event_class) do
         Class.new(E11y::Event::Base) do
           def self.name
@@ -29,23 +29,26 @@ RSpec.describe E11y::Middleware::PIIFilter do
           event_class: event_class,
           payload: {
             status: "ok",
-            uptime_ms: 12345
+            uptime_ms: 12_345
           }
         }
 
         result = middleware.call(event_data)
 
         expect(result[:payload][:status]).to eq("ok")
-        expect(result[:payload][:uptime_ms]).to eq(12345)
+        expect(result[:payload][:uptime_ms]).to eq(12_345)
       end
     end
 
-    context "Tier 2: Rails filters (default)" do
+    context "when using Tier 2: Rails filters (default)" do
       before do
+        # rubocop:disable RSpec/AnyInstance
+        # Mocking Rails parameter_filter which is a private method
         # Mock Rails filter_parameters
         allow_any_instance_of(described_class).to receive(:parameter_filter).and_return(
-          ActiveSupport::ParameterFilter.new([:password, :api_key, :token])
+          ActiveSupport::ParameterFilter.new(%i[password api_key token])
         )
+        # rubocop:enable RSpec/AnyInstance
       end
 
       let(:event_class) do
@@ -77,7 +80,7 @@ RSpec.describe E11y::Middleware::PIIFilter do
       end
     end
 
-    context "Tier 3: Explicit PII (contains_pii true)" do
+    context "when using Tier 3: Explicit PII (contains_pii true)" do
       let(:event_class) do
         Class.new(E11y::Event::Base) do
           def self.name

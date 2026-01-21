@@ -3,6 +3,10 @@
 require "spec_helper"
 require "e11y/middleware/sampling"
 
+# rubocop:disable RSpec/FilePath, RSpec/SpecFilePathFormat, RSpec/DescribeMethod
+# Stress test suite grouped by test type, not class structure.
+# Sampling stress tests require load simulation, adaptive algorithms,
+# and extensive performance monitoring with multiple fixtures.
 RSpec.describe E11y::Middleware::Sampling, "Stress Tests (FEAT-4841)" do
   let(:app) { ->(event_data) { event_data } }
   let(:middleware) do
@@ -168,7 +172,7 @@ RSpec.describe E11y::Middleware::Sampling, "Stress Tests (FEAT-4841)" do
       # Load monitor should detect elevated load
       load_monitor = load_aware_middleware.instance_variable_get(:@load_monitor)
       current_level = load_monitor.load_level
-      expect(%i[high very_high overload]).to include(current_level)
+      expect(current_level).to be(:high).or(be(:very_high)).or(be(:overload))
     end
 
     it "reduces sampling rate during overload" do
@@ -188,7 +192,7 @@ RSpec.describe E11y::Middleware::Sampling, "Stress Tests (FEAT-4841)" do
 
       # Should detect elevated load (overload or very_high)
       current_level = load_monitor.load_level
-      expect(%i[very_high overload]).to include(current_level)
+      expect(current_level).to be(:very_high).or(be(:overload))
 
       # Recommended sample rate should be reduced
       expect(load_monitor.recommended_sample_rate).to be <= 0.1
@@ -208,10 +212,11 @@ RSpec.describe E11y::Middleware::Sampling, "Stress Tests (FEAT-4841)" do
       # System should remain responsive
       load_monitor = load_aware_middleware.instance_variable_get(:@load_monitor)
       current_level = load_monitor.load_level
-      expect(%i[high very_high overload]).to include(current_level)
+      expect(current_level).to be(:high).or(be(:very_high)).or(be(:overload))
 
       # Should be able to query stats without errors
       expect { load_monitor.stats }.not_to raise_error
     end
   end
 end
+# rubocop:enable RSpec/FilePath, RSpec/SpecFilePathFormat, RSpec/DescribeMethod

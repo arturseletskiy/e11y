@@ -91,7 +91,12 @@ module E11y
       def detect_backend
         # Check if Yabeda adapter is configured
         # Use class name string to avoid LoadError if Yabeda gem not installed
-        yabeda_adapter = E11y.config.adapters.values.find { |adapter| adapter.class.name == "E11y::Adapters::Yabeda" }
+        # rubocop:disable Style/ClassEqualityComparison
+        # Reason: instance_of?(::E11y::Adapters::Yabeda) would trigger LoadError when gem not installed
+        yabeda_adapter = E11y.config.adapters.values.find do |adapter|
+          adapter.class.name == "E11y::Adapters::Yabeda"
+        end
+        # rubocop:enable Style/ClassEqualityComparison
         return yabeda_adapter if yabeda_adapter
 
         # No backend configured → noop

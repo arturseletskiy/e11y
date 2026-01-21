@@ -3,6 +3,8 @@
 require "spec_helper"
 require "e11y/middleware/routing"
 
+# Routing integration tests require multiple adapters, severity-based routing,
+# and complex configuration scenarios with extensive mocking.
 RSpec.describe E11y::Middleware::Routing do
   let(:final_app) { ->(event_data) { event_data } }
   let(:middleware) { described_class.new(final_app) }
@@ -38,12 +40,12 @@ RSpec.describe E11y::Middleware::Routing do
     context "with explicit adapters (bypass routing)" do
       it "uses explicit adapters, ignoring routing rules" do
         E11y.configuration.routing_rules = [
-          ->(event) { :s3_glacier } # This should be ignored
+          ->(_event) { :s3_glacier } # This should be ignored
         ]
 
         event_data = {
           event_name: "payment.completed",
-          adapters: [:loki, :sentry], # ← Explicit
+          adapters: %i[loki sentry], # ← Explicit
           retention_until: (Time.now + 365.days).iso8601
         }
 
@@ -74,8 +76,8 @@ RSpec.describe E11y::Middleware::Routing do
     context "with routing rules" do
       it "applies rules when no explicit adapters" do
         E11y.configuration.routing_rules = [
-          ->(event) {
-            days = (Time.parse(event[:retention_until]) - Time.now) / 86400
+          lambda { |event|
+            days = (Time.parse(event[:retention_until]) - Time.now) / 86_400
             days > 90 ? :s3_glacier : :loki
           }
         ]
@@ -94,8 +96,8 @@ RSpec.describe E11y::Middleware::Routing do
 
       it "routes to cold storage for long retention" do
         E11y.configuration.routing_rules = [
-          ->(event) {
-            days = (Time.parse(event[:retention_until]) - Time.now) / 86400
+          lambda { |event|
+            days = (Time.parse(event[:retention_until]) - Time.now) / 86_400
             days > 90 ? :s3_glacier : :loki
           }
         ]
@@ -114,7 +116,7 @@ RSpec.describe E11y::Middleware::Routing do
 
       it "marks routing as :rules" do
         E11y.configuration.routing_rules = [
-          ->(event) { :loki }
+          ->(_event) { :loki }
         ]
 
         event_data = {
@@ -149,7 +151,7 @@ RSpec.describe E11y::Middleware::Routing do
       it "collects all matching rules (audit + storage)" do
         E11y.configuration.routing_rules = [
           ->(event) { :audit_encrypted if event[:audit_event] }, # First
-          ->(event) { :loki } # Second (also applied)
+          ->(_event) { :loki } # Second (also applied)
         ]
 
         event_data = {
@@ -170,7 +172,7 @@ RSpec.describe E11y::Middleware::Routing do
       it "routes to multiple adapters when rules return multiple results" do
         E11y.configuration.routing_rules = [
           ->(event) { :sentry if event[:severity] == :error },
-          ->(event) { :loki } # Always add loki
+          ->(_event) { :loki } # Always add loki
         ]
 
         event_data = {
@@ -189,7 +191,7 @@ RSpec.describe E11y::Middleware::Routing do
       it "de-duplicates adapters when multiple rules return same adapter" do
         E11y.configuration.routing_rules = [
           ->(event) { :loki if event[:severity] == :error },
-          ->(event) { :loki } # Returns same adapter
+          ->(_event) { :loki } # Returns same adapter
         ]
 
         event_data = {
@@ -206,7 +208,7 @@ RSpec.describe E11y::Middleware::Routing do
 
       it "handles array return values from rules" do
         E11y.configuration.routing_rules = [
-          ->(event) { [:loki, :sentry] if event[:severity] == :error }
+          ->(event) { %i[loki sentry] if event[:severity] == :error }
         ]
 
         event_data = {
@@ -225,7 +227,7 @@ RSpec.describe E11y::Middleware::Routing do
     context "with fallback adapters" do
       it "uses fallback when no rule matches" do
         E11y.configuration.routing_rules = [
-          ->(event) { nil } # Always returns nil
+          ->(_event) {} # Always returns nil
         ]
         E11y.configuration.fallback_adapters = [:stdout]
 
@@ -257,8 +259,8 @@ RSpec.describe E11y::Middleware::Routing do
     context "with rule evaluation errors" do
       it "continues to next rule if one raises error" do
         E11y.configuration.routing_rules = [
-          ->(event) { raise "Rule error" }, # Raises error
-          ->(event) { :loki } # Should still be evaluated
+          ->(_event) { raise "Rule error" }, # Raises error
+          ->(_event) { :loki } # Should still be evaluated
         ]
 
         event_data = {
@@ -279,7 +281,7 @@ RSpec.describe E11y::Middleware::Routing do
         allow(loki_adapter).to receive(:write).and_raise("Loki error")
 
         E11y.configuration.routing_rules = [
-          ->(event) { [:loki, :sentry] }
+          ->(_event) { %i[loki sentry] }
         ]
 
         event_data = {
@@ -300,7 +302,7 @@ RSpec.describe E11y::Middleware::Routing do
         allow(middleware).to receive(:increment_metric)
 
         E11y.configuration.routing_rules = [
-          ->(event) { :loki }
+          ->(_event) { :loki }
         ]
 
         event_data = {
@@ -318,7 +320,7 @@ RSpec.describe E11y::Middleware::Routing do
     context "with adapter not found" do
       it "skips missing adapters gracefully" do
         E11y.configuration.routing_rules = [
-          ->(event) { :nonexistent_adapter }
+          ->(_event) { :nonexistent_adapter }
         ]
 
         event_data = {
@@ -336,8 +338,8 @@ RSpec.describe E11y::Middleware::Routing do
   describe "UC-019 compliance (Retention-Based Routing)" do
     it "routes short retention events to hot storage" do
       E11y.configuration.routing_rules = [
-        ->(event) {
-          days = (Time.parse(event[:retention_until]) - Time.now) / 86400
+        lambda { |event|
+          days = (Time.parse(event[:retention_until]) - Time.now) / 86_400
           days <= 30 ? :loki : :s3_glacier
         }
       ]
@@ -355,8 +357,8 @@ RSpec.describe E11y::Middleware::Routing do
 
     it "routes long retention events to cold storage" do
       E11y.configuration.routing_rules = [
-        ->(event) {
-          days = (Time.parse(event[:retention_until]) - Time.now) / 86400
+        lambda { |event|
+          days = (Time.parse(event[:retention_until]) - Time.now) / 86_400
           days > 90 ? :s3_glacier : :loki
         }
       ]
@@ -392,7 +394,7 @@ RSpec.describe E11y::Middleware::Routing do
     it "routes errors to multiple adapters (Sentry + storage)" do
       E11y.configuration.routing_rules = [
         ->(event) { :sentry if event[:severity] == :error },
-        ->(event) { :loki } # Storage
+        ->(_event) { :loki } # Storage
       ]
 
       event_data = {
@@ -411,7 +413,7 @@ RSpec.describe E11y::Middleware::Routing do
   describe "ADR-004 §14 compliance (Retention-Based Routing)" do
     it "explicit adapters have highest priority" do
       E11y.configuration.routing_rules = [
-        ->(event) { :s3_glacier } # Should be ignored
+        ->(_event) { :s3_glacier } # Should be ignored
       ]
 
       event_data = {
@@ -428,7 +430,7 @@ RSpec.describe E11y::Middleware::Routing do
 
     it "applies routing rules when adapters not specified" do
       E11y.configuration.routing_rules = [
-        ->(event) { :loki }
+        ->(_event) { :loki }
       ]
 
       event_data = {
@@ -444,7 +446,7 @@ RSpec.describe E11y::Middleware::Routing do
 
     it "uses fallback adapters when no rule matches" do
       E11y.configuration.routing_rules = [
-        ->(event) { nil } # Never matches
+        ->(_event) {} # Never matches
       ]
       E11y.configuration.fallback_adapters = [:stdout]
 
@@ -470,7 +472,7 @@ RSpec.describe E11y::Middleware::Routing do
       routing_middleware = described_class.new(collector)
 
       E11y.configuration.routing_rules = [
-        ->(event) { :loki }
+        ->(_event) { :loki }
       ]
 
       event_data = {
@@ -488,7 +490,7 @@ RSpec.describe E11y::Middleware::Routing do
 
     it "includes routed_at timestamp" do
       E11y.configuration.routing_rules = [
-        ->(event) { :loki }
+        ->(_event) { :loki }
       ]
 
       event_data = {
@@ -504,15 +506,17 @@ RSpec.describe E11y::Middleware::Routing do
   end
 
   describe "complex routing scenarios" do
+    # rubocop:disable RSpec/ExampleLength
+    # Integration test requires multiple tier scenarios with routing logic
     it "handles tiered storage routing (hot/warm/cold)" do
       E11y.configuration.routing_rules = [
-        ->(event) {
-          days = (Time.parse(event[:retention_until]) - Time.now) / 86400
+        lambda { |event|
+          days = (Time.parse(event[:retention_until]) - Time.now) / 86_400
           case days
           when 0..7    then :stdout       # Very short
           when 8..30   then :loki         # Short
-          when 31..90  then :s3_glacier   # Medium (simulating S3 Standard)
-          else              :s3_glacier    # Long (cold storage)
+          when 31..90  then :s3 # Medium (simulating S3 Standard)
+          else              :s3_glacier # Long (cold storage)
           end
         }
       ]
@@ -544,6 +548,7 @@ RSpec.describe E11y::Middleware::Routing do
       middleware.call(cold_event)
       expect(s3_glacier_adapter).to have_received(:write).with(cold_event)
     end
+    # rubocop:enable RSpec/ExampleLength
 
     it "combines audit routing + error routing" do
       E11y.configuration.routing_rules = [

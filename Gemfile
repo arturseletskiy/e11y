@@ -38,15 +38,19 @@ end
 group :integration do
   gem "rails", "~> 8.0" # Full Rails for integration tests
   gem "sqlite3", "~> 2.0" # Database for Rails integration tests
-  
+
   # OpenTelemetry SDK for OTel adapter tests
-  gem "opentelemetry-sdk", "~> 1.0"
   gem "opentelemetry-logs-api", "~> 0.1"
   gem "opentelemetry-logs-sdk", "~> 0.1"
-  
+  gem "opentelemetry-sdk", "~> 1.0"
+
+  # Yabeda for Yabeda adapter tests
+  gem "yabeda", "~> 0.12" # Yabeda core
+  gem "yabeda-prometheus", "~> 0.9" # Prometheus exporter
+
   # Additional Rails dependencies
-  gem "rspec-rails", "~> 7.0" # Rails-specific RSpec matchers
   gem "database_cleaner-active_record", "~> 2.0" # DB cleanup between tests
+  gem "rspec-rails", "~> 7.0" # Rails-specific RSpec matchers
 end
 
 # Code quality

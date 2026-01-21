@@ -44,6 +44,8 @@ module E11y
     #
     # @see ADR-002 Metrics & Yabeda Integration
     # @see UC-003 Pattern-Based Metrics
+    # rubocop:disable Metrics/ClassLength
+    # Yabeda adapter contains metrics registration and update logic as cohesive unit
     class Yabeda < Base
       # Initialize Yabeda adapter
       #
@@ -253,6 +255,8 @@ module E11y
       #
       # @param metric_config [Hash] Metric configuration from Registry
       # @return [void]
+      # rubocop:disable Metrics/MethodLength
+      # Metric registration requires case/when for different metric types
       def register_yabeda_metric(metric_config)
         metric_name = metric_config[:name]
         metric_type = metric_config[:type]
@@ -278,6 +282,7 @@ module E11y
         # Metric might already be registered - that's OK
         warn "E11y Yabeda: Could not register metric #{metric_name}: #{e.message}"
       end
+      # rubocop:enable Metrics/MethodLength
 
       # Register a metric if it doesn't exist yet (for direct metric calls).
       #
@@ -287,6 +292,8 @@ module E11y
       # @param buckets [Array<Numeric>, nil] Optional histogram buckets
       # @return [void]
       # @api private
+      # rubocop:disable Metrics/MethodLength
+      # Metric registration requires case/when for different metric types
       def register_metric_if_needed(name, type, tags, buckets: nil)
         # Check if metric already exists
         return if ::Yabeda.metrics.key?(:"e11y_#{name}")
@@ -310,12 +317,15 @@ module E11y
         # Metric might already be registered - that's OK
         E11y.logger.debug("Could not register Yabeda metric #{name}: #{e.message}")
       end
+      # rubocop:enable Metrics/MethodLength
 
       # Update a single metric based on event data
       #
       # @param metric_config [Hash] Metric configuration
       # @param event_data [Hash] Event data
       # @return [void]
+      # rubocop:disable Metrics/AbcSize
+      # Metric update requires multiple steps for label extraction and value handling
       def update_metric(metric_config, event_data)
         metric_name = metric_config[:name]
         labels = extract_labels(metric_config, event_data)
@@ -338,6 +348,7 @@ module E11y
       rescue StandardError => e
         warn "E11y Yabeda: Error updating metric #{metric_name}: #{e.message}"
       end
+      # rubocop:enable Metrics/AbcSize
 
       # Extract labels from event data
       #
@@ -368,5 +379,6 @@ module E11y
         end
       end
     end
+    # rubocop:enable Metrics/ClassLength
   end
 end

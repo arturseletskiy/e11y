@@ -2,7 +2,6 @@
 
 require "spec_helper"
 
-# rubocop:disable RSpec/MultipleMemoizedHelpers
 RSpec.describe E11y::Pipeline::ZoneValidator do
   let(:builder) { E11y::Pipeline::Builder.new }
 
@@ -243,4 +242,3 @@ RSpec.describe E11y::Pipeline::ZoneValidator do
     end
   end
 end
-# rubocop:enable RSpec/MultipleMemoizedHelpers

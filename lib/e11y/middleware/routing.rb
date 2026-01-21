@@ -58,16 +58,18 @@ module E11y
       # @option event_data [Boolean] :audit_event Audit event flag (optional, for routing rules)
       # @option event_data [Symbol] :severity Event severity (optional, for routing rules)
       # @return [Hash, nil] Event data (passed to next middleware), or nil if dropped
-      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+      # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # Routing logic requires adapter selection, iteration with error handling,
+      # metadata enrichment, and metrics tracking
       def call(event_data)
         # 1. Determine target adapters (explicit or via routing rules)
         target_adapters = if event_data[:adapters]&.any?
-          # Explicit adapters bypass routing rules
-          event_data[:adapters]
-        else
-          # Apply routing rules from configuration
-          apply_routing_rules(event_data)
-        end
+                            # Explicit adapters bypass routing rules
+                            event_data[:adapters]
+                          else
+                            # Apply routing rules from configuration
+                            apply_routing_rules(event_data)
+                          end
 
         # 2. Write to selected adapters
         target_adapters.each do |adapter_name|
@@ -102,7 +104,7 @@ module E11y
         # 6. Pass to next app (if any)
         @app&.call(event_data)
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
+      # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
 
       private
 
@@ -134,13 +136,11 @@ module E11y
         # Apply each rule, collect matched adapters
         rules = E11y.configuration.routing_rules || []
         rules.each do |rule|
-          begin
-            result = rule.call(event_data)
-            matched_adapters.concat(Array(result)) if result
-          rescue StandardError => e
-            # Log rule evaluation error but continue
-            warn "E11y routing rule error: #{e.message}"
-          end
+          result = rule.call(event_data)
+          matched_adapters.concat(Array(result)) if result
+        rescue StandardError => e
+          # Log rule evaluation error but continue
+          warn "E11y routing rule error: #{e.message}"
         end
 
         # Return unique adapters or fallback

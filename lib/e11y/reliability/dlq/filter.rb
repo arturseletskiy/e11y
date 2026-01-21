@@ -48,6 +48,8 @@ module E11y
         #
         # @param event_data [Hash] Event data
         # @return [Boolean] true if event should be saved to DLQ
+        # rubocop:disable Metrics/MethodLength
+        # DLQ filter requires 4-priority decision tree with metrics tracking for each branch
         def should_save?(event_data)
           event_name = event_data[:event_name].to_s
           severity = event_data[:severity]
@@ -79,6 +81,7 @@ module E11y
             false
           end
         end
+        # rubocop:enable Metrics/MethodLength
 
         # Get filter statistics.
         #

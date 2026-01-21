@@ -23,6 +23,8 @@ module E11y
     # @example Find matching metrics
     #   metrics = registry.find_matching('order.paid')
     #   # => [{ type: :counter, name: :orders_total, ... }]
+    # rubocop:disable Metrics/ClassLength
+    # Registry is a cohesive singleton managing metric definitions and pattern matching
     class Registry
       include Singleton
 
@@ -161,7 +163,8 @@ module E11y
       # @param new_config [Hash] New metric configuration
       # @raise [TypeConflictError] if types don't match
       # @raise [LabelConflictError] if labels don't match
-      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+      # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # Conflict validation requires checking type and labels with detailed error messages
       def validate_no_conflicts!(existing, new_config)
         # Check 1: Type must match
         if existing[:type] != new_config[:type]
@@ -212,7 +215,7 @@ module E11y
           Using existing buckets.
         WARNING
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
+      # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
 
       # Compile glob pattern to regex
       # @param pattern [String] Glob pattern (e.g., "order.*", "user.*.created")
@@ -230,5 +233,6 @@ module E11y
         Regexp.new("\\A#{regex_pattern}\\z")
       end
     end
+    # rubocop:enable Metrics/ClassLength
   end
 end

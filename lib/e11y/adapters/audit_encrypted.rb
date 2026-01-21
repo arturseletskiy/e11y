@@ -28,6 +28,8 @@ module E11y
     #
     # @see ADR-006 §4.0 Audit Trail Security
     # @see UC-012 Audit Trail
+    # rubocop:disable Metrics/ClassLength
+    # Audit adapter contains encryption/decryption logic as cohesive unit
     class AuditEncrypted < Base
       # AES-256-GCM cipher
       CIPHER = "aes-256-gcm"
@@ -125,6 +127,8 @@ module E11y
       #
       # @param encrypted [Hash] Encrypted data with nonce and tag
       # @return [Hash] Decrypted event data
+      # rubocop:disable Metrics/AbcSize
+      # Cryptographic operations require multiple steps for secure decryption
       def decrypt_event(encrypted)
         cipher = OpenSSL::Cipher.new(CIPHER)
         cipher.decrypt
@@ -137,6 +141,7 @@ module E11y
 
         JSON.parse(plaintext, symbolize_names: true)
       end
+      # rubocop:enable Metrics/AbcSize
 
       # Write encrypted data to storage
       #
@@ -235,5 +240,6 @@ module E11y
         end
       end
     end
+    # rubocop:enable Metrics/ClassLength
   end
 end

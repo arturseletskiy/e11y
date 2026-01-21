@@ -4,9 +4,9 @@ require "spec_helper"
 
 RSpec.describe E11y::Adapters::InMemory do
   let(:adapter) { described_class.new }
-  let(:event1) { { event_name: "order.paid", severity: :success, payload: { order_id: "123" } } }
-  let(:event2) { { event_name: "order.failed", severity: :error, payload: { order_id: "456" } } }
-  let(:event3) { { event_name: "user.created", severity: :info, payload: { user_id: "789" } } }
+  let(:paid_order_event) { { event_name: "order.paid", severity: :success, payload: { order_id: "123" } } }
+  let(:failed_order_event) { { event_name: "order.failed", severity: :error, payload: { order_id: "456" } } }
+  let(:user_created_event) { { event_name: "user.created", severity: :info, payload: { user_id: "789" } } }
 
   describe "#initialize" do
     it "defaults to 1000 max_events" do
@@ -30,20 +30,20 @@ RSpec.describe E11y::Adapters::InMemory do
 
   describe "#write" do
     it "stores event in memory" do
-      adapter.write(event1)
-      expect(adapter.events).to eq([event1])
+      adapter.write(paid_order_event)
+      expect(adapter.events).to eq([paid_order_event])
     end
 
     it "returns true on success" do
-      expect(adapter.write(event1)).to be true
+      expect(adapter.write(paid_order_event)).to be true
     end
 
     it "appends events in order" do
-      adapter.write(event1)
-      adapter.write(event2)
-      adapter.write(event3)
+      adapter.write(paid_order_event)
+      adapter.write(failed_order_event)
+      adapter.write(user_created_event)
 
-      expect(adapter.events).to eq([event1, event2, event3])
+      expect(adapter.events).to eq([paid_order_event, failed_order_event, user_created_event])
     end
 
     it "is thread-safe" do
@@ -58,7 +58,7 @@ RSpec.describe E11y::Adapters::InMemory do
   end
 
   describe "#write_batch" do
-    let(:batch) { [event1, event2, event3] }
+    let(:batch) { [paid_order_event, failed_order_event, user_created_event] }
 
     it "stores all events from batch" do
       adapter.write_batch(batch)
@@ -75,10 +75,10 @@ RSpec.describe E11y::Adapters::InMemory do
     end
 
     it "appends batch events to events list" do
-      adapter.write(event1)
-      adapter.write_batch([event2, event3])
+      adapter.write(paid_order_event)
+      adapter.write_batch([failed_order_event, user_created_event])
 
-      expect(adapter.events).to eq([event1, event2, event3])
+      expect(adapter.events).to eq([paid_order_event, failed_order_event, user_created_event])
     end
 
     it "is thread-safe" do
@@ -92,16 +92,12 @@ RSpec.describe E11y::Adapters::InMemory do
     end
   end
 
+  # rubocop:disable RSpec/RepeatedExampleGroupDescription
+  # Testing #clear! method in two contexts: basic operations and memory limits
   describe "#clear!" do
     before do
-      adapter.write(event1)
-      adapter.write_batch([event2, event3])
-      
-      # Force some drops
-      limited_adapter = described_class.new(max_events: 1)
-      limited_adapter.write(event1)
-      limited_adapter.write(event2)
-      @limited_adapter = limited_adapter
+      adapter.write(paid_order_event)
+      adapter.write_batch([failed_order_event, user_created_event])
     end
 
     it "clears all events" do
@@ -115,11 +111,16 @@ RSpec.describe E11y::Adapters::InMemory do
     end
 
     it "resets dropped_count" do
-      expect(@limited_adapter.dropped_count).to be > 0
-      @limited_adapter.clear!
-      expect(@limited_adapter.dropped_count).to eq(0)
+      limited_adapter = described_class.new(max_events: 1)
+      limited_adapter.write(paid_order_event)
+      limited_adapter.write(failed_order_event)
+
+      expect(limited_adapter.dropped_count).to be > 0
+      limited_adapter.clear!
+      expect(limited_adapter.dropped_count).to eq(0)
     end
   end
+  # rubocop:enable RSpec/RepeatedExampleGroupDescription
 
   describe "memory limit enforcement" do
     context "with default limit (1000 events)" do
@@ -150,7 +151,8 @@ RSpec.describe E11y::Adapters::InMemory do
       end
 
       it "drops correct number on batch write" do
-        limited_adapter.write_batch([event1, event2, event3, event1, event2])
+        limited_adapter.write_batch([paid_order_event, failed_order_event, user_created_event, paid_order_event,
+                                     failed_order_event])
 
         expect(limited_adapter.events.size).to eq(3)
         expect(limited_adapter.dropped_count).to eq(2)
@@ -171,21 +173,23 @@ RSpec.describe E11y::Adapters::InMemory do
     it "tracks dropped count across multiple writes" do
       limited = described_class.new(max_events: 5)
 
-      limited.write(event1)
+      limited.write(paid_order_event)
       expect(limited.dropped_count).to eq(0)
 
-      limited.write_batch([event2, event3, event1, event2])
+      limited.write_batch([failed_order_event, user_created_event, paid_order_event, failed_order_event])
       expect(limited.dropped_count).to eq(0)
 
-      limited.write_batch([event3, event1, event2]) # Total 8, limit 5
+      limited.write_batch([user_created_event, paid_order_event, failed_order_event]) # Total 8, limit 5
       expect(limited.dropped_count).to eq(3)
     end
   end
 
+  # rubocop:disable RSpec/RepeatedExampleGroupDescription
+  # Second block tests #clear! in context of regular operations
   describe "#clear!" do
     before do
-      adapter.write(event1)
-      adapter.write_batch([event2, event3])
+      adapter.write(paid_order_event)
+      adapter.write_batch([failed_order_event, user_created_event])
     end
 
     it "clears all events" do
@@ -201,19 +205,19 @@ RSpec.describe E11y::Adapters::InMemory do
 
   describe "#find_events" do
     before do
-      adapter.write(event1)
-      adapter.write(event2)
-      adapter.write(event3)
+      adapter.write(paid_order_event)
+      adapter.write(failed_order_event)
+      adapter.write(user_created_event)
     end
 
     it "finds events by string pattern" do
       results = adapter.find_events("order.paid")
-      expect(results).to eq([event1])
+      expect(results).to eq([paid_order_event])
     end
 
     it "finds events by regex pattern" do
       results = adapter.find_events(/order/)
-      expect(results).to eq([event1, event2])
+      expect(results).to eq([paid_order_event, failed_order_event])
     end
 
     it "returns empty array when no matches" do
@@ -224,10 +228,10 @@ RSpec.describe E11y::Adapters::InMemory do
 
   describe "#event_count" do
     before do
-      adapter.write(event1)
-      adapter.write(event2)
-      adapter.write(event3)
-      adapter.write(event1)  # Duplicate
+      adapter.write(paid_order_event)
+      adapter.write(failed_order_event)
+      adapter.write(user_created_event)
+      adapter.write(paid_order_event) # Duplicate
     end
 
     it "returns total count without event_name" do
@@ -287,14 +291,14 @@ RSpec.describe E11y::Adapters::InMemory do
 
   describe "#events_by_severity" do
     before do
-      adapter.write(event1)
-      adapter.write(event2)
-      adapter.write(event3)
+      adapter.write(paid_order_event)
+      adapter.write(failed_order_event)
+      adapter.write(user_created_event)
     end
 
     it "filters events by severity" do
       results = adapter.events_by_severity(:error)
-      expect(results).to eq([event2])
+      expect(results).to eq([failed_order_event])
     end
 
     it "returns empty array when no matches" do
@@ -311,8 +315,8 @@ RSpec.describe E11y::Adapters::InMemory do
 
   describe "#any_event?" do
     before do
-      adapter.write(event1)
-      adapter.write(event2)
+      adapter.write(paid_order_event)
+      adapter.write(failed_order_event)
     end
 
     it "returns true when pattern matches" do
@@ -384,3 +388,4 @@ RSpec.describe E11y::Adapters::InMemory do
     end
   end
 end
+# rubocop:enable RSpec/RepeatedExampleGroupDescription

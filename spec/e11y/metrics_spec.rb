@@ -135,7 +135,7 @@ RSpec.describe E11y::Metrics do
       described_class.reset_backend!
 
       # Next call should re-detect backend
-      expect(E11y.config.adapters).to receive(:values).and_return([])
+      allow(E11y.config.adapters).to receive(:values).and_return([])
       expect(described_class.backend).to be_nil
     end
   end

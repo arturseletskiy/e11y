@@ -60,7 +60,7 @@ RSpec.describe E11y::SelfMonitoring::BufferMonitor do
     end
   end
 
-  context "ADR-016 §3.3 compliance" do
+  context "when testing ADR-016 §3.3 compliance" do
     it "tracks buffer utilization threshold (<80%)" do
       expect(E11y::Metrics).to receive(:gauge).with(
         :e11y_buffer_utilization_percent,

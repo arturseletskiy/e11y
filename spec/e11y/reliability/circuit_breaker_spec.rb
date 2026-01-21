@@ -23,11 +23,9 @@ RSpec.describe E11y::Reliability::CircuitBreaker do
       cb = described_class.new(adapter_name: "test")
       # Default threshold is 5
       5.times do
-        begin
-          cb.call { raise "error" }
-        rescue StandardError
-          # Expected
-        end
+        cb.call { raise "error" }
+      rescue StandardError
+        # Expected
       end
       expect(cb.healthy?).to be false
     end
@@ -52,11 +50,9 @@ RSpec.describe E11y::Reliability::CircuitBreaker do
       it "transitions to OPEN after threshold failures" do
         # Fail 3 times (threshold)
         3.times do
-          begin
-            circuit_breaker.call { raise "error" }
-          rescue StandardError
-            # Expected
-          end
+          circuit_breaker.call { raise "error" }
+        rescue StandardError
+          # Expected
         end
 
         expect(circuit_breaker.healthy?).to be false
@@ -85,11 +81,9 @@ RSpec.describe E11y::Reliability::CircuitBreaker do
       before do
         # Open the circuit
         3.times do
-          begin
-            circuit_breaker.call { raise "error" }
-          rescue StandardError
-            # Expected
-          end
+          circuit_breaker.call { raise "error" }
+        rescue StandardError
+          # Expected
         end
       end
 
@@ -128,11 +122,9 @@ RSpec.describe E11y::Reliability::CircuitBreaker do
       before do
         # Open the circuit
         3.times do
-          begin
-            circuit_breaker.call { raise "error" }
-          rescue StandardError
-            # Expected
-          end
+          circuit_breaker.call { raise "error" }
+        rescue StandardError
+          # Expected
         end
 
         # Wait for timeout to transition to HALF_OPEN
@@ -170,11 +162,9 @@ RSpec.describe E11y::Reliability::CircuitBreaker do
     it "returns false when circuit is OPEN" do
       # Open the circuit
       3.times do
-        begin
-          circuit_breaker.call { raise "error" }
-        rescue StandardError
-          # Expected
-        end
+        circuit_breaker.call { raise "error" }
+      rescue StandardError
+        # Expected
       end
 
       expect(circuit_breaker.healthy?).to be false
@@ -183,11 +173,9 @@ RSpec.describe E11y::Reliability::CircuitBreaker do
     it "returns false when circuit is HALF_OPEN" do
       # Open the circuit
       3.times do
-        begin
-          circuit_breaker.call { raise "error" }
-        rescue StandardError
-          # Expected
-        end
+        circuit_breaker.call { raise "error" }
+      rescue StandardError
+        # Expected
       end
 
       # Wait for timeout
@@ -233,11 +221,9 @@ RSpec.describe E11y::Reliability::CircuitBreaker do
     it "tracks success count in HALF_OPEN" do
       # Open the circuit
       3.times do
-        begin
-          circuit_breaker.call { raise "error" }
-        rescue StandardError
-          # Expected
-        end
+        circuit_breaker.call { raise "error" }
+      rescue StandardError
+        # Expected
       end
 
       # Wait for timeout
@@ -253,11 +239,9 @@ RSpec.describe E11y::Reliability::CircuitBreaker do
     it "tracks opened_at timestamp" do
       # Open the circuit
       3.times do
-        begin
-          circuit_breaker.call { raise "error" }
-        rescue StandardError
-          # Expected
-        end
+        circuit_breaker.call { raise "error" }
+      rescue StandardError
+        # Expected
       end
 
       stats = circuit_breaker.stats
@@ -270,11 +254,9 @@ RSpec.describe E11y::Reliability::CircuitBreaker do
       threads = 10.times.map do
         Thread.new do
           10.times do
-            begin
-              circuit_breaker.call { "success" }
-            rescue E11y::Reliability::CircuitBreaker::CircuitOpenError
-              # Expected when circuit opens
-            end
+            circuit_breaker.call { "success" }
+          rescue E11y::Reliability::CircuitBreaker::CircuitOpenError
+            # Expected when circuit opens
           end
         end
       end
@@ -290,11 +272,9 @@ RSpec.describe E11y::Reliability::CircuitBreaker do
     it "allows gradual recovery after outage" do
       # Simulate adapter down (3 failures)
       3.times do
-        begin
-          circuit_breaker.call { raise Timeout::Error, "adapter down" }
-        rescue StandardError
-          # Expected
-        end
+        circuit_breaker.call { raise Timeout::Error, "adapter down" }
+      rescue StandardError
+        # Expected
       end
 
       expect(circuit_breaker.stats[:state]).to eq(:open)
@@ -318,20 +298,18 @@ RSpec.describe E11y::Reliability::CircuitBreaker do
       circuit_opened = false
 
       20.times do |i|
-        begin
-          result = circuit_breaker.call do
-            # Fail consistently to trigger circuit (threshold = 3)
-            raise "adapter error" if i < 10
+        result = circuit_breaker.call do
+          # Fail consistently to trigger circuit (threshold = 3)
+          raise "adapter error" if i < 10
 
-            "success"
-          end
-          results << result
-        rescue E11y::Reliability::CircuitBreaker::CircuitOpenError
-          results << :circuit_open
-          circuit_opened = true
-        rescue StandardError
-          results << :error
+          "success"
         end
+        results << result
+      rescue E11y::Reliability::CircuitBreaker::CircuitOpenError
+        results << :circuit_open
+        circuit_opened = true
+      rescue StandardError
+        results << :error
       end
 
       # Circuit should open after threshold failures

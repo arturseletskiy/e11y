@@ -7,7 +7,7 @@ RSpec.describe E11y::Middleware::Versioning do
   let(:middleware) { described_class.new(next_middleware) }
 
   describe "#call" do
-    context "V1 events (no version suffix)" do
+    context "when testing V1 events (no version suffix)" do
       let(:event_data) { { event_name: "Events::OrderPaid", payload: { order_id: "123" } } }
 
       it "does not add v: field for V1 events" do
@@ -21,7 +21,7 @@ RSpec.describe E11y::Middleware::Versioning do
       end
     end
 
-    context "V2 events (with V2 suffix)" do
+    context "when testing V2 events (with V2 suffix)" do
       let(:event_data) { { event_name: "Events::OrderPaidV2", payload: { order_id: "123", currency: "USD" } } }
 
       it "adds v: 2 field" do
@@ -40,7 +40,7 @@ RSpec.describe E11y::Middleware::Versioning do
       end
     end
 
-    context "V3+ events (with V3, V4, etc. suffix)" do
+    context "when testing V3+ events (with V3, V4, etc. suffix)" do
       it "extracts V3 correctly" do
         event_data = { event_name: "Events::OrderPaidV3" }
         result = middleware.call(event_data)
@@ -56,7 +56,7 @@ RSpec.describe E11y::Middleware::Versioning do
       end
     end
 
-    context "Nested namespace events" do
+    context "when testing nested namespace events" do
       it "normalizes nested namespaces" do
         event_data = { event_name: "Events::Payments::OrderPaid" }
         result = middleware.call(event_data)
@@ -71,7 +71,7 @@ RSpec.describe E11y::Middleware::Versioning do
       end
     end
 
-    context "Edge cases" do
+    context "when testing edge cases" do
       it "handles nil event_name" do
         event_data = { event_name: nil }
         result = middleware.call(event_data)

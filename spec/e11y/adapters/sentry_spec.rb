@@ -3,6 +3,8 @@
 require "spec_helper"
 require "time"
 
+# Sentry adapter integration tests require SDK mocking, scope management,
+# and extensive configuration with multiple fixtures.
 # Skip Sentry tests if Sentry SDK not available
 begin
   require "e11y/adapters/sentry"
@@ -67,19 +69,19 @@ RSpec.describe E11y::Adapters::Sentry do
     allow(sentry_config).to receive(:environment=)
     allow(sentry_config).to receive(:breadcrumbs_logger=)
 
-    allow(::Sentry).to receive(:init).and_yield(sentry_config)
-    allow(::Sentry).to receive(:initialized?).and_return(true)
+    allow(Sentry).to receive(:init).and_yield(sentry_config)
+    allow(Sentry).to receive(:initialized?).and_return(true)
 
     # Stub Sentry methods to prevent real calls
-    allow(::Sentry).to receive(:with_scope).and_yield(double(
-                                                         set_tags: nil,
-                                                         set_extras: nil,
-                                                         set_user: nil,
-                                                         set_context: nil
-                                                       ))
-    allow(::Sentry).to receive(:capture_message)
-    allow(::Sentry).to receive(:capture_exception)
-    allow(::Sentry).to receive(:add_breadcrumb)
+    allow(Sentry).to receive(:with_scope).and_yield(double(
+                                                      set_tags: nil,
+                                                      set_extras: nil,
+                                                      set_user: nil,
+                                                      set_context: nil
+                                                    ))
+    allow(Sentry).to receive(:capture_message)
+    allow(Sentry).to receive(:capture_exception)
+    allow(Sentry).to receive(:add_breadcrumb)
   end
 
   describe "ADR-004 compliance" do
@@ -118,7 +120,7 @@ RSpec.describe E11y::Adapters::Sentry do
 
     describe "Section 4.4: Sentry Adapter Specification" do
       it "sends errors to Sentry" do
-        expect(::Sentry).to receive(:capture_message).with(
+        expect(Sentry).to receive(:capture_message).with(
           "Payment processing failed",
           level: :error
         )
@@ -127,7 +129,7 @@ RSpec.describe E11y::Adapters::Sentry do
       end
 
       it "sends breadcrumbs for non-error events" do
-        expect(::Sentry).to receive(:add_breadcrumb) do |breadcrumb|
+        expect(Sentry).to receive(:add_breadcrumb) do |breadcrumb|
           expect(breadcrumb.category).to eq("rate.limit.warning")
           expect(breadcrumb.level).to eq(:warning)
         end
@@ -136,8 +138,8 @@ RSpec.describe E11y::Adapters::Sentry do
       end
 
       it "respects severity threshold" do
-        expect(::Sentry).not_to receive(:add_breadcrumb)
-        expect(::Sentry).not_to receive(:capture_message)
+        expect(Sentry).not_to receive(:add_breadcrumb)
+        expect(Sentry).not_to receive(:capture_message)
 
         # Info is below :warn threshold
         adapter.write(info_event)
@@ -146,15 +148,15 @@ RSpec.describe E11y::Adapters::Sentry do
       it "sets tags on errors" do
         scope = double("Sentry::Scope")
         expect(scope).to receive(:set_tags).with(hash_including(
-                                                    event_name: "payment.failed",
-                                                    severity: "error"
-                                                  ))
+                                                   event_name: "payment.failed",
+                                                   severity: "error"
+                                                 ))
         expect(scope).to receive(:set_extras).with(hash_including(amount: 100))
         expect(scope).to receive(:set_user).with(hash_including(id: 123))
         expect(scope).to receive(:set_context).with("trace", hash_including(trace_id: "trace-123"))
 
-        expect(::Sentry).to receive(:with_scope).and_yield(scope)
-        expect(::Sentry).to receive(:capture_message)
+        allow(Sentry).to receive(:with_scope).and_yield(scope)
+        expect(Sentry).to receive(:capture_message)
 
         adapter.write(error_event)
       end
@@ -163,7 +165,7 @@ RSpec.describe E11y::Adapters::Sentry do
         exception = StandardError.new("Test error")
         event_with_exception = error_event.merge(exception: exception)
 
-        expect(::Sentry).to receive(:capture_exception).with(exception)
+        expect(Sentry).to receive(:capture_exception).with(exception)
 
         adapter.write(event_with_exception)
       end
@@ -233,20 +235,20 @@ RSpec.describe E11y::Adapters::Sentry do
     end
 
     it "sends all events when threshold is :debug" do
-      expect(::Sentry).to receive(:add_breadcrumb)
+      expect(Sentry).to receive(:add_breadcrumb)
 
       debug_adapter.write(info_event)
     end
 
     it "only sends errors when threshold is :error" do
-      expect(::Sentry).not_to receive(:add_breadcrumb)
-      expect(::Sentry).not_to receive(:capture_message)
+      expect(Sentry).not_to receive(:add_breadcrumb)
+      expect(Sentry).not_to receive(:capture_message)
 
       error_adapter.write(warn_event)
     end
 
     it "sends errors when threshold is :error" do
-      expect(::Sentry).to receive(:capture_message)
+      expect(Sentry).to receive(:capture_message)
 
       error_adapter.write(error_event)
     end
@@ -254,8 +256,8 @@ RSpec.describe E11y::Adapters::Sentry do
 
   describe "Breadcrumbs" do
     it "adds breadcrumbs for warn-level events" do
-      expect(::Sentry).to receive(:add_breadcrumb) do |breadcrumb|
-        expect(breadcrumb).to be_a(::Sentry::Breadcrumb)
+      expect(Sentry).to receive(:add_breadcrumb) do |breadcrumb|
+        expect(breadcrumb).to be_a(Sentry::Breadcrumb)
         expect(breadcrumb.category).to eq("rate.limit.warning")
         expect(breadcrumb.message).to eq("Approaching rate limit")
         expect(breadcrumb.level).to eq(:warning)
@@ -270,14 +272,14 @@ RSpec.describe E11y::Adapters::Sentry do
         breadcrumbs: false
       )
 
-      expect(::Sentry).not_to receive(:add_breadcrumb)
+      expect(Sentry).not_to receive(:add_breadcrumb)
 
       no_breadcrumbs.write(warn_event)
     end
 
     it "does not add breadcrumbs for error events" do
-      expect(::Sentry).not_to receive(:add_breadcrumb)
-      expect(::Sentry).to receive(:capture_message)
+      expect(Sentry).not_to receive(:add_breadcrumb)
+      expect(Sentry).to receive(:capture_message)
 
       adapter.write(error_event)
     end
@@ -285,7 +287,7 @@ RSpec.describe E11y::Adapters::Sentry do
 
   describe "Error reporting" do
     it "captures error messages" do
-      expect(::Sentry).to receive(:capture_message).with(
+      expect(Sentry).to receive(:capture_message).with(
         "Payment processing failed",
         level: :error
       )
@@ -296,7 +298,7 @@ RSpec.describe E11y::Adapters::Sentry do
     it "captures fatal messages" do
       fatal_event = error_event.merge(severity: :fatal)
 
-      expect(::Sentry).to receive(:capture_message).with(
+      expect(Sentry).to receive(:capture_message).with(
         "Payment processing failed",
         level: :fatal
       )
@@ -308,7 +310,7 @@ RSpec.describe E11y::Adapters::Sentry do
       event_without_message = error_event.dup
       event_without_message.delete(:message)
 
-      expect(::Sentry).to receive(:capture_message).with(
+      expect(Sentry).to receive(:capture_message).with(
         "payment.failed",
         level: :error
       )
@@ -323,8 +325,8 @@ RSpec.describe E11y::Adapters::Sentry do
       allow(scope).to receive(:set_user)
       allow(scope).to receive(:set_context)
 
-      expect(::Sentry).to receive(:with_scope).and_yield(scope)
-      expect(::Sentry).to receive(:capture_message)
+      allow(Sentry).to receive(:with_scope).and_yield(scope)
+      expect(Sentry).to receive(:capture_message)
 
       adapter.write(error_event)
     end
@@ -336,8 +338,8 @@ RSpec.describe E11y::Adapters::Sentry do
       allow(scope).to receive(:set_extras)
       allow(scope).to receive(:set_context)
 
-      expect(::Sentry).to receive(:with_scope).and_yield(scope)
-      expect(::Sentry).to receive(:capture_message)
+      allow(Sentry).to receive(:with_scope).and_yield(scope)
+      expect(Sentry).to receive(:capture_message)
 
       adapter.write(error_event)
     end
@@ -352,8 +354,8 @@ RSpec.describe E11y::Adapters::Sentry do
       allow(scope).to receive(:set_extras)
       allow(scope).to receive(:set_user)
 
-      expect(::Sentry).to receive(:with_scope).and_yield(scope)
-      expect(::Sentry).to receive(:capture_message)
+      allow(Sentry).to receive(:with_scope).and_yield(scope)
+      expect(Sentry).to receive(:capture_message)
 
       adapter.write(error_event)
     end
@@ -378,7 +380,7 @@ RSpec.describe E11y::Adapters::Sentry do
 
   describe "Error handling" do
     it "returns false on Sentry error" do
-      allow(::Sentry).to receive(:capture_message).and_raise(StandardError.new("Sentry error"))
+      allow(Sentry).to receive(:capture_message).and_raise(StandardError.new("Sentry error"))
 
       result = adapter.write(error_event)
 
@@ -386,7 +388,7 @@ RSpec.describe E11y::Adapters::Sentry do
     end
 
     it "does not raise on Sentry error" do
-      allow(::Sentry).to receive(:capture_message).and_raise(StandardError.new("Sentry error"))
+      allow(Sentry).to receive(:capture_message).and_raise(StandardError.new("Sentry error"))
 
       expect { adapter.write(error_event) }.not_to raise_error
     end
@@ -395,7 +397,7 @@ RSpec.describe E11y::Adapters::Sentry do
   describe "Severity mapping" do
     it "maps debug to :debug" do
       event = info_event.merge(severity: :debug)
-      allow(::Sentry).to receive(:add_breadcrumb) do |breadcrumb|
+      allow(Sentry).to receive(:add_breadcrumb) do |breadcrumb|
         expect(breadcrumb.level).to eq(:debug)
       end
 
@@ -404,7 +406,7 @@ RSpec.describe E11y::Adapters::Sentry do
 
     it "maps info to :info" do
       event = info_event.merge(severity: :info)
-      allow(::Sentry).to receive(:add_breadcrumb) do |breadcrumb|
+      allow(Sentry).to receive(:add_breadcrumb) do |breadcrumb|
         expect(breadcrumb.level).to eq(:info)
       end
 
@@ -413,7 +415,7 @@ RSpec.describe E11y::Adapters::Sentry do
 
     it "maps success to :info" do
       event = info_event.merge(severity: :success)
-      allow(::Sentry).to receive(:add_breadcrumb) do |breadcrumb|
+      allow(Sentry).to receive(:add_breadcrumb) do |breadcrumb|
         expect(breadcrumb.level).to eq(:info)
       end
 
@@ -421,7 +423,7 @@ RSpec.describe E11y::Adapters::Sentry do
     end
 
     it "maps warn to :warning" do
-      allow(::Sentry).to receive(:add_breadcrumb) do |breadcrumb|
+      allow(Sentry).to receive(:add_breadcrumb) do |breadcrumb|
         expect(breadcrumb.level).to eq(:warning)
       end
 
@@ -429,7 +431,7 @@ RSpec.describe E11y::Adapters::Sentry do
     end
 
     it "maps error to :error" do
-      expect(::Sentry).to receive(:capture_message).with(anything, level: :error)
+      expect(Sentry).to receive(:capture_message).with(anything, level: :error)
 
       adapter.write(error_event)
     end
@@ -437,7 +439,7 @@ RSpec.describe E11y::Adapters::Sentry do
     it "maps fatal to :fatal" do
       fatal_event = error_event.merge(severity: :fatal)
 
-      expect(::Sentry).to receive(:capture_message).with(anything, level: :fatal)
+      expect(Sentry).to receive(:capture_message).with(anything, level: :fatal)
 
       adapter.write(fatal_event)
     end

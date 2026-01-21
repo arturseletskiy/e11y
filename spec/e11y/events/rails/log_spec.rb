@@ -81,11 +81,11 @@ RSpec.describe E11y::Events::Rails::Log do
 
   describe "inheritance" do
     it "all severity classes inherit from Log" do
-      expect(E11y::Events::Rails::Log::Debug.superclass).to eq(E11y::Events::Rails::Log)
-      expect(E11y::Events::Rails::Log::Info.superclass).to eq(E11y::Events::Rails::Log)
-      expect(E11y::Events::Rails::Log::Warn.superclass).to eq(E11y::Events::Rails::Log)
-      expect(E11y::Events::Rails::Log::Error.superclass).to eq(E11y::Events::Rails::Log)
-      expect(E11y::Events::Rails::Log::Fatal.superclass).to eq(E11y::Events::Rails::Log)
+      expect(E11y::Events::Rails::Log::Debug.superclass).to eq(described_class)
+      expect(E11y::Events::Rails::Log::Info.superclass).to eq(described_class)
+      expect(E11y::Events::Rails::Log::Warn.superclass).to eq(described_class)
+      expect(E11y::Events::Rails::Log::Error.superclass).to eq(described_class)
+      expect(E11y::Events::Rails::Log::Fatal.superclass).to eq(described_class)
     end
   end
 end

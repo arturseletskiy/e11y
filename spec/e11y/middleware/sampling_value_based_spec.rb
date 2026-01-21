@@ -3,6 +3,8 @@
 require "spec_helper"
 require "e11y/middleware/sampling"
 
+# rubocop:disable RSpec/FilePath, RSpec/SpecFilePathFormat, RSpec/DescribeMethod
+# Feature test suite grouped by functionality, not class structure.
 RSpec.describe E11y::Middleware::Sampling, "Value-Based Sampling (FEAT-4849)" do
   let(:app) { ->(event_data) { event_data } }
   let(:middleware) do
@@ -178,3 +180,4 @@ RSpec.describe E11y::Middleware::Sampling, "Value-Based Sampling (FEAT-4849)" do
     end
   end
 end
+# rubocop:enable RSpec/FilePath, RSpec/SpecFilePathFormat, RSpec/DescribeMethod

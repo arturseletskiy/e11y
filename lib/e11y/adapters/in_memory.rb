@@ -80,6 +80,8 @@ module E11y
       #
       # @param event_data [Hash] Event payload
       # @return [Boolean] true on success
+      # rubocop:disable Naming/PredicateMethod
+      # This is an action method (write event), not a predicate (is written?)
       def write(event_data)
         @mutex.synchronize do
           @events << event_data
@@ -87,11 +89,14 @@ module E11y
         end
         true
       end
+      # rubocop:enable Naming/PredicateMethod
 
       # Write batch of events to memory
       #
       # @param events [Array<Hash>] Array of event payloads
       # @return [Boolean] true on success
+      # rubocop:disable Naming/PredicateMethod
+      # This is an action method (write batch), not a predicate (is written?)
       def write_batch(events)
         @mutex.synchronize do
           @events.concat(events)
@@ -100,6 +105,7 @@ module E11y
         end
         true
       end
+      # rubocop:enable Naming/PredicateMethod
 
       # Clear all stored events and batches
       #

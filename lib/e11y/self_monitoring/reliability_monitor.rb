@@ -131,6 +131,8 @@ module E11y
       # @param state [String] Circuit state
       # @return [Integer] Numeric representation (0=closed, 1=half_open, 2=open)
       # @api private
+      # rubocop:disable Lint/DuplicateBranch
+      # Unknown states intentionally fallback to closed (0), same as "closed"
       def self.state_to_value(state)
         case state
         when "closed" then 0
@@ -139,6 +141,7 @@ module E11y
         else 0
         end
       end
+      # rubocop:enable Lint/DuplicateBranch
 
       private_class_method :state_to_value
     end

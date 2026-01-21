@@ -122,7 +122,7 @@ RSpec.describe E11y::Sampling::ValueExtractor do
       end
     end
 
-    context "ADR-009 §3.4 compliance" do
+    context "when testing ADR-009 §3.4 compliance" do
       it "extracts monetary amounts for value-based sampling" do
         payment_event = { payment: { amount: 1500, currency: "USD" } }
         expect(extractor.extract(payment_event, "payment.amount")).to eq(1500.0)
@@ -134,7 +134,7 @@ RSpec.describe E11y::Sampling::ValueExtractor do
       end
     end
 
-    context "UC-014 examples" do
+    context "when testing UC-014 examples" do
       it "supports e-commerce transaction amounts" do
         order_event = { order: { total: 2500 } }
         expect(extractor.extract(order_event, "order.total")).to eq(2500.0)

@@ -2,6 +2,8 @@
 
 require "spec_helper"
 
+# rubocop:disable RSpec/FilePath, RSpec/SpecFilePathFormat
+# Organized under configuration/ directory for logical grouping.
 RSpec.describe E11y::ErrorHandlingConfig do
   let(:config) { described_class.new }
 
@@ -33,6 +35,8 @@ RSpec.describe E11y::ErrorHandlingConfig do
     context "when fail_on_error = false (background jobs)" do
       before { config.fail_on_error = false }
 
+      # rubocop:disable RSpec/RepeatedExample
+      # Documenting different aspects of same configuration (context and behavior)
       it "represents background job context (don't fail business logic)" do
         expect(config.fail_on_error).to be false
       end
@@ -42,6 +46,8 @@ RSpec.describe E11y::ErrorHandlingConfig do
         # In background jobs, E11y errors should NOT raise exceptions
         expect(config.fail_on_error).to be false
       end
+      # rubocop:enable RSpec/RepeatedExample
     end
   end
 end
+# rubocop:enable RSpec/FilePath, RSpec/SpecFilePathFormat

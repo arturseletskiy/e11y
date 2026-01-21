@@ -18,6 +18,8 @@ module E11y
       #
       # @see ADR-013 §4 (Dead Letter Queue)
       # @see UC-021 §3 (DLQ File Storage)
+      # rubocop:disable Metrics/ClassLength
+      # DLQ file storage is a cohesive unit handling event persistence, rotation, and querying
       class FileStorage
         # @param file_path [String] Path to DLQ file (default: log/e11y_dlq.jsonl)
         # @param max_file_size_mb [Integer] Maximum file size in MB before rotation (default: 100)
@@ -36,6 +38,8 @@ module E11y
         # @param event_data [Hash] Event data
         # @param metadata [Hash] Failure metadata (error, retry_count, adapter, etc.)
         # @return [String] Event ID (UUID)
+        # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+        # DLQ save requires building entry, writing, rotation, cleanup, and metrics
         def save(event_data, metadata: {})
           event_id = SecureRandom.uuid
           timestamp = Time.now.utc
@@ -61,6 +65,7 @@ module E11y
 
           event_id
         end
+        # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
         # List DLQ entries with optional filters.
         #
@@ -68,6 +73,8 @@ module E11y
         # @param offset [Integer] Number of entries to skip
         # @param filters [Hash] Filter options (event_name, after, before)
         # @return [Array<Hash>] Array of DLQ entries
+        # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+        # DLQ listing requires file iteration, pagination, multiple filters, and error handling
         def list(limit: 100, offset: 0, filters: {})
           entries = []
 
@@ -93,10 +100,13 @@ module E11y
           increment_metric("e11y.dlq.parse_error", error: e.class.name)
           entries
         end
+        # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
         # Get DLQ statistics.
         #
         # @return [Hash] Statistics (total_entries, file_size_mb, oldest_entry, newest_entry)
+        # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+        # DLQ stats requires reading file size, counting entries, extracting timestamps, and error handling
         def stats
           return default_stats unless File.exist?(@file_path)
 
@@ -124,6 +134,7 @@ module E11y
           increment_metric("e11y.dlq.stats_error", error: e.class.name)
           default_stats
         end
+        # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
         # Replay single event from DLQ.
         #
@@ -171,12 +182,15 @@ module E11y
         #
         # @param event_id [String] Event ID to delete
         # @return [Boolean] true if deleted
+        # rubocop:disable Naming/PredicateMethod
+        # delete is an action method returning boolean status, not a predicate query
         def delete(_event_id)
           # TODO: Implement deletion (requires rewriting file)
           # For JSONL, deletion is expensive (requires full file rewrite)
           # Consider marking as deleted instead or using database
           false
         end
+        # rubocop:enable Naming/PredicateMethod
 
         private
 
@@ -272,6 +286,7 @@ module E11y
           # E11y::Metrics.increment(metric_name, tags)
         end
       end
+      # rubocop:enable Metrics/ClassLength
     end
   end
 end

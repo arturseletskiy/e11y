@@ -47,6 +47,8 @@ module E11y
     #   end
     #
     # @see ADR-004 Section 3.1 (Base Adapter Contract)
+    # rubocop:disable Metrics/ClassLength
+    # Base adapter is a foundational class with core adapter functionality
     class Base
       attr_reader :config
 
@@ -103,6 +105,8 @@ module E11y
       # @param event_data [Hash] Event payload
       # @return [Boolean] true on success
       # @raise [RetryExhaustedError, CircuitOpenError] if fail_on_error=true
+      # rubocop:disable Metrics/MethodLength
+      # Core reliability logic with retry and circuit breaker - should stay as cohesive unit
       def write_with_reliability(event_data)
         return write(event_data) unless @reliability_enabled
 
@@ -125,6 +129,7 @@ module E11y
           handle_reliability_error(event_data, e, :circuit_open)
         end
       end
+      # rubocop:enable Metrics/MethodLength
 
       # Write a batch of events (preferred for performance)
       #
@@ -301,6 +306,8 @@ module E11y
       #   def retriable_error?(error)
       #     super || error.is_a?(CustomTransientError)
       #   end
+      # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # This method checks many different error types for retryability - splitting would reduce clarity
       def retriable_error?(error)
         # Network timeout errors
         return true if error.is_a?(Timeout::Error)
@@ -327,6 +334,7 @@ module E11y
 
         false
       end
+      # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
 
       # Calculate exponential backoff delay with jitter
       #
@@ -373,6 +381,8 @@ module E11y
       #   end
       #
       # @see ADR-004 Section 7.2 (Circuit Breaker)
+      # rubocop:disable Metrics/MethodLength
+      # Circuit breaker state machine logic should stay as cohesive unit
       def with_circuit_breaker(failure_threshold: 5, timeout: 60)
         init_circuit_breaker! unless @circuit_state
 
@@ -397,6 +407,7 @@ module E11y
           raise
         end
       end
+      # rubocop:enable Metrics/MethodLength
 
       # Initialize circuit breaker state
       #
@@ -487,6 +498,8 @@ module E11y
       # @raise [StandardError] Re-raises if fail_on_error=true
       #
       # @api private
+      # rubocop:disable Naming/PredicateMethod
+      # This is an action method (handle error), not a predicate (is error handled?)
       def handle_reliability_error(event_data, error, reason)
         # Save to DLQ if filter allows
         save_to_dlq_if_needed(event_data, error, reason)
@@ -503,6 +516,7 @@ module E11y
         # TODO: Track metric e11y.event.tracking_failed_silent
         false
       end
+      # rubocop:enable Naming/PredicateMethod
 
       # Save event to DLQ if filter allows.
       #
@@ -573,6 +587,7 @@ module E11y
         warn "[E11y] Self-monitoring error: #{e.message}"
       end
     end
+    # rubocop:enable Metrics/ClassLength
 
     # Circuit breaker open error
     class CircuitOpenError < Error; end

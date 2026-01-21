@@ -36,6 +36,8 @@ module E11y
     #
     # @see ADR-002 §4 (Cardinality Protection)
     # @see UC-013 (High Cardinality Protection)
+    # rubocop:disable Metrics/ClassLength
+    # Cardinality protection is a cohesive 4-layer defense system against metric explosions
     class CardinalityProtection
       # Universal denylist - high-cardinality fields that should NEVER be labels
       UNIVERSAL_DENYLIST = %i[
@@ -83,6 +85,8 @@ module E11y
       # @option config [Float] :alert_threshold (0.8) Alert when cardinality reaches this ratio
       # @option config [Proc] :alert_callback Optional callback when alert triggered
       # @option config [Boolean] :auto_relabel (false) Auto-relabel to [OTHER] on overflow
+      # rubocop:disable Metrics/AbcSize
+      # Cardinality protection initialization requires extracting multiple config options and setting up components
       def initialize(config = {})
         @cardinality_limit = config.fetch(:cardinality_limit, DEFAULT_CARDINALITY_LIMIT)
         @enabled = config.fetch(:enabled, true)
@@ -105,6 +109,7 @@ module E11y
         @overflow_counts = Hash.new(0)
         @overflow_mutex = Mutex.new
       end
+      # rubocop:enable Metrics/AbcSize
 
       # Define relabeling rule for a label
       #
@@ -201,11 +206,11 @@ module E11y
                 "Must be one of: #{OVERFLOW_STRATEGIES.join(', ')}"
         end
 
-        unless @alert_threshold.is_a?(Numeric) && @alert_threshold.positive? && @alert_threshold <= 1.0
-          raise ArgumentError,
-                "Invalid alert_threshold: #{@alert_threshold}. " \
-                "Must be a number between 0 and 1.0"
-        end
+        return if @alert_threshold.is_a?(Numeric) && @alert_threshold.positive? && @alert_threshold <= 1.0
+
+        raise ArgumentError,
+              "Invalid alert_threshold: #{@alert_threshold}. " \
+              "Must be a number between 0 and 1.0"
       end
 
       # Check if label should be denied (Layer 1: Denylist)
@@ -217,6 +222,8 @@ module E11y
 
       # Check if approaching alert threshold (Layer 3: Monitoring)
       # @param metric_name [String] Metric name
+      # rubocop:disable Metrics/MethodLength
+      # Alert threshold checking requires calculating ratio, checking conditions, and sending detailed alerts
       def check_alert_threshold(metric_name)
         return unless @alert_threshold
 
@@ -245,6 +252,7 @@ module E11y
         # Track metric
         track_cardinality_metric(metric_name, :threshold_exceeded, current_cardinality)
       end
+      # rubocop:enable Metrics/MethodLength
 
       # Handle overflow when cardinality limit exceeded (Layer 4: Dynamic Actions)
       # @param metric_name [String] Metric name
@@ -278,11 +286,11 @@ module E11y
       def handle_drop(metric_name, key, value)
         # Silent drop (most efficient)
         # Optionally log at debug level
-        if defined?(Rails) && Rails.logger.debug?
-          Rails.logger.debug(
-            "[E11y] Cardinality limit exceeded: #{metric_name}:#{key}=#{value} (dropped)"
-          )
-        end
+        return unless defined?(Rails) && Rails.logger.debug?
+
+        Rails.logger.debug(
+          "[E11y] Cardinality limit exceeded: #{metric_name}:#{key}=#{value} (dropped)"
+        )
       end
 
       # Handle alert strategy - alert ops team and drop
@@ -324,12 +332,12 @@ module E11y
         # Add [OTHER] to safe_labels
         safe_labels[key] = other_value
 
-        if defined?(Rails) && Rails.logger.debug?
-          Rails.logger.debug(
-            "[E11y] Cardinality limit exceeded: #{metric_name}:#{key}=#{value} " \
-            "(relabeled to [OTHER])"
-          )
-        end
+        return unless defined?(Rails) && Rails.logger.debug?
+
+        Rails.logger.debug(
+          "[E11y] Cardinality limit exceeded: #{metric_name}:#{key}=#{value} " \
+          "(relabeled to [OTHER])"
+        )
       end
 
       # Send alert to configured destinations
@@ -377,6 +385,8 @@ module E11y
       # @param metric_name [String] Metric name
       # @param action [Symbol] Action type (:threshold_exceeded, :drop, :alert, :relabel)
       # @param value [Integer] Metric value
+      # rubocop:disable Metrics/MethodLength
+      # Cardinality tracking requires incrementing overflow counters and updating gauge metrics
       def track_cardinality_metric(metric_name, action, value)
         return unless defined?(E11y::Metrics)
 
@@ -400,6 +410,8 @@ module E11y
         # Don't fail on metrics tracking errors
         warn "E11y: Failed to track cardinality metric: #{e.message}"
       end
+      # rubocop:enable Metrics/MethodLength
     end
+    # rubocop:enable Metrics/ClassLength
   end
 end

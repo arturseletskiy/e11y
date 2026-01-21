@@ -65,7 +65,7 @@ module E11y
       # @param e11y_event_class_name [String] E11y event class name
       # @return [void]
       def self.subscribe_to_event(asn_pattern, e11y_event_class_name)
-        ActiveSupport::Notifications.subscribe(asn_pattern) do |name, start, finish, id, payload|
+        ActiveSupport::Notifications.subscribe(asn_pattern) do |name, start, finish, _id, payload|
           # Convert ASN event → E11y event
           duration = (finish - start) * 1000 # Convert to milliseconds
 

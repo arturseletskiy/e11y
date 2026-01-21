@@ -229,58 +229,58 @@ module E11y
           resolved_severity
         end
 
-      # Set or get event version
-      #
-      # @param value [Integer, nil] Event version
-      # @return [Integer] Current version (default: 1)
-      #
-      # @example
-      #   class OrderPaidEventV2 < E11y::Event::Base
-      #     version 2
-      #   end
-      def version(value = nil)
-        @version = value if value
-        # Return explicitly set version OR inherit from parent (if set) OR default to 1
-        return @version if @version
-        return superclass.version if superclass != E11y::Event::Base && superclass.instance_variable_get(:@version)
+        # Set or get event version
+        #
+        # @param value [Integer, nil] Event version
+        # @return [Integer] Current version (default: 1)
+        #
+        # @example
+        #   class OrderPaidEventV2 < E11y::Event::Base
+        #     version 2
+        #   end
+        def version(value = nil)
+          @version = value if value
+          # Return explicitly set version OR inherit from parent (if set) OR default to 1
+          return @version if @version
+          return superclass.version if superclass != E11y::Event::Base && superclass.instance_variable_get(:@version)
 
-        1
-      end
-
-      # Set or get retention period for this event
-      #
-      # Retention period determines how long events should be kept in storage.
-      # Used by routing middleware to select appropriate adapters (hot/warm/cold storage).
-      #
-      # @param value [ActiveSupport::Duration, nil] Retention period (e.g., 30.days, 7.years)
-      # @return [ActiveSupport::Duration] Current retention period
-      #
-      # @example Short retention (debug logs)
-      #   class DebugEvent < E11y::Event::Base
-      #     retention_period 7.days
-      #   end
-      #
-      # @example Long retention (audit events)
-      #   class UserDeletedEvent < E11y::Event::Base
-      #     audit_event true
-      #     retention_period 7.years  # GDPR compliance
-      #   end
-      #
-      # @example Default retention (from config)
-      #   class OrderEvent < E11y::Event::Base
-      #     # No retention_period specified → uses config default (30 days)
-      #   end
-      def retention_period(value = nil)
-        @retention_period = value if value
-        # Return explicitly set retention_period OR inherit from parent (if set) OR config default OR final fallback
-        return @retention_period if @retention_period
-        if superclass != E11y::Event::Base && superclass.instance_variable_get(:@retention_period)
-          return superclass.retention_period
+          1
         end
 
-        # Fallback to configuration or 30 days
-        E11y.configuration&.default_retention_period || 30.days
-      end
+        # Set or get retention period for this event
+        #
+        # Retention period determines how long events should be kept in storage.
+        # Used by routing middleware to select appropriate adapters (hot/warm/cold storage).
+        #
+        # @param value [ActiveSupport::Duration, nil] Retention period (e.g., 30.days, 7.years)
+        # @return [ActiveSupport::Duration] Current retention period
+        #
+        # @example Short retention (debug logs)
+        #   class DebugEvent < E11y::Event::Base
+        #     retention_period 7.days
+        #   end
+        #
+        # @example Long retention (audit events)
+        #   class UserDeletedEvent < E11y::Event::Base
+        #     audit_event true
+        #     retention_period 7.years  # GDPR compliance
+        #   end
+        #
+        # @example Default retention (from config)
+        #   class OrderEvent < E11y::Event::Base
+        #     # No retention_period specified → uses config default (30 days)
+        #   end
+        def retention_period(value = nil)
+          @retention_period = value if value
+          # Return explicitly set retention_period OR inherit from parent (if set) OR config default OR final fallback
+          return @retention_period if @retention_period
+          if superclass != E11y::Event::Base && superclass.instance_variable_get(:@retention_period)
+            return superclass.retention_period
+          end
+
+          # Fallback to configuration or 30 days
+          E11y.configuration&.default_retention_period || 30.days
+        end
 
         # Set or get adapters for this event
         #

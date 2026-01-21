@@ -195,7 +195,7 @@ RSpec.describe E11y::Reliability::DLQ::Filter do
   end
 
   describe "real-world scenarios" do
-    context "production configuration" do
+    context "with production configuration" do
       let(:prod_filter) do
         described_class.new(
           always_save_patterns: [
@@ -245,7 +245,7 @@ RSpec.describe E11y::Reliability::DLQ::Filter do
       end
     end
 
-    context "development configuration" do
+    context "with development configuration" do
       let(:dev_filter) do
         described_class.new(
           always_save_patterns: [],

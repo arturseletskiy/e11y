@@ -47,11 +47,13 @@ RSpec.describe E11y::Adapters::Registry do
     end
 
     it "registers cleanup hook for adapter" do
-      expect(test_adapter).to receive(:close).at_least(:once)
+      allow(test_adapter).to receive(:close)
       described_class.register(:test, test_adapter)
 
       # Manually trigger cleanup (normally at_exit would handle this)
       described_class.clear!
+
+      expect(test_adapter).to have_received(:close).at_least(:once)
     end
 
     it "allows registering multiple adapters" do
@@ -94,13 +96,13 @@ RSpec.describe E11y::Adapters::Registry do
     end
 
     it "resolves multiple adapters by names" do
-      adapters = described_class.resolve_all([:test1, :test2])
+      adapters = described_class.resolve_all(%i[test1 test2])
       expect(adapters).to eq([test_adapter, another_adapter])
     end
 
     it "raises error if any adapter not found" do
       expect do
-        described_class.resolve_all([:test1, :nonexistent])
+        described_class.resolve_all(%i[test1 nonexistent])
       end.to raise_error(E11y::Adapters::Registry::AdapterNotFoundError)
     end
 
@@ -134,7 +136,7 @@ RSpec.describe E11y::Adapters::Registry do
       described_class.register(:test1, test_adapter)
       described_class.register(:test2, another_adapter)
 
-      expect(described_class.names).to match_array([:test1, :test2])
+      expect(described_class.names).to match_array(%i[test1 test2])
     end
   end
 
@@ -164,10 +166,13 @@ RSpec.describe E11y::Adapters::Registry do
     end
 
     it "calls close on all adapters" do
-      expect(test_adapter).to receive(:close)
-      expect(another_adapter).to receive(:close)
+      allow(test_adapter).to receive(:close)
+      allow(another_adapter).to receive(:close)
 
       described_class.clear!
+
+      expect(test_adapter).to have_received(:close)
+      expect(another_adapter).to have_received(:close)
     end
 
     it "can register adapters again after clear" do
@@ -183,7 +188,7 @@ RSpec.describe E11y::Adapters::Registry do
       threads = 10.times.map do |i|
         Thread.new do
           adapter = E11y::Adapters::InMemory.new
-          described_class.register("adapter_#{i}".to_sym, adapter)
+          described_class.register(:"adapter_#{i}", adapter)
         end
       end
 

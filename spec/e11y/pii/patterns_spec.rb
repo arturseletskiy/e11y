@@ -66,7 +66,7 @@ RSpec.describe E11y::PII::Patterns do
   end
 
   describe ".contains_pii?" do
-    context "EMAIL pattern" do
+    context "when testing EMAIL pattern" do
       it "detects valid emails" do
         expect(described_class.contains_pii?("user@example.com")).to be true
         expect(described_class.contains_pii?("contact.me@domain.co.uk")).to be true
@@ -79,7 +79,7 @@ RSpec.describe E11y::PII::Patterns do
       end
     end
 
-    context "SSN pattern" do
+    context "when testing SSN pattern" do
       it "detects US SSN format" do
         expect(described_class.contains_pii?("123-45-6789")).to be true
         expect(described_class.contains_pii?("987-65-4321")).to be true
@@ -91,7 +91,7 @@ RSpec.describe E11y::PII::Patterns do
       end
     end
 
-    context "CREDIT_CARD pattern" do
+    context "when testing CREDIT_CARD pattern" do
       it "detects credit card formats" do
         expect(described_class.contains_pii?("4111 1111 1111 1111")).to be true
         expect(described_class.contains_pii?("4111-1111-1111-1111")).to be true
@@ -103,7 +103,7 @@ RSpec.describe E11y::PII::Patterns do
       end
     end
 
-    context "IPV4 pattern" do
+    context "when testing IPV4 pattern" do
       it "detects IP addresses" do
         expect(described_class.contains_pii?("192.168.1.1")).to be true
         expect(described_class.contains_pii?("10.0.0.1")).to be true
@@ -116,7 +116,7 @@ RSpec.describe E11y::PII::Patterns do
       end
     end
 
-    context "PHONE pattern" do
+    context "when testing PHONE pattern" do
       it "detects phone numbers" do
         expect(described_class.contains_pii?("555-123-4567")).to be true
         expect(described_class.contains_pii?("(555) 123-4567")).to be true
@@ -128,7 +128,7 @@ RSpec.describe E11y::PII::Patterns do
       end
     end
 
-    context "Non-PII content" do
+    context "when testing non-PII content" do
       it "returns false for safe strings" do
         expect(described_class.contains_pii?("Hello, world!")).to be false
         expect(described_class.contains_pii?("Order ID: 12345")).to be false
@@ -136,7 +136,7 @@ RSpec.describe E11y::PII::Patterns do
       end
     end
 
-    context "Mixed content" do
+    context "when testing mixed content" do
       it "detects PII in mixed content" do
         expect(described_class.contains_pii?("Contact: user@example.com")).to be true
         expect(described_class.contains_pii?("SSN is 123-45-6789")).to be true
@@ -144,10 +144,10 @@ RSpec.describe E11y::PII::Patterns do
       end
     end
 
-    context "Non-string types" do
+    context "when testing non-string types" do
       it "returns false for non-strings" do
         expect(described_class.contains_pii?(nil)).to be false
-        expect(described_class.contains_pii?(12345)).to be false
+        expect(described_class.contains_pii?(12_345)).to be false
         expect(described_class.contains_pii?({ email: "test@example.com" })).to be false
       end
     end
@@ -161,10 +161,10 @@ RSpec.describe E11y::PII::Patterns do
           "contact+tag@domain.co.uk",
           "first.last@company.org"
         ],
-        ssns: [
-          "123-45-6789",
-          "987-65-4321",
-          "111-22-3333"
+        ssns: %w[
+          123-45-6789
+          987-65-4321
+          111-22-3333
         ],
         credit_cards: [
           "4111 1111 1111 1111",

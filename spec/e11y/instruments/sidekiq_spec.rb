@@ -10,7 +10,7 @@ RSpec.describe E11y::Instruments::Sidekiq do
     describe "C17 Hybrid Tracing: Propagate parent trace context" do
       it "injects parent_trace_id from E11y::Current.trace_id" do
         E11y::Current.trace_id = "trace123"
-        middleware.call(nil, job, nil, nil) {}
+        middleware.call(nil, job, nil, nil) {} # rubocop:todo Lint/EmptyBlock
         # C17: Propagates current trace_id as PARENT for the job
         expect(job["e11y_parent_trace_id"]).to eq("trace123")
       ensure
@@ -19,7 +19,7 @@ RSpec.describe E11y::Instruments::Sidekiq do
 
       it "injects parent_span_id from E11y::Current.span_id" do
         E11y::Current.span_id = "span123"
-        middleware.call(nil, job, nil, nil) {}
+        middleware.call(nil, job, nil, nil) {} # rubocop:todo Lint/EmptyBlock
         # C17: Propagates current span_id as PARENT for the job
         expect(job["e11y_parent_span_id"]).to eq("span123")
       ensure
@@ -27,7 +27,7 @@ RSpec.describe E11y::Instruments::Sidekiq do
       end
 
       it "does not inject metadata if E11y::Current is empty" do
-        middleware.call(nil, job, nil, nil) {}
+        middleware.call(nil, job, nil, nil) {} # rubocop:todo Lint/EmptyBlock
         expect(job).not_to have_key("e11y_parent_trace_id")
         expect(job).not_to have_key("e11y_parent_span_id")
       end
@@ -36,7 +36,7 @@ RSpec.describe E11y::Instruments::Sidekiq do
         # C17 Hybrid Tracing: Job creates NEW trace_id, but preserves parent link
         E11y::Current.trace_id = "parent_trace_from_request"
 
-        middleware.call(nil, job, nil, nil) {}
+        middleware.call(nil, job, nil, nil) {} # rubocop:todo Lint/EmptyBlock
 
         # Parent trace is propagated (job will know its origin)
         expect(job["e11y_parent_trace_id"]).to eq("parent_trace_from_request")
@@ -121,7 +121,7 @@ RSpec.describe E11y::Instruments::Sidekiq do
         E11y.config.error_handling.fail_on_error = true
         expect(E11y.config.error_handling.fail_on_error).to be true
 
-        middleware.call(worker, job, queue) {}
+        middleware.call(worker, job, queue) {} # rubocop:todo Lint/EmptyBlock
 
         expect(E11y.config.error_handling.fail_on_error).to be true
       end
@@ -192,7 +192,7 @@ RSpec.describe E11y::Instruments::Sidekiq do
 
         # Job should succeed despite E11y buffer failure
         expect do
-          middleware.call(worker, job, queue) {}
+          middleware.call(worker, job, queue) {} # rubocop:todo Lint/EmptyBlock
         end.not_to raise_error
       end
 
@@ -201,7 +201,7 @@ RSpec.describe E11y::Instruments::Sidekiq do
 
         # Job should succeed despite E11y flush failure
         expect do
-          middleware.call(worker, job, queue) {}
+          middleware.call(worker, job, queue) {} # rubocop:todo Lint/EmptyBlock
         end.not_to raise_error
       end
 
@@ -218,7 +218,7 @@ RSpec.describe E11y::Instruments::Sidekiq do
 
         # Job should succeed despite E11y reset failure
         expect do
-          middleware.call(worker, job, queue) {}
+          middleware.call(worker, job, queue) {} # rubocop:todo Lint/EmptyBlock
         end.not_to raise_error
       end
     end

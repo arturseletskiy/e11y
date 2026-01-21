@@ -2,6 +2,8 @@
 
 require "spec_helper"
 
+# rubocop:disable RSpec/DescribeClass
+# Feature test for Metrics DSL functionality, not testing a specific class
 RSpec.describe "E11y::Event::Base Metrics DSL" do
   let(:registry) { E11y::Metrics::Registry.instance }
 
@@ -153,6 +155,8 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
   end
 
   describe "metric inheritance" do
+    # rubocop:disable RSpec/ExampleLength
+    # Integration test for inheritance requires full class hierarchy setup
     it "inherits metrics from base class" do
       base_class = Class.new(E11y::Event::Base) do
         def self.name
@@ -185,6 +189,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
       expect(base_metrics.map { |m| m[:name] }).to include(:orders_total)
       expect(child_metrics.map { |m| m[:name] }).to include(:order_amount)
     end
+    # rubocop:enable RSpec/ExampleLength
   end
 
   describe "validation on registration" do
@@ -289,7 +294,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
   end
 
   describe "real-world usage examples" do
-    context "e-commerce order events" do
+    context "when testing e-commerce order events" do
       before do
         # Base order event with shared metric
         @base_order_event = Class.new(E11y::Event::Base) do
@@ -346,7 +351,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
       end
     end
 
-    context "queue monitoring" do
+    context "when testing queue monitoring" do
       before do
         @queue_event = Class.new(E11y::Event::Base) do
           def self.name
@@ -368,3 +373,4 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
     end
   end
 end
+# rubocop:enable RSpec/DescribeClass

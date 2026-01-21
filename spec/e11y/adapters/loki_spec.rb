@@ -3,6 +3,8 @@
 require "spec_helper"
 require "time"
 
+# Loki adapter integration tests require HTTP mocking, batch processing,
+# and extensive configuration with multiple fixtures.
 # Skip Loki tests if Faraday not available
 begin
   require "e11y/adapters/loki"
@@ -30,7 +32,7 @@ RSpec.describe E11y::Adapters::Loki do
 
   let(:adapter) { described_class.new(config) }
 
-  let(:event1) do
+  let(:login_event) do
     {
       event_name: "user.login",
       severity: :info,
@@ -39,7 +41,7 @@ RSpec.describe E11y::Adapters::Loki do
     }
   end
 
-  let(:event2) do
+  let(:logout_event) do
     {
       event_name: "user.logout",
       severity: :info,
@@ -48,7 +50,7 @@ RSpec.describe E11y::Adapters::Loki do
     }
   end
 
-  let(:event3) do
+  let(:payment_event) do
     {
       event_name: "payment.processed",
       severity: :success,
@@ -75,12 +77,12 @@ RSpec.describe E11y::Adapters::Loki do
 
       it "implements #write" do
         expect(adapter).to respond_to(:write)
-        expect(adapter.write(event1)).to be(true).or(be(false))
+        expect(adapter.write(login_event)).to be(true).or(be(false))
       end
 
       it "implements #write_batch" do
         expect(adapter).to respond_to(:write_batch)
-        expect(adapter.write_batch([event1, event2])).to be(true).or(be(false))
+        expect(adapter.write_batch([login_event, logout_event])).to be(true).or(be(false))
       end
 
       it "implements #healthy?" do
@@ -103,21 +105,21 @@ RSpec.describe E11y::Adapters::Loki do
 
     describe "Section 4.3: Loki Adapter Specification" do
       it "buffers events until batch_size reached" do
-        adapter.write(event1)
-        adapter.write(event2)
+        adapter.write(login_event)
+        adapter.write(logout_event)
 
         # Should not send yet (batch_size = 3)
         expect(WebMock).not_to have_requested(:post, "#{loki_url}/loki/api/v1/push")
 
-        adapter.write(event3)
+        adapter.write(payment_event)
 
         # Should send now
         expect(WebMock).to have_requested(:post, "#{loki_url}/loki/api/v1/push").once
       end
 
       it "flushes on close" do
-        adapter.write(event1)
-        adapter.write(event2)
+        adapter.write(login_event)
+        adapter.write(logout_event)
 
         adapter.close
 
@@ -125,70 +127,70 @@ RSpec.describe E11y::Adapters::Loki do
       end
 
       it "sends events in Loki push API format" do
-        adapter.write(event1)
-        adapter.write(event2)
-        adapter.write(event3)
+        adapter.write(login_event)
+        adapter.write(logout_event)
+        adapter.write(payment_event)
 
-        expect(WebMock).to have_requested(:post, "#{loki_url}/loki/api/v1/push")
-          .with { |req|
+        expect(WebMock).to(have_requested(:post, "#{loki_url}/loki/api/v1/push")
+          .with do |req|
             body = JSON.parse(req.body, symbolize_names: true)
             expect(body).to have_key(:streams)
             expect(body[:streams]).to be_an(Array)
             expect(body[:streams].first).to have_key(:stream)
             expect(body[:streams].first).to have_key(:values)
             true
-          }
+          end)
       end
 
       it "includes configured labels in streams" do
-        adapter.write(event1)
-        adapter.write(event2)
-        adapter.write(event3)
+        adapter.write(login_event)
+        adapter.write(logout_event)
+        adapter.write(payment_event)
 
-        expect(WebMock).to have_requested(:post, "#{loki_url}/loki/api/v1/push")
-          .with { |req|
+        expect(WebMock).to(have_requested(:post, "#{loki_url}/loki/api/v1/push")
+          .with do |req|
             body = JSON.parse(req.body, symbolize_names: true)
             stream = body[:streams].first[:stream]
             expect(stream[:app]).to eq("test_app")
             expect(stream[:env]).to eq("test")
             true
-          }
+          end)
       end
 
       it "includes event_name and severity in labels" do
-        adapter.write(event1)
-        adapter.write(event2)
-        adapter.write(event3)
+        adapter.write(login_event)
+        adapter.write(logout_event)
+        adapter.write(payment_event)
 
-        expect(WebMock).to have_requested(:post, "#{loki_url}/loki/api/v1/push")
-          .with { |req|
+        expect(WebMock).to(have_requested(:post, "#{loki_url}/loki/api/v1/push")
+          .with do |req|
             body = JSON.parse(req.body, symbolize_names: true)
             streams = body[:streams]
-            
+
             login_stream = streams.find { |s| s[:stream][:event_name] == "user.login" }
             expect(login_stream).not_to be_nil
             expect(login_stream[:stream][:severity]).to eq("info")
-            
+
             true
-          }
+          end)
       end
 
       it "formats timestamps as nanoseconds" do
-        adapter.write(event1)
-        adapter.write(event2)
-        adapter.write(event3)
+        adapter.write(login_event)
+        adapter.write(logout_event)
+        adapter.write(payment_event)
 
-        expect(WebMock).to have_requested(:post, "#{loki_url}/loki/api/v1/push")
-          .with { |req|
+        expect(WebMock).to(have_requested(:post, "#{loki_url}/loki/api/v1/push")
+          .with do |req|
             body = JSON.parse(req.body, symbolize_names: true)
             values = body[:streams].first[:values]
-            
+
             timestamp_ns = values.first[0]
             expect(timestamp_ns).to be_a(String)
             expect(timestamp_ns.to_i).to be > 1_000_000_000_000_000_000 # Nanoseconds
-            
+
             true
-          }
+          end)
       end
     end
   end
@@ -246,15 +248,15 @@ RSpec.describe E11y::Adapters::Loki do
 
   describe "Batching" do
     it "sends batch when batch_size reached" do
-      adapter.write(event1)
-      adapter.write(event2)
-      adapter.write(event3)
+      adapter.write(login_event)
+      adapter.write(logout_event)
+      adapter.write(payment_event)
 
       expect(WebMock).to have_requested(:post, "#{loki_url}/loki/api/v1/push").once
     end
 
     it "sends batch with write_batch" do
-      adapter.write_batch([event1, event2, event3])
+      adapter.write_batch([login_event, logout_event, payment_event])
 
       expect(WebMock).to have_requested(:post, "#{loki_url}/loki/api/v1/push").once
     end
@@ -265,27 +267,27 @@ RSpec.describe E11y::Adapters::Loki do
     end
 
     it "groups events by labels into streams" do
-      adapter.write(event1) # user.login, info
-      adapter.write(event2) # user.logout, info
-      adapter.write(event3) # payment.processed, success
+      adapter.write(login_event) # user.login, info
+      adapter.write(logout_event) # user.logout, info
+      adapter.write(payment_event) # payment.processed, success
 
-      expect(WebMock).to have_requested(:post, "#{loki_url}/loki/api/v1/push")
-        .with { |req|
+      expect(WebMock).to(have_requested(:post, "#{loki_url}/loki/api/v1/push")
+        .with do |req|
           body = JSON.parse(req.body, symbolize_names: true)
-          
+
           # Should have 3 streams (each event has different event_name)
           expect(body[:streams].size).to eq(3)
-          
+
           login_stream = body[:streams].find { |s| s[:stream][:event_name] == "user.login" }
           logout_stream = body[:streams].find { |s| s[:stream][:event_name] == "user.logout" }
           payment_stream = body[:streams].find { |s| s[:stream][:event_name] == "payment.processed" }
-          
+
           expect(login_stream[:values].size).to eq(1)
           expect(logout_stream[:values].size).to eq(1)
           expect(payment_stream[:values].size).to eq(1)
-          
+
           true
-        }
+        end)
     end
   end
 
@@ -302,39 +304,39 @@ RSpec.describe E11y::Adapters::Loki do
       after { compressed_adapter.close }
 
       it "sends gzip-compressed payload" do
-        compressed_adapter.write(event1)
-        compressed_adapter.write(event2)
+        compressed_adapter.write(login_event)
+        compressed_adapter.write(logout_event)
 
         expect(WebMock).to have_requested(:post, "#{loki_url}/loki/api/v1/push")
           .with(headers: { "Content-Encoding" => "gzip" })
       end
 
       it "compressed payload can be decompressed" do
-        compressed_adapter.write(event1)
-        compressed_adapter.write(event2)
+        compressed_adapter.write(login_event)
+        compressed_adapter.write(logout_event)
 
-        expect(WebMock).to have_requested(:post, "#{loki_url}/loki/api/v1/push")
-          .with { |req|
+        expect(WebMock).to(have_requested(:post, "#{loki_url}/loki/api/v1/push")
+          .with do |req|
             decompressed = Zlib::GzipReader.new(StringIO.new(req.body)).read
             body = JSON.parse(decompressed, symbolize_names: true)
             expect(body).to have_key(:streams)
             true
-          }
+          end)
       end
     end
 
     context "with compression disabled" do
       it "sends uncompressed payload" do
-        adapter.write(event1)
-        adapter.write(event2)
-        adapter.write(event3)
+        adapter.write(login_event)
+        adapter.write(logout_event)
+        adapter.write(payment_event)
 
-        expect(WebMock).to have_requested(:post, "#{loki_url}/loki/api/v1/push")
+        expect(WebMock).to(have_requested(:post, "#{loki_url}/loki/api/v1/push")
           .with(headers: { "Content-Type" => "application/json" })
-          .with { |req|
+          .with do |req|
             expect(req.headers["Content-Encoding"]).to be_nil
             true
-          }
+          end)
       end
     end
   end
@@ -351,8 +353,8 @@ RSpec.describe E11y::Adapters::Loki do
     after { tenant_adapter.close }
 
     it "sends X-Scope-OrgID header" do
-      tenant_adapter.write(event1)
-      tenant_adapter.write(event2)
+      tenant_adapter.write(login_event)
+      tenant_adapter.write(logout_event)
 
       expect(WebMock).to have_requested(:post, "#{loki_url}/loki/api/v1/push")
         .with(headers: { "X-Scope-OrgID" => "org-456" })
@@ -367,7 +369,7 @@ RSpec.describe E11y::Adapters::Loki do
 
   describe "#close" do
     it "flushes remaining events" do
-      adapter.write(event1)
+      adapter.write(login_event)
 
       adapter.close
 
@@ -375,7 +377,7 @@ RSpec.describe E11y::Adapters::Loki do
     end
 
     it "can be called multiple times safely" do
-      adapter.write(event1)
+      adapter.write(login_event)
 
       expect { adapter.close }.not_to raise_error
       expect { adapter.close }.not_to raise_error
@@ -409,9 +411,9 @@ RSpec.describe E11y::Adapters::Loki do
       stub_request(:post, "#{loki_url}/loki/api/v1/push")
         .to_return(status: 500, body: "Internal Server Error")
 
-      adapter.write(event1)
-      adapter.write(event2)
-      result = adapter.write(event3)
+      adapter.write(login_event)
+      adapter.write(logout_event)
+      result = adapter.write(payment_event)
 
       # Should not raise, just return false
       expect(result).to be true # write() returns true, error happens in background
@@ -426,7 +428,7 @@ RSpec.describe E11y::Adapters::Loki do
       stub_request(:post, "http://nonexistent.test:9999/loki/api/v1/push")
         .to_raise(Faraday::ConnectionFailed.new("Connection refused"))
 
-      expect { bad_adapter.write(event1) }.not_to raise_error
+      expect { bad_adapter.write(login_event) }.not_to raise_error
 
       bad_adapter.close
     end

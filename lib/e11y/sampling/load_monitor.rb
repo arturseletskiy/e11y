@@ -90,6 +90,8 @@ module E11y
         rate = current_rate
 
         # Check thresholds in descending order
+        # rubocop:disable Lint/DuplicateBranch
+        # Values between normal and high thresholds intentionally mapped to :high
         if rate >= @thresholds[:overload]
           :overload
         elsif rate >= @thresholds[:very_high]
@@ -101,11 +103,14 @@ module E11y
         else
           :normal
         end
+        # rubocop:enable Lint/DuplicateBranch
       end
 
       # Get recommended sample rate for current load
       #
       # @return [Float] Sample rate (0.0-1.0)
+      # rubocop:disable Style/HashLikeCase
+      # Case/when more readable for load level mapping with inline comments
       def recommended_sample_rate
         case load_level
         when :normal
@@ -118,6 +123,7 @@ module E11y
           0.01  # 1% sampling
         end
       end
+      # rubocop:enable Style/HashLikeCase
 
       # Check if system is overloaded
       #

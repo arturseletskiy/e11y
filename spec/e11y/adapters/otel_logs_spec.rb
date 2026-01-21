@@ -2,13 +2,15 @@
 
 require "spec_helper"
 
+# rubocop:disable RSpec/FilePath, RSpec/SpecFilePathFormat
+# File path matches common abbreviation "OTel" rather than "OTelLogs" class name.
 # Integration test: requires OpenTelemetry SDK
 # Run with: INTEGRATION=true bundle exec rspec --tag integration
 begin
   require "opentelemetry/sdk"
   require "opentelemetry/logs"
 rescue LoadError
-  RSpec.describe "E11y::Adapters::OTelLogs", integration: true do
+  RSpec.describe "E11y::Adapters::OTelLogs", :integration do
     it "requires OpenTelemetry SDK to be available" do
       skip "OpenTelemetry SDK not available (run: bundle install --with integration)"
     end
@@ -17,7 +19,7 @@ rescue LoadError
   return
 end
 
-RSpec.describe E11y::Adapters::OTelLogs, integration: true do
+RSpec.describe E11y::Adapters::OTelLogs, :integration do
   let(:adapter) { described_class.new(service_name: "test-service") }
   let(:event_data) do
     {
@@ -147,7 +149,7 @@ RSpec.describe E11y::Adapters::OTelLogs, integration: true do
 
     it "only includes allowlisted keys in attributes" do
       adapter_with_allowlist = described_class.new(
-        baggage_allowlist: [:user_id, :trace_id]
+        baggage_allowlist: %i[user_id trace_id]
       )
 
       attributes = adapter_with_allowlist.send(:build_attributes, pii_event)
@@ -162,7 +164,7 @@ RSpec.describe E11y::Adapters::OTelLogs, integration: true do
     end
 
     it "uses default allowlist for safe keys" do
-      attributes = adapter.send(:build_attributes, event_data)
+      adapter.send(:build_attributes, event_data)
 
       # Default allowlist includes these keys
       expect(adapter.instance_variable_get(:@baggage_allowlist)).to include(:trace_id, :span_id)
@@ -205,7 +207,9 @@ RSpec.describe E11y::Adapters::OTelLogs, integration: true do
 
     it "protects against attribute explosion" do
       # C04: Prevent high-cardinality attributes from overwhelming OTel
-      adapter_with_limit = described_class.new(max_attributes: 20, baggage_allowlist: (1..100).map { |i| "key_#{i}".to_sym })
+      adapter_with_limit = described_class.new(max_attributes: 20, baggage_allowlist: (1..100).map do |i|
+        :"key_#{i}"
+      end)
       attributes = adapter_with_limit.send(:build_attributes, high_cardinality_event)
 
       # Cardinality protected (limited to max_attributes)
@@ -274,3 +278,4 @@ RSpec.describe E11y::Adapters::OTelLogs, integration: true do
     end
   end
 end
+# rubocop:enable RSpec/FilePath, RSpec/SpecFilePathFormat

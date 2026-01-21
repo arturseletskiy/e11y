@@ -31,6 +31,8 @@ module E11y
     #     :file_logger,
     #     E11y::Adapters::File.new(path: "log/events.log")
     #   )
+    # rubocop:disable Metrics/ClassLength
+    # File adapter contains file rotation and buffering logic as cohesive unit
     class File < Base
       # Default maximum file size before rotation (100MB)
       DEFAULT_MAX_SIZE = 100 * 1024 * 1024
@@ -191,7 +193,7 @@ module E11y
 
       # Perform actual file rotation
       def perform_rotation!
-        @file.close if @file
+        @file&.close
 
         timestamp = Time.now.strftime("%Y%m%d-%H%M%S")
         rotated_path = "#{@path}.#{timestamp}"
@@ -220,5 +222,6 @@ module E11y
         warn "E11y File adapter compression error: #{e.message}"
       end
     end
+    # rubocop:enable Metrics/ClassLength
   end
 end

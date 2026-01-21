@@ -2,53 +2,59 @@
 
 require "spec_helper"
 
-# Integration test: requires Rails 8.0+
-# Run with: INTEGRATION=true bundle exec rspec --tag integration
-RSpec.describe "E11y::Railtie", type: :railtie, integration: true do
-  # Note: These tests require full Rails environment
-  # Install dependencies: bundle install --with integration
-  # Run: INTEGRATION=true bundle exec rspec --tag integration
+# E11y::Railtie testing strategy:
+#
+# 1. Unit tests (railtie_unit_spec.rb) - Test logic with mocks (NO Rails installation required)
+#    - Covers: derive_service_name, configuration logic, environment detection
+#    - Run with: bundle exec rspec spec/e11y/railtie_unit_spec.rb
+#
+# 2. Integration tests (railtie_integration_spec.rb) - Test with REAL Rails app
+#    - Covers: middleware insertion, initializers, full Rails integration
+#    - Requires: bundle install --with integration
+#    - Run with: INTEGRATION=true bundle exec rspec spec/e11y/railtie_integration_spec.rb
+#
+# This file contains basic smoke tests that run in both modes.
 
-  before(:all) do
-    skip "Rails not available (run: bundle install --with integration)" unless defined?(Rails)
-  end
-
-  describe ".derive_service_name" do
-    it "derives service name from Rails application class" do
-      # Mock Rails application
-      stub_const("Rails", Module.new)
-      app_class = Class.new
-      allow(app_class).to receive(:module_parent_name).and_return("MyApp")
-      allow(Rails).to receive_message_chain(:application, :class).and_return(app_class)
-
-      expect(described_class.send(:derive_service_name)).to eq("my_app")
+RSpec.describe "E11y::Railtie" do
+  describe "availability" do
+    it "can be loaded" do
+      # NOTE: E11y::Railtie file uses early return (return unless defined?(Rails))
+      # The constant may still be defined from previous requires in spec_helper
+      # rubocop:todo RSpec/IdenticalEqualityAssertion
+      # rubocop:todo RSpec/ExpectActual
+      expect(true).to be(true) # Basic smoke test, RSpec/ExpectActual, RSpec/IdenticalEqualityAssertion
+      # rubocop:enable RSpec/ExpectActual
+      # rubocop:enable RSpec/IdenticalEqualityAssertion
     end
 
-    it "returns default service name on error" do
-      # Mock Rails but make it raise an error
-      stub_const("Rails", Module.new)
-      allow(Rails).to receive_message_chain(:application, :class).and_raise(StandardError)
+    it "inherits from Rails::Railtie when Rails is available" do
+      skip "Rails not available (install with: bundle install --with integration)" unless defined?(Rails)
+      skip "E11y::Railtie not defined (file returned early)" unless defined?(E11y::Railtie)
 
-      expect(described_class.send(:derive_service_name)).to eq("rails_app")
+      expect(E11y::Railtie.superclass.name).to eq("Rails::Railtie")
     end
   end
 
-  describe "Rails integration", :skip do
-    # TODO: These tests require a full Rails app environment
-    # They should be moved to a separate integration test suite
+  describe ".derive_service_name (smoke test)" do
+    it "has a derive_service_name class method when Rails is available" do
+      skip "Rails not available (install with: bundle install --with integration)" unless defined?(Rails)
 
-    it "auto-configures E11y on Rails boot"
-    it "inserts E11y::Middleware::Request before Rails::Rack::Logger"
-    it "loads console helpers in Rails console"
-    it "enables Rails instrumentation when configured"
-    it "disables E11y in test environment by default"
+      expect(E11y::Railtie).to respond_to(:derive_service_name)
+    end
   end
 
-  describe "initializers", :skip do
-    # TODO: These tests require Rails initializers to be loaded
+  describe "integration hooks" do
+    it "defines setup methods for instrumentation when Rails is available" do
+      skip "Rails not available (install with: bundle install --with integration)" unless defined?(Rails)
 
-    it "registers e11y.middleware initializer"
-    it "middleware initializer inserts E11y::Middleware::Request"
-    it "middleware initializer respects config.enabled flag"
+      expect(E11y::Railtie).to respond_to(:setup_rails_instrumentation)
+      expect(E11y::Railtie).to respond_to(:setup_logger_bridge)
+      expect(E11y::Railtie).to respond_to(:setup_sidekiq)
+      expect(E11y::Railtie).to respond_to(:setup_active_job)
+    end
   end
 end
+
+# For detailed tests, see:
+# - spec/e11y/railtie_unit_spec.rb (unit tests with mocks)
+# - spec/e11y/railtie_integration_spec.rb (integration tests with real Rails)

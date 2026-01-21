@@ -4,6 +4,8 @@ require "spec_helper"
 require "e11y/logger/bridge"
 require "logger"
 
+# Logger bridge tests require extensive mocking of logger behavior,
+# severity mapping, and event tracking with multiple test doubles.
 RSpec.describe E11y::Logger::Bridge do
   let(:original_logger) { instance_double(Logger) }
   let(:bridge) { described_class.new(original_logger) }
@@ -54,11 +56,11 @@ RSpec.describe E11y::Logger::Bridge do
   end
 
   describe "per-severity tracking configuration" do
-    let(:debug_class) { class_double("E11y::Events::Rails::Log::Debug") }
-    let(:info_class) { class_double("E11y::Events::Rails::Log::Info") }
-    let(:warn_class) { class_double("E11y::Events::Rails::Log::Warn") }
-    let(:error_class) { class_double("E11y::Events::Rails::Log::Error") }
-    let(:fatal_class) { class_double("E11y::Events::Rails::Log::Fatal") }
+    let(:debug_class) { class_double(E11y::Events::Rails::Log::Debug) }
+    let(:info_class) { class_double(E11y::Events::Rails::Log::Info) }
+    let(:warn_class) { class_double(E11y::Events::Rails::Log::Warn) }
+    let(:error_class) { class_double(E11y::Events::Rails::Log::Error) }
+    let(:fatal_class) { class_double(E11y::Events::Rails::Log::Fatal) }
 
     before do
       stub_const("E11y::Events::Rails::Log::Debug", debug_class)
@@ -182,7 +184,7 @@ RSpec.describe E11y::Logger::Bridge do
     end
 
     it "does not break original logging if E11y tracking fails" do
-      stub_const("E11y::Events::Rails::Log", class_double("E11y::Events::Rails::Log"))
+      stub_const("E11y::Events::Rails::Log", class_double(E11y::Events::Rails::Log))
       allow(E11y::Events::Rails::Log).to receive(:track).and_raise(StandardError, "E11y error")
 
       # Should not raise, only warn

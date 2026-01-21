@@ -138,6 +138,8 @@ module E11y
       #     error: true,
       #     fatal: true
       #   }
+      # rubocop:disable Lint/DuplicateBranch
+      # Unknown config types intentionally fallback to false (same as FalseClass)
       def should_track_severity?(severity)
         config = E11y.config.logger_bridge&.track_to_e11y
         return false unless config
@@ -153,12 +155,15 @@ module E11y
           false # Unknown config type
         end
       end
+      # rubocop:enable Lint/DuplicateBranch
 
       # Track log message as E11y event
       # @param severity [Symbol] E11y severity
       # @param message [String, nil] Log message
       # @yield Block that returns log message
       # @return [void]
+      # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+      # Logger tracking requires message extraction, validation, event class lookup, and error handling
       def track_to_e11y(severity, message = nil, &block)
         # Extract message
         msg = message || (block_given? ? block.call : nil)
@@ -176,10 +181,13 @@ module E11y
         # In development/test, you might want to log this
         warn "E11y logger tracking failed: #{e.message}" if defined?(Rails) && Rails.env.development?
       end
+      # rubocop:enable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
       # Get event class for severity
       # @param severity [Symbol] E11y severity
       # @return [Class] Event class
+      # rubocop:disable Lint/DuplicateBranch
+      # Unknown severities intentionally fallback to Info (same as :info)
       def event_class_for_severity(severity)
         case severity
         when :debug then E11y::Events::Rails::Log::Debug
@@ -190,15 +198,15 @@ module E11y
         else E11y::Events::Rails::Log::Info # Fallback
         end
       end
+      # rubocop:enable Lint/DuplicateBranch
 
       # Extract caller location (first caller outside E11y)
       # @return [String, nil] Caller location string
       def extract_caller_location
-        caller_locations.find do |loc|
-          !loc.path.include?("e11y")
-        end&.then do |loc|
-          "#{loc.path}:#{loc.lineno}:in `#{loc.label}'"
-        end
+        loc = caller_locations.find { |l| !l.path.include?("e11y") }
+        return nil unless loc
+
+        "#{loc.path}:#{loc.lineno}:in `#{loc.label}'"
       end
     end
   end

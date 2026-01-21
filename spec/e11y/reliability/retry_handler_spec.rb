@@ -28,11 +28,13 @@ RSpec.describe E11y::Reliability::RetryHandler do
       end
 
       it "does not sleep" do
-        expect(retry_handler).not_to receive(:sleep)
+        allow(retry_handler).to receive(:sleep)
 
         retry_handler.with_retry(adapter: adapter, event: event_data) do
           "success"
         end
+
+        expect(retry_handler).not_to have_received(:sleep)
       end
     end
 
@@ -150,7 +152,9 @@ RSpec.describe E11y::Reliability::RetryHandler do
             attempt += 1
             raise Timeout::Error, "always fails"
           end
+          # rubocop:todo Style/MultilineBlockChain
         end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError) do |error|
+          # rubocop:enable Style/MultilineBlockChain
           expect(error.retry_count).to eq(3)
           expect(error.original_error).to be_a(Timeout::Error)
         end

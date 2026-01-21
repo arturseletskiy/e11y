@@ -39,6 +39,8 @@ module E11y
     # @see ADR-006 PII Security & Compliance
     # @see UC-007 PII Filtering
     # @see E11y::PII::Patterns
+    # rubocop:disable Metrics/ClassLength
+    # PII filter is a cohesive security component with 3-tier filtering strategy
     class PIIFilter < Base
       middleware_zone :security
 
@@ -55,6 +57,8 @@ module E11y
       #
       # @param event_data [Hash] Event data with payload
       # @return [Hash] Processed event data
+      # rubocop:disable Lint/DuplicateBranch
+      # Unknown tiers intentionally fallback to no filtering (same as tier1)
       def call(event_data)
         # Determine filtering tier
         tier = determine_tier(event_data)
@@ -75,6 +79,7 @@ module E11y
           @app.call(event_data)
         end
       end
+      # rubocop:enable Lint/DuplicateBranch
 
       private
 
@@ -139,6 +144,8 @@ module E11y
       # @param payload [Hash] Payload to filter
       # @param config [Hash] PII configuration
       # @return [Hash] Filtered payload
+      # rubocop:disable Metrics/CyclomaticComplexity, Metrics/MethodLength
+      # Field strategies require case/when for each PII filtering strategy type
       def apply_field_strategies(payload, config)
         return payload unless config
 
@@ -147,6 +154,8 @@ module E11y
         payload.each do |key, value|
           strategy = config.dig(:fields, key, :strategy) || :allow
 
+          # rubocop:disable Lint/DuplicateBranch
+          # Unknown strategies intentionally fallback to allow (same as :allow)
           filtered[key] = case strategy
                           when :mask
                             "[FILTERED]"
@@ -161,10 +170,12 @@ module E11y
                           else
                             value
                           end
+          # rubocop:enable Lint/DuplicateBranch
         end
 
         filtered
       end
+      # rubocop:enable Metrics/CyclomaticComplexity, Metrics/MethodLength
 
       # Apply pattern-based filtering to string values
       #
@@ -262,5 +273,6 @@ module E11y
                               end
       end
     end
+    # rubocop:enable Metrics/ClassLength
   end
 end

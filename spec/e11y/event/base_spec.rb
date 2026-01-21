@@ -490,7 +490,6 @@ RSpec.describe E11y::Event::Base do
         expect(result).not_to be_a(described_class)
       end
 
-      # rubocop:disable RSpec/MessageSpies
       it "reuses class methods without instantiation" do
         # Verify we're calling class methods, not instance methods
         # Note: event_name is called multiple times internally (in validate_payload! and track)
@@ -562,6 +561,8 @@ RSpec.describe E11y::Event::Base do
     end
   end
 
+  # rubocop:disable RSpec/RepeatedExampleGroupDescription
+  # Testing .resolve_sample_rate in different contexts (basic behavior and priority chain)
   describe ".resolve_sample_rate" do
     it "returns 1.0 for :error severity (100%)" do
       event_class = Class.new(described_class) do
@@ -918,7 +919,10 @@ RSpec.describe E11y::Event::Base do
       end
     end
   end
+  # rubocop:enable RSpec/RepeatedExampleGroupDescription
 
+  # rubocop:disable RSpec/RepeatedExampleGroupDescription
+  # Second block tests priority chain and edge cases of the same method
   describe ".resolve_sample_rate" do
     context "with explicit sample_rate" do
       it "returns explicit sample_rate (highest priority)" do
@@ -1062,3 +1066,4 @@ RSpec.describe E11y::Event::Base do
     end
   end
 end
+# rubocop:enable RSpec/RepeatedExampleGroupDescription

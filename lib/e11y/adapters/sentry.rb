@@ -40,6 +40,8 @@ module E11y
     #   )
     #
     # @see https://docs.sentry.io/platforms/ruby/
+    # rubocop:disable Metrics/ClassLength
+    # Sentry adapter contains error transformation and context enrichment logic
     class Sentry < Base
       # Severity levels in order
       SEVERITY_LEVELS = %i[debug info success warn error fatal].freeze
@@ -153,6 +155,8 @@ module E11y
       # Send error to Sentry
       #
       # @param event_data [Hash] Event data
+      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+      # Sentry scope configuration requires multiple context enrichment steps
       def send_error_to_sentry(event_data)
         ::Sentry.with_scope do |scope|
           # Set tags
@@ -183,6 +187,7 @@ module E11y
           end
         end
       end
+      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
       # Send breadcrumb to Sentry
       #
@@ -215,6 +220,8 @@ module E11y
       #
       # @param severity [Symbol] E11y severity
       # @return [Symbol] Sentry level
+      # rubocop:disable Lint/DuplicateBranch
+      # Multiple severity levels intentionally map to :info (info, success, unknown)
       def sentry_level(severity)
         case severity
         when :debug then :debug
@@ -225,6 +232,8 @@ module E11y
         else :info
         end
       end
+      # rubocop:enable Lint/DuplicateBranch
     end
+    # rubocop:enable Metrics/ClassLength
   end
 end

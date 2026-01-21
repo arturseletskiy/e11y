@@ -4,6 +4,8 @@ require "spec_helper"
 require "e11y/sampling/stratified_tracker"
 require "e11y/slo/tracker"
 
+# rubocop:disable RSpec/DescribeClass
+# Integration test for stratified sampling feature, tests multiple components
 RSpec.describe "Stratified Sampling for SLO Accuracy (C11 Resolution)" do
   let(:tracker) { E11y::Sampling::StratifiedTracker.new }
 
@@ -77,6 +79,8 @@ RSpec.describe "Stratified Sampling for SLO Accuracy (C11 Resolution)" do
   end
 
   describe "UC-014 production example" do
+    # rubocop:disable RSpec/ExampleLength
+    # Integration test requires load simulation and statistical calculations
     it "corrects SLO metrics under load-based adaptive sampling" do
       # During high load: success events sampled at 10%
       100.times do
@@ -110,6 +114,7 @@ RSpec.describe "Stratified Sampling for SLO Accuracy (C11 Resolution)" do
       # Note: With randomized sampling, expect wider tolerance
       expect(corrected_success_rate).to be_between(0.80, 0.95) # Reasonable range given sampling variance
     end
+    # rubocop:enable RSpec/ExampleLength
   end
 
   describe "C11 Resolution verification" do
@@ -145,3 +150,4 @@ RSpec.describe "Stratified Sampling for SLO Accuracy (C11 Resolution)" do
     end
   end
 end
+# rubocop:enable RSpec/DescribeClass

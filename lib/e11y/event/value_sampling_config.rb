@@ -64,6 +64,8 @@ module E11y
 
       private
 
+      # rubocop:disable Metrics/CyclomaticComplexity
+      # Validation requires checking multiple comparison types and threshold types
       def validate_comparisons!
         raise ArgumentError, "At least one comparison required" if comparisons.empty?
 
@@ -79,6 +81,7 @@ module E11y
           end
         end
       end
+      # rubocop:enable Metrics/CyclomaticComplexity
     end
   end
 end

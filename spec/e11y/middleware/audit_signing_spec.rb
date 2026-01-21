@@ -214,6 +214,8 @@ RSpec.describe E11y::Middleware::AuditSigning do
         expect(result[:audit_canonical]).to be_nil
       end
 
+      # rubocop:disable RSpec/ExampleLength
+      # Integration test requires full event class setup and signature verification
       it "signs audit event when signing explicitly enabled" do
         audit_event_with_signing = Class.new(E11y::Event::Base) do
           def self.name
@@ -244,6 +246,7 @@ RSpec.describe E11y::Middleware::AuditSigning do
         expect(result[:audit_signed_at]).not_to be_nil
         expect(result[:audit_canonical]).not_to be_nil
       end
+      # rubocop:enable RSpec/ExampleLength
 
       it "signs audit event by default (no signing declaration)" do
         # This is the existing audit_event_class from above

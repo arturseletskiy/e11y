@@ -248,7 +248,7 @@ RSpec.describe E11y::SLO::Tracker do
     end
   end
 
-  context "UC-004 compliance" do
+  context "when testing UC-004 compliance" do
     it "supports zero-config SLO tracking" do
       E11y.configure do |config|
         config.slo_tracking.enabled = true
@@ -278,7 +278,7 @@ RSpec.describe E11y::SLO::Tracker do
     end
   end
 
-  context "ADR-003 compliance" do
+  context "when testing ADR-003 compliance" do
     it "tracks application-wide SLO metrics" do
       E11y.configure do |config|
         config.slo_tracking.enabled = true

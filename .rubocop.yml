@@ -5,6 +5,11 @@
 
 require:
   - rubocop-rspec
+  - rubocop-rspec_rails
+
+plugins:
+  - rubocop-capybara
+  - rubocop-factory_bot
 
 AllCops:
   TargetRubyVersion: 3.2
@@ -52,6 +57,9 @@ RSpec/ExampleLength:
 RSpec/MultipleExpectations:
   Max: 10 # Allow more expectations for integration tests
 
+RSpec/MultipleMemoizedHelpers:
+  Max: 10 # Allow more memoized helpers for complex tests
+
 RSpec/NestedGroups:
   Max: 3
 
@@ -66,4 +74,13 @@ RSpec/DescribeClass:
 
 # Allow simple doubles for now (will improve in Phase 1)
 RSpec/VerifiedDoubles:
+  Enabled: false
+
+# MessageSpies: Prefer explicit expect().to receive() for readability.
+# Large codebase uses this pattern consistently (116 occurrences).
+# Will be gradually migrated to have_received in future.
+RSpec/MessageSpies:
+  Enabled: false
+
+Capybara/RSpec/PredicateMatcher:
   Enabled: false

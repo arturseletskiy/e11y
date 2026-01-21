@@ -27,75 +27,67 @@ module E11y
     # Define helper methods on E11y module
     # @return [void]
     def self.define_helper_methods
-      E11y.singleton_class.class_eval do
-        # Show E11y statistics
-        # @return [Hash] Statistics hash
-        def stats
+      E11y.extend(ConsoleHelpers)
+    end
+
+    # Console helper methods module
+    module ConsoleHelpers
+      # Show E11y statistics
+      def stats
+        {
+          enabled: config.enabled,
+          environment: config.environment,
+          service_name: config.service_name,
+          adapters: adapters_info,
+          buffer: buffer_info
+        }
+      end
+
+      # Track a test event
+      def test_event
+        puts "✅ E11y test event would be tracked here"
+        puts "   (Waiting for Events::Console::Test implementation)"
+      end
+
+      # List all registered event classes
+      def events
+        puts "📋 E11y events list"
+        puts "   (Waiting for Event registry implementation)"
+        []
+      end
+
+      # List all registered adapters
+      def adapters
+        Adapters::Registry.all.map do |adapter|
           {
-            enabled: E11y.config.enabled,
-            environment: E11y.config.environment,
-            service_name: E11y.config.service_name,
-            adapters: E11y::Adapters::Registry.all.map do |a|
-              {
-                name: a.name,
-                class: a.class.name,
-                healthy: a.healthy?
-              }
-            end,
-            buffer: {
-              size: buffer_size,
-              max_size: E11y.config.buffer&.max_size
-            }
+            name: adapter.name,
+            class: adapter.class.name,
+            healthy: adapter.healthy?,
+            capabilities: adapter.capabilities
           }
         end
+      end
 
-        # Track a test event
-        # @return [void]
-        def test_event
-          # TODO: Implement test event tracking
-          # For now, just print a message
-          puts "✅ E11y test event would be tracked here"
-          puts "   (Waiting for Events::Console::Test implementation)"
+      # Reset buffers
+      def reset!
+        puts "✅ E11y buffers would be cleared here"
+        puts "   (Waiting for Buffer#clear! implementation)"
+      end
+
+      private
+
+      def adapters_info
+        Adapters::Registry.all.map do |a|
+          { name: a.name, class: a.class.name, healthy: a.healthy? }
         end
+      end
 
-        # List all registered event classes
-        # @return [Array<String>] Event class names
-        def events
-          # TODO: Implement event registry
-          puts "📋 E11y events list"
-          puts "   (Waiting for Event registry implementation)"
-          []
-        end
+      def buffer_info
+        { size: buffer_size }
+      end
 
-        # List all registered adapters
-        # @return [Array<Hash>] Adapter details
-        def adapters
-          E11y::Adapters::Registry.all.map do |adapter|
-            {
-              name: adapter.name,
-              class: adapter.class.name,
-              healthy: adapter.healthy?,
-              capabilities: adapter.capabilities
-            }
-          end
-        end
-
-        # Reset buffers (clear all buffered events)
-        # @return [void]
-        def reset!
-          # TODO: Implement buffer clearing
-          puts "✅ E11y buffers would be cleared here"
-          puts "   (Waiting for Buffer#clear! implementation)"
-        end
-
-        private
-
-        # Get current buffer size
-        # @return [Integer] Number of buffered events
-        def buffer_size
-          # TODO: Implement buffer size tracking
-          0
-        end
+      def buffer_size
+        0 # TODO: Implement buffer size tracking
       end
     end
 

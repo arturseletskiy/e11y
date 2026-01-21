@@ -59,6 +59,8 @@ module E11y
     #
     # @see https://grafana.com/docs/loki/latest/api/#push-log-entries-to-loki
     # @see ADR-009 §8 (C04 Resolution - Universal Cardinality Protection)
+    # rubocop:disable Metrics/ClassLength
+    # Loki adapter contains HTTP client, batching, and Loki-specific formatting logic
     class Loki < Base
       # Default batch size (events)
       DEFAULT_BATCH_SIZE = 100
@@ -82,6 +84,8 @@ module E11y
       # @option config [String] :tenant_id (nil) Loki tenant ID (X-Scope-OrgID header)
       # @option config [Boolean] :enable_cardinality_protection (false) Enable cardinality protection for labels (C04)
       # @option config [Integer] :max_label_cardinality (100) Max unique values per label when protection enabled
+      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+      # Adapter initialization requires many instance variable assignments
       def initialize(config = {})
         @url = config[:url]
         @labels = config.fetch(:labels, {})
@@ -108,6 +112,7 @@ module E11y
 
         build_connection!
       end
+      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
       # Write a single event to buffer
       #
@@ -189,6 +194,8 @@ module E11y
       #
       # @see ADR-004 Section 7.1 (Retry Policy via gem-level middleware)
       # @see ADR-004 Section 6.1 (Connection pooling via HTTP client)
+      # rubocop:disable Metrics/MethodLength
+      # HTTP client configuration requires detailed retry and connection settings
       def build_connection!
         @connection = Faraday.new(url: @url) do |f|
           # Retry middleware (exponential backoff: 1s, 2s, 4s)
@@ -211,6 +218,7 @@ module E11y
           f.adapter Faraday.default_adapter
         end
       end
+      # rubocop:enable Metrics/MethodLength
 
       # Check if buffer should be flushed
       def flush_if_needed!
@@ -329,5 +337,6 @@ module E11y
         headers
       end
     end
+    # rubocop:enable Metrics/ClassLength
   end
 end

@@ -3,6 +3,8 @@
 require "spec_helper"
 require "e11y/middleware/event_slo"
 
+# rubocop:disable RSpec/FilePath, RSpec/SpecFilePathFormat
+# File path uses abbreviated name 'slo' for clarity.
 RSpec.describe E11y::Middleware::EventSlo do
   subject(:middleware) { described_class.new(app) }
 
@@ -226,3 +228,4 @@ RSpec.describe E11y::Middleware::EventSlo do
     end
   end
 end
+# rubocop:enable RSpec/FilePath, RSpec/SpecFilePathFormat

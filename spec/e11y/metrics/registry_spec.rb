@@ -11,7 +11,10 @@ RSpec.describe E11y::Metrics::Registry do
 
   describe "singleton pattern" do
     it "returns the same instance" do
+      # rubocop:disable RSpec/IdenticalEqualityAssertion
+      # Testing singleton pattern: same object must be returned
       expect(described_class.instance).to be(described_class.instance)
+      # rubocop:enable RSpec/IdenticalEqualityAssertion
     end
 
     it "raises error when trying to create new instance" do
