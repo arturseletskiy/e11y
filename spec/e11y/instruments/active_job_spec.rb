@@ -2,20 +2,21 @@
 
 require "spec_helper"
 
-# Skip ActiveJob tests if ActiveJob not available
+# Integration test: requires ActiveJob (part of Rails)
+# Run with: INTEGRATION=true bundle exec rspec --tag integration
 begin
   require "active_job"
 rescue LoadError
-  RSpec.describe "E11y::Instruments::ActiveJob (skipped)" do
+  RSpec.describe "E11y::Instruments::ActiveJob", integration: true do
     it "requires ActiveJob to be available" do
-      skip "ActiveJob not available in test environment"
+      skip "ActiveJob not available (run: bundle install --with integration)"
     end
   end
 
   return
 end
 
-RSpec.describe E11y::Instruments::ActiveJob do
+RSpec.describe E11y::Instruments::ActiveJob, integration: true do
   # Test job class that includes E11y::Instruments::ActiveJob
   class TestJob < ActiveJob::Base
     include E11y::Instruments::ActiveJob::Callbacks

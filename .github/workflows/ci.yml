@@ -45,8 +45,8 @@ jobs:
       - name: Run Brakeman
         run: bundle exec brakeman --no-pager
 
-  test:
-    name: Test (Ruby ${{ matrix.ruby }})
+  test-unit:
+    name: Unit Tests (Ruby ${{ matrix.ruby }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -61,10 +61,10 @@ jobs:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
       
-      - name: Run tests
+      - name: Run unit tests (fast, no Rails/integrations)
         env:
           COVERAGE: true
-        run: bundle exec rspec
+        run: bundle exec rspec --tag ~integration
       
       - name: Upload coverage to Codecov
         if: matrix.ruby == '3.2'
@@ -75,10 +75,109 @@ jobs:
           name: codecov-umbrella
           fail_ci_if_error: true
 
+  test-integration:
+    name: Integration Tests (Ruby ${{ matrix.ruby }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: ['3.2', '3.3']
+    services:
+      loki:
+        image: grafana/loki:2.9.0
+        ports:
+          - 3100:3100
+        options: >-
+          --health-cmd "wget --spider -q http://localhost:3100/ready"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      prometheus:
+        image: prom/prometheus:v2.45.0
+        ports:
+          - 9090:9090
+        options: >-
+          --health-cmd "wget --spider -q http://localhost:9090/-/healthy"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      elasticsearch:
+        image: elasticsearch:8.9.0
+        ports:
+          - 9200:9200
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: false
+          ES_JAVA_OPTS: -Xms512m -Xmx512m
+        options: >-
+          --health-cmd "curl -f http://localhost:9200/_cluster/health"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      
+      - name: Install integration dependencies
+        run: |
+          bundle config set --local with 'integration'
+          bundle install
+      
+      - name: Wait for services to be ready
+        run: |
+          echo "Waiting for Loki..."
+          timeout 30 bash -c 'until curl -s http://localhost:3100/ready > /dev/null; do sleep 1; done'
+          
+          echo "Waiting for Prometheus..."
+          timeout 30 bash -c 'until curl -s http://localhost:9090/-/healthy > /dev/null; do sleep 1; done'
+          
+          echo "Waiting for Elasticsearch..."
+          timeout 60 bash -c 'until curl -s http://localhost:9200/_cluster/health > /dev/null; do sleep 1; done'
+          
+          echo "Waiting for Redis..."
+          timeout 30 bash -c 'until redis-cli -h localhost ping > /dev/null; do sleep 1; done'
+          
+          echo "All services ready!"
+      
+      - name: Run integration tests (Rails, OpenTelemetry, adapters)
+        env:
+          INTEGRATION: true
+          LOKI_URL: http://localhost:3100
+          PROMETHEUS_URL: http://localhost:9090
+          ELASTICSEARCH_URL: http://localhost:9200
+          REDIS_URL: redis://localhost:6379
+        run: bundle exec rspec --tag integration
+      
+      - name: Upload integration test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results-ruby-${{ matrix.ruby }}
+          path: tmp/rspec_results.xml
+          if-no-files-found: ignore
+
   build:
     name: Build Gem
     runs-on: ubuntu-latest
-    needs: [lint, security, test]
+    needs: [lint, security, test-unit, test-integration]
     steps:
       - uses: actions/checkout@v4
       

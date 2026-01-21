@@ -2,14 +2,15 @@
 
 require "spec_helper"
 
-# Mock Rails before loading Railtie
-RSpec.describe "E11y::Railtie", type: :railtie do
-  # Note: Full Rails integration testing is complex and requires a Rails app
-  # These are basic unit tests for the Railtie class itself
-  # Since Railtie requires Rails, we skip these tests if Rails is not available
+# Integration test: requires Rails 8.0+
+# Run with: INTEGRATION=true bundle exec rspec --tag integration
+RSpec.describe "E11y::Railtie", type: :railtie, integration: true do
+  # Note: These tests require full Rails environment
+  # Install dependencies: bundle install --with integration
+  # Run: INTEGRATION=true bundle exec rspec --tag integration
 
   before(:all) do
-    skip "Rails not available" unless defined?(Rails)
+    skip "Rails not available (run: bundle install --with integration)" unless defined?(Rails)
   end
 
   describe ".derive_service_name" do

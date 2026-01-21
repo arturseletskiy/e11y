@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# bin/test-integration - Run integration tests with docker-compose services
+#
+# Usage:
+#   bin/test-integration                    # Run all integration tests
+#   bin/test-integration spec/path/to/spec  # Run specific integration test
+#
+# Prerequisites:
+#   1. Install integration dependencies: bundle install --with integration
+#   2. Docker and docker-compose installed
+
+set -e
+
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+echo -e "${GREEN}==> E11y Integration Tests${NC}"
+echo ""
+
+# Check if docker-compose is available
+if ! command -v docker-compose &> /dev/null; then
+    echo -e "${RED}ERROR: docker-compose not found${NC}"
+    echo "Please install Docker Desktop or docker-compose"
+    exit 1
+fi
+
+# Check if integration dependencies are installed
+if ! bundle show rails &> /dev/null; then
+    echo -e "${YELLOW}WARNING: Integration dependencies not installed${NC}"
+    echo "Installing with: bundle install --with integration"
+    bundle install --with integration
+fi
+
+echo -e "${GREEN}==> Starting docker-compose services...${NC}"
+docker-compose up -d
+
+# Wait for services to be ready
+echo -e "${GREEN}==> Waiting for services to be ready...${NC}"
+
+echo -n "  Waiting for Loki..."
+timeout 30 bash -c 'until curl -s http://localhost:3100/ready > /dev/null 2>&1; do sleep 1; done' && echo " ✓"
+
+echo -n "  Waiting for Prometheus..."
+timeout 30 bash -c 'until curl -s http://localhost:9090/-/healthy > /dev/null 2>&1; do sleep 1; done' && echo " ✓"
+
+echo -n "  Waiting for Elasticsearch..."
+timeout 60 bash -c 'until curl -s http://localhost:9200/_cluster/health > /dev/null 2>&1; do sleep 1; done' && echo " ✓"
+
+echo -n "  Waiting for Redis..."
+timeout 30 bash -c 'until redis-cli -h localhost ping > /dev/null 2>&1; do sleep 1; done' && echo " ✓"
+
+echo ""
+echo -e "${GREEN}==> All services ready! Running integration tests...${NC}"
+echo ""
+
+# Run integration tests
+INTEGRATION=true \
+  LOKI_URL=http://localhost:3100 \
+  PROMETHEUS_URL=http://localhost:9090 \
+  ELASTICSEARCH_URL=http://localhost:9200 \
+  REDIS_URL=redis://localhost:6379 \
+  bundle exec rspec --tag integration "$@"
+
+TEST_EXIT_CODE=$?
+
+# Cleanup
+echo ""
+echo -e "${GREEN}==> Stopping docker-compose services...${NC}"
+docker-compose down
+
+if [ $TEST_EXIT_CODE -eq 0 ]; then
+    echo -e "${GREEN}==> Integration tests passed! ✓${NC}"
+else
+    echo -e "${RED}==> Integration tests failed! ✗${NC}"
+fi
+
+exit $TEST_EXIT_CODE

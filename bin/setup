@@ -1,9 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 IFS=$'\n\t'
-set -vx
 
+echo "🔧 Setting up E11y development environment..."
+echo ""
+
+# Configure bundle to exclude integration dependencies by default
+echo "📦 Configuring bundle (excluding integration group)..."
+bundle config set --local without 'integration'
+
+# Install dependencies
+echo "📦 Installing dependencies..."
 bundle install
 
-# Do any other automated setup that you need to do here
-echo "✅ Setup complete! Run 'bin/console' to start interactive console."
+echo ""
+echo "✅ Setup complete!"
+echo ""
+echo "Available commands:"
+echo "  bin/console            - Interactive console"
+echo "  bundle exec rspec      - Run unit tests (fast)"
+echo "  bin/test-integration   - Run integration tests (requires Docker)"
+echo ""
+echo "For integration tests, run: bundle install --with integration"
+echo "See docs/testing/integration-tests.md for more info."

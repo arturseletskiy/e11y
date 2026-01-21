@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Integration Tests** - Full test suite for Rails, OpenTelemetry, and external services
+  - Rails 8.0 integration tests (Railtie, middleware, instrumentation)
+  - OpenTelemetry SDK integration tests (OTel Logs API, severity mapping, baggage protection)
+  - ActiveJob integration tests (hybrid tracing, context isolation, error handling)
+  - Docker Compose setup for Loki, Prometheus, Elasticsearch, Redis
+  - `bin/test-integration` script for automated integration testing
+  - CI/CD: Separate jobs for unit tests (fast) and integration tests (with services)
+  - Documentation: [Integration Testing Guide](docs/testing/integration-tests.md)
+
 ### Changed
 - **Retention-Based Routing** - Replaced TieredStorage adapter with flexible lambda-based routing
   - Events declare `retention_period` (e.g., `7.days`, `7.years`)
@@ -15,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Configuration** - Added `default_retention_period` and `routing_rules` (lambda-based)
 - **Event::Base** - Added `retention_period` DSL method, `retention_until` auto-calculated in `track()`
 - **Middleware::Routing** - Rewritten to support retention-based adapter selection
+- **Test Organization** - Unit tests run by default, integration tests require `INTEGRATION=true`
 
 ### Removed
 - **TieredStorage Adapter** - Removed in favor of retention-based routing (more flexible)

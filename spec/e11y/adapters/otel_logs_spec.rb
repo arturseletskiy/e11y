@@ -2,21 +2,22 @@
 
 require "spec_helper"
 
-# Skip OTel tests if OpenTelemetry SDK not available
+# Integration test: requires OpenTelemetry SDK
+# Run with: INTEGRATION=true bundle exec rspec --tag integration
 begin
   require "opentelemetry/sdk"
   require "opentelemetry/logs"
 rescue LoadError
-  RSpec.describe "E11y::Adapters::OTelLogs (skipped)" do
+  RSpec.describe "E11y::Adapters::OTelLogs", integration: true do
     it "requires OpenTelemetry SDK to be available" do
-      skip "OpenTelemetry SDK not available in test environment"
+      skip "OpenTelemetry SDK not available (run: bundle install --with integration)"
     end
   end
 
   return
 end
 
-RSpec.describe E11y::Adapters::OTelLogs do
+RSpec.describe E11y::Adapters::OTelLogs, integration: true do
   let(:adapter) { described_class.new(service_name: "test-service") }
   let(:event_data) do
     {

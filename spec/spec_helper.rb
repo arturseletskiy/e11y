@@ -56,6 +56,19 @@ RSpec.configure do |config|
   config.order = :random
   Kernel.srand config.seed
 
+  # Integration tests configuration
+  # By default, exclude integration tests (requires Rails, OpenTelemetry SDK, Docker)
+  # Run integration tests with: INTEGRATION=true bundle exec rspec
+  if ENV["INTEGRATION"] == "true"
+    # Run ONLY integration tests when INTEGRATION=true
+    config.filter_run_including integration: true
+    puts "\n🔧 Running INTEGRATION tests (Rails, OpenTelemetry, etc.)"
+    puts "   Dependencies: bundle install --with integration\n\n"
+  else
+    # Default: exclude integration tests (fast unit tests only)
+    config.filter_run_excluding integration: true
+  end
+
   # Clean up after each test
   config.after do
     E11y.reset! if E11y.respond_to?(:reset!)

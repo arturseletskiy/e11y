@@ -126,12 +126,34 @@ E11y uses smart conventions to minimize configuration:
 
 After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
 
+### Testing
+
+E11y has two types of tests:
+
+**1. Unit Tests (default)** - Fast, isolated tests without Rails/external dependencies:
+```bash
+bundle exec rspec  # Runs unit tests only (~2 minutes)
+```
+
+**2. Integration Tests** - Full tests with Rails 8.0, OpenTelemetry SDK, and docker-compose services:
+```bash
+# Install integration dependencies
+bundle install --with integration
+
+# Run integration tests (starts docker-compose automatically)
+bin/test-integration  # Runs with Loki, Prometheus, Elasticsearch, Redis (~5 minutes)
+```
+
+See [Integration Testing Guide](docs/testing/integration-tests.md) for detailed instructions.
+
+### Other Commands
+
 ```bash
 # Install dependencies
 bin/setup
 
-# Run tests
-bundle exec rspec
+# Run console
+bin/console
 
 # Run linter
 bundle exec rubocop

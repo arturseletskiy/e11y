@@ -32,6 +32,23 @@ group :test do
   gem "webmock", "~> 3.18"
 end
 
+# Integration testing dependencies (optional)
+# Install with: bundle install --with integration
+# Run integration tests: INTEGRATION=true bundle exec rspec --tag integration
+group :integration do
+  gem "rails", "~> 8.0" # Full Rails for integration tests
+  gem "sqlite3", "~> 2.0" # Database for Rails integration tests
+  
+  # OpenTelemetry SDK for OTel adapter tests
+  gem "opentelemetry-sdk", "~> 1.0"
+  gem "opentelemetry-logs-api", "~> 0.1"
+  gem "opentelemetry-logs-sdk", "~> 0.1"
+  
+  # Additional Rails dependencies
+  gem "rspec-rails", "~> 7.0" # Rails-specific RSpec matchers
+  gem "database_cleaner-active_record", "~> 2.0" # DB cleanup between tests
+end
+
 # Code quality
 group :development, :test do
   gem "brakeman", "~> 6.0"
