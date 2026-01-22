@@ -58,7 +58,7 @@
 - ❌ Global `E11y.configure { metric_pattern ... }` API NOT_IMPLEMENTED
 - ⚠️ **ARCHITECTURE DIFF**: E11y uses event-level DSL instead of global config
 
-**Audit Log:** `/Users/aseletskiy/projects/recruit/e11y/docs/researches/post_implementation/AUDIT-024-UC-003-PATTERN-MATCHING.md`
+**Audit Log:** `docs/researches/post_implementation/AUDIT-024-UC-003-PATTERN-MATCHING.md`
 
 **Key Findings:**
 ```markdown
@@ -153,7 +153,7 @@ end
 - ✅ :user_id excluded (UNIVERSAL_DENYLIST)
 - ✅ End-to-end integration verified
 
-**Audit Log:** `/Users/aseletskiy/projects/recruit/e11y/docs/researches/post_implementation/AUDIT-024-UC-003-FIELD-EXTRACTION-SAFETY.md`
+**Audit Log:** `docs/researches/post_implementation/AUDIT-024-UC-003-FIELD-EXTRACTION-SAFETY.md`
 
 **Key Findings:**
 ```markdown
@@ -253,19 +253,19 @@ end
 **Verification:**
 
 **Files Created:**
-1. `/Users/aseletskiy/projects/recruit/e11y/docs/researches/post_implementation/AUDIT-024-UC-003-PATTERN-MATCHING.md`
+1. `docs/researches/post_implementation/AUDIT-024-UC-003-PATTERN-MATCHING.md`
    - Purpose: Document FEAT-5001 audit findings
    - Scope: ✅ In scope (audit log)
 
-2. `/Users/aseletskiy/projects/recruit/e11y/docs/researches/post_implementation/AUDIT-024-UC-003-FIELD-EXTRACTION-SAFETY.md`
+2. `docs/researches/post_implementation/AUDIT-024-UC-003-FIELD-EXTRACTION-SAFETY.md`
    - Purpose: Document FEAT-5002 audit findings
    - Scope: ✅ In scope (audit log)
 
-3. `/Users/aseletskiy/projects/recruit/e11y/docs/researches/post_implementation/AUDIT-024-UC-003-PERFORMANCE.md`
+3. `docs/researches/post_implementation/AUDIT-024-UC-003-PERFORMANCE.md`
    - Purpose: Document FEAT-5003 audit findings
    - Scope: ✅ In scope (audit log)
 
-4. `/Users/aseletskiy/projects/recruit/e11y/docs/researches/post_implementation/AUDIT-024-UC-003-QUALITY-GATE.md` (this file)
+4. `docs/researches/post_implementation/AUDIT-024-UC-003-QUALITY-GATE.md` (this file)
    - Purpose: Quality gate review
    - Scope: ✅ In scope (quality gate)
 
