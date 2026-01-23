@@ -8,7 +8,7 @@
 
 ## 📊 Overview
 
-Summary of reliability and error handling gaps found during E11y v1.0.0 audit.
+Summary of reliability and error handling gaps found during E11y v0.1.0 audit.
 
 **Audits Analyzed:**
 - AUDIT-010: ADR-013 Reliability & Error Handling

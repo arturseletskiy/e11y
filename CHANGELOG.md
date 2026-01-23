@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - **TieredStorage Adapter** - Removed in favor of retention-based routing (more flexible)
 
-## [1.0.0] - 2026-01-21
+## [0.1.0] - 2026-01-21
 
 ### 🎉 First Production Release
 
@@ -126,6 +126,6 @@ Production-ready observability gem for Ruby on Rails with zero-config SLO tracki
 - Research documents for 6 successful gems (Devise, Sidekiq, Puma, Dry-rb, Yabeda, Sentry)
 - Best practices synthesis for configuration DSL, testing, documentation, CI/CD, release process
 
-[Unreleased]: https://github.com/arturseletskiy/e11y/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/arturseletskiy/e11y/releases/tag/v1.0.0
+[Unreleased]: https://github.com/arturseletskiy/e11y/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/arturseletskiy/e11y/releases/tag/v0.1.0
 [0.1.0]: https://github.com/arturseletskiy/e11y/releases/tag/v0.1.0

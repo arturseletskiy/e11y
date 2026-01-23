@@ -925,10 +925,4 @@ Yabeda.e11y.track_duration_seconds # p99 should be <1ms
 - [ ] Monitor performance
 - [ ] Rollout to production (canary 1% → 10% → 100%)
 
----
-
-**Questions?** See `e11y-final-spec.md` FAQ section or open GitHub issue.
-
-**Version**: 1.0.0  
-**Last Updated**: 2025-12-24
 

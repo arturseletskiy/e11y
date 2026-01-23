@@ -8,7 +8,7 @@
 
 ## 📊 Overview
 
-Summary of documentation gaps found during E11y v1.0.0 audit.
+Summary of documentation gaps found during E11y v0.1.0 audit.
 
 **Audits Analyzed:**
 - AUDIT-024: UC-006 Event-Based Alerts (documentation)

@@ -8,7 +8,7 @@
 
 ## 📊 Overview
 
-Summary of core architecture gaps found during E11y v1.0.0 audit.
+Summary of core architecture gaps found during E11y v0.1.0 audit.
 
 **Audits Analyzed:**
 - AUDIT-004: ADR-001 Architecture & Design Principles

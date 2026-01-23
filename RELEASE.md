@@ -1,13 +1,13 @@
-# Release Instructions for e11y v1.0.0
+# Release Instructions for e11y v0.1.0
 
 ## Pre-Release Checklist
 
-- [x] Version updated to 1.0.0 in `lib/e11y/version.rb`
+- [x] Version updated to 0.1.0 in `lib/e11y/version.rb`
 - [x] CHANGELOG.md updated with all changes
 - [x] All tests passing (1409 examples, 99%+ pass rate)
 - [x] Benchmarks passing (100K events/sec)
-- [x] Gem builds successfully: `e11y-1.0.0.gem`
-- [ ] Git tag created: `v1.0.0`
+- [x] Gem builds successfully: `e11y-0.1.0.gem`
+- [ ] Git tag created: `v0.1.0`
 - [ ] Published to RubyGems.org
 - [ ] GitHub release created
 
@@ -16,14 +16,14 @@
 ```bash
 # Ensure all changes are committed
 git add -A
-git commit -m "Release v1.0.0"
+git commit -m "Release v0.1.0"
 
 # Create annotated tag
-git tag -a v1.0.0 -m "Release v1.0.0 - First production release"
+git tag -a v0.1.0 -m "Release v0.1.0 - First production release"
 
 # Push tag to GitHub
 git push origin main
-git push origin v1.0.0
+git push origin v0.1.0
 ```
 
 ## Step 2: Publish to RubyGems.org
@@ -41,7 +41,7 @@ git push origin v1.0.0
 gem signin
 
 # Push the gem (requires MFA)
-gem push e11y-1.0.0.gem
+gem push e11y-0.1.0.gem
 ```
 
 Expected output:
@@ -51,7 +51,7 @@ Enter your RubyGems.org credentials.
 Username: [your_username]
 Password: [your_password]
 MFA Code: [6-digit code from authenticator app]
-Successfully registered gem: e11y (1.0.0)
+Successfully registered gem: e11y (0.1.0)
 ```
 
 ### Verify Publication
@@ -67,16 +67,16 @@ gem install e11y
 ## Step 3: Create GitHub Release
 
 1. Go to https://github.com/arturseletskiy/e11y/releases/new
-2. Choose tag: `v1.0.0`
-3. Release title: `v1.0.0 - First Production Release`
+2. Choose tag: `v0.1.0`
+3. Release title: `v0.1.0 - First Production Release`
 4. Description: Use content from CHANGELOG.md (see below)
-5. Attach binary: Upload `e11y-1.0.0.gem`
+5. Attach binary: Upload `e11y-0.1.0.gem`
 6. Click "Publish release"
 
 ### GitHub Release Notes Template
 
 ```markdown
-# 🎉 E11y 1.0.0 - First Production Release
+# 🎉 E11y 0.1.0 - First Production Release
 
 Production-ready observability gem for Ruby on Rails with zero-config SLO tracking, request-scoped buffering, and high-performance event streaming.
 
@@ -165,7 +165,7 @@ If critical bug found after release:
 
 ```bash
 # Yank the gem (makes it unavailable for new installs)
-gem yank e11y -v 1.0.0
+gem yank e11y -v 0.1.0
 
 # Fix the issue, bump to 1.0.1, and re-release
 ```

@@ -22,7 +22,7 @@
 **Critical Findings:**
 - ❌ **No event metadata API:** E11y::Registry does NOT exist (see FEAT-5058)
 - ❌ **rake e11y:docs is YARD:** Generates code docs, NOT event registry docs
-- ❌ **UC-022 is v1.1+:** Feature NOT part of v1.0.0 MVP
+- ❌ **UC-022 is v1.1+:** Feature NOT part of v0.1.0 MVP
 - ✅ **YARD docs exist:** Standard Ruby documentation (not event-specific)
 
 **Production Readiness:** ❌ **NOT IMPLEMENTED** (0%)
@@ -148,7 +148,7 @@ OrderPaid.documentation
   - Only basic introspection available (version, adapters)
   - UC-022 is v1.1+ feature (not MVP)
 - **Severity:** LOW (v1.1+ feature)
-- **Risk:** No metadata API in v1.0.0
+- **Risk:** No metadata API in v0.1.0
 
 ---
 
@@ -265,7 +265,7 @@ Methods:       287 (   34 undocumented)
   - UC-022 is v1.1+ feature (not MVP)
   - YARD docs exist but serve different purpose (code API, not event catalog)
 - **Severity:** LOW (v1.1+ feature)
-- **Risk:** No automatic event documentation in v1.0.0
+- **Risk:** No automatic event documentation in v0.1.0
 
 ---
 
@@ -313,12 +313,12 @@ Since event documentation generator does NOT exist, there are no generated docs 
 **Problem:** Audit plan includes UC-022 (v1.1+ feature) causing false negatives.
 
 **Recommendation:**
-Update audit plan to SKIP UC-022 tasks (not part of v1.0.0 MVP).
+Update audit plan to SKIP UC-022 tasks (not part of v0.1.0 MVP).
 
 **Rationale:**
 - UC-022 explicitly marked "Developer Experience Feature (v1.1+)"
 - E11y::Registry NOT implemented (as expected)
-- Including v1.1+ features in v1.0.0 audit creates confusion
+- Including v1.1+ features in v0.1.0 audit creates confusion
 - Should be SKIP (not FAIL) for v1.1+ features
 
 **Action:**
@@ -327,7 +327,7 @@ Mark FEAT-5057 (AUDIT-038: UC-022) as SKIP with note:
 ```
 AUDIT-038: UC-022 Event Registry verified
 
-Status: ⚠️ SKIP (v1.1+ feature, NOT part of v1.0.0 MVP)
+Status: ⚠️ SKIP (v1.1+ feature, NOT part of v0.1.0 MVP)
 
 Subtasks:
 - FEAT-5058: Event registry API - SKIP (v1.1+)
@@ -335,12 +335,12 @@ Subtasks:
 - FEAT-5060: Registry performance - SKIP (v1.1+)
 
 Outcome: UC-022 NOT implemented (as expected for v1.1+ feature)
-No blocker for v1.0.0 production deployment.
+No blocker for v0.1.0 production deployment.
 ```
 
 **Priority:** HIGH (prevents false audit failures)
 **Effort:** 30 minutes (update audit plan)
-**Value:** HIGH (clarifies v1.0.0 vs v1.1+ scope)
+**Value:** HIGH (clarifies v0.1.0 vs v1.1+ scope)
 
 ---
 
@@ -527,7 +527,7 @@ $ rake e11y:docs:generate
 **Critical Findings:**
 - ❌ **No event metadata API:** E11y::Registry does NOT exist (FEAT-5058)
 - ❌ **rake e11y:docs is YARD:** Standard Ruby documentation (not event-specific)
-- ❌ **UC-022 is v1.1+:** Feature NOT part of v1.0.0 MVP
+- ❌ **UC-022 is v1.1+:** Feature NOT part of v0.1.0 MVP
 - ✅ **YARD docs exist:** Code documentation available (different purpose)
 
 **Production Readiness Assessment:**
@@ -538,7 +538,7 @@ $ rake e11y:docs:generate
 **Risk:** ✅ LOW (UC-022 is v1.1+, not production requirement)
 
 **Impact:**
-- No automatic event documentation in v1.0.0
+- No automatic event documentation in v0.1.0
 - YARD docs available for code API
 - Manual documentation required for events
 - v1.1 will add event docs generator

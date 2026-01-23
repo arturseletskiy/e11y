@@ -1,4 +1,4 @@
-# E11y v1.0.0 Production Readiness Summary
+# E11y v0.1.0 Production Readiness Summary
 
 **Date:** 2026-01-21  
 **Audit Scope:** 43 audit reports (Phases 1-6)  

@@ -8,7 +8,7 @@
 
 ## 📊 Overview
 
-Summary of performance and optimization gaps found during E11y v1.0.0 audit.
+Summary of performance and optimization gaps found during E11y v0.1.0 audit.
 
 **Audits Analyzed:**
 - AUDIT-015: ADR-002 Performance Targets
