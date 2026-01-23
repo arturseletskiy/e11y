@@ -8,7 +8,7 @@ require "spec_helper"
 # Run with: INTEGRATION=true bundle exec rspec --tag integration
 begin
   require "opentelemetry/sdk"
-  require "opentelemetry/logs"
+  require "opentelemetry-logs-sdk"
   require "e11y/adapters/otel_logs"
 rescue LoadError
   RSpec.describe "E11y::Adapters::OTelLogs", :integration do

@@ -56,6 +56,7 @@ RSpec.describe E11y::Adapters::Yabeda, :integration do
                     comment: "Total orders tracked"
           end
         end
+        Yabeda.configure!
       end
 
       it "increments real Yabeda counter" do
@@ -123,6 +124,7 @@ RSpec.describe E11y::Adapters::Yabeda, :integration do
                       comment: "Order amounts"
           end
         end
+        Yabeda.configure!
       end
 
       it "observes real Yabeda histogram" do
@@ -178,6 +180,7 @@ RSpec.describe E11y::Adapters::Yabeda, :integration do
                   comment: "Queue depth"
           end
         end
+        Yabeda.configure!
       end
 
       it "sets real Yabeda gauge" do
@@ -226,6 +229,7 @@ RSpec.describe E11y::Adapters::Yabeda, :integration do
             counter :api_requests, tags: [:method], comment: "API requests"
           end
         end
+        Yabeda.configure!
 
         E11y::Metrics.increment(:api_requests, { method: "GET" })
 
@@ -242,6 +246,7 @@ RSpec.describe E11y::Adapters::Yabeda, :integration do
                       comment: "Request duration"
           end
         end
+        Yabeda.configure!
 
         E11y::Metrics.histogram(:request_duration, 0.042, { endpoint: "/api/users" })
 
@@ -256,6 +261,7 @@ RSpec.describe E11y::Adapters::Yabeda, :integration do
             gauge :active_connections, tags: [:server], comment: "Active connections"
           end
         end
+        Yabeda.configure!
 
         E11y::Metrics.gauge(:active_connections, 42, { server: "web-01" })
 
@@ -271,6 +277,7 @@ RSpec.describe E11y::Adapters::Yabeda, :integration do
             counter :protected_metric, tags: [:label1], comment: "Protected metric"
           end
         end
+        Yabeda.configure!
 
         registry.register(
           type: :counter,
@@ -309,6 +316,7 @@ RSpec.describe E11y::Adapters::Yabeda, :integration do
             counter :exported_metric, tags: [], comment: "Exported metric"
           end
         end
+        Yabeda.configure!
 
         Yabeda.e11y.exported_metric.increment({})
 
@@ -332,6 +340,7 @@ RSpec.describe E11y::Adapters::Yabeda, :integration do
 
     it "is healthy when Yabeda is configured" do
       Yabeda.configure {} # Configure Yabeda
+      Yabeda.configure! # Apply configuration
       expect(adapter.healthy?).to be(true)
     end
   end

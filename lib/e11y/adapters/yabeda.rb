@@ -64,7 +64,13 @@ module E11y
         )
 
         # Auto-register metrics from Registry
-        register_metrics_from_registry! if config.fetch(:auto_register, true)
+        return unless config.fetch(:auto_register, true)
+
+        register_metrics_from_registry!
+
+        # Apply configuration in non-Rails environments (Rails does this automatically)
+        # In tests, Yabeda.configure! should be called explicitly in before blocks
+        apply_yabeda_configuration!
       end
 
       # Write a single event to Yabeda
@@ -236,6 +242,27 @@ module E11y
 
       private
 
+      # Apply Yabeda configuration (smart detection of environment)
+      #
+      # In Rails environments, configuration is applied automatically via Railtie.
+      # In non-Rails environments (e.g., Sinatra, standalone Ruby), we apply it here.
+      # In test environments, configuration should be applied explicitly in test setup.
+      #
+      # @return [void]
+      # @api private
+      def apply_yabeda_configuration!
+        # Don't auto-apply in Rails - Rails will call configure! via Railtie
+        return if defined?(::Rails)
+
+        # Don't auto-apply if already configured
+        return if ::Yabeda.configured?
+
+        # Apply configuration (non-Rails environments only)
+        ::Yabeda.configure!
+      rescue StandardError => e
+        E11y.logger.debug("Could not apply Yabeda configuration: #{e.message}")
+      end
+
       # Register metrics from Registry into Yabeda
       #
       # This is called during initialization if auto_register is true.
@@ -313,9 +340,12 @@ module E11y
             end
           end
         end
+
+        # Apply configuration for runtime-registered metrics (non-Rails environments)
+        apply_yabeda_configuration!
       rescue StandardError => e
         # Metric might already be registered - that's OK
-        E11y.logger.debug("Could not register Yabeda metric #{name}: #{e.message}")
+        E11y.logger.warn("Could not register Yabeda metric #{name}: #{e.message}")
       end
       # rubocop:enable Metrics/MethodLength
 

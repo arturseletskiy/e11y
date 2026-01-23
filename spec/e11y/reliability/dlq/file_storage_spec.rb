@@ -39,11 +39,15 @@ RSpec.describe E11y::Reliability::DLQ::FileStorage do
     end
 
     it "uses default file path if not provided" do
-      allow(Rails).to receive(:root).and_return(Pathname.new("/app")) if defined?(Rails)
+      # Use a writable temporary directory for testing
+      temp_dir = Dir.mktmpdir
+      allow(Rails).to receive(:root).and_return(Pathname.new(temp_dir)) if defined?(Rails)
 
       dlq_default = described_class.new
       # Should not crash
       expect(dlq_default).to be_a(described_class)
+    ensure
+      FileUtils.rm_rf(temp_dir) if temp_dir
     end
   end
 
