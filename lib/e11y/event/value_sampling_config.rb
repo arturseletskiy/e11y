@@ -62,12 +62,12 @@ module E11y
         end
       end
 
-      private
-
       # Valid comparison types for value-based sampling
       VALID_COMPARISON_TYPES = %i[greater_than less_than equals in_range].freeze
       # Comparison types that require numeric thresholds
       NUMERIC_COMPARISON_TYPES = %i[greater_than less_than].freeze
+
+      private
 
       # rubocop:disable Metrics/CyclomaticComplexity
       # Validation requires checking multiple comparison types and threshold types
@@ -75,9 +75,7 @@ module E11y
         raise ArgumentError, "At least one comparison required" if comparisons.empty?
 
         comparisons.each do |type, threshold|
-          unless VALID_COMPARISON_TYPES.include?(type)
-            raise ArgumentError, "Invalid comparison type: #{type}"
-          end
+          raise ArgumentError, "Invalid comparison type: #{type}" unless VALID_COMPARISON_TYPES.include?(type)
 
           raise ArgumentError, "in_range requires a Range" if type == :in_range && !threshold.is_a?(Range)
 

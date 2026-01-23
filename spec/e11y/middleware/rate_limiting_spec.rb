@@ -300,7 +300,7 @@ RSpec.describe E11y::Middleware::RateLimiting do
       middleware = described_class.new(next_middleware, global_limit: 100, per_event_limit: 50, window: 1.0)
 
       # Simulate flood: 200 events
-      results = 200.times.map { middleware.call(event_data) }
+      results = Array.new(200) { middleware.call(event_data) }
 
       # Only first ~50-100 allowed (exact count depends on refill timing)
       allowed_count = results.compact.count

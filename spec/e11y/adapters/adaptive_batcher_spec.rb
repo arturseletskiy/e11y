@@ -177,7 +177,7 @@ RSpec.describe E11y::Adapters::AdaptiveBatcher do
 
   describe "thread safety" do
     it "handles concurrent writes safely" do
-      threads = 10.times.map do |i|
+      threads = Array.new(10) do |i|
         Thread.new do
           10.times { |j| batcher.add(event_name: "event.#{i}.#{j}") }
         end
@@ -193,7 +193,7 @@ RSpec.describe E11y::Adapters::AdaptiveBatcher do
     it "handles concurrent flush safely" do
       20.times { batcher.add(event_name: "event") }
 
-      threads = 5.times.map { Thread.new { batcher.flush! } }
+      threads = Array.new(5) { Thread.new { batcher.flush! } }
       threads.each(&:join)
 
       # Should only flush once (buffer was cleared by first flush)

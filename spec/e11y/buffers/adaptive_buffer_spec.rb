@@ -113,7 +113,7 @@ RSpec.describe E11y::Buffers::AdaptiveBuffer do
 
   describe "#flush" do
     let(:events) do
-      5.times.map do |i|
+      Array.new(5) do |i|
         {
           event_name: "Event#{i}",
           payload: { id: i },
@@ -152,7 +152,7 @@ RSpec.describe E11y::Buffers::AdaptiveBuffer do
       100.times { |i| buffer.add_event({ event_name: "E#{i}", payload: { id: i }, adapters: [:logs] }) }
 
       # Flush concurrently from multiple threads
-      threads = 5.times.map do
+      threads = Array.new(5) do
         Thread.new { buffer.flush }
       end
 
@@ -393,7 +393,7 @@ RSpec.describe E11y::Buffers::AdaptiveBuffer do
 
     # rubocop:disable RSpec/ExampleLength
     it "handles concurrent add_event calls" do
-      threads = 10.times.map do |thread_id|
+      threads = Array.new(10) do |thread_id|
         Thread.new do
           100.times do |i|
             buffer.add_event({
@@ -412,7 +412,7 @@ RSpec.describe E11y::Buffers::AdaptiveBuffer do
     end
 
     it "maintains consistent memory tracking under concurrency" do
-      threads = 5.times.map do
+      threads = Array.new(5) do
         Thread.new do
           50.times do
             buffer.add_event({
@@ -441,7 +441,7 @@ RSpec.describe E11y::Buffers::AdaptiveBuffer do
 
     it "handles 10K events/sec with memory <100MB", :benchmark do
       event_count = 10_000
-      events = event_count.times.map do |i|
+      events = Array.new(event_count) do |i|
         {
           event_name: "BenchmarkEvent",
           payload: { id: i, data: "x" * 1000 }, # ~1KB per event

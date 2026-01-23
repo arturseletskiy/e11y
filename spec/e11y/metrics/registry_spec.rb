@@ -397,7 +397,7 @@ RSpec.describe E11y::Metrics::Registry do
 
   describe "thread safety" do
     it "handles concurrent registrations" do
-      threads = 10.times.map do |i|
+      threads = Array.new(10) do |i|
         Thread.new do
           registry.register(
             type: :counter,

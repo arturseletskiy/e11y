@@ -107,7 +107,7 @@ RSpec.describe E11y::Buffers::RequestScopedBuffer, :benchmark do
 
         results = Concurrent::Array.new
 
-        threads = thread_count.times.map do |thread_id|
+        threads = Array.new(thread_count) do |thread_id|
           Thread.new do
             # Simulate request lifecycle
             described_class.initialize!(request_id: "req-#{thread_id}")
@@ -137,7 +137,7 @@ RSpec.describe E11y::Buffers::RequestScopedBuffer, :benchmark do
         puts "  Concurrent threads: #{thread_count}"
         puts "  Events per thread: #{events_per_request}"
         puts "  Thread buffer sizes: #{thread_sizes.tally.inspect}"
-        puts "  All threads isolated: #{thread_sizes.all? { |s| s == events_per_request } ? '✅' : '❌'}"
+        puts "  All threads isolated: #{thread_sizes.all?(events_per_request) ? '✅' : '❌'}"
 
         # Each thread should have exactly its own events
         expect(thread_sizes).to all(eq(events_per_request))
@@ -317,7 +317,7 @@ RSpec.describe E11y::Buffers::RequestScopedBuffer, :benchmark do
 
       start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
-      threads = test_concurrency.times.map do |_req_id|
+      threads = Array.new(test_concurrency) do |_req_id|
         Thread.new do
           described_class.initialize!
           events_per_request.times { |i| described_class.add_event({ event: i, severity: :debug }) }

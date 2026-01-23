@@ -415,7 +415,7 @@ RSpec.describe E11y::Adapters::File do
     after { adapter.close }
 
     it "handles concurrent writes safely" do
-      threads = 10.times.map do |i|
+      threads = Array.new(10) do |i|
         Thread.new do
           adapter.write(event_name: "concurrent.event.#{i}", severity: :info)
         end

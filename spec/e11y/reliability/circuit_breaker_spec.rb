@@ -251,7 +251,7 @@ RSpec.describe E11y::Reliability::CircuitBreaker do
 
   describe "thread safety" do
     it "handles concurrent calls safely" do
-      threads = 10.times.map do
+      threads = Array.new(10) do
         Thread.new do
           10.times do
             circuit_breaker.call { "success" }

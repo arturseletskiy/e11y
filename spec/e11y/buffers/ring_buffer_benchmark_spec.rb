@@ -112,7 +112,7 @@ RSpec.describe E11y::Buffers::RingBuffer, :benchmark do
         events_per_thread = 1_000
         buffer_concurrent = described_class.new(capacity: 20_000)
 
-        threads = thread_count.times.map do |thread_id|
+        threads = Array.new(thread_count) do |thread_id|
           Thread.new do
             events_per_thread.times do |i|
               buffer_concurrent.push({ thread: thread_id, event: i })
@@ -269,7 +269,7 @@ RSpec.describe E11y::Buffers::RingBuffer, :benchmark do
         popped_events = Concurrent::AtomicFixnum.new(0)
 
         # Start producers
-        producers = producer_count.times.map do |producer_id|
+        producers = Array.new(producer_count) do |producer_id|
           Thread.new do
             events_per_producer.times do |i|
               buffer_concurrent.push({ producer: producer_id, event: i })
@@ -279,7 +279,7 @@ RSpec.describe E11y::Buffers::RingBuffer, :benchmark do
         end
 
         # Start consumers
-        consumers = consumer_count.times.map do
+        consumers = Array.new(consumer_count) do
           Thread.new do
             loop do
               events = buffer_concurrent.pop(100)

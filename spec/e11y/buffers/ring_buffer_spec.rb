@@ -144,7 +144,7 @@ RSpec.describe E11y::Buffers::RingBuffer do
 
   describe "#flush_all" do
     it "returns all events and empties buffer" do
-      events = 10.times.map { |i| { id: i } }
+      events = Array.new(10) { |i| { id: i } }
       events.each { |e| buffer.push(e) }
 
       result = buffer.flush_all
@@ -273,7 +273,7 @@ RSpec.describe E11y::Buffers::RingBuffer do
     context "with single producer, single consumer (SPSC)" do
       it "handles concurrent push/pop without data loss" do
         event_count = 5000
-        events_to_push = event_count.times.map { |i| { id: i, timestamp: Time.now.to_f } }
+        events_to_push = Array.new(event_count) { |i| { id: i, timestamp: Time.now.to_f } }
         consumed_events = []
 
         # Producer thread
@@ -305,7 +305,7 @@ RSpec.describe E11y::Buffers::RingBuffer do
 
       it "maintains FIFO order under concurrency" do
         event_count = 1000
-        events_to_push = event_count.times.map { |i| { sequence: i } }
+        events_to_push = Array.new(event_count) { |i| { sequence: i } }
         consumed_events = []
 
         producer = Thread.new do
@@ -343,7 +343,7 @@ RSpec.describe E11y::Buffers::RingBuffer do
         consumed_events = Concurrent::Array.new
 
         # 50 producer threads
-        producer_threads = producers.times.map do |producer_id|
+        producer_threads = Array.new(producers) do |producer_id|
           Thread.new do
             events_per_producer.times do |i|
               buffer.push({ producer_id: producer_id, event_id: i })
@@ -352,7 +352,7 @@ RSpec.describe E11y::Buffers::RingBuffer do
         end
 
         # 50 consumer threads
-        consumer_threads = consumers.times.map do
+        consumer_threads = Array.new(consumers) do
           Thread.new do
             loop do
               batch = buffer.pop(10)
@@ -381,7 +381,7 @@ RSpec.describe E11y::Buffers::RingBuffer do
         threads = 100
         operations_per_thread = 100
 
-        threads_array = threads.times.map do |thread_id|
+        threads_array = Array.new(threads) do |thread_id|
           Thread.new do
             operations_per_thread.times do |i|
               if thread_id.even?

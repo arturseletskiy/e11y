@@ -185,7 +185,7 @@ RSpec.describe E11y::Adapters::Registry do
 
   describe "thread safety" do
     it "handles concurrent registration" do
-      threads = 10.times.map do |i|
+      threads = Array.new(10) do |i|
         Thread.new do
           adapter = E11y::Adapters::InMemory.new
           described_class.register(:"adapter_#{i}", adapter)
@@ -200,7 +200,7 @@ RSpec.describe E11y::Adapters::Registry do
     it "handles concurrent resolution" do
       described_class.register(:test, test_adapter)
 
-      threads = 10.times.map do
+      threads = Array.new(10) do
         Thread.new { described_class.resolve(:test) }
       end
 

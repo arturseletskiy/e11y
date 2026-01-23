@@ -159,7 +159,7 @@ RSpec.describe E11y::Buffers::AdaptiveBuffer, :benchmark do
         thread_count = 10
         events_per_thread = 500
 
-        threads = thread_count.times.map do |thread_id|
+        threads = Array.new(thread_count) do |thread_id|
           Thread.new do
             events_per_thread.times do |i|
               buffer_concurrent.add_event({

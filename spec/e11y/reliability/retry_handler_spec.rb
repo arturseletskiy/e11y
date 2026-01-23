@@ -304,7 +304,7 @@ RSpec.describe E11y::Reliability::RetryHandler do
 
   describe "thread safety" do
     it "handles concurrent retries safely" do
-      threads = 5.times.map do |i|
+      threads = Array.new(5) do |i|
         Thread.new do
           adapter_i = double("Adapter#{i}", class: double(name: "Adapter#{i}"))
 
