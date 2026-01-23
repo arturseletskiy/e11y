@@ -112,8 +112,9 @@ module E11y
           @error_events[event_name] << now
           @all_errors << now
 
-          # Cleanup old events (outside window)
-          cleanup_old_events(now)
+          # Cleanup old events periodically (every 50 errors) instead of on every error
+          # This reduces O(n²) overhead significantly while keeping memory bounded
+          cleanup_old_events(now) if @all_errors.size % 50 == 0
 
           # Update baseline (if not in spike)
           update_baseline(event_name) unless @spike_started_at
@@ -127,10 +128,12 @@ module E11y
       def current_error_rate(event_name = nil)
         @mutex.synchronize do
           now = Time.now
-          cleanup_old_events(now)
+          cutoff = now - @window
 
           events = event_name ? @error_events[event_name] : @all_errors
-          count = events.count { |ts| (now - ts) <= @window }
+          # Count events within window without cleanup
+          # Cleanup is handled periodically in record_event
+          count = events.count { |ts| ts >= cutoff }
 
           # Convert to per-minute rate
           (count.to_f / @window) * 60
@@ -191,8 +194,10 @@ module E11y
       # @return [Float] Errors per minute
       def current_error_rate_unsafe(event_name = nil)
         now = Time.now
+        cutoff = now - @window
         events = event_name ? @error_events[event_name] : @all_errors
-        count = events.count { |ts| (now - ts) <= @window }
+        # Count within window without cleanup
+        count = events.count { |ts| ts >= cutoff }
         (count.to_f / @window) * 60
       end
 

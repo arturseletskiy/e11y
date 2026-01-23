@@ -154,7 +154,7 @@ module E11y
         # Update Yabeda metric
         ::Yabeda.e11y.send(name).increment(safe_labels, by: value)
       rescue StandardError => e
-        E11y.logger.warn("Failed to increment Yabeda metric #{name}: #{e.message}", error: e.class.name)
+        E11y.logger.warn("Failed to increment Yabeda metric #{name}: #{e.message}")
       end
 
       # Track a histogram metric (for E11y::Metrics facade).
@@ -174,9 +174,9 @@ module E11y
         register_metric_if_needed(name, :histogram, safe_labels.keys, buckets: buckets)
 
         # Update Yabeda metric
-        ::Yabeda.e11y.send(name).observe(value, safe_labels)
+        ::Yabeda.e11y.send(name).measure(safe_labels, value)
       rescue StandardError => e
-        E11y.logger.warn("Failed to observe Yabeda histogram #{name}: #{e.message}", error: e.class.name)
+        E11y.logger.warn("Failed to observe Yabeda histogram #{name}: #{e.message}")
       end
 
       # Track a gauge metric (for E11y::Metrics facade).
@@ -195,9 +195,9 @@ module E11y
         register_metric_if_needed(name, :gauge, safe_labels.keys)
 
         # Update Yabeda metric
-        ::Yabeda.e11y.send(name).set(value, safe_labels)
+        ::Yabeda.e11y.send(name).set(safe_labels, value)
       rescue StandardError => e
-        E11y.logger.warn("Failed to set Yabeda gauge #{name}: #{e.message}", error: e.class.name)
+        E11y.logger.warn("Failed to set Yabeda gauge #{name}: #{e.message}")
       end
 
       # Validate configuration
@@ -371,9 +371,9 @@ module E11y
         when :counter
           ::Yabeda.e11y.send(metric_name).increment(safe_labels)
         when :histogram
-          ::Yabeda.e11y.send(metric_name).observe(value, safe_labels)
+          ::Yabeda.e11y.send(metric_name).measure(safe_labels, value)
         when :gauge
-          ::Yabeda.e11y.send(metric_name).set(value, safe_labels)
+          ::Yabeda.e11y.send(metric_name).set(safe_labels, value)
         end
       rescue StandardError => e
         warn "E11y Yabeda: Error updating metric #{metric_name}: #{e.message}"
