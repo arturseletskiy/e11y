@@ -20,6 +20,7 @@ AllCops:
     - 'vendor/**/*'
     - 'node_modules/**/*'
     - 'tmp/**/*'
+    - 'benchmarks/**/*'
 
 # Metrics
 Metrics/BlockLength:

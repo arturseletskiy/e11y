@@ -83,7 +83,7 @@ def measure_allocations(event_count:)
 end
 
 def detailed_allocation_report(event_count:)
-  puts "\n" + "=" * 80
+  puts "\n#{'=' * 80}"
   puts "  DETAILED ALLOCATION REPORT (#{event_count} events)"
   puts "=" * 80
 
@@ -118,7 +118,7 @@ def detailed_allocation_report(event_count:)
   end
 
   # Leak detection
-  if report.total_retained > 0
+  if report.total_retained.positive?
     puts "\n⚠️  MEMORY LEAK WARNING:"
     puts "  #{report.total_retained} objects retained (not garbage collected)"
     puts ""
@@ -150,7 +150,7 @@ def verify_allocation_target(result:, event_count:)
 
   puts "  Ruby theoretical minimum:  #{ruby_minimum} allocations/event"
   puts "  E11y actual:               #{per_event} allocations/event"
-  puts "  Overhead:                  #{((per_event / ruby_minimum) * 100 - 100).round(1)}%"
+  puts "  Overhead:                  #{(((per_event / ruby_minimum) * 100) - 100).round(1)}%"
   puts ""
 
   if is_near_minimum
@@ -181,7 +181,7 @@ def check_for_leaks(result:)
   retained = result[:total_retained]
 
   puts "\n🔍 Memory Leak Check:"
-  if retained == 0
+  if retained.zero?
     puts "  ✅ PASS: No memory leaks (0 retained objects)"
   else
     puts "  ❌ FAIL: #{retained} objects retained (potential memory leak)"
@@ -205,7 +205,7 @@ def main
     count = test_case[:count]
     name = test_case[:name]
 
-    puts "\n" + "=" * 80
+    puts "\n#{'=' * 80}"
     puts "  Testing: #{name}"
     puts "=" * 80
 
@@ -227,7 +227,7 @@ def main
   check_for_leaks(result: results[1000])
 
   # Summary
-  puts "\n" + "=" * 80
+  puts "\n#{'=' * 80}"
   puts "  SUMMARY"
   puts "=" * 80
   puts ""
@@ -235,13 +235,13 @@ def main
   result_1k = results[1000]
   per_event = result_1k[:per_event_allocated]
 
-  if per_event <= 5 && result_1k[:total_retained] == 0
+  if per_event <= 5 && result_1k[:total_retained].zero?
     puts "  ✅ EXCELLENT: Near-optimal allocations, no leaks"
     exit 0
-  elsif per_event <= 10 && result_1k[:total_retained] == 0
+  elsif per_event <= 10 && result_1k[:total_retained].zero?
     puts "  ⚠️  ACCEPTABLE: Reasonable allocations, no leaks"
     exit 0
-  elsif result_1k[:total_retained] > 0
+  elsif result_1k[:total_retained].positive?
     puts "  ❌ FAIL: Memory leak detected"
     exit 1
   else

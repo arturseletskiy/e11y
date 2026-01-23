@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require 'time'
+require "time"
 
 # Ruby Baseline Allocation Measurement
 #
@@ -14,7 +14,7 @@ require 'time'
 # Helper Functions
 # ============================================================================
 
-def measure_allocations(&block)
+def measure_allocations
   before = GC.stat(:total_allocated_objects)
   yield
   after = GC.stat(:total_allocated_objects)
@@ -32,7 +32,7 @@ puts "Ruby: #{RUBY_VERSION}"
 puts ""
 
 # Warmup (initialize GC stats)
-100.times { Hash.new }
+100.times { {} }
 GC.start
 
 puts "📊 Test 1: Empty method call"
