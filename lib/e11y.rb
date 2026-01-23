@@ -8,7 +8,8 @@ loader = Zeitwerk::Loader.for_gem
 # Configure inflector for acronyms
 loader.inflector.inflect(
   "pii" => "PII",
-  "pii_filter" => "PIIFilter"
+  "pii_filter" => "PIIFilter",
+  "otel_logs" => "OTelLogs"
 )
 loader.setup
 
