@@ -8,6 +8,8 @@ if ENV["COVERAGE"]
   require "simplecov-cobertura"
 
   SimpleCov.start do
+    # Set coverage directory
+    coverage_dir "coverage"
     add_filter "/spec/"
     add_filter "/vendor/"
     add_filter "/benchmarks/"
@@ -55,10 +57,10 @@ if ENV["COVERAGE"]
     end
 
     # Multiple formatters
-    formatter SimpleCov::Formatter::MultiFormatter.new([
-                                                         SimpleCov::Formatter::HTMLFormatter,
-                                                         SimpleCov::Formatter::CoberturaFormatter
-                                                       ])
+    SimpleCov.formatters = SimpleCov::Formatter::MultiFormatter.new([
+      SimpleCov::Formatter::HTMLFormatter,
+      SimpleCov::Formatter::CoberturaFormatter
+    ])
   end
 end
 
