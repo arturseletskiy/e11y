@@ -86,8 +86,11 @@ jobs:
           COVERAGE: true
         run: |
           echo "🧪 Starting unit tests at $(date)"
-          bundle exec rspec --tag ~integration --format progress
+          bundle exec rspec --tag ~integration --format progress 2>&1 | tee rspec_output.log
           echo "✅ Unit tests completed at $(date)"
+          echo ""
+          echo "📝 Checking for SimpleCov output/errors..."
+          grep -i "simplecov\|coverage" rspec_output.log || echo "No SimpleCov messages in output"
       
       - name: Check coverage files
         if: matrix.ruby == '3.2'
