@@ -75,6 +75,12 @@ jobs:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
       
+      - name: Check SimpleCov Cobertura gem
+        run: |
+          echo "📦 Checking if simplecov-cobertura is installed..."
+          bundle list | grep simplecov || echo "❌ SimpleCov gems not found"
+          bundle exec ruby -e "require 'simplecov-cobertura'; puts '✅ simplecov-cobertura loaded successfully'" || echo "❌ Failed to load simplecov-cobertura"
+      
       - name: Run unit tests (fast, no Rails/integrations)
         env:
           COVERAGE: true
