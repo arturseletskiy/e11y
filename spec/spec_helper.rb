@@ -8,6 +8,9 @@ if ENV["COVERAGE"]
   require "simplecov-cobertura"
 
   SimpleCov.start do
+    # Set coverage directory
+    coverage_dir "coverage"
+
     add_filter "/spec/"
     add_filter "/vendor/"
     add_filter "/benchmarks/"
@@ -39,8 +42,10 @@ if ENV["COVERAGE"]
     minimum_coverage line: 95
     refuse_coverage_drop
 
-    # Print files with low coverage
-    at_exit do
+    # Print files with low coverage (using SimpleCov's at_exit hook)
+    SimpleCov.at_exit do
+      SimpleCov.result.format! # CRITICAL: Ensure formatters run!
+
       if SimpleCov.result
         files_under_target = SimpleCov.result.files.select { |f| f.covered_percent < 100 }.sort_by(&:covered_percent)
         if files_under_target.any?
@@ -55,10 +60,10 @@ if ENV["COVERAGE"]
     end
 
     # Multiple formatters
-    formatter SimpleCov::Formatter::MultiFormatter.new([
-                                                         SimpleCov::Formatter::HTMLFormatter,
-                                                         SimpleCov::Formatter::CoberturaFormatter
-                                                       ])
+    SimpleCov.formatters = SimpleCov::Formatter::MultiFormatter.new([
+                                                                      SimpleCov::Formatter::HTMLFormatter,
+                                                                      SimpleCov::Formatter::CoberturaFormatter
+                                                                    ])
   end
 end
 
