@@ -8,7 +8,8 @@ require "spec_helper"
 # Run with: INTEGRATION=true bundle exec rspec --tag integration
 begin
   require "opentelemetry/sdk"
-  require "opentelemetry/logs"
+  require "opentelemetry-logs-sdk"
+  require "e11y/adapters/otel_logs"
 rescue LoadError
   RSpec.describe "E11y::Adapters::OTelLogs", :integration do
     it "requires OpenTelemetry SDK to be available" do
@@ -73,12 +74,12 @@ RSpec.describe E11y::Adapters::OTelLogs, :integration do
 
   describe "#healthy?" do
     it "returns true when logger provider and logger are set" do
-      expect(adapter.healthy?).to be true
+      expect(adapter.healthy?).to be(true)
     end
 
     it "returns false when logger not set" do
       adapter.instance_variable_set(:@logger, nil)
-      expect(adapter.healthy?).to be false
+      expect(adapter.healthy?).to be(false)
     end
   end
 
@@ -94,21 +95,21 @@ RSpec.describe E11y::Adapters::OTelLogs, :integration do
     describe "Severity mapping (E11y → OTel)" do
       it "maps E11y severities to OTel severities" do
         {
-          debug: OpenTelemetry::SDK::Logs::Severity::DEBUG,
-          info: OpenTelemetry::SDK::Logs::Severity::INFO,
-          success: OpenTelemetry::SDK::Logs::Severity::INFO,
-          warn: OpenTelemetry::SDK::Logs::Severity::WARN,
-          error: OpenTelemetry::SDK::Logs::Severity::ERROR,
-          fatal: OpenTelemetry::SDK::Logs::Severity::FATAL
-        }.each do |e11y_severity, otel_severity|
+          debug: 5,  # DEBUG
+          info: 9,   # INFO
+          success: 9, # INFO
+          warn: 13,  # WARN
+          error: 17, # ERROR
+          fatal: 21  # FATAL
+        }.each do |e11y_severity, otel_severity_number|
           result = adapter.send(:map_severity, e11y_severity)
-          expect(result).to eq(otel_severity), "Expected #{otel_severity} for #{e11y_severity}"
+          expect(result).to eq(otel_severity_number), "Expected #{otel_severity_number} for #{e11y_severity}"
         end
       end
 
       it "defaults to INFO for unknown severity" do
         result = adapter.send(:map_severity, :unknown)
-        expect(result).to eq(OpenTelemetry::SDK::Logs::Severity::INFO)
+        expect(result).to eq(9) # INFO
       end
     end
 
@@ -126,7 +127,12 @@ RSpec.describe E11y::Adapters::OTelLogs, :integration do
       end
 
       it "prefixes payload attributes with 'event.'" do
-        attributes = adapter.send(:build_attributes, event_data)
+        # The baggage allowlist needs to include these keys
+        custom_adapter = described_class.new(
+          service_name: "test-service",
+          baggage_allowlist: %i[order_id amount user_id trace_id span_id]
+        )
+        attributes = custom_adapter.send(:build_attributes, event_data)
         expect(attributes).to have_key("event.order_id")
         expect(attributes).to have_key("event.amount")
       end
@@ -177,7 +183,7 @@ RSpec.describe E11y::Adapters::OTelLogs, :integration do
       pii_keys = %i[email phone ssn credit_card]
       pii_keys.each do |pii_key|
         is_allowed = adapter.send(:baggage_allowed?, pii_key)
-        expect(is_allowed).to be false, "PII key #{pii_key} should not be allowed"
+        expect(is_allowed).to be(false), "PII key #{pii_key} should not be allowed"
       end
     end
   end
@@ -274,7 +280,7 @@ RSpec.describe E11y::Adapters::OTelLogs, :integration do
       }
 
       log_record = adapter.send(:build_log_record, error_event)
-      expect(log_record.severity_number).to eq(OpenTelemetry::SDK::Logs::Severity::ERROR)
+      expect(log_record.severity_number).to eq(17) # ERROR
     end
   end
 end

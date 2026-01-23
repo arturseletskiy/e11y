@@ -8,7 +8,8 @@ loader = Zeitwerk::Loader.for_gem
 # Configure inflector for acronyms
 loader.inflector.inflect(
   "pii" => "PII",
-  "pii_filter" => "PIIFilter"
+  "pii_filter" => "PIIFilter",
+  "otel_logs" => "OTelLogs"
 )
 loader.setup
 
@@ -106,8 +107,8 @@ module E11y
   class Configuration
     attr_accessor :adapters, :log_level, :enabled, :environment, :service_name, :default_retention_period,
                   :routing_rules, :fallback_adapters
-    attr_reader :adapter_mapping, :pipeline, :rails_instrumentation, :logger_bridge, :request_buffer, :error_handling,
-                :dlq_storage, :dlq_filter, :rate_limiting, :slo_tracking
+    attr_reader :adapter_mapping, :pipeline, :rails_instrumentation, :logger_bridge, :request_buffer, :active_job,
+                :error_handling, :dlq_storage, :dlq_filter, :rate_limiting, :slo_tracking
 
     def initialize
       initialize_basic_config
@@ -138,6 +139,7 @@ module E11y
       @rails_instrumentation = RailsInstrumentationConfig.new
       @logger_bridge = LoggerBridgeConfig.new
       @request_buffer = RequestBufferConfig.new
+      @active_job = ActiveJobConfig.new
       @error_handling = ErrorHandlingConfig.new # ✅ C18 Resolution
       @dlq_storage = nil # Set by user (e.g., DLQ::FileStorage instance)
       @dlq_filter = nil # Set by user (e.g., DLQ::Filter instance)
@@ -243,6 +245,24 @@ module E11y
 
     def initialize
       @enabled = false # Disabled by default
+    end
+  end
+
+  # ActiveJob configuration
+  #
+  # Controls ActiveJob integration (callbacks for event tracking).
+  # When enabled, E11y will automatically track job lifecycle events:
+  # - job.enqueued
+  # - job.started
+  # - job.completed
+  # - job.failed
+  #
+  # @see lib/e11y/instruments/active_job.rb
+  class ActiveJobConfig
+    attr_accessor :enabled
+
+    def initialize
+      @enabled = false # Disabled by default, enabled by Railtie
     end
   end
 

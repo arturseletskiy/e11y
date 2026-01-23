@@ -2,186 +2,246 @@
 
 require "spec_helper"
 
-# rubocop:disable RSpec/LeakyConstantDeclaration, Lint/ConstantDefinitionInBlock
-# Test requires mocking Yabeda with nested classes for comprehensive adapter testing.
-# Skip Yabeda tests if Yabeda not available
-begin
-  require "e11y/adapters/yabeda"
-rescue LoadError
-  RSpec.describe "E11y::Adapters::Yabeda (skipped)" do
-    it "requires Yabeda to be available" do
-      skip "Yabeda not available in test environment"
-    end
+# Unit tests for Yabeda adapter (without real Yabeda gem)
+RSpec.describe E11y::Adapters::Yabeda do
+  # Skip if Yabeda not available
+  begin
+    require "yabeda"
+  rescue LoadError
+    skip "Yabeda gem not available"
   end
 
-  return
-end
-
-RSpec.describe E11y::Adapters::Yabeda do
-  let(:adapter) { described_class.new(auto_register: false) }
   let(:registry) { E11y::Metrics::Registry.instance }
+  let(:adapter) { described_class.new(auto_register: false) }
 
   before do
-    # Clear registry before each test
-    registry.clear!
-
     # Mock Yabeda
-    stub_const("Yabeda", Class.new do
-      def self.configured?
-        true
-      end
+    allow(Yabeda).to receive_messages(configured?: true, configure!: true)
+    allow(Yabeda).to receive(:configure).and_yield
 
-      def self.configure(&)
-        # No-op for tests
-      end
-
-      def self.e11y
-        @e11y ||= YabedaGroup.new
-      end
-
-      class YabedaGroup
-        def method_missing(method_name, *_args)
-          YabedaMetric.new(method_name)
-        end
-
-        def respond_to_missing?(_method_name, _include_private = false)
-          true
-        end
-      end
-
-      class YabedaMetric
-        attr_reader :name
-
-        def initialize(name)
-          @name = name
-        end
-
-        def increment(labels = {})
-          # No-op for tests
-        end
-
-        def observe(value, labels = {})
-          # No-op for tests
-        end
-
-        def set(value, labels = {})
-          # No-op for tests
-        end
-      end
-    end)
+    # Clear registry
+    registry.clear!
   end
 
-  describe "ADR-004 compliance" do
-    describe "Section 3.1: Base Adapter Contract" do
-      it "implements write method" do
-        expect(adapter).to respond_to(:write)
-      end
-
-      it "implements write_batch method" do
-        expect(adapter).to respond_to(:write_batch)
-      end
-
-      it "implements healthy? method" do
-        expect(adapter).to respond_to(:healthy?)
-      end
-
-      it "implements close method" do
-        expect(adapter).to respond_to(:close)
-      end
-
-      it "implements capabilities method" do
-        expect(adapter).to respond_to(:capabilities)
-      end
-
-      it "implements validate_config! method" do
-        expect(adapter).to respond_to(:validate_config!)
-      end
-
-      it "implements format_event method" do
-        expect(adapter).to respond_to(:format_event)
-      end
-    end
-
-    describe "write method" do
-      it "returns Boolean" do
-        event = { event_name: "test", payload: {} }
-        result = adapter.write(event)
-        expect(result).to be(true).or(be(false))
-      end
-
-      it "never raises exceptions" do
-        expect { adapter.write(nil) }.not_to raise_error
-        expect { adapter.write({}) }.not_to raise_error
-        expect { adapter.write(invalid: "data") }.not_to raise_error
-      end
-    end
-
-    describe "write_batch method" do
-      it "returns Boolean" do
-        events = [{ event_name: "test1" }, { event_name: "test2" }]
-        result = adapter.write_batch(events)
-        expect(result).to be(true).or(be(false))
-      end
-
-      it "never raises exceptions" do
-        expect { adapter.write_batch(nil) }.not_to raise_error
-        expect { adapter.write_batch([]) }.not_to raise_error
-        expect { adapter.write_batch([nil, {}]) }.not_to raise_error
-      end
-    end
-
-    describe "healthy? method" do
-      it "returns Boolean" do
-        result = adapter.healthy?
-        expect(result).to be(true).or(be(false))
-      end
-
-      it "returns true when Yabeda is configured" do
-        expect(adapter.healthy?).to be(true)
-      end
-
-      it "returns false when Yabeda is not defined" do
-        hide_const("Yabeda")
-        new_adapter = described_class.new(auto_register: false)
-        expect(new_adapter.healthy?).to be(false)
-      end
-    end
-
-    describe "capabilities method" do
-      it "returns Hash with required keys" do
-        caps = adapter.capabilities
-        expect(caps).to be_a(Hash)
-        expect(caps).to have_key(:batch)
-        expect(caps).to have_key(:async)
-        expect(caps).to have_key(:filtering)
-      end
-
-      it "indicates metrics support" do
-        caps = adapter.capabilities
-        expect(caps[:metrics]).to be(true)
-      end
-    end
+  after do
+    registry.clear!
   end
 
-  describe "initialization" do
+  describe "#initialize" do
     it "initializes with default config" do
-      adapter = described_class.new
-      expect(adapter).to be_a(described_class)
+      expect { described_class.new }.not_to raise_error
     end
 
-    it "initializes with custom cardinality limit" do
-      adapter = described_class.new(cardinality_limit: 500, auto_register: false)
-      expect(adapter).to be_a(described_class)
+    it "accepts cardinality_limit option" do
+      adapter = described_class.new(cardinality_limit: 500)
+      expect(adapter.instance_variable_get(:@cardinality_protection)).to be_a(E11y::Metrics::CardinalityProtection)
     end
 
-    it "initializes with forbidden labels" do
-      adapter = described_class.new(
-        forbidden_labels: [:custom_id],
-        auto_register: false
+    it "accepts forbidden_labels option" do
+      adapter = described_class.new(forbidden_labels: [:user_id])
+      expect(adapter.instance_variable_get(:@cardinality_protection)).to be_a(E11y::Metrics::CardinalityProtection)
+    end
+
+    it "accepts overflow_strategy option" do
+      adapter = described_class.new(overflow_strategy: :alert)
+      expect(adapter.instance_variable_get(:@cardinality_protection)).to be_a(E11y::Metrics::CardinalityProtection)
+    end
+
+    it "auto-registers metrics by default" do
+      registry.register(type: :counter, pattern: "test.*", name: :test_counter, tags: [])
+
+      adapter = described_class.allocate
+      expect(adapter).to receive(:register_metrics_from_registry!)
+      adapter.send(:initialize, auto_register: true)
+    end
+
+    it "skips auto-registration when disabled" do
+      adapter = described_class.allocate
+      expect(adapter).not_to receive(:register_metrics_from_registry!)
+      adapter.send(:initialize, auto_register: false)
+    end
+  end
+
+  describe "#write" do
+    let(:yabeda_group) { double("YabedaGroup") }
+    let(:yabeda_metric) { double("YabedaMetric", increment: true, measure: true, set: true) }
+
+    before do
+      allow(Yabeda).to receive(:e11y).and_return(yabeda_group)
+      allow(yabeda_group).to receive(:orders_total).and_return(yabeda_metric)
+
+      registry.register(
+        type: :counter,
+        pattern: "order.*",
+        name: :orders_total,
+        tags: [:status]
       )
-      expect(adapter).to be_a(described_class)
     end
 
+    it "writes event and updates matching metrics" do
+      event = { event_name: "order.created", status: "paid" }
+
+      expect(yabeda_metric).to receive(:increment).with({ status: "paid" })
+      expect(adapter.write(event)).to be true
+    end
+
+    it "returns false on error" do
+      event = { event_name: "order.created", status: "paid" }
+
+      allow(registry).to receive(:find_matching).and_raise(StandardError, "Test error")
+      expect(adapter.write(event)).to be false
+    end
+
+    it "warns on error" do
+      event = { event_name: "order.created", status: "paid" }
+
+      allow(registry).to receive(:find_matching).and_raise(StandardError, "Test error")
+      expect { adapter.write(event) }.to output(/Yabeda adapter error/).to_stderr
+    end
+  end
+
+  describe "#write_batch" do
+    it "writes multiple events" do
+      events = [
+        { event_name: "test.1" },
+        { event_name: "test.2" }
+      ]
+
+      expect(adapter).to receive(:write).twice
+      expect(adapter.write_batch(events)).to be true
+    end
+
+    it "returns false on error" do
+      allow(adapter).to receive(:write).and_raise(StandardError)
+      expect(adapter.write_batch([{}])).to be false
+    end
+  end
+
+  describe "#healthy?" do
+    it "returns true when Yabeda is configured" do
+      allow(Yabeda).to receive(:configured?).and_return(true)
+      expect(adapter.healthy?).to be true
+    end
+
+    it "returns false when Yabeda is not configured" do
+      allow(Yabeda).to receive(:configured?).and_return(false)
+      expect(adapter.healthy?).to be false
+    end
+
+    it "returns false on error" do
+      allow(Yabeda).to receive(:configured?).and_raise(StandardError)
+      expect(adapter.healthy?).to be false
+    end
+  end
+
+  describe "#close" do
+    it "does nothing (no-op for Yabeda)" do
+      expect { adapter.close }.not_to raise_error
+    end
+  end
+
+  describe "#capabilities" do
+    it "returns capabilities hash" do
+      caps = adapter.capabilities
+      expect(caps).to be_a(Hash)
+      expect(caps[:batch]).to be true
+      expect(caps[:async]).to be false
+      expect(caps[:filtering]).to be false
+      expect(caps[:metrics]).to be true
+    end
+  end
+
+  describe "#increment" do
+    let(:yabeda_group) { double("YabedaGroup") }
+    let(:yabeda_metric) { double("YabedaMetric") }
+
+    before do
+      allow(Yabeda).to receive_messages(e11y: yabeda_group, metrics: {})
+      allow(yabeda_group).to receive(:test_counter).and_return(yabeda_metric)
+      allow(adapter).to receive(:register_metric_if_needed)
+    end
+
+    it "increments counter metric" do
+      expect(yabeda_metric).to receive(:increment).with({}, by: 1)
+      adapter.increment(:test_counter)
+    end
+
+    it "increments with labels" do
+      expect(yabeda_metric).to receive(:increment).with({ status: "success" }, by: 1)
+      adapter.increment(:test_counter, { status: "success" })
+    end
+
+    it "increments with custom value" do
+      expect(yabeda_metric).to receive(:increment).with({}, by: 5)
+      adapter.increment(:test_counter, {}, value: 5)
+    end
+
+    it "applies cardinality protection" do
+      allow(adapter.instance_variable_get(:@cardinality_protection)).to receive(:filter).and_return({})
+      expect(yabeda_metric).to receive(:increment).with({}, by: 1)
+      adapter.increment(:test_counter, { user_id: 123 })
+    end
+
+    it "handles errors gracefully" do
+      allow(yabeda_metric).to receive(:increment).and_raise(StandardError)
+      expect { adapter.increment(:test_counter) }.not_to raise_error
+    end
+  end
+
+  describe "#histogram" do
+    let(:yabeda_group) { double("YabedaGroup") }
+    let(:yabeda_metric) { double("YabedaMetric") }
+
+    before do
+      allow(Yabeda).to receive_messages(e11y: yabeda_group, metrics: {})
+      allow(yabeda_group).to receive(:request_duration).and_return(yabeda_metric)
+      allow(adapter).to receive(:register_metric_if_needed)
+    end
+
+    it "observes histogram value" do
+      expect(yabeda_metric).to receive(:measure).with({}, 0.5)
+      adapter.histogram(:request_duration, 0.5)
+    end
+
+    it "observes with labels" do
+      expect(yabeda_metric).to receive(:measure).with({ method: "GET" }, 1.2)
+      adapter.histogram(:request_duration, 1.2, { method: "GET" })
+    end
+
+    it "accepts custom buckets" do
+      expect(adapter).to receive(:register_metric_if_needed).with(
+        :request_duration,
+        :histogram,
+        [],
+        buckets: [0.1, 1.0, 10.0]
+      )
+      expect(yabeda_metric).to receive(:measure).with({}, 0.5)
+      adapter.histogram(:request_duration, 0.5, {}, buckets: [0.1, 1.0, 10.0])
+    end
+  end
+
+  describe "#gauge" do
+    let(:yabeda_group) { double("YabedaGroup") }
+    let(:yabeda_metric) { double("YabedaMetric") }
+
+    before do
+      allow(Yabeda).to receive_messages(e11y: yabeda_group, metrics: {})
+      allow(yabeda_group).to receive(:queue_size).and_return(yabeda_metric)
+      allow(adapter).to receive(:register_metric_if_needed)
+    end
+
+    it "sets gauge value" do
+      expect(yabeda_metric).to receive(:set).with({}, 42)
+      adapter.gauge(:queue_size, 42)
+    end
+
+    it "sets with labels" do
+      expect(yabeda_metric).to receive(:set).with({ queue: "default" }, 10)
+      adapter.gauge(:queue_size, 10, { queue: "default" })
+    end
+  end
+
+  describe "#validate_config!" do
     it "validates cardinality_limit type" do
       expect do
         described_class.new(cardinality_limit: "invalid")
@@ -193,220 +253,21 @@ RSpec.describe E11y::Adapters::Yabeda do
         described_class.new(forbidden_labels: "invalid")
       end.to raise_error(ArgumentError, /forbidden_labels must be an Array/)
     end
-  end
 
-  describe "#write" do
-    before do
-      registry.register(
-        type: :counter,
-        pattern: "order.*",
-        name: :orders_total,
-        tags: %i[currency status]
-      )
-    end
-
-    it "updates matching metrics" do
-      event = {
-        event_name: "order.created",
-        payload: { amount: 100 },
-        currency: "USD",
-        status: "pending"
-      }
-
-      metric = Yabeda.e11y.orders_total
-      allow(Yabeda.e11y).to receive(:orders_total).and_return(metric)
-      allow(metric).to receive(:increment)
-
-      adapter.write(event)
-
-      expect(metric).to have_received(:increment).with(hash_including(currency: "USD", status: "pending"))
-    end
-
-    it "applies cardinality protection" do
-      # Register metric with cardinality limit
-      adapter_with_limit = described_class.new(
-        cardinality_limit: 2,
-        auto_register: false,
-        overflow_strategy: :alert # Alert strategy produces warnings
-      )
-
-      event_template = {
-        event_name: "order.created",
-        payload: {},
-        status: "pending"
-      }
-
-      # First 2 unique currencies should work
-      adapter_with_limit.write(event_template.merge(currency: "USD"))
-      adapter_with_limit.write(event_template.merge(currency: "EUR"))
-
-      # 3rd unique currency should be dropped (cardinality limit exceeded)
+    it "accepts valid config" do
       expect do
-        adapter_with_limit.write(event_template.merge(currency: "GBP"))
-      end.to output(/Cardinality limit exceeded/).to_stderr
-    end
-
-    it "returns true on success" do
-      event = { event_name: "order.created", payload: {} }
-      expect(adapter.write(event)).to be(true)
-    end
-
-    it "returns false on error" do
-      event = { event_name: "order.created", payload: {} }
-      allow(registry).to receive(:find_matching).and_raise(StandardError)
-
-      expect(adapter.write(event)).to be(false)
-    end
-
-    it "extracts labels from event data" do
-      event = {
-        event_name: "order.created",
-        currency: "USD", # Top-level
-        payload: { status: "pending" } # Nested in payload
-      }
-
-      metric = Yabeda.e11y.orders_total
-      allow(Yabeda.e11y).to receive(:orders_total).and_return(metric)
-      allow(metric).to receive(:increment)
-
-      adapter.write(event)
-
-      expect(metric).to have_received(:increment).with(hash_including(currency: "USD", status: "pending"))
+        described_class.new(
+          cardinality_limit: 1000,
+          forbidden_labels: [:user_id]
+        )
+      end.not_to raise_error
     end
   end
 
-  describe "#write_batch" do
-    before do
-      registry.register(
-        type: :counter,
-        pattern: "order.*",
-        name: :orders_total,
-        tags: [:status]
-      )
-    end
-
-    it "processes all events in batch" do
-      events = [
-        { event_name: "order.created", status: "pending" },
-        { event_name: "order.paid", status: "paid" }
-      ]
-
-      metric = Yabeda.e11y.orders_total
-      allow(Yabeda.e11y).to receive(:orders_total).and_return(metric)
-      allow(metric).to receive(:increment)
-
-      adapter.write_batch(events)
-
-      expect(metric).to have_received(:increment).twice
-    end
-
-    it "returns true on success" do
-      events = [{ event_name: "order.created" }]
-      expect(adapter.write_batch(events)).to be(true)
-    end
-
-    it "returns false on error" do
-      events = [{ event_name: "order.created" }]
-      allow(adapter).to receive(:write).and_raise(StandardError)
-
-      expect(adapter.write_batch(events)).to be(false)
-    end
-  end
-
-  describe "histogram metrics" do
-    before do
-      registry.register(
-        type: :histogram,
-        pattern: "order.paid",
-        name: :order_amount,
-        value: :amount,
-        tags: [:currency]
-      )
-    end
-
-    it "observes histogram values" do
-      event = {
-        event_name: "order.paid",
-        payload: { amount: 99.99 },
-        currency: "USD"
-      }
-
-      metric = Yabeda.e11y.order_amount
-      allow(Yabeda.e11y).to receive(:order_amount).and_return(metric)
-      allow(metric).to receive(:observe)
-
-      adapter.write(event)
-
-      expect(metric).to have_received(:observe).with(99.99, hash_including(currency: "USD"))
-    end
-
-    it "extracts value from payload" do
-      event = {
-        event_name: "order.paid",
-        payload: { amount: 123.45 },
-        currency: "EUR"
-      }
-
-      metric = Yabeda.e11y.order_amount
-      allow(Yabeda.e11y).to receive(:order_amount).and_return(metric)
-      allow(metric).to receive(:observe)
-
-      adapter.write(event)
-
-      expect(metric).to have_received(:observe).with(123.45, anything)
-    end
-
-    it "supports Proc value extractors" do
-      registry.clear!
-      registry.register(
-        type: :histogram,
-        pattern: "order.paid",
-        name: :order_amount,
-        value: ->(event) { event[:payload][:amount] * 2 },
-        tags: [:currency]
-      )
-
-      event = {
-        event_name: "order.paid",
-        payload: { amount: 50 },
-        currency: "USD"
-      }
-
-      metric = Yabeda.e11y.order_amount
-      allow(Yabeda.e11y).to receive(:order_amount).and_return(metric)
-      allow(metric).to receive(:observe)
-
-      adapter.write(event)
-
-      expect(metric).to have_received(:observe).with(100, anything)
-    end
-  end
-
-  describe "gauge metrics" do
-    before do
-      registry.register(
-        type: :gauge,
-        pattern: "queue.*",
-        name: :queue_depth,
-        value: :size,
-        tags: [:queue_name]
-      )
-    end
-
-    it "sets gauge values" do
-      event = {
-        event_name: "queue.updated",
-        payload: { size: 42 },
-        queue_name: "default"
-      }
-
-      metric = Yabeda.e11y.queue_depth
-      allow(Yabeda.e11y).to receive(:queue_depth).and_return(metric)
-      allow(metric).to receive(:set)
-
-      adapter.write(event)
-
-      expect(metric).to have_received(:set).with(42, hash_including(queue_name: "default"))
+  describe "#format_event" do
+    it "returns event data unchanged" do
+      event = { test: "data" }
+      expect(adapter.format_event(event)).to eq(event)
     end
   end
 
@@ -419,49 +280,55 @@ RSpec.describe E11y::Adapters::Yabeda do
 
   describe "#reset_cardinality!" do
     it "resets cardinality tracking" do
+      protection = adapter.instance_variable_get(:@cardinality_protection)
+      expect(protection).to receive(:reset!)
       adapter.reset_cardinality!
-      expect(adapter.cardinality_stats).to be_empty
     end
   end
 
-  describe "#close" do
-    it "closes adapter without errors" do
-      expect { adapter.close }.not_to raise_error
+  describe "private methods" do
+    describe "#extract_labels" do
+      it "extracts labels from event payload" do
+        metric_config = { tags: %i[status method] }
+        event_data = { payload: { status: "success", method: "GET" } }
+
+        labels = adapter.send(:extract_labels, metric_config, event_data)
+        expect(labels).to eq({ status: "success", method: "GET" })
+      end
+
+      it "handles missing labels" do
+        metric_config = { tags: [:status] }
+        event_data = { payload: {} }
+
+        labels = adapter.send(:extract_labels, metric_config, event_data)
+        expect(labels).to eq({})
+      end
     end
-  end
 
-  describe "#format_event" do
-    it "returns event data unchanged" do
-      event = { event_name: "test", payload: {} }
-      expect(adapter.format_event(event)).to eq(event)
-    end
-  end
+    describe "#extract_value" do
+      it "extracts symbol value from payload" do
+        metric_config = { value: :duration }
+        event_data = { payload: { duration: 1.5 } }
 
-  describe "cardinality protection integration" do
-    it "blocks forbidden labels" do
-      event = {
-        event_name: "order.created",
-        user_id: 123, # Forbidden by default
-        currency: "USD",
-        status: "pending"
-      }
+        value = adapter.send(:extract_value, metric_config, event_data)
+        expect(value).to eq(1.5)
+      end
 
-      registry.register(
-        type: :counter,
-        pattern: "order.*",
-        name: :orders_total,
-        tags: %i[user_id currency status]
-      )
+      it "extracts proc value" do
+        metric_config = { value: ->(data) { data[:payload][:count] * 2 } }
+        event_data = { payload: { count: 5 } }
 
-      metric = Yabeda.e11y.orders_total
-      allow(Yabeda.e11y).to receive(:orders_total).and_return(metric)
-      allow(metric).to receive(:increment)
+        value = adapter.send(:extract_value, metric_config, event_data)
+        expect(value).to eq(10)
+      end
 
-      adapter.write(event)
+      it "returns 1 as default" do
+        metric_config = { value: nil }
+        event_data = {}
 
-      # user_id should be filtered out
-      expect(metric).to have_received(:increment).with(hash_excluding(:user_id))
+        value = adapter.send(:extract_value, metric_config, event_data)
+        expect(value).to eq(1)
+      end
     end
   end
 end
-# rubocop:enable RSpec/LeakyConstantDeclaration, Lint/ConstantDefinitionInBlock

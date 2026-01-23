@@ -212,7 +212,7 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
 
   describe "thread safety" do
     it "handles concurrent filtering" do
-      threads = 100.times.map do |i|
+      threads = Array.new(100) do |i|
         Thread.new do
           protection.filter({ status: "status_#{i % 10}" }, "orders.total")
         end

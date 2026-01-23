@@ -144,7 +144,7 @@ RSpec.describe E11y::Metrics::Relabeling do
 
   describe "thread safety" do
     it "handles concurrent rule definitions" do
-      threads = 10.times.map do |i|
+      threads = Array.new(10) do |i|
         Thread.new do
           relabeler.define(:"rule_#{i}") { |_v| "value_#{i}" }
         end
@@ -157,7 +157,7 @@ RSpec.describe E11y::Metrics::Relabeling do
     it "handles concurrent apply operations" do
       relabeler.define(:http_status) { |v| "#{v.to_i / 100}xx" }
 
-      threads = 10.times.map do
+      threads = Array.new(10) do
         Thread.new do
           100.times { relabeler.apply(:http_status, 200) }
         end

@@ -39,11 +39,15 @@ RSpec.describe E11y::Reliability::DLQ::FileStorage do
     end
 
     it "uses default file path if not provided" do
-      allow(Rails).to receive(:root).and_return(Pathname.new("/app")) if defined?(Rails)
+      # Use a writable temporary directory for testing
+      temp_dir = Dir.mktmpdir
+      allow(Rails).to receive(:root).and_return(Pathname.new(temp_dir)) if defined?(Rails)
 
       dlq_default = described_class.new
       # Should not crash
       expect(dlq_default).to be_a(described_class)
+    ensure
+      FileUtils.rm_rf(temp_dir) if temp_dir
     end
   end
 
@@ -210,7 +214,7 @@ RSpec.describe E11y::Reliability::DLQ::FileStorage do
 
   describe "#replay_batch" do
     it "replays multiple events" do
-      event_ids = 3.times.map do
+      event_ids = Array.new(3) do
         dlq.save(event_data, metadata: metadata)
       end
 
@@ -269,7 +273,7 @@ RSpec.describe E11y::Reliability::DLQ::FileStorage do
 
   describe "thread safety" do
     it "handles concurrent writes safely" do
-      threads = 10.times.map do |i|
+      threads = Array.new(10) do |i|
         Thread.new do
           10.times do
             dlq.save(event_data.merge(thread_id: i), metadata: metadata)
@@ -288,7 +292,7 @@ RSpec.describe E11y::Reliability::DLQ::FileStorage do
   describe "real-world scenario: adapter failure recovery" do
     it "stores failed events during outage" do
       # Simulate 10 failed events during Loki outage
-      event_ids = 10.times.map do |i|
+      event_ids = Array.new(10) do |i|
         dlq.save(
           event_data.merge(order_id: i),
           metadata: metadata.merge(retry_count: 3)

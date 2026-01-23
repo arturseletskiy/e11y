@@ -6,12 +6,19 @@ on:
   pull_request:
     branches: [ main, develop ]
   schedule:
-    - cron: '0 0 * * 0' # Weekly on Sunday
+    - cron: '0 0 * * 0' # Weekly security scan on Sunday
 
 permissions:
   contents: read
 
 jobs:
+  # Best practices applied:
+  # 1. Use ruby/setup-ruby with bundler-cache: true (faster gem installs)
+  # 2. Add timeout-minutes to prevent stuck jobs
+  # 3. Use fail-fast: false for matrix jobs (see all failures)
+  # 4. Separate unit and integration tests (fast feedback)
+  # 5. Proper service health checks with verbose logging
+  # 6. RuboCop Security instead of Brakeman (gem-appropriate security scanning)
   lint:
     name: Lint (Rubocop)
     runs-on: ubuntu-latest
@@ -39,15 +46,22 @@ jobs:
           ruby-version: '3.2'
           bundler-cache: true
       
-      - name: Run Bundler Audit
-        run: bundle exec bundler-audit check --update
+      - name: Run Bundler Audit (check for vulnerable dependencies)
+        run: |
+          gem install bundler-audit
+          bundle audit check --update
       
-      - name: Run Brakeman
-        run: bundle exec brakeman --no-pager
+      - name: Run RuboCop Security Analysis
+        run: |
+          echo "🔒 Running RuboCop security checks..."
+          bundle exec rubocop --only Security,Lint/MixedRegexpCaptureTypes,Lint/SafeNavigationChain \
+            --format progress
+          echo "✅ Security analysis completed"
 
   test-unit:
     name: Unit Tests (Ruby ${{ matrix.ruby }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -64,12 +78,16 @@ jobs:
       - name: Run unit tests (fast, no Rails/integrations)
         env:
           COVERAGE: true
-        run: bundle exec rspec --tag ~integration
+        run: |
+          echo "🧪 Starting unit tests at $(date)"
+          bundle exec rspec --tag ~integration --format progress
+          echo "✅ Unit tests completed at $(date)"
       
-      - name: Upload coverage to Codecov
+      - name: Upload coverage reports to Codecov
         if: matrix.ruby == '3.2'
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/coverage.xml
           flags: unittests
           name: codecov-umbrella
@@ -78,6 +96,7 @@ jobs:
   test-integration:
     name: Integration Tests (Ruby ${{ matrix.ruby }})
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -136,6 +155,13 @@ jobs:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
       
+      - name: Install system dependencies for integration tests
+        run: |
+          # netcat is pre-installed on ubuntu-latest
+          # If we need redis-cli later, uncomment:
+          # sudo apt-get update && sudo apt-get install -y redis-tools
+          echo "✅ System dependencies ready"
+      
       - name: Install integration dependencies
         run: |
           bundle config set --local with 'integration'
@@ -144,18 +170,23 @@ jobs:
       - name: Wait for services to be ready
         run: |
           echo "Waiting for Loki..."
-          timeout 30 bash -c 'until curl -s http://localhost:3100/ready > /dev/null; do sleep 1; done'
+          timeout 30 bash -c 'until curl -sf http://localhost:3100/ready; do echo "Loki not ready yet..."; sleep 1; done' || (echo "❌ Loki timeout"; exit 1)
+          echo "✅ Loki ready"
           
           echo "Waiting for Prometheus..."
-          timeout 30 bash -c 'until curl -s http://localhost:9090/-/healthy > /dev/null; do sleep 1; done'
+          timeout 30 bash -c 'until curl -sf http://localhost:9090/-/healthy; do echo "Prometheus not ready yet..."; sleep 1; done' || (echo "❌ Prometheus timeout"; exit 1)
+          echo "✅ Prometheus ready"
           
           echo "Waiting for Elasticsearch..."
-          timeout 60 bash -c 'until curl -s http://localhost:9200/_cluster/health > /dev/null; do sleep 1; done'
+          timeout 60 bash -c 'until curl -sf http://localhost:9200/_cluster/health; do echo "Elasticsearch not ready yet..."; sleep 1; done' || (echo "❌ Elasticsearch timeout"; exit 1)
+          echo "✅ Elasticsearch ready"
           
           echo "Waiting for Redis..."
-          timeout 30 bash -c 'until redis-cli -h localhost ping > /dev/null; do sleep 1; done'
+          # Use nc (netcat) instead of redis-cli which is not installed by default
+          timeout 30 bash -c 'until nc -z localhost 6379; do echo "Redis not ready yet..."; sleep 1; done' || (echo "❌ Redis timeout"; exit 1)
+          echo "✅ Redis ready"
           
-          echo "All services ready!"
+          echo "✅ All services ready!"
       
       - name: Run integration tests (Rails, OpenTelemetry, adapters)
         env:
@@ -164,7 +195,10 @@ jobs:
           PROMETHEUS_URL: http://localhost:9090
           ELASTICSEARCH_URL: http://localhost:9200
           REDIS_URL: redis://localhost:6379
-        run: bundle exec rspec --tag integration
+        run: |
+          echo "🧪 Starting integration tests at $(date)"
+          timeout 5m bundle exec rspec --tag integration --format documentation --profile 10 || (echo "⚠️ Integration tests timeout or failed at $(date)"; exit 1)
+          echo "✅ Integration tests completed at $(date)"
       
       - name: Upload integration test results
         if: always()

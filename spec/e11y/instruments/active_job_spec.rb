@@ -232,7 +232,9 @@ RSpec.describe E11y::Instruments::ActiveJob, :integration do
       end
 
       it "swallows E11y::Current.reset errors (extreme edge case)" do
-        allow(E11y::Current).to receive(:reset).and_raise(StandardError, "Reset error")
+        # Mock reset to raise error on first call (inside callback), then work normally (in after block)
+        allow(E11y::Current).to receive(:reset).once.and_raise(StandardError, "Reset error")
+        allow(E11y::Current).to receive(:reset).and_call_original
 
         # Job should succeed despite E11y reset failure
         expect do

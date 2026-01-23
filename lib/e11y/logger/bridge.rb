@@ -164,9 +164,9 @@ module E11y
       # @return [void]
       # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
       # Logger tracking requires message extraction, validation, event class lookup, and error handling
-      def track_to_e11y(severity, message = nil, &block)
+      def track_to_e11y(severity, message = nil)
         # Extract message
-        msg = message || (block_given? ? block.call : nil)
+        msg = message || (block_given? ? yield : nil)
         return if msg.nil? || (msg.respond_to?(:empty?) && msg.empty?)
 
         # Track to E11y using severity-specific class

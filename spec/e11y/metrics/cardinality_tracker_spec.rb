@@ -164,7 +164,7 @@ RSpec.describe E11y::Metrics::CardinalityTracker do
 
   describe "thread safety" do
     it "handles concurrent tracking" do
-      threads = 10.times.map do |i|
+      threads = Array.new(10) do |i|
         Thread.new do
           10.times do |j|
             tracker.track("test.metric", :label, "value_#{i}_#{j}")
@@ -181,7 +181,7 @@ RSpec.describe E11y::Metrics::CardinalityTracker do
     it "handles concurrent reads" do
       tracker.track("test.metric", :label, "value_1")
 
-      threads = 10.times.map do
+      threads = Array.new(10) do
         Thread.new do
           100.times { tracker.cardinality("test.metric", :label) }
         end

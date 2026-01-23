@@ -65,8 +65,9 @@ module E11y
           now = Time.now
           @events << now
 
-          # Cleanup old events (outside window)
-          cleanup_old_events(now)
+          # Cleanup old events periodically (every 100 events) instead of on every event
+          # This reduces O(n²) overhead significantly while keeping memory bounded
+          cleanup_old_events(now) if (@events.size % 100).zero?
         end
       end
 
@@ -76,9 +77,11 @@ module E11y
       def current_rate
         @mutex.synchronize do
           now = Time.now
-          cleanup_old_events(now)
+          cutoff = now - @window
 
-          count = @events.count { |ts| (now - ts) <= @window }
+          # Count events within window without cleanup
+          # Cleanup is handled periodically in record_event
+          count = @events.count { |ts| ts >= cutoff }
           count.to_f / @window
         end
       end

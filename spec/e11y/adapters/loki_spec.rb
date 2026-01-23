@@ -436,7 +436,7 @@ RSpec.describe E11y::Adapters::Loki do
 
   describe "Thread safety" do
     it "handles concurrent writes safely" do
-      threads = 10.times.map do |i|
+      threads = Array.new(10) do |i|
         Thread.new do
           adapter.write(event_name: "concurrent.event.#{i}", severity: :info)
         end

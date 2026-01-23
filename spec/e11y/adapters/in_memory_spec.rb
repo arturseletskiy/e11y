@@ -47,7 +47,7 @@ RSpec.describe E11y::Adapters::InMemory do
     end
 
     it "is thread-safe" do
-      threads = 10.times.map do |i|
+      threads = Array.new(10) do |i|
         Thread.new { adapter.write({ event_name: "test.#{i}", severity: :info }) }
       end
 
@@ -82,7 +82,7 @@ RSpec.describe E11y::Adapters::InMemory do
     end
 
     it "is thread-safe" do
-      threads = 5.times.map do |i|
+      threads = Array.new(5) do |i|
         Thread.new { adapter.write_batch([{ event_name: "batch.#{i}.event", severity: :info }]) }
       end
 

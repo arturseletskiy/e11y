@@ -125,7 +125,7 @@ module E11y
         name.gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2') # ABCWord → ABC_Word
             .gsub(/([a-z\d])([A-Z])/, '\1_\2') # wordWord → word_Word
             .downcase
-            .gsub("_", ".") # Convert underscores to dots for event names
+            .tr("_", ".") # Convert underscores to dots for event names
       end
     end
   end
