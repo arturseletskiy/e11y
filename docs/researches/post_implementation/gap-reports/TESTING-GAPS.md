@@ -8,7 +8,7 @@
 
 ## 📊 Overview
 
-Summary of testing strategy gaps found during E11y v1.0.0 audit.
+Summary of testing strategy gaps found during E11y v0.1.0 audit.
 
 **Audits Analyzed:**
 - AUDIT-030: ADR-011 Testing Strategy

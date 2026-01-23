@@ -20,7 +20,7 @@
 
 **Critical Findings:**
 - ❌ **E11y::Registry does NOT exist:** No registry to benchmark (FEAT-5058)
-- ❌ **UC-022 is v1.1+:** Feature NOT part of v1.0.0 MVP
+- ❌ **UC-022 is v1.1+:** Feature NOT part of v0.1.0 MVP
 - ✅ **No boot impact:** Since registry doesn't exist, no boot slowdown
 
 **Production Readiness:** ❌ **NOT IMPLEMENTED** (0%)
@@ -191,8 +191,8 @@ Findings:
 - Query performance: SKIP (E11y::Registry does NOT exist)
 - Boot impact: PASS (no registry = no boot slowdown)
 
-Outcome: Cannot benchmark v1.1+ feature in v1.0.0 audit.
-No blocker for v1.0.0 production deployment.
+Outcome: Cannot benchmark v1.1+ feature in v0.1.0 audit.
+No blocker for v0.1.0 production deployment.
 
 Note for v1.1: When implementing E11y::Registry, ensure:
 - Query performance: <10ms for E11y::Registry.all_events
@@ -228,7 +228,7 @@ Note for v1.1: When implementing E11y::Registry, ensure:
 **Risk:** ✅ LOW (UC-022 is v1.1+, not production requirement)
 
 **Impact:**
-- No registry performance to measure in v1.0.0
+- No registry performance to measure in v0.1.0
 - Current E11y boot time: ~10-30ms (acceptable)
 - v1.1 must ensure registry meets performance targets
 

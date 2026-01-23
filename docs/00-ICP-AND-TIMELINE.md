@@ -228,7 +228,7 @@
 - [ ] Migration guide (from Rails.logger, other gems)
 - [ ] Video tutorials (YouTube, Quick Start)
 - [ ] Blog posts (announcement, case studies)
-- [ ] RubyGems v1.0.0 release
+- [ ] RubyGems v0.1.0 release
 - [ ] HackerNews / Reddit launch
 
 **Success Criteria:**
@@ -270,7 +270,7 @@
 
 ---
 
-### v1.0.0 (End of Phase 5) - July 2025
+### v0.1.0 (End of Phase 5) - July 2025
 **Focus:** Production-grade, battle-tested
 
 **Polish:**

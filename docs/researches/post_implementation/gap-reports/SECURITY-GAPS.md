@@ -8,7 +8,7 @@
 
 ## 📊 Overview
 
-Summary of security and compliance gaps found during E11y v1.0.0 audit.
+Summary of security and compliance gaps found during E11y v0.1.0 audit.
 
 **Audits Analyzed:**
 - AUDIT-001: ADR-006 Security & Compliance

@@ -227,7 +227,7 @@ What actually happened.
 
 **Environment**
 - Ruby version: 3.3.0
-- E11y version: 1.0.0
+- E11y version: 0.1.0
 - Rails version (if applicable): 8.0.0
 - OS: macOS 14.0
 

@@ -2167,7 +2167,7 @@ graph TB
 Version Format: MAJOR.MINOR.PATCH
 
 Examples:
-- 1.0.0 - Initial release (all 22 use cases)
+- 0.1.0 - Initial release (all 22 use cases)
 - 1.1.0 - New adapter (backward compatible)
 - 1.0.1 - Bug fix
 - 2.0.0 - Breaking change (API change, Rails 9 support)

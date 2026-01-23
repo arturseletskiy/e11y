@@ -150,7 +150,7 @@ E11y::Registry.all_events
 **Why Registry Missing:**
 
 UC-022 is explicitly marked as **v1.1+ feature**, meaning:
-- NOT part of v1.0.0 MVP
+- NOT part of v0.1.0 MVP
 - Planned for future release
 - Not implemented yet
 
@@ -170,7 +170,7 @@ UC-022 is explicitly marked as **v1.1+ feature**, meaning:
   - DoD expects working API (not implemented)
   - This is NOT a bug - feature planned for v1.1
 - **Severity:** LOW (feature planned for future, not production issue)
-- **Risk:** No event introspection in v1.0.0
+- **Risk:** No event introspection in v0.1.0
 
 ---
 
@@ -416,7 +416,7 @@ E11y::Registry.find('order.paid')
 
 **Problem:** DoD expects working event registry API, but UC-022 is explicitly marked as "v1.1+" feature.
 
-**Gap:** Audit plan includes UC-022 in production readiness audit, but feature NOT implemented in v1.0.0.
+**Gap:** Audit plan includes UC-022 in production readiness audit, but feature NOT implemented in v0.1.0.
 
 **Recommendation:**
 Update audit plan to clarify UC-022 status.
@@ -428,7 +428,7 @@ Update audit plan to clarify UC-022 status.
 ```markdown
 # AUDIT-038: UC-022 Event Registry verified
 
-**Status:** ⚠️ **FUTURE FEATURE (v1.1+)** - NOT part of v1.0.0 MVP
+**Status:** ⚠️ **FUTURE FEATURE (v1.1+)** - NOT part of v0.1.0 MVP
 
 **DoD:**
 1. ~~Introspection: E11y.registry.events lists all event types~~ (v1.1+)
@@ -436,22 +436,22 @@ Update audit plan to clarify UC-022 status.
 3. ~~Documentation generation: auto-generate API docs from registry~~ (v1.1+)
 4. ~~Performance: <10ms to query registry~~ (v1.1+)
 
-**Expected Outcome:** ✅ SKIP (feature not in v1.0.0)
+**Expected Outcome:** ✅ SKIP (feature not in v0.1.0)
 
 **Audit Result:**
 - E11y::Registry NOT implemented (as expected for v1.1+ feature)
 - Partial introspection EXISTS (Event::Base methods)
-- No blocker for v1.0.0 production deployment
+- No blocker for v0.1.0 production deployment
 ```
 
 **Rationale:**
 - UC-022 explicitly says "v1.1+" (lines 3-6)
-- Including it in v1.0.0 audit creates false FAIL
+- Including it in v0.1.0 audit creates false FAIL
 - Should be SKIP (not FAIL) since feature planned for future
 
 **Priority:** HIGH (prevents false negative in audit)
 **Effort:** 30 minutes (update audit plan, document status)
-**Value:** HIGH (clarifies v1.0.0 vs v1.1+ scope)
+**Value:** HIGH (clarifies v0.1.0 vs v1.1+ scope)
 
 ---
 
@@ -599,7 +599,7 @@ module E11y
 end
 ```
 
-**Priority:** MEDIUM (improves DX, not critical for v1.0.0)
+**Priority:** MEDIUM (improves DX, not critical for v0.1.0)
 **Effort:** 2-3 days (implement registry, tests, documentation)
 **Value:** HIGH (enables tooling, documentation generation)
 
@@ -607,15 +607,15 @@ end
 
 ### R-242: Document Current Workarounds (Manual Event Discovery) ⚠️ (MEDIUM PRIORITY)
 
-**Problem:** No registry in v1.0.0. Developers need workarounds to list events.
+**Problem:** No registry in v0.1.0. Developers need workarounds to list events.
 
 **Recommendation:**
-Document manual event discovery methods for v1.0.0.
+Document manual event discovery methods for v0.1.0.
 
 **File:** `docs/guides/EVENT-DISCOVERY.md` (NEW FILE)
 
 ```markdown
-# Event Discovery Without Registry (v1.0.0)
+# Event Discovery Without Registry (v0.1.0)
 
 **Note:** E11y::Registry will be available in v1.1. Until then, use these workarounds.
 
@@ -692,9 +692,9 @@ end
 
 ---
 
-## Recommended Approach (v1.0.0)
+## Recommended Approach (v0.1.0)
 
-For v1.0.0, use **Option 1 (grep)** for quick discovery:
+For v0.1.0, use **Option 1 (grep)** for quick discovery:
 
 ```bash
 # Find all events
@@ -710,9 +710,9 @@ grep -r "class.*< E11y::Event::Base" app/events/ | \
 **Coming in v1.1:** E11y::Registry for automatic event discovery.
 ```
 
-**Priority:** MEDIUM (helps v1.0.0 users until v1.1)
+**Priority:** MEDIUM (helps v0.1.0 users until v1.1)
 **Effort:** 1-2 hours (write guide, test examples)
-**Value:** MEDIUM (improves DX for v1.0.0)
+**Value:** MEDIUM (improves DX for v0.1.0)
 
 ---
 
@@ -741,7 +741,7 @@ grep -r "class.*< E11y::Event::Base" app/events/ | \
 **Risk:** ✅ LOW (UC-022 is v1.1+, not production requirement)
 
 **Impact:**
-- No event registry in v1.0.0 (as planned)
+- No event registry in v0.1.0 (as planned)
 - Manual event discovery required (grep, ObjectSpace)
 - No automatic documentation generation
 - v1.1 will add E11y::Registry
