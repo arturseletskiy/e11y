@@ -91,6 +91,7 @@ jobs:
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   test-integration:
     name: Integration Tests (Ruby ${{ matrix.ruby }})

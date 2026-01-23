@@ -16,10 +16,9 @@ RSpec.describe E11y::Adapters::Yabeda do
 
   before do
     # Mock Yabeda
-    allow(Yabeda).to receive(:configured?).and_return(true)
-    allow(Yabeda).to receive(:configure!).and_return(true)
+    allow(Yabeda).to receive_messages(configured?: true, configure!: true)
     allow(Yabeda).to receive(:configure).and_yield
-    
+
     # Clear registry
     registry.clear!
   end
@@ -50,14 +49,16 @@ RSpec.describe E11y::Adapters::Yabeda do
 
     it "auto-registers metrics by default" do
       registry.register(type: :counter, pattern: "test.*", name: :test_counter, tags: [])
-      
-      expect_any_instance_of(described_class).to receive(:register_metrics_from_registry!)
-      described_class.new(auto_register: true)
+
+      adapter = described_class.allocate
+      expect(adapter).to receive(:register_metrics_from_registry!)
+      adapter.send(:initialize, auto_register: true)
     end
 
     it "skips auto-registration when disabled" do
-      expect_any_instance_of(described_class).not_to receive(:register_metrics_from_registry!)
-      described_class.new(auto_register: false)
+      adapter = described_class.allocate
+      expect(adapter).not_to receive(:register_metrics_from_registry!)
+      adapter.send(:initialize, auto_register: false)
     end
   end
 
@@ -68,7 +69,7 @@ RSpec.describe E11y::Adapters::Yabeda do
     before do
       allow(Yabeda).to receive(:e11y).and_return(yabeda_group)
       allow(yabeda_group).to receive(:orders_total).and_return(yabeda_metric)
-      
+
       registry.register(
         type: :counter,
         pattern: "order.*",
@@ -79,21 +80,21 @@ RSpec.describe E11y::Adapters::Yabeda do
 
     it "writes event and updates matching metrics" do
       event = { event_name: "order.created", status: "paid" }
-      
+
       expect(yabeda_metric).to receive(:increment).with({ status: "paid" })
       expect(adapter.write(event)).to be true
     end
 
     it "returns false on error" do
       event = { event_name: "order.created", status: "paid" }
-      
+
       allow(registry).to receive(:find_matching).and_raise(StandardError, "Test error")
       expect(adapter.write(event)).to be false
     end
 
     it "warns on error" do
       event = { event_name: "order.created", status: "paid" }
-      
+
       allow(registry).to receive(:find_matching).and_raise(StandardError, "Test error")
       expect { adapter.write(event) }.to output(/Yabeda adapter error/).to_stderr
     end
@@ -105,7 +106,7 @@ RSpec.describe E11y::Adapters::Yabeda do
         { event_name: "test.1" },
         { event_name: "test.2" }
       ]
-      
+
       expect(adapter).to receive(:write).twice
       expect(adapter.write_batch(events)).to be true
     end
@@ -155,8 +156,7 @@ RSpec.describe E11y::Adapters::Yabeda do
     let(:yabeda_metric) { double("YabedaMetric") }
 
     before do
-      allow(Yabeda).to receive(:e11y).and_return(yabeda_group)
-      allow(Yabeda).to receive(:metrics).and_return({})
+      allow(Yabeda).to receive_messages(e11y: yabeda_group, metrics: {})
       allow(yabeda_group).to receive(:test_counter).and_return(yabeda_metric)
       allow(adapter).to receive(:register_metric_if_needed)
     end
@@ -177,7 +177,7 @@ RSpec.describe E11y::Adapters::Yabeda do
     end
 
     it "applies cardinality protection" do
-      expect(adapter.instance_variable_get(:@cardinality_protection)).to receive(:filter).and_return({})
+      allow(adapter.instance_variable_get(:@cardinality_protection)).to receive(:filter).and_return({})
       expect(yabeda_metric).to receive(:increment).with({}, by: 1)
       adapter.increment(:test_counter, { user_id: 123 })
     end
@@ -193,8 +193,7 @@ RSpec.describe E11y::Adapters::Yabeda do
     let(:yabeda_metric) { double("YabedaMetric") }
 
     before do
-      allow(Yabeda).to receive(:e11y).and_return(yabeda_group)
-      allow(Yabeda).to receive(:metrics).and_return({})
+      allow(Yabeda).to receive_messages(e11y: yabeda_group, metrics: {})
       allow(yabeda_group).to receive(:request_duration).and_return(yabeda_metric)
       allow(adapter).to receive(:register_metric_if_needed)
     end
@@ -226,8 +225,7 @@ RSpec.describe E11y::Adapters::Yabeda do
     let(:yabeda_metric) { double("YabedaMetric") }
 
     before do
-      allow(Yabeda).to receive(:e11y).and_return(yabeda_group)
-      allow(Yabeda).to receive(:metrics).and_return({})
+      allow(Yabeda).to receive_messages(e11y: yabeda_group, metrics: {})
       allow(yabeda_group).to receive(:queue_size).and_return(yabeda_metric)
       allow(adapter).to receive(:register_metric_if_needed)
     end
@@ -291,9 +289,9 @@ RSpec.describe E11y::Adapters::Yabeda do
   describe "private methods" do
     describe "#extract_labels" do
       it "extracts labels from event payload" do
-        metric_config = { tags: [:status, :method] }
+        metric_config = { tags: %i[status method] }
         event_data = { payload: { status: "success", method: "GET" } }
-        
+
         labels = adapter.send(:extract_labels, metric_config, event_data)
         expect(labels).to eq({ status: "success", method: "GET" })
       end
@@ -301,7 +299,7 @@ RSpec.describe E11y::Adapters::Yabeda do
       it "handles missing labels" do
         metric_config = { tags: [:status] }
         event_data = { payload: {} }
-        
+
         labels = adapter.send(:extract_labels, metric_config, event_data)
         expect(labels).to eq({})
       end
@@ -311,7 +309,7 @@ RSpec.describe E11y::Adapters::Yabeda do
       it "extracts symbol value from payload" do
         metric_config = { value: :duration }
         event_data = { payload: { duration: 1.5 } }
-        
+
         value = adapter.send(:extract_value, metric_config, event_data)
         expect(value).to eq(1.5)
       end
@@ -319,7 +317,7 @@ RSpec.describe E11y::Adapters::Yabeda do
       it "extracts proc value" do
         metric_config = { value: ->(data) { data[:payload][:count] * 2 } }
         event_data = { payload: { count: 5 } }
-        
+
         value = adapter.send(:extract_value, metric_config, event_data)
         expect(value).to eq(10)
       end
@@ -327,7 +325,7 @@ RSpec.describe E11y::Adapters::Yabeda do
       it "returns 1 as default" do
         metric_config = { value: nil }
         event_data = {}
-        
+
         value = adapter.send(:extract_value, metric_config, event_data)
         expect(value).to eq(1)
       end
