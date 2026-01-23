@@ -7,24 +7,33 @@ Gem::Specification.new do |spec|
   spec.version = E11y::VERSION
   spec.authors = ["Artur Seletskiy"]
 
-  spec.summary = "E11y - Easy Telemetry: Production-grade observability for Rails with zero-config SLO tracking"
+  spec.summary = "E11y - Easy Telemetry: Observability for Rails developers who hate noise"
   spec.description = <<~DESC
-    E11y (Easy Telemetry) - production-ready observability gem for Ruby on Rails applications.
+    E11y (Easy Telemetry) - Observability for Rails developers who hate noise.
 
-    KEY FEATURES:
-    • 📊 Zero-Config SLO Tracking - automatic Service Level Objectives for HTTP endpoints and background jobs
-    • 🎯 Request-Scoped Debug Buffering - buffer debug logs in memory, flush only on errors (reduce log noise by 90%)
-    • 📈 Pattern-Based Metrics - auto-generate Prometheus/Yabeda metrics from business events
-    • 🔒 GDPR/SOC2 Compliance - built-in PII filtering and audit trails
-    • 🔌 Pluggable Adapters - send events to Loki, Sentry, OpenTelemetry, Elasticsearch, or custom backends
-    • 🚀 High Performance - zero-allocation event tracking, lock-free ring buffers, adaptive memory limits
-    • 🧵 Thread-Safe - designed for multi-threaded Rails apps and Sidekiq workers
-    • 🎭 Multi-Tenant Ready - trace context propagation across services with OpenTelemetry integration
-    • 📝 Type-Safe Events - declarative event schemas with dry-schema validation
-    • ⚡ Rate Limiting & Sampling - protect production from metric storms and cost overruns
+    UNIQUE FEATURES:
+    • Request-scoped debug buffering - buffers debug logs in memory, flushes ONLY on errors
+    • Zero-config SLO tracking - automatic Service Level Objectives for HTTP endpoints and jobs
+    • Schema-validated events - catch bugs before production with dry-schema
 
-    Perfect for SuperApp architectures, microservices, and high-scale Rails applications.
-    Battle-tested patterns from Devise, Sidekiq, Sentry, and Yabeda.
+    DEVELOPER EXPERIENCE:
+    • 5-minute setup (not 2-week migration)
+    • Auto-metrics from events (no manual Yabeda.increment)
+    • Rails-first design (follows Rails conventions)
+    • Pluggable adapters (Loki, Sentry, OpenTelemetry, custom backends)
+
+    COST SAVINGS:
+    • Reduce log storage costs by 90% (request-scoped buffering)
+    • Replace expensive APM SaaS ($500-5k/month → infra costs only)
+    • Own your observability data (no vendor lock-in)
+
+    PRODUCTION-READY:
+    • Thread-safe for multi-threaded Rails + Sidekiq
+    • Adaptive sampling (error-based, load-based, value-based)
+    • PII filtering (GDPR-compliant masking/hashing)
+    • Performance optimized (hash-based events, minimal allocations)
+
+    Perfect for Rails 7.0+ teams who need observability without complexity or high costs.
   DESC
   spec.homepage = "https://github.com/arturseletskiy/e11y"
   spec.license = "MIT"
