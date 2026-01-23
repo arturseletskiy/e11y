@@ -1131,8 +1131,11 @@ Development:
 1. Fork the repository
 2. Create a feature branch
 3. Run tests: `bundle exec rspec`
-4. Run linter: `bundle exec rubocop`
-5. Submit a pull request
+4. Run benchmarks (optional): `bundle exec rspec --tag benchmark`
+5. Run linter: `bundle exec rubocop`
+6. Submit a pull request
+
+**Note:** Performance benchmarks are excluded from default test runs due to CI environment variability. Run them explicitly with `--tag benchmark` when needed.
 
 ---
 

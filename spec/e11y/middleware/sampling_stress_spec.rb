@@ -7,7 +7,7 @@ require "e11y/middleware/sampling"
 # Stress test suite grouped by test type, not class structure.
 # Sampling stress tests require load simulation, adaptive algorithms,
 # and extensive performance monitoring with multiple fixtures.
-RSpec.describe E11y::Middleware::Sampling, "Stress Tests (FEAT-4841)" do
+RSpec.describe E11y::Middleware::Sampling, "Stress Tests (FEAT-4841)", :benchmark do
   let(:app) { ->(event_data) { event_data } }
   let(:middleware) do
     instance = described_class.new(config)

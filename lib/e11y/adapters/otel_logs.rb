@@ -110,7 +110,7 @@ module E11y
       #
       # @return [Boolean] true if OTel SDK available and configured
       def healthy?
-        @logger_provider && @logger
+        !@logger_provider.nil? && !@logger.nil?
       end
 
       # Adapter capabilities

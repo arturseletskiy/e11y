@@ -3,7 +3,7 @@
 # rubocop:disable RSpec/FilePath, RSpec/SpecFilePathFormat
 require "spec_helper"
 
-RSpec.describe E11y::Event::Base, ".track performance" do
+RSpec.describe E11y::Event::Base, ".track performance", :benchmark do
   let(:event_class) do
     Class.new(described_class) do
       def self.name
