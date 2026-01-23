@@ -18,6 +18,7 @@ jobs:
   # 3. Use fail-fast: false for matrix jobs (see all failures)
   # 4. Separate unit and integration tests (fast feedback)
   # 5. Proper service health checks with verbose logging
+  # 6. RuboCop Security instead of Brakeman (gem-appropriate security scanning)
   lint:
     name: Lint (Rubocop)
     runs-on: ubuntu-latest
@@ -50,15 +51,12 @@ jobs:
           gem install bundler-audit
           bundle audit check --update
       
-      - name: Run Brakeman (static security analysis)
+      - name: Run RuboCop Security Analysis
         run: |
-          # Brakeman is designed for Rails apps, not gems
-          # Skip if no Rails app detected
-          if [ -f "config/application.rb" ]; then
-            bundle exec brakeman --no-pager
-          else
-            echo "⚠️ Skipping Brakeman (no Rails app detected - this is a gem project)"
-          fi
+          echo "🔒 Running RuboCop security checks..."
+          bundle exec rubocop --only Security,Lint/MixedRegexpCaptureTypes,Lint/SafeNavigationChain \
+            --format progress --display-only-failed
+          echo "✅ Security analysis completed"
 
   test-unit:
     name: Unit Tests (Ruby ${{ matrix.ruby }})

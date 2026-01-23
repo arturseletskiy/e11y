@@ -55,8 +55,8 @@ end
 
 # Code quality
 group :development, :test do
-  gem "brakeman", "~> 6.0"
-  gem "bundler-audit", "~> 0.9"
+  gem "bundler-audit", "~> 0.9" # Check for vulnerable dependencies
+  gem "rubocop-performance", "~> 1.21" # Performance cops
   gem "simplecov", require: false
   gem "simplecov-cobertura", require: false
 end

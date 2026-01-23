@@ -166,7 +166,7 @@ module E11y
       # Logger tracking requires message extraction, validation, event class lookup, and error handling
       def track_to_e11y(severity, message = nil, &block)
         # Extract message
-        msg = message || (block_given? ? block.call : nil)
+        msg = message || (block_given? ? yield : nil)
         return if msg.nil? || (msg.respond_to?(:empty?) && msg.empty?)
 
         # Track to E11y using severity-specific class

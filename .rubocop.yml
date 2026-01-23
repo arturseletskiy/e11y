@@ -10,6 +10,7 @@ require:
 plugins:
   - rubocop-capybara
   - rubocop-factory_bot
+  - rubocop-performance
 
 AllCops:
   TargetRubyVersion: 3.2
