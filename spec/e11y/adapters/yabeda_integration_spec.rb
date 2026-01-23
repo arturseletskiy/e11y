@@ -311,6 +311,10 @@ RSpec.describe E11y::Adapters::Yabeda, :integration do
 
     context "Prometheus export" do # rubocop:todo RSpec/ContextWording
       it "exports metrics in Prometheus format" do
+        # Explicitly register Prometheus adapter
+        prometheus_adapter = Yabeda::Prometheus::Adapter.new
+        Yabeda.register_adapter(:prometheus, prometheus_adapter)
+
         Yabeda.configure do
           group :e11y do
             counter :exported_metric, tags: [], comment: "Exported metric"
@@ -321,11 +325,9 @@ RSpec.describe E11y::Adapters::Yabeda, :integration do
         Yabeda.e11y.exported_metric.increment({})
 
         # Export to Prometheus format
-        # Get the Prometheus registry
-        registry = Yabeda.adapters.find { |a| a.is_a?(Yabeda::Prometheus::Adapter) }&.registry
-        skip "Prometheus adapter not configured" unless registry
-
-        exporter = Yabeda::Prometheus::Exporter.new(registry)
+        # Get the registry from the adapter
+        prometheus_registry = prometheus_adapter.registry
+        exporter = Yabeda::Prometheus::Exporter.new(prometheus_registry)
         env = Rack::MockRequest.env_for("/metrics")
         output = exporter.call(env)
         prometheus_text = output[2].join
@@ -363,8 +365,8 @@ RSpec.describe E11y::Adapters::Yabeda, :integration do
       # Create adapter with auto_register: true
       described_class.new(auto_register: true)
 
-      # Configure Yabeda to apply the registrations
-      Yabeda.configure!
+      # Configure Yabeda to apply the registrations (only if not already configured)
+      Yabeda.configure! unless Yabeda.configured?
 
       # Check that metric was auto-registered in Yabeda
       expect(Yabeda.e11y).to respond_to(:auto_counter)

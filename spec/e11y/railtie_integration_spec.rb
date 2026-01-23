@@ -50,10 +50,12 @@ RSpec.describe E11y::Railtie, :integration do
     it "auto-configures E11y on Rails boot" do
       # Configuration is done during Rails initialization in before_all
       # If config was reset by previous tests, reinitialize
-      E11y.configure do |config|
-        config.environment = Rails.env.to_s
-        config.service_name = E11y::Railtie.derive_service_name
-      end if E11y.config.environment.nil?
+      if E11y.config.environment.nil?
+        E11y.configure do |config|
+          config.environment = Rails.env.to_s
+          config.service_name = described_class.derive_service_name
+        end
+      end
 
       config = E11y.config
       expect(config.environment).to eq("development") # Rails.env in this test suite
@@ -265,10 +267,12 @@ RSpec.describe E11y::Railtie, :integration do
       # User should not need to configure anything
       # Railtie should set sensible defaults during Rails initialization
       # If config was reset by previous tests, reinitialize
-      E11y.configure do |config|
-        config.environment = Rails.env.to_s
-        config.service_name = E11y::Railtie.derive_service_name
-      end if E11y.config.environment.nil?
+      if E11y.config.environment.nil?
+        E11y.configure do |config|
+          config.environment = Rails.env.to_s
+          config.service_name = described_class.derive_service_name
+        end
+      end
 
       config = E11y.config
       expect(config.environment).to eq("development") # Rails.env in this suite

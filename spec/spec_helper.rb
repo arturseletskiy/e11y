@@ -12,6 +12,17 @@ if ENV["COVERAGE"]
     add_filter "/vendor/"
     add_filter "/benchmarks/"
 
+    # Exclude namespace-only files (no logic to test)
+    add_filter "lib/e11y/buffers.rb"
+    add_filter "lib/e11y/middleware.rb"
+    add_filter "lib/e11y/pii.rb"
+    add_filter "lib/e11y/pipeline.rb"
+    add_filter "lib/e11y/version.rb"
+
+    # Exclude deprecated/duplicate files (old versions not used in production)
+    add_filter "lib/e11y/middleware/pii_filtering.rb" # Duplicate of pii_filter.rb
+    add_filter "lib/e11y/middleware/slo.rb" # Duplicate of event_slo.rb
+
     # Coverage groups
     add_group "Core", "lib/e11y"
     add_group "Events", "lib/e11y/events"

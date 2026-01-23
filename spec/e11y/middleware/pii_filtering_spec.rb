@@ -120,6 +120,78 @@ RSpec.describe E11y::Middleware::PIIFilter do
         expect(result[:payload][:user_id]).to eq("u-123")
       end
     end
+
+    context "when event class has unknown or invalid pii_tier" do
+      let(:event_class) do
+        Class.new(E11y::Event::Base) do
+          def self.name
+            "Events::InvalidTierEvent"
+          end
+
+          schema do
+            required(:data).filled(:string)
+          end
+
+          # Override pii_tier to return invalid value
+          def self.pii_tier
+            :unknown_tier
+          end
+        end
+      end
+
+      it "falls back to skipping filtering (safe default)" do
+        event_data = {
+          event_class: event_class,
+          payload: {
+            data: "sensitive-data-12345"
+          }
+        }
+
+        result = middleware.call(event_data)
+
+        # Unknown tier should fallback to no filtering (line 79)
+        expect(result[:payload][:data]).to eq("sensitive-data-12345")
+      end
+    end
+
+    context "when event class does not respond to pii_tier" do
+      let(:event_class) do
+        Class.new(E11y::Event::Base) do
+          def self.name
+            "Events::NoTierEvent"
+          end
+
+          schema do
+            required(:order_id).filled(:string)
+          end
+
+          # No pii_tier method - should default to tier2
+        end
+      end
+
+      before do
+        # rubocop:disable RSpec/AnyInstance
+        allow_any_instance_of(described_class).to receive(:parameter_filter).and_return(
+          ActiveSupport::ParameterFilter.new(%i[password])
+        )
+        # rubocop:enable RSpec/AnyInstance
+      end
+
+      it "defaults to Tier 2 (Rails filters)" do
+        event_data = {
+          event_class: event_class,
+          payload: {
+            order_id: "o123",
+            password: "secret"
+          }
+        }
+
+        result = middleware.call(event_data)
+
+        expect(result[:payload][:order_id]).to eq("o123")
+        expect(result[:payload][:password]).to eq("[FILTERED]")
+      end
+    end
   end
 
   describe "Field Strategies" do
@@ -234,6 +306,188 @@ RSpec.describe E11y::Middleware::PIIFilter do
 
       expect(result[:payload][:allow_field]).to eq("keep_original")
     end
+
+    context "with partial masking strategy" do
+      let(:event_class_partial) do
+        Class.new(E11y::Event::Base) do
+          def self.name
+            "Events::PartialMaskingEvent"
+          end
+
+          schema do
+            required(:email_field).filled(:string)
+            required(:generic_field).filled(:string)
+          end
+
+          contains_pii true
+
+          pii_filtering do
+            partials :email_field, :generic_field
+          end
+        end
+      end
+
+      let(:middleware) { described_class.new(app) }
+
+      it "handles email format correctly" do
+        event_data = {
+          event_class: event_class_partial,
+          payload: {
+            email_field: "alice@example.com",
+            generic_field: "test"
+          }
+        }
+
+        result = middleware.call(event_data)
+
+        # Email: show first 2 chars + *** + last 3 chars of domain
+        expect(result[:payload][:email_field]).to eq("al***com")
+      end
+
+      it "handles generic strings correctly" do
+        event_data = {
+          event_class: event_class_partial,
+          payload: {
+            email_field: "test@test.com",
+            generic_field: "verylongpassword123"
+          }
+        }
+
+        result = middleware.call(event_data)
+
+        # Generic: show first 2 + *** + last 2 chars
+        expect(result[:payload][:generic_field]).to eq("ve***23")
+      end
+
+      it "handles short strings (< 4 chars) by fully masking" do
+        event_data = {
+          event_class: event_class_partial,
+          payload: {
+            email_field: "x",
+            generic_field: "abc"
+          }
+        }
+
+        result = middleware.call(event_data)
+
+        # Short strings (< 4 chars) are fully masked for security
+        expect(result[:payload][:email_field]).to eq("[FILTERED]")
+        expect(result[:payload][:generic_field]).to eq("[FILTERED]")
+      end
+
+      it "handles minimum length strings (4 chars) correctly" do
+        event_data = {
+          event_class: event_class_partial,
+          payload: {
+            email_field: "test@test.com",
+            generic_field: "abcd"
+          }
+        }
+
+        result = middleware.call(event_data)
+
+        # 4+ chars strings get partial masking
+        expect(result[:payload][:generic_field]).to eq("ab***cd")
+      end
+    end
+
+    context "with hash strategy consistency" do
+      let(:event_class_hash) do
+        Class.new(E11y::Event::Base) do
+          def self.name
+            "Events::HashConsistencyEvent"
+          end
+
+          schema do
+            required(:hash_field).filled(:string)
+          end
+
+          contains_pii true
+
+          pii_filtering do
+            hashes :hash_field
+          end
+        end
+      end
+
+      it "produces consistent hashes for same input" do
+        event_data1 = {
+          event_class: event_class_hash,
+          payload: { hash_field: "same_value" }
+        }
+
+        event_data2 = {
+          event_class: event_class_hash,
+          payload: { hash_field: "same_value" }
+        }
+
+        result1 = middleware.call(event_data1)
+        result2 = middleware.call(event_data2)
+
+        expect(result1[:payload][:hash_field]).to eq(result2[:payload][:hash_field])
+        expect(result1[:payload][:hash_field]).to match(/^hashed_[a-f0-9]{16}$/)
+      end
+
+      it "produces different hashes for different inputs" do
+        event_data1 = {
+          event_class: event_class_hash,
+          payload: { hash_field: "value1" }
+        }
+
+        event_data2 = {
+          event_class: event_class_hash,
+          payload: { hash_field: "value2" }
+        }
+
+        result1 = middleware.call(event_data1)
+        result2 = middleware.call(event_data2)
+
+        expect(result1[:payload][:hash_field]).not_to eq(result2[:payload][:hash_field])
+      end
+    end
+
+    context "with unknown strategy" do
+      let(:event_class_unknown) do
+        Class.new(E11y::Event::Base) do
+          def self.name
+            "Events::UnknownStrategyEvent"
+          end
+
+          schema do
+            required(:test_field).filled(:string)
+          end
+
+          contains_pii true
+
+          pii_filtering do
+            # We'll override the config to inject unknown strategy
+          end
+
+          # Override pii_filtering_config to return unknown strategy
+          def self.pii_filtering_config
+            {
+              fields: {
+                test_field: { strategy: :unknown_invalid_strategy }
+              }
+            }
+          end
+        end
+      end
+
+      it "falls back to :allow strategy for unknown strategies (line 171)" do
+        event_data = {
+          event_class: event_class_unknown,
+          payload: {
+            test_field: "original_value"
+          }
+        }
+
+        result = middleware.call(event_data)
+
+        # Unknown strategy should fallback to allow (keep original)
+        expect(result[:payload][:test_field]).to eq("original_value")
+      end
+    end
   end
 
   describe "Pattern-Based Filtering" do
@@ -346,6 +600,247 @@ RSpec.describe E11y::Middleware::PIIFilter do
 
       # First mask the whole :user field
       expect(result[:payload][:user]).to eq("[FILTERED]")
+    end
+
+    context "with arrays in payload" do
+      let(:event_class_array) do
+        Class.new(E11y::Event::Base) do
+          def self.name
+            "Events::ArrayEvent"
+          end
+
+          schema do
+            required(:items).filled(:array)
+          end
+
+          contains_pii true
+
+          pii_filtering do
+            allows :items
+          end
+        end
+      end
+
+      it "applies pattern filtering to arrays (line 189)" do
+        event_data = {
+          event_class: event_class_array,
+          payload: {
+            items: [
+              "User email: john@example.com",
+              "Another user: alice@test.com",
+              "No PII here"
+            ]
+          }
+        }
+
+        result = middleware.call(event_data)
+
+        # Emails should be filtered in all array elements
+        expect(result[:payload][:items][0]).not_to include("john@example.com")
+        expect(result[:payload][:items][1]).not_to include("alice@test.com")
+        expect(result[:payload][:items][2]).to eq("No PII here")
+      end
+
+      it "handles nested arrays correctly" do
+        event_data = {
+          event_class: event_class_array,
+          payload: {
+            items: [
+              ["email1@test.com", "email2@test.com"],
+              ["192.168.1.1", "text"]
+            ]
+          }
+        }
+
+        result = middleware.call(event_data)
+
+        # Pattern filtering should work recursively in nested arrays
+        expect(result[:payload][:items][0][0]).not_to include("email1@test.com")
+        expect(result[:payload][:items][1][0]).not_to include("192.168.1.1")
+      end
+    end
+  end
+
+  describe "Edge Cases and Data Integrity" do
+    let(:event_class_edge) do
+      Class.new(E11y::Event::Base) do
+        def self.name
+          "Events::EdgeCaseEvent"
+        end
+
+        schema do
+          required(:data).filled
+        end
+
+        contains_pii true
+
+        pii_filtering do
+          allows :data
+        end
+      end
+    end
+
+    it "handles nil values gracefully" do
+      event_data = {
+        event_class: event_class_edge,
+        payload: {
+          data: nil
+        }
+      }
+
+      result = middleware.call(event_data)
+
+      expect(result[:payload][:data]).to be_nil
+    end
+
+    it "handles empty strings" do
+      event_data = {
+        event_class: event_class_edge,
+        payload: {
+          data: ""
+        }
+      }
+
+      result = middleware.call(event_data)
+
+      expect(result[:payload][:data]).to eq("")
+    end
+
+    it "handles empty hashes" do
+      event_data = {
+        event_class: event_class_edge,
+        payload: {
+          data: {}
+        }
+      }
+
+      result = middleware.call(event_data)
+
+      expect(result[:payload][:data]).to eq({})
+    end
+
+    it "handles empty arrays" do
+      event_data = {
+        event_class: event_class_edge,
+        payload: {
+          data: []
+        }
+      }
+
+      result = middleware.call(event_data)
+
+      expect(result[:payload][:data]).to eq([])
+    end
+
+    it "prevents mutation of original data (deep_dup)" do
+      original_payload = {
+        data: {
+          nested: %w[value1 value2],
+          email: "test@example.com"
+        }
+      }
+
+      event_data = {
+        event_class: event_class_edge,
+        payload: original_payload
+      }
+
+      # Call middleware
+      result = middleware.call(event_data)
+
+      # Original should be unchanged
+      expect(original_payload[:data][:nested]).to eq(%w[value1 value2])
+      expect(original_payload[:data][:email]).to eq("test@example.com")
+
+      # Result should be filtered
+      expect(result[:payload][:data][:email]).not_to eq("test@example.com")
+    end
+
+    it "handles complex nested structures with arrays (line 250)" do
+      event_data = {
+        event_class: event_class_edge,
+        payload: {
+          data: {
+            users: [
+              { name: "John", email: "john@test.com" },
+              { name: "Alice", email: "alice@test.com" }
+            ],
+            settings: {
+              notifications: %w[email sms],
+              preferences: { theme: "dark" }
+            }
+          }
+        }
+      }
+
+      result = middleware.call(event_data)
+
+      # Should handle deep nesting with arrays
+      expect(result[:payload][:data][:users]).to be_an(Array)
+      expect(result[:payload][:data][:settings][:notifications]).to eq(%w[email sms])
+    end
+
+    context "with unduplicatable objects" do
+      it "handles objects that cannot be duplicated (line 257)" do
+        # Create a custom object that raises on dup
+        unduplicatable = Class.new do
+          def dup
+            raise TypeError, "can't dup"
+          end
+
+          def to_s
+            "unduplicatable_object"
+          end
+        end.new
+
+        event_data = {
+          event_class: event_class_edge,
+          payload: {
+            data: unduplicatable
+          }
+        }
+
+        # Should handle the error gracefully and return original
+        expect { middleware.call(event_data) }.not_to raise_error
+        result = middleware.call(event_data)
+        expect(result[:payload][:data]).to eq(unduplicatable)
+      end
+    end
+  end
+
+  describe "Non-Rails Environment" do
+    let(:event_class_non_rails) do
+      Class.new(E11y::Event::Base) do
+        def self.name
+          "Events::NonRailsEvent"
+        end
+
+        schema do
+          required(:data).filled(:string)
+        end
+
+        # Tier 2: Should use Rails filters (or fallback if no Rails)
+      end
+    end
+
+    it "handles non-Rails environment gracefully (lines 266-272)" do
+      # Stub Rails as undefined
+      hide_const("Rails")
+
+      # Create new middleware without Rails
+      middleware_no_rails = described_class.new(app)
+
+      event_data = {
+        event_class: event_class_non_rails,
+        payload: {
+          data: "some data"
+        }
+      }
+
+      # Should work without Rails (fallback to empty filter)
+      expect { middleware_no_rails.call(event_data) }.not_to raise_error
+      result = middleware_no_rails.call(event_data)
+      expect(result[:payload][:data]).to eq("some data")
     end
   end
 end
