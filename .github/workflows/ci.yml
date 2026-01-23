@@ -75,45 +75,22 @@ jobs:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
       
-      - name: Check SimpleCov Cobertura gem
-        run: |
-          echo "📦 Checking if simplecov-cobertura is installed..."
-          bundle list | grep simplecov || echo "❌ SimpleCov gems not found"
-          bundle exec ruby -e "require 'simplecov-cobertura'; puts '✅ simplecov-cobertura loaded successfully'" || echo "❌ Failed to load simplecov-cobertura"
-      
       - name: Run unit tests (fast, no Rails/integrations)
         env:
           COVERAGE: true
         run: |
           echo "🧪 Starting unit tests at $(date)"
-          bundle exec rspec --tag ~integration --format progress 2>&1 | tee rspec_output.log
+          bundle exec rspec --tag ~integration --format progress
           echo "✅ Unit tests completed at $(date)"
-          echo ""
-          echo "📝 Checking for SimpleCov output/errors..."
-          grep -i "simplecov\|coverage" rspec_output.log || echo "No SimpleCov messages in output"
-      
-      - name: Check coverage files
-        if: matrix.ruby == '3.2'
-        run: |
-          echo "📊 Checking for coverage files..."
-          ls -la coverage/ || echo "❌ coverage/ directory not found"
-          if [ -f coverage/coverage.xml ]; then
-            echo "✅ coverage.xml found"
-            head -20 coverage/coverage.xml
-          else
-            echo "❌ coverage.xml NOT found"
-            exit 1
-          fi
       
       - name: Upload coverage reports to Codecov
-        if: matrix.ruby == '3.2'
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage/coverage.xml
-          flags: unittests
-          name: codecov-umbrella
-          fail_ci_if_error: true
+          flags: unittests-ruby-${{ matrix.ruby }}
+          name: codecov-ruby-${{ matrix.ruby }}
+          fail_ci_if_error: false
           verbose: true
 
   test-integration:

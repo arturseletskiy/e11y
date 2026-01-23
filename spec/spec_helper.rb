@@ -4,19 +4,12 @@
 
 # SimpleCov setup (must be at the very top)
 if ENV["COVERAGE"]
-  puts "🔍 COVERAGE=true detected, loading SimpleCov..."
   require "simplecov"
-  puts "✅ SimpleCov loaded"
   require "simplecov-cobertura"
-  puts "✅ simplecov-cobertura loaded"
 
   SimpleCov.start do
-    puts "🚀 SimpleCov.start called"
     # Set coverage directory
     coverage_dir "coverage"
-
-    # Enable for debugging
-    SimpleCov.print_error_status = true
 
     add_filter "/spec/"
     add_filter "/vendor/"
@@ -67,16 +60,11 @@ if ENV["COVERAGE"]
     end
 
     # Multiple formatters
-    formatters = [
+    SimpleCov.formatters = SimpleCov::Formatter::MultiFormatter.new([
       SimpleCov::Formatter::HTMLFormatter,
       SimpleCov::Formatter::CoberturaFormatter
-    ]
-    puts "📊 Setting up formatters: #{formatters.map(&:name).join(', ')}"
-    SimpleCov.formatters = SimpleCov::Formatter::MultiFormatter.new(formatters)
-    puts "✅ SimpleCov formatters configured"
+    ])
   end
-
-  puts "✅ SimpleCov configuration complete"
 end
 
 # Eager load all files for coverage tracking (Zeitwerk uses lazy loading by default)
