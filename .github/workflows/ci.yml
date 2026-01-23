@@ -156,6 +156,13 @@ jobs:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
       
+      - name: Install system dependencies for integration tests
+        run: |
+          # netcat is pre-installed on ubuntu-latest
+          # If we need redis-cli later, uncomment:
+          # sudo apt-get update && sudo apt-get install -y redis-tools
+          echo "✅ System dependencies ready"
+      
       - name: Install integration dependencies
         run: |
           bundle config set --local with 'integration'
@@ -176,7 +183,8 @@ jobs:
           echo "✅ Elasticsearch ready"
           
           echo "Waiting for Redis..."
-          timeout 30 bash -c 'until redis-cli -h localhost ping > /dev/null 2>&1; do echo "Redis not ready yet..."; sleep 1; done' || (echo "❌ Redis timeout"; exit 1)
+          # Use nc (netcat) instead of redis-cli which is not installed by default
+          timeout 30 bash -c 'until nc -z localhost 6379; do echo "Redis not ready yet..."; sleep 1; done' || (echo "❌ Redis timeout"; exit 1)
           echo "✅ Redis ready"
           
           echo "✅ All services ready!"
