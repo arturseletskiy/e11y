@@ -5,7 +5,7 @@
 **Observability for Rails developers who hate noise**
 
 [![Gem Version](https://badge.fury.io/rb/e11y.svg)](https://badge.fury.io/rb/e11y)
-[![Build Status](https://github.com/arturseletskiy/e11y/workflows/CI/badge.svg)](https://github.com/arturseletskiy/e11y/actions)
+[![CI](https://github.com/arturseletskiy/e11y/actions/workflows/ci.yml/badge.svg)](https://github.com/arturseletskiy/e11y/actions/workflows/ci.yml)
 [![Code Coverage](https://codecov.io/gh/arturseletskiy/e11y/branch/main/graph/badge.svg)](https://codecov.io/gh/arturseletskiy/e11y)
 
 **⚠️ Work in Progress** - Core features implemented, production validation in progress

@@ -14,10 +14,10 @@ if ENV["COVERAGE"]
     puts "🚀 SimpleCov.start called"
     # Set coverage directory
     coverage_dir "coverage"
-    
+
     # Enable for debugging
     SimpleCov.print_error_status = true
-    
+
     add_filter "/spec/"
     add_filter "/vendor/"
     add_filter "/benchmarks/"
@@ -51,8 +51,8 @@ if ENV["COVERAGE"]
 
     # Print files with low coverage (using SimpleCov's at_exit hook)
     SimpleCov.at_exit do
-      SimpleCov.result.format!  # CRITICAL: Ensure formatters run!
-      
+      SimpleCov.result.format! # CRITICAL: Ensure formatters run!
+
       if SimpleCov.result
         files_under_target = SimpleCov.result.files.select { |f| f.covered_percent < 100 }.sort_by(&:covered_percent)
         if files_under_target.any?
@@ -75,7 +75,7 @@ if ENV["COVERAGE"]
     SimpleCov.formatters = SimpleCov::Formatter::MultiFormatter.new(formatters)
     puts "✅ SimpleCov formatters configured"
   end
-  
+
   puts "✅ SimpleCov configuration complete"
 end
 
