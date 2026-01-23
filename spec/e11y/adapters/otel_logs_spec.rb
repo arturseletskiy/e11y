@@ -9,6 +9,7 @@ require "spec_helper"
 begin
   require "opentelemetry/sdk"
   require "opentelemetry/logs"
+  require "e11y/adapters/otel_logs"
 rescue LoadError
   RSpec.describe "E11y::Adapters::OTelLogs", :integration do
     it "requires OpenTelemetry SDK to be available" do
