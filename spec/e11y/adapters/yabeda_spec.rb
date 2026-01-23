@@ -333,11 +333,11 @@ RSpec.describe E11y::Adapters::Yabeda do
 
       metric = Yabeda.e11y.order_amount
       allow(Yabeda.e11y).to receive(:order_amount).and_return(metric)
-      allow(metric).to receive(:observe)
+      allow(metric).to receive(:measure)
 
       adapter.write(event)
 
-      expect(metric).to have_received(:observe).with(99.99, hash_including(currency: "USD"))
+      expect(metric).to have_received(:measure).with(hash_including(currency: "USD"), 99.99)
     end
 
     it "extracts value from payload" do
@@ -349,11 +349,11 @@ RSpec.describe E11y::Adapters::Yabeda do
 
       metric = Yabeda.e11y.order_amount
       allow(Yabeda.e11y).to receive(:order_amount).and_return(metric)
-      allow(metric).to receive(:observe)
+      allow(metric).to receive(:measure)
 
       adapter.write(event)
 
-      expect(metric).to have_received(:observe).with(123.45, anything)
+      expect(metric).to have_received(:measure).with(anything, 123.45)
     end
 
     it "supports Proc value extractors" do
@@ -374,11 +374,11 @@ RSpec.describe E11y::Adapters::Yabeda do
 
       metric = Yabeda.e11y.order_amount
       allow(Yabeda.e11y).to receive(:order_amount).and_return(metric)
-      allow(metric).to receive(:observe)
+      allow(metric).to receive(:measure)
 
       adapter.write(event)
 
-      expect(metric).to have_received(:observe).with(100, anything)
+      expect(metric).to have_received(:measure).with(anything, 100)
     end
   end
 
@@ -406,7 +406,7 @@ RSpec.describe E11y::Adapters::Yabeda do
 
       adapter.write(event)
 
-      expect(metric).to have_received(:set).with(42, hash_including(queue_name: "default"))
+      expect(metric).to have_received(:set).with(hash_including(queue_name: "default"), 42)
     end
   end
 

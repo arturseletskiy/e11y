@@ -114,7 +114,7 @@ module E11y
 
           # Cleanup old events periodically (every 50 errors) instead of on every error
           # This reduces O(n²) overhead significantly while keeping memory bounded
-          cleanup_old_events(now) if @all_errors.size % 50 == 0
+          cleanup_old_events(now) if (@all_errors.size % 50).zero?
 
           # Update baseline (if not in spike)
           update_baseline(event_name) unless @spike_started_at

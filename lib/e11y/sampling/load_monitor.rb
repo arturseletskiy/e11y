@@ -67,7 +67,7 @@ module E11y
 
           # Cleanup old events periodically (every 100 events) instead of on every event
           # This reduces O(n²) overhead significantly while keeping memory bounded
-          cleanup_old_events(now) if @events.size % 100 == 0
+          cleanup_old_events(now) if (@events.size % 100).zero?
         end
       end
 

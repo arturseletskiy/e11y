@@ -139,7 +139,7 @@ RSpec.describe E11y::Adapters::Yabeda, :integration do
         # Check histogram was recorded
         metric = Yabeda.e11y.order_amount
         values = metric.values
-        
+
         # Check that observation was recorded for USD
         usd_values = values.select { |labels, _| labels[:currency] == "USD" }
         expect(usd_values).not_to be_empty
@@ -356,7 +356,7 @@ RSpec.describe E11y::Adapters::Yabeda, :integration do
 
       # Create adapter with auto_register: true
       described_class.new(auto_register: true)
-      
+
       # Configure Yabeda to apply the registrations
       Yabeda.configure!
 

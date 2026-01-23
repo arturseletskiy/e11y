@@ -55,7 +55,7 @@ jobs:
         run: |
           echo "🔒 Running RuboCop security checks..."
           bundle exec rubocop --only Security,Lint/MixedRegexpCaptureTypes,Lint/SafeNavigationChain \
-            --format progress --display-only-failed
+            --format progress
           echo "✅ Security analysis completed"
 
   test-unit:

@@ -74,12 +74,12 @@ RSpec.describe E11y::Adapters::OTelLogs, :integration do
 
   describe "#healthy?" do
     it "returns true when logger provider and logger are set" do
-      expect(adapter.healthy?).to eq(true)
+      expect(adapter.healthy?).to be(true)
     end
 
     it "returns false when logger not set" do
       adapter.instance_variable_set(:@logger, nil)
-      expect(adapter.healthy?).to eq(false)
+      expect(adapter.healthy?).to be(false)
     end
   end
 
@@ -130,7 +130,7 @@ RSpec.describe E11y::Adapters::OTelLogs, :integration do
         # The baggage allowlist needs to include these keys
         custom_adapter = described_class.new(
           service_name: "test-service",
-          baggage_allowlist: [:order_id, :amount, :user_id, :trace_id, :span_id]
+          baggage_allowlist: %i[order_id amount user_id trace_id span_id]
         )
         attributes = custom_adapter.send(:build_attributes, event_data)
         expect(attributes).to have_key("event.order_id")
@@ -183,7 +183,7 @@ RSpec.describe E11y::Adapters::OTelLogs, :integration do
       pii_keys = %i[email phone ssn credit_card]
       pii_keys.each do |pii_key|
         is_allowed = adapter.send(:baggage_allowed?, pii_key)
-        expect(is_allowed).to eq(false), "PII key #{pii_key} should not be allowed"
+        expect(is_allowed).to be(false), "PII key #{pii_key} should not be allowed"
       end
     end
   end

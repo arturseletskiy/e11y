@@ -85,7 +85,7 @@ RSpec.describe E11y::Railtie, :integration do
       # Would be enabled in development
       E11y.instance_variable_set(:@config, nil)
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("development"))
-      
+
       E11y.configure do |config|
         config.enabled = !Rails.env.test?
       end
@@ -97,7 +97,7 @@ RSpec.describe E11y::Railtie, :integration do
       # Would be enabled in production
       E11y.instance_variable_set(:@config, nil)
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
-      
+
       E11y.configure do |config|
         config.enabled = !Rails.env.test?
       end
@@ -300,21 +300,21 @@ RSpec.describe E11y::Railtie, :integration do
       # Test env: disabled by default
       E11y.instance_variable_set(:@config, nil)
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("test"))
-      
+
       E11y.configure { |config| config.enabled = !Rails.env.test? }
       expect(E11y.config.enabled).to be(false)
 
       # Development env: enabled by default
       E11y.instance_variable_set(:@config, nil)
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("development"))
-      
+
       E11y.configure { |config| config.enabled = !Rails.env.test? }
       expect(E11y.config.enabled).to be(true)
 
       # Production env: enabled by default
       E11y.instance_variable_set(:@config, nil)
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
-      
+
       E11y.configure { |config| config.enabled = !Rails.env.test? }
       expect(E11y.config.enabled).to be(true)
     end
