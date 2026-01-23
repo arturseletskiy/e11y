@@ -10,7 +10,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write  # Required for OIDC authentication with Codecov
 
 jobs:
   # Best practices applied:
@@ -84,15 +83,15 @@ jobs:
           bundle exec rspec --tag ~integration --format progress
           echo "✅ Unit tests completed at $(date)"
       
-      - name: Upload coverage to Codecov
+      - name: Upload coverage reports to Codecov
         if: matrix.ruby == '3.2'
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/coverage.xml
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: true
-          use_oidc: true
 
   test-integration:
     name: Integration Tests (Ruby ${{ matrix.ruby }})
