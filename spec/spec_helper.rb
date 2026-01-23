@@ -49,8 +49,10 @@ if ENV["COVERAGE"]
     minimum_coverage line: 95
     refuse_coverage_drop
 
-    # Print files with low coverage
-    at_exit do
+    # Print files with low coverage (using SimpleCov's at_exit hook)
+    SimpleCov.at_exit do
+      SimpleCov.result.format!  # CRITICAL: Ensure formatters run!
+      
       if SimpleCov.result
         files_under_target = SimpleCov.result.files.select { |f| f.covered_percent < 100 }.sort_by(&:covered_percent)
         if files_under_target.any?
