@@ -14,4 +14,15 @@ RSpec.describe E11y::Events::Rails::View::Render do
   it "has schema defined" do
     expect(described_class).to respond_to(:schema)
   end
+
+  it "can track event with valid payload" do
+    result = described_class.track(
+      event_name: "render_template.action_view",
+      duration: 45.8,
+      identifier: "app/views/users/index.html.erb",
+      layout: "layouts/application"
+    )
+    expect(result).to be_a(Hash)
+    expect(result[:payload][:identifier]).to eq("app/views/users/index.html.erb")
+  end
 end
