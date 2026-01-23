@@ -61,9 +61,9 @@ if ENV["COVERAGE"]
 
     # Multiple formatters
     SimpleCov.formatters = SimpleCov::Formatter::MultiFormatter.new([
-      SimpleCov::Formatter::HTMLFormatter,
-      SimpleCov::Formatter::CoberturaFormatter
-    ])
+                                                                      SimpleCov::Formatter::HTMLFormatter,
+                                                                      SimpleCov::Formatter::CoberturaFormatter
+                                                                    ])
   end
 end
 
