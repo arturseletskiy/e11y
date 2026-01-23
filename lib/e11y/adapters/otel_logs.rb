@@ -58,14 +58,16 @@ module E11y
     # @see ADR-007 for OpenTelemetry integration architecture
     # @see UC-008 for use cases
     class OTelLogs < Base
-      # E11y severity → OTel severity mapping
+      # E11y severity → OTel severity_number mapping
+      # See: https://opentelemetry.io/docs/specs/otel/logs/data-model/#field-severitynumber
+      # Severity numbers: TRACE=1, DEBUG=5, INFO=9, WARN=13, ERROR=17, FATAL=21
       SEVERITY_MAPPING = {
-        debug: OpenTelemetry::SDK::Logs::Severity::DEBUG,
-        info: OpenTelemetry::SDK::Logs::Severity::INFO,
-        success: OpenTelemetry::SDK::Logs::Severity::INFO, # OTel has no "success"
-        warn: OpenTelemetry::SDK::Logs::Severity::WARN,
-        error: OpenTelemetry::SDK::Logs::Severity::ERROR,
-        fatal: OpenTelemetry::SDK::Logs::Severity::FATAL
+        debug: 5,  # DEBUG
+        info: 9,   # INFO
+        success: 9, # INFO (OTel has no "success" level)
+        warn: 13,  # WARN
+        error: 17, # ERROR
+        fatal: 21  # FATAL
       }.freeze
 
       # Default baggage allowlist (safe keys that don't contain PII)
@@ -157,7 +159,7 @@ module E11y
       # @param severity [Symbol] E11y severity (:debug, :info, etc.)
       # @return [Integer] OTel severity number
       def map_severity(severity)
-        SEVERITY_MAPPING[severity] || OpenTelemetry::SDK::Logs::Severity::INFO
+        SEVERITY_MAPPING[severity] || 9 # Default to INFO
       end
 
       # Build OTel attributes from E11y payload
