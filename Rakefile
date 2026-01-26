@@ -21,7 +21,11 @@ namespace :spec do
   task :integration do
     # Run integration tests with explicit file patterns to avoid loading all specs
     # This prevents test pollution from unit test files
-    sh "INTEGRATION=true bundle exec rspec spec/integration/*.rb spec/e11y/adapters/*_spec.rb spec/e11y/instruments/*_spec.rb --tag integration"
+    sh "INTEGRATION=true bundle exec rspec " \
+       "spec/integration/*.rb " \
+       "spec/e11y/adapters/*_spec.rb " \
+       "spec/e11y/instruments/*_spec.rb " \
+       "--tag integration"
   end
 
   desc "Run railtie integration tests (separate Rails app instance)"

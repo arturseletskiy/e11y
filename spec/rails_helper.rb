@@ -87,9 +87,7 @@ RSpec.configure do |config|
 
     # Ensure routes are loaded (they should already be loaded during Rails.application.initialize!)
     # If routes are empty, reload them from config/routes.rb
-    if Rails.application.routes.empty?
-      Rails.application.routes_reloader.reload!
-    end
+    Rails.application.routes_reloader.reload! if Rails.application.routes.empty?
 
     # E11y is already configured in dummy/config/application.rb
     # Verify configuration is correct

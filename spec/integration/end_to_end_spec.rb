@@ -61,7 +61,7 @@ RSpec.describe "End-to-End Integration", :integration do
       # CRITICAL: Clear adapter immediately before test to ensure clean state
       # The before hook at describe level may not be sufficient due to test execution order
       memory_adapter.clear!
-      
+
       threads = Array.new(5) do
         Thread.new do
           get "/posts"

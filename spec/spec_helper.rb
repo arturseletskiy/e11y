@@ -130,16 +130,16 @@ RSpec.configure do |config|
   # Detect if --tag integration is being used (but NOT --tag ~integration which EXCLUDES integration)
   # Handle both "--tag integration" (two args) and "--tag=integration" (one arg)
   tag_integration = ARGV.each_cons(2).any? { |a, b| a == "--tag" && b == "integration" } ||
-                    ARGV.any? { |arg| arg == "--tag=integration" } ||
+                    ARGV.any?("--tag=integration") ||
                     ENV["INTEGRATION"] == "true"
-  
+
   tag_exclude_integration = ARGV.each_cons(2).any? { |a, b| a == "--tag" && b == "~integration" } ||
-                            ARGV.any? { |arg| arg == "--tag=~integration" }
-  
+                            ARGV.any?("--tag=~integration")
+
   # Detect if running integration spec files directly (e.g., spec/integration/xxx_spec.rb)
   # In this case, we should run integration tests even without explicit --tag
   running_integration_files = ARGV.any? { |arg| arg.include?("spec/integration/") }
-  
+
   if (tag_integration || running_integration_files) && !tag_exclude_integration
     ENV["INTEGRATION"] = "true" # Ensure rails_helper knows we're in integration mode
     # Run ONLY integration tests
