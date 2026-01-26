@@ -14,15 +14,12 @@ return unless ENV["INTEGRATION"] == "true"
 ENV["E11Y_AUDIT_SIGNING_KEY"] ||= "test_signing_key_for_integration_tests_only"
 ENV["RAILS_ENV"] ||= "test"
 
-# Load Rails environment ONLY if not already loaded
+# Load Rails environment file (but DON'T initialize yet - that happens in before(:suite))
 # Use global variable because constants don't persist across multiple file loads
 # rubocop:disable Style/GlobalVars
-unless $rails_app_initialized
+unless $rails_env_loaded
   require File.expand_path("dummy/config/environment", __dir__)
-
-  # Initialize Rails application
-  Rails.application.initialize!
-  $rails_app_initialized = true
+  $rails_env_loaded = true
   # rubocop:enable Style/GlobalVars
 
   require "rspec/rails"
@@ -47,7 +44,14 @@ RSpec.configure do |config|
   end
 
   # Initialize Rails environment ONCE for the entire test suite
+  # rubocop:disable Style/GlobalVars
   config.before(:suite) do
+    # Initialize Rails application ONCE
+    unless $rails_app_initialized
+      Rails.application.initialize!
+      $rails_app_initialized = true
+    end
+    # rubocop:enable Style/GlobalVars
     # Run migrations to create database schema
     ActiveRecord::Base.establish_connection
     ActiveRecord::Migration.suppress_messages do
