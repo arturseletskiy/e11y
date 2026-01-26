@@ -94,13 +94,23 @@ if ENV["COVERAGE"]
   end
 end
 
+# Detect integration mode BEFORE loading E11y (critical for Railtie registration)
+# Avoid loading E11y before Rails in integration tests, or Railtie won't register.
+tag_integration = ARGV.each_cons(2).any? { |a, b| a == "--tag" && b == "integration" } ||
+                  ARGV.any?("--tag=integration") ||
+                  ENV["INTEGRATION"] == "true"
+tag_exclude_integration = ARGV.each_cons(2).any? { |a, b| a == "--tag" && b == "~integration" } ||
+                          ARGV.any?("--tag=~integration")
+running_integration_files = ARGV.any? { |arg| arg.include?("spec/integration/") }
+integration_run = (tag_integration || running_integration_files) && !tag_exclude_integration
+
 # Load ActiveSupport BEFORE core extensions (required for Rails 7.1+ deprecator)
 require "active_support"
 require "active_support/core_ext/numeric/time" # For 30.days, 7.years
 require "active_support/core_ext/integer/time"
 require "active_support/core_ext/object/blank" # For .present?
 require "climate_control" # For ENV manipulation in tests
-require "e11y"
+require "e11y" unless integration_run
 require "webmock/rspec"
 
 # Configure WebMock
@@ -127,20 +137,8 @@ RSpec.configure do |config|
   # Run integration tests with: INTEGRATION=true bundle exec rspec
   # Or with: bundle exec rspec --tag integration
 
-  # Detect if --tag integration is being used (but NOT --tag ~integration which EXCLUDES integration)
-  # Handle both "--tag integration" (two args) and "--tag=integration" (one arg)
-  tag_integration = ARGV.each_cons(2).any? { |a, b| a == "--tag" && b == "integration" } ||
-                    ARGV.any?("--tag=integration") ||
-                    ENV["INTEGRATION"] == "true"
-
-  tag_exclude_integration = ARGV.each_cons(2).any? { |a, b| a == "--tag" && b == "~integration" } ||
-                            ARGV.any?("--tag=~integration")
-
-  # Detect if running integration spec files directly (e.g., spec/integration/xxx_spec.rb)
-  # In this case, we should run integration tests even without explicit --tag
-  running_integration_files = ARGV.any? { |arg| arg.include?("spec/integration/") }
-
-  if (tag_integration || running_integration_files) && !tag_exclude_integration
+  # Integration detection is computed above (integration_run)
+  if integration_run
     ENV["INTEGRATION"] = "true" # Ensure rails_helper knows we're in integration mode
     # Run ONLY integration tests
     config.filter_run_including integration: true
