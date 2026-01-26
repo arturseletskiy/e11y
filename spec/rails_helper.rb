@@ -7,8 +7,18 @@ require "spec_helper"
 
 # Only load Rails environment when running integration tests
 # This prevents conflicts when running regular specs
-# Skip if not in integration mode (early return to avoid loading Rails for unit tests)
-return unless ENV["INTEGRATION"] == "true"
+# NOTE: spec_helper.rb sets ENV["INTEGRATION"] = "true" when --tag integration is detected
+# If not set, we're in unit test mode - skip Rails loading
+unless ENV["INTEGRATION"] == "true"
+  # CRITICAL: Don't just return - raise an error if someone tries to require rails_helper outside integration mode
+  # This makes debugging easier than silent failures
+  if caller.grep(/spec_helper\.rb/).empty?
+    warn "\n⚠️  WARNING: rails_helper.rb loaded without INTEGRATION=true!"
+    warn "   This file should only be loaded during integration tests."
+    warn "   Run with: bundle exec rspec --tag integration\n\n"
+  end
+  return
+end
 
 # CRITICAL: Set RAILS_ENV FIRST, before loading anything else
 # This ensures Rails.env is correctly set to "test" from the start
