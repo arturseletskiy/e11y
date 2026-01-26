@@ -56,9 +56,27 @@ RSpec.describe "Rails Instrumentation Integration", :integration do
 
   describe "View rendering instrumentation" do
     it "captures view rendering events" do
-      # This would require actual view templates
-      # For now, we're using JSON rendering which doesn't trigger view events
-      skip "Add view template tests when needed"
+      # Create some posts to render
+      Post.create!(title: "Post 1", body: "Body 1")
+      Post.create!(title: "Post 2", body: "Body 2")
+      
+      memory_adapter.clear!
+      
+      # Make a request that renders a view template
+      get "/posts_list"
+      
+      expect(response).to be_successful
+      
+      events = memory_adapter.events
+      # Rails emits render_template.action_view events for view rendering
+      render_events = events.select { |e| e[:event_name]&.include?("View::Render") }
+      
+      expect(render_events).not_to be_empty
+      
+      # The event should include template identifier
+      template_event = render_events.find { |e| e[:payload][:identifier]&.include?("posts/list") }
+      expect(template_event).not_to be_nil
+      expect(template_event[:payload][:identifier]).to include("posts/list.html.erb")
     end
   end
 end

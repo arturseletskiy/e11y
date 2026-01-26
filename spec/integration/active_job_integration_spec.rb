@@ -12,20 +12,20 @@ RSpec.describe "ActiveJob Integration", :integration, type: :integration do
 
   describe "Job enqueue" do
     it "captures job enqueue events" do
-      TestJob.perform_later("test message")
+      DummyTestJob.perform_later("test message")
 
       events = memory_adapter.events
       # Event name is the class name, check for Job::Enqueued pattern
       enqueue_events = events.select { |e| e[:event_name]&.include?("Job::Enqueued") }
 
       expect(enqueue_events).not_to be_empty
-      expect(enqueue_events.first[:payload][:job_class]).to eq("TestJob")
+      expect(enqueue_events.first[:payload][:job_class]).to eq("DummyTestJob")
     end
   end
 
   describe "Job perform" do
     it "captures job execution events" do
-      TestJob.perform_now("test message")
+      DummyTestJob.perform_now("test message")
 
       events = memory_adapter.events
       # Look for Started and Completed events by event_name pattern
@@ -34,11 +34,11 @@ RSpec.describe "ActiveJob Integration", :integration, type: :integration do
 
       expect(started_events).not_to be_empty
       expect(completed_events).not_to be_empty
-      expect(started_events.first[:payload][:job_class]).to eq("TestJob")
+      expect(started_events.first[:payload][:job_class]).to eq("DummyTestJob")
     end
 
     it "tracks job duration" do
-      TestJob.perform_now("test message")
+      DummyTestJob.perform_now("test message")
 
       events = memory_adapter.events
       completed_event = events.find { |e| e[:event_name]&.include?("Job::Completed") }

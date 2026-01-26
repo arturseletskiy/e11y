@@ -6,4 +6,5 @@ Rails.application.routes.draw do
 
   get "/test_error", to: "posts#error"
   get "/test_redirect", to: "posts#redirect"
+  get "/posts_list", to: "posts#list"
 end

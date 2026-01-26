@@ -94,6 +94,8 @@ if ENV["COVERAGE"]
   end
 end
 
+# Load ActiveSupport BEFORE core extensions (required for Rails 7.1+ deprecator)
+require "active_support"
 require "active_support/core_ext/numeric/time" # For 30.days, 7.years
 require "active_support/core_ext/integer/time"
 require "active_support/core_ext/object/blank" # For .present?
@@ -103,6 +105,21 @@ require "webmock/rspec"
 
 # Configure WebMock
 WebMock.disable_net_connect!(allow_localhost: true)
+
+# Load Rails environment for integration tests BEFORE RSpec.configure
+# This must happen early so Rails is available when spec files are loaded
+if ENV["INTEGRATION"] == "true" || ARGV.any? { |arg| arg.include?("integration") }
+  ENV["INTEGRATION"] = "true"
+  ENV["RAILS_ENV"] ||= "test"
+  ENV["E11Y_AUDIT_SIGNING_KEY"] ||= "test_signing_key_for_integration_tests_only"
+  
+  # Load Rails ONCE
+  unless defined?(Rails) && Rails.application
+    require File.expand_path("dummy/config/environment", __dir__)
+    Rails.application.initialize! unless Rails.application.initialized?
+    require "rspec/rails" # Load RSpec::Rails helpers
+  end
+end
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure
@@ -128,6 +145,25 @@ RSpec.configure do |config|
     config.filter_run_including integration: true
     puts "\n🔧 Running INTEGRATION tests (Rails, OpenTelemetry, etc.)"
     puts "   Dependencies: bundle install --with integration\n\n"
+    
+    # Setup Rails environment (Rails and rspec-rails are already loaded at top of spec_helper)
+    config.before(:suite) do
+      # Run migrations to create database schema
+      ActiveRecord::Base.establish_connection
+      ActiveRecord::Migration.suppress_messages do
+        ActiveRecord::MigrationContext.new(File.expand_path("dummy/db/migrate", __dir__)).migrate
+      end
+      
+      # Load dummy app models and controllers
+      Dir[File.expand_path("dummy/app/**/*.rb", __dir__)].each { |f| require f }
+      
+      # Setup E11y instrumentation manually
+      if E11y.config.enabled
+        E11y::Railtie.setup_rails_instrumentation if E11y.config.rails_instrumentation&.enabled
+        E11y::Railtie.setup_active_job if defined?(ActiveJob) && E11y.config.active_job&.enabled
+        E11y::Railtie.setup_sidekiq if defined?(Sidekiq) && E11y.config.sidekiq&.enabled
+      end
+    end
   else
     # Default: exclude integration tests (fast unit tests only)
     config.filter_run_excluding integration: true

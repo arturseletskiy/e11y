@@ -11,42 +11,51 @@ require "action_mailer/railtie"
 require "active_job/railtie"
 require "rails/test_unit/railtie"
 
-# Load E11y gem and configure BEFORE defining Application class
+# Load E11y gem BEFORE defining Application class
 # This ensures Railtie is registered before Rails collects railties
 require "e11y"
 
-E11y.configure do |config|
-  config.enabled = true
-  config.service_name = "dummy_app"
-  config.environment = ENV["RAILS_ENV"] || "test"
+# Configure E11y ONCE (guard against multiple loads during test suite)
+unless $e11y_dummy_configured
+  E11y.configure do |config|
+    config.enabled = true
+    config.service_name = "dummy_app"
+    config.environment = ENV["RAILS_ENV"] || "test"
 
-  # Use in-memory adapter for testing
-  config.adapters[:memory] = E11y::Adapters::InMemory.new
+    # Use in-memory adapter for testing
+    config.adapters[:memory] = E11y::Adapters::InMemory.new
 
-  # Also register as :logs adapter so events go to memory by default
-  config.adapters[:logs] = config.adapters[:memory]
+    # Also register as :logs adapter so events go to memory by default
+    config.adapters[:logs] = config.adapters[:memory]
 
-  # Enable instrumentation
-  config.rails_instrumentation.enabled = true
-  config.active_job.enabled = true
-  config.sidekiq.enabled = true if defined?(Sidekiq)
-  config.logger_bridge.enabled = false
+    # Enable instrumentation
+    config.rails_instrumentation.enabled = true
+    config.active_job.enabled = true
+    config.sidekiq.enabled = true if defined?(Sidekiq)
+    config.logger_bridge.enabled = false
 
-  # Reconfigure pipeline for tests: 100% sampling (capture all events)
-  config.pipeline.clear
-  config.pipeline.use E11y::Middleware::TraceContext
-  config.pipeline.use E11y::Middleware::Validation
-  config.pipeline.use E11y::Middleware::PIIFilter
-  config.pipeline.use E11y::Middleware::AuditSigning
-  config.pipeline.use E11y::Middleware::Sampling,
-                      default_sample_rate: 1.0,
-                      trace_aware: false,
-                      severity_rates: { debug: 1.0, info: 1.0, warn: 1.0, error: 1.0, fatal: 1.0 }
-  config.pipeline.use E11y::Middleware::Routing
+    # Reconfigure pipeline for tests: 100% sampling (capture all events)
+    # NOTE: This must happen BEFORE Rails.application.initialize! is called
+    config.pipeline.clear
+    config.pipeline.use E11y::Middleware::TraceContext
+    config.pipeline.use E11y::Middleware::Validation
+    config.pipeline.use E11y::Middleware::PIIFilter
+    config.pipeline.use E11y::Middleware::AuditSigning
+    config.pipeline.use E11y::Middleware::Sampling,
+                        default_sample_rate: 1.0,
+                        trace_aware: false,
+                        severity_rates: { debug: 1.0, info: 1.0, warn: 1.0, error: 1.0, fatal: 1.0 }
+    config.pipeline.use E11y::Middleware::Routing
+  end
+  $e11y_dummy_configured = true
 end
 
 module Dummy
-  class Application < Rails::Application
+  # Guard against redefining Application class during test suite
+  # If Application is already defined, skip redefinition to avoid
+  # FrozenError when Rails tries to re-initialize middleware stack
+  unless defined?(Application)
+    class Application < Rails::Application
     # Set root to dummy app directory (must be first)
     config.root = DUMMY_APP_ROOT
 
@@ -68,6 +77,7 @@ module Dummy
     # Disable Rails logs in test output (E11y will handle logging)
     config.logger = Logger.new(nil) unless ENV["VERBOSE"]
     config.log_level = :fatal
+    end
   end
 end
 

@@ -11,7 +11,7 @@ module E11y
             required(:duration).filled(:float)
             optional(:controller).maybe(:string)
             optional(:action).maybe(:string)
-            optional(:format).maybe(:string)
+            optional(:format) # Rails passes Symbol (e.g., :html, :json)
             optional(:status).maybe(:integer)
             optional(:view_runtime).maybe(:float)
             optional(:db_runtime).maybe(:float)

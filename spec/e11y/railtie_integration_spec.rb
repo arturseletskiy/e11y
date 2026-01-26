@@ -21,7 +21,13 @@ rescue LoadError
   return
 end
 
-RSpec.describe E11y::Railtie, :integration do
+# NOTE: This spec tests Railtie initialization process and must NOT be run
+# with other integration tests that share a Rails application instance.
+# It should be run separately: bundle exec rspec spec/e11y/railtie_integration_spec.rb
+#
+# We use :railtie_integration tag instead of :integration to avoid conflicts
+# with the shared Rails app in spec_helper.rb
+RSpec.describe E11y::Railtie, :railtie_integration do
   # Create a minimal Rails application for testing
   # rubocop:todo RSpec/LeakyConstantDeclaration
   class TestApp < Rails::Application # rubocop:todo Lint/ConstantDefinitionInBlock, RSpec/LeakyConstantDeclaration

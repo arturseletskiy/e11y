@@ -26,7 +26,12 @@ module E11y
   #   end
   #
   # @see ADR-008 §3 (Railtie & Initialization)
-  
+
+  # Rails integration engine that handles E11y initialization and setup
+  #
+  # This Railtie manages the lifecycle of E11y within a Rails application,
+  # including configuration, middleware insertion, instrumentation setup,
+  # and console integration.
   class Railtie < Rails::Railtie
     # Derive service name from Rails application class
     # @return [String] Service name (e.g., "my_app")

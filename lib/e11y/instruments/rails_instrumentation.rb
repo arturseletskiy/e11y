@@ -30,18 +30,18 @@ module E11y
       #
       # @return [Hash<String, Class>] Event mappings
       DEFAULT_RAILS_EVENT_MAPPING = {
-        "sql.active_record" => "Events::Rails::Database::Query",
-        "process_action.action_controller" => "Events::Rails::Http::Request",
-        "render_template.action_view" => "Events::Rails::View::Render",
-        "send_file.action_controller" => "Events::Rails::Http::SendFile",
-        "redirect_to.action_controller" => "Events::Rails::Http::Redirect",
-        "cache_read.active_support" => "Events::Rails::Cache::Read",
-        "cache_write.active_support" => "Events::Rails::Cache::Write",
-        "cache_delete.active_support" => "Events::Rails::Cache::Delete",
-        "enqueue.active_job" => "Events::Rails::Job::Enqueued",
-        "enqueue_at.active_job" => "Events::Rails::Job::Scheduled",
-        "perform_start.active_job" => "Events::Rails::Job::Started",
-        "perform.active_job" => "Events::Rails::Job::Completed"
+        "sql.active_record" => "E11y::Events::Rails::Database::Query",
+        "process_action.action_controller" => "E11y::Events::Rails::Http::Request",
+        "render_template.action_view" => "E11y::Events::Rails::View::Render",
+        "send_file.action_controller" => "E11y::Events::Rails::Http::SendFile",
+        "redirect_to.action_controller" => "E11y::Events::Rails::Http::Redirect",
+        "cache_read.active_support" => "E11y::Events::Rails::Cache::Read",
+        "cache_write.active_support" => "E11y::Events::Rails::Cache::Write",
+        "cache_delete.active_support" => "E11y::Events::Rails::Cache::Delete",
+        "enqueue.active_job" => "E11y::Events::Rails::Job::Enqueued",
+        "enqueue_at.active_job" => "E11y::Events::Rails::Job::Scheduled",
+        "perform_start.active_job" => "E11y::Events::Rails::Job::Started",
+        "perform.active_job" => "E11y::Events::Rails::Job::Completed"
       }.freeze
 
       # Setup Rails instrumentation

@@ -29,6 +29,11 @@ class PostsController < ApplicationController
     redirect_to posts_path
   end
 
+  def list
+    @posts = Post.all
+    # Renders app/views/posts/list.html.erb
+  end
+
   private
 
   def post_params

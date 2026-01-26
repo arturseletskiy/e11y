@@ -3,5 +3,5 @@
 # Load the Rails application
 require_relative "application"
 
-# Initialize the Rails application (only if not already initialized)
-Rails.application.initialize! unless Rails.application.initialized?
+# NOTE: Rails.application.initialize! is called from rails_helper.rb
+# to ensure it's only called once during the test suite
