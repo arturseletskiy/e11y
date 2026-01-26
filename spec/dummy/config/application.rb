@@ -50,10 +50,6 @@ module Dummy
     # Set root to dummy app directory (must be first)
     config.root = DUMMY_APP_ROOT
 
-    # Rails 8 requires setting paths before they're frozen
-    # Override the default database config path
-    config.paths.add "config/database", with: File.join(DUMMY_APP_ROOT, "config", "database.yml")
-
     # Rails configuration
     # Don't load defaults to avoid version-specific settings
     # config.load_defaults Rails::VERSION::STRING.to_f
