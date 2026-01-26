@@ -51,6 +51,11 @@ RSpec.configure do |config|
   config.before(:suite) do
     # Initialize Rails application ONCE
     unless $rails_app_initialized
+      # CRITICAL: Ensure config.root is set BEFORE initialize!
+      # Rails 8.0 needs this to find database.yml during initialization
+      dummy_root = File.expand_path("dummy", __dir__)
+      Rails.application.config.root = dummy_root unless Rails.application.config.root.to_s == dummy_root
+
       Rails.application.initialize!
       $rails_app_initialized = true
     end

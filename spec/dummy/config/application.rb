@@ -54,8 +54,6 @@ end
 
 module Dummy
   # Guard against redefining Application class during test suite
-  # If Application is already defined, skip redefinition to avoid
-  # FrozenError when Rails tries to re-initialize middleware stack
   unless defined?(Application)
     class Application < Rails::Application
       # Set root to dummy app directory (must be first)
