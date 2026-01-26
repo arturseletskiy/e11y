@@ -1,32 +1,110 @@
-# Release Instructions for e11y v0.1.0
+# Release Instructions for e11y
+
+## Quick Release (Automated)
+
+```bash
+# 1. Bump version (updates VERSION + CHANGELOG)
+rake release:bump
+# Enter new version when prompted, e.g., 0.2.0
+
+# 2. Review and commit
+git diff
+git add -A
+git commit -m "Bump version to 0.2.0"
+
+# 3. Full release (test + build + tag + push + publish)
+rake release:full
+```
+
+For more control, see [Step-by-Step Release](#step-by-step-release) below.
 
 ## Pre-Release Checklist
 
-- [x] Version updated to 0.1.0 in `lib/e11y/version.rb`
-- [x] CHANGELOG.md updated with all changes
-- [x] All tests passing (1409 examples, 99%+ pass rate)
-- [x] Benchmarks passing (100K events/sec)
-- [x] Gem builds successfully: `e11y-0.1.0.gem`
-- [ ] Git tag created: `v0.1.0`
+- [ ] All changes documented in CHANGELOG.md under `[Unreleased]`
+- [ ] Version bumped: `rake release:bump`
+- [ ] All tests passing: `rake spec`
+- [ ] Changes committed
+- [ ] Git tag created
 - [ ] Published to RubyGems.org
 - [ ] GitHub release created
 
-## Step 1: Create Git Tag
+## Step-by-Step Release
+
+### Step 0: Bump Version
+
+First, update version and CHANGELOG:
 
 ```bash
-# Ensure all changes are committed
-git add -A
-git commit -m "Release v0.1.0"
-
-# Create annotated tag
-git tag -a v0.1.0 -m "Release v0.1.0 - First production release"
-
-# Push tag to GitHub
-git push origin main
-git push origin v0.1.0
+rake release:bump
 ```
 
-## Step 2: Publish to RubyGems.org
+This will:
+1. Prompt for new version (e.g., 0.2.0)
+2. Update `lib/e11y/version.rb`
+3. Convert `[Unreleased]` → `[0.2.0] - YYYY-MM-DD` in CHANGELOG
+4. Add new empty `[Unreleased]` section
+
+Commit the changes:
+
+```bash
+git add -A
+git commit -m "Bump version to 0.2.0"
+```
+
+### Step 1: Prepare Release
+
+Run tests, build gem, create tag:
+
+```bash
+rake release:prep
+```
+
+This will:
+- ✅ Check git status (fails if uncommitted changes)
+- ✅ Run full test suite
+- ✅ Build gem file
+- ✅ Create annotated git tag
+
+Or manually:
+
+```bash
+# Run all tests
+bundle exec rspec
+
+# Build gem
+gem build e11y.gemspec
+
+# Create and push tag
+git tag -a v0.2.0 -m "Release v0.2.0"
+git push origin main
+git push origin v0.2.0
+```
+
+### Step 2: Push to GitHub
+
+```bash
+rake release:git_push
+```
+
+This will:
+- ✅ Verify tag exists
+- ✅ Push commits to origin/main
+- ✅ Push tag to origin
+- ✅ Show GitHub release URL
+
+### Step 3: Publish to RubyGems.org
+
+```bash
+rake release:gem_push
+```
+
+This will:
+- ✅ Verify gem file exists
+- ✅ Prompt for confirmation
+- ✅ Push gem to RubyGems (requires MFA)
+- ✅ Show verification URL
+
+Or manually:
 
 ### Prerequisites
 

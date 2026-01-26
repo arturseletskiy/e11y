@@ -5,6 +5,7 @@
 #
 # Quick reference:
 #   rake                   # Run tests and rubocop
+#   rake release:bump      # Bump version and update CHANGELOG (interactive)
 #   rake release:full      # Complete release workflow (prep + git_push + gem_push)
 #   rake release:prep      # Run tests, build gem, create tag
 #   rake release:git_push  # Push to GitHub
@@ -131,6 +132,105 @@ end
 # Note: bundler/gem_tasks provides: release, release:guard_clean, release:rubygem_push, etc.
 # Our tasks provide more control and visibility
 namespace :release do
+  desc "Bump version and update CHANGELOG (interactive)"
+  task :bump do
+    require_relative "lib/e11y/version"
+    current_version = E11y::VERSION
+    
+    puts "\n#{'=' * 80}"
+    puts "📝 Version Bump"
+    puts "#{'=' * 80}\n"
+    puts "Current version: #{current_version}"
+    puts "\nEnter new version (e.g., 0.2.0, 1.0.0):"
+    
+    new_version = $stdin.gets.chomp.strip
+    
+    if new_version.empty?
+      puts "❌ Error: Version cannot be empty"
+      exit 1
+    end
+    
+    unless new_version.match?(/^\d+\.\d+\.\d+$/)
+      puts "❌ Error: Invalid version format. Use semantic versioning (e.g., 0.2.0)"
+      exit 1
+    end
+    
+    if new_version == current_version
+      puts "⚠️  Warning: New version is the same as current version"
+      puts "Continue anyway? (y/N)"
+      response = $stdin.gets.chomp.downcase
+      exit 0 unless response == "y" || response == "yes"
+    end
+    
+    puts "\n[1/3] Updating lib/e11y/version.rb..."
+    version_file = "lib/e11y/version.rb"
+    version_content = File.read(version_file)
+    updated_version_content = version_content.gsub(
+      /VERSION = "#{Regexp.escape(current_version)}"/,
+      "VERSION = \"#{new_version}\""
+    )
+    File.write(version_file, updated_version_content)
+    puts "✅ Updated: #{current_version} → #{new_version}"
+    
+    puts "\n[2/3] Updating CHANGELOG.md..."
+    changelog_file = "CHANGELOG.md"
+    changelog_content = File.read(changelog_file)
+    
+    # Check if there's an [Unreleased] section
+    if changelog_content.include?("## [Unreleased]")
+      # Replace [Unreleased] with version and date
+      today = Time.now.strftime("%Y-%m-%d")
+      updated_changelog = changelog_content.sub(
+        /## \[Unreleased\]/,
+        "## [#{new_version}] - #{today}"
+      )
+      
+      # Add new [Unreleased] section at the top
+      updated_changelog = updated_changelog.sub(
+        /(## \[#{Regexp.escape(new_version)}\] - #{today})/,
+        "## [Unreleased]\n\n### Added\n\n### Changed\n\n### Fixed\n\n### Deprecated\n\n### Removed\n\n### Security\n\n\\1"
+      )
+      
+      File.write(changelog_file, updated_changelog)
+      puts "✅ Updated CHANGELOG.md:"
+      puts "   - [Unreleased] → [#{new_version}] - #{today}"
+      puts "   - Added new [Unreleased] section"
+    else
+      # No [Unreleased] section, just add version entry
+      today = Time.now.strftime("%Y-%m-%d")
+      
+      # Find where to insert (after the header, before first version)
+      if changelog_content =~ /(## \[\d+\.\d+\.\d+\])/
+        updated_changelog = changelog_content.sub(
+          /(## \[\d+\.\d+\.\d+\])/,
+          "## [Unreleased]\n\n### Added\n\n### Changed\n\n### Fixed\n\n### Deprecated\n\n### Removed\n\n### Security\n\n## [#{new_version}] - #{today}\n\n### Added\n- Version bump\n\n\\1"
+        )
+      else
+        # No previous versions, add after header
+        header_end = changelog_content.index("\n\n") || 0
+        header = changelog_content[0..header_end]
+        rest = changelog_content[header_end + 1..-1] || ""
+        updated_changelog = "#{header}\n## [#{new_version}] - #{today}\n\n### Added\n- Initial release\n\n#{rest}"
+      end
+      
+      File.write(changelog_file, updated_changelog)
+      puts "✅ Added version [#{new_version}] - #{today} to CHANGELOG.md"
+    end
+    
+    puts "\n[3/3] Summary"
+    puts "✅ Version bumped: #{current_version} → #{new_version}"
+    puts "✅ Files updated:"
+    puts "   - lib/e11y/version.rb"
+    puts "   - CHANGELOG.md"
+    
+    puts "\n#{'=' * 80}"
+    puts "Next steps:"
+    puts "  1. Review changes: git diff"
+    puts "  2. Commit changes: git add -A && git commit -m 'Bump version to #{new_version}'"
+    puts "  3. Release: rake release:prep"
+    puts "#{'=' * 80}\n"
+  end
+
   desc "Prepare release: run tests, build gem, create git tag (safe)"
   task :prep do
     require_relative "lib/e11y/version"
