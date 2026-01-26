@@ -94,13 +94,18 @@ jobs:
           verbose: true
 
   test-integration:
-    name: Integration Tests (Ruby ${{ matrix.ruby }})
+    name: Integration Tests (Ruby ${{ matrix.ruby }}, Rails ${{ matrix.rails }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
         ruby: ['3.2', '3.3']
+        rails: ['7.0', '7.1', '8.0']
+        exclude:
+          # Rails 8.0 requires Ruby 3.2+
+          - ruby: '3.1'
+            rails: '8.0'
     services:
       loki:
         image: grafana/loki:2.9.0
@@ -163,8 +168,12 @@ jobs:
           echo "✅ System dependencies ready"
       
       - name: Install integration dependencies
+        env:
+          RAILS_VERSION: ${{ matrix.rails }}
         run: |
           bundle config set --local with 'integration'
+          # Install specific Rails version
+          gem install rails -v "~> ${{ matrix.rails }}.0"
           bundle install
       
       - name: Wait for services to be ready
@@ -190,21 +199,22 @@ jobs:
       
       - name: Run integration tests (Rails, OpenTelemetry, adapters)
         env:
-          INTEGRATION: true
+          INTEGRATION: "true"
+          RAILS_VERSION: ${{ matrix.rails }}
           LOKI_URL: http://localhost:3100
           PROMETHEUS_URL: http://localhost:9090
           ELASTICSEARCH_URL: http://localhost:9200
           REDIS_URL: redis://localhost:6379
         run: |
-          echo "🧪 Starting integration tests at $(date)"
-          timeout 5m bundle exec rspec --tag integration --format documentation --profile 10 || (echo "⚠️ Integration tests timeout or failed at $(date)"; exit 1)
+          echo "🧪 Starting integration tests with Rails ${{ matrix.rails }} at $(date)"
+          timeout 5m bundle exec rspec --format documentation --profile 10 || (echo "⚠️ Integration tests timeout or failed at $(date)"; exit 1)
           echo "✅ Integration tests completed at $(date)"
       
       - name: Upload integration test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: integration-test-results-ruby-${{ matrix.ruby }}
+          name: integration-test-results-ruby-${{ matrix.ruby }}-rails-${{ matrix.rails }}
           path: tmp/rspec_results.xml
           if-no-files-found: ignore
 

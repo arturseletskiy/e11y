@@ -59,10 +59,10 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   # Runtime dependencies
-  spec.add_dependency "activesupport", ">= 7.0"
   spec.add_dependency "concurrent-ruby", "~> 1.2" # Thread-safe data structures
   spec.add_dependency "dry-schema", "~> 1.13" # Event schema validation
   spec.add_dependency "dry-types", "~> 1.7"
+  spec.add_dependency "rails", ">= 7.0"
   spec.add_dependency "zeitwerk", "~> 2.6"
 
   # Development dependencies

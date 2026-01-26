@@ -56,13 +56,31 @@ module E11y
       # @option event_data [Hash] :payload The event payload (required)
       # @return [Hash, nil] Validated event data, or nil if dropped
       # @raise [E11y::ValidationError] if validation fails
-      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
       def call(event_data)
         # Skip validation if no event_class or payload
         return @app.call(event_data) unless event_data[:event_class] && event_data[:payload]
 
         event_class = event_data[:event_class]
         payload = event_data[:payload]
+
+        # Check validation mode (FEAT-4850: performance tuning)
+        validation_mode = event_class.respond_to?(:validation_mode) ? event_class.validation_mode : :always
+
+        # Skip validation if mode is :never
+        if validation_mode == :never
+          increment_metric("e11y.middleware.validation.skipped")
+          return @app.call(event_data)
+        end
+
+        # Skip validation probabilistically if mode is :sampled
+        if validation_mode == :sampled
+          sample_rate = event_class.respond_to?(:validation_sample_rate) ? event_class.validation_sample_rate : 0.01
+          if rand >= sample_rate
+            increment_metric("e11y.middleware.validation.skipped")
+            return @app.call(event_data)
+          end
+        end
 
         # Get compiled schema from event class
         schema = event_class.compiled_schema
@@ -88,7 +106,7 @@ module E11y
           raise E11y::ValidationError, error_message
         end
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
+      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
       private
 

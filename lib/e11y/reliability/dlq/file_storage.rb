@@ -196,11 +196,7 @@ module E11y
 
         # Get default file path (log/e11y_dlq.jsonl).
         def default_file_path
-          if defined?(Rails) && Rails.root
-            Rails.root.join("log", "e11y_dlq.jsonl").to_s
-          else
-            File.join("log", "e11y_dlq.jsonl")
-          end
+          ::Rails.root.join("log", "e11y_dlq.jsonl").to_s
         end
 
         # Ensure log directory exists.

@@ -73,6 +73,7 @@ Gemspec/DevelopmentDependencies:
 RSpec/DescribeClass:
   Exclude:
     - "spec/zeitwerk_spec.rb"
+    - "spec/integration/**/*"
 
 # Allow simple doubles for now (will improve in Phase 1)
 RSpec/VerifiedDoubles:

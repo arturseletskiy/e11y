@@ -54,25 +54,54 @@ module E11y
       # @option event_data [Time,String] :timestamp Existing timestamp (optional)
       # @return [Hash, nil] Enriched event data, or nil if dropped
       def call(event_data)
-        # Add trace_id (propagate from E11y::Current or Thread.current or generate new)
-        event_data[:trace_id] ||= current_trace_id || generate_trace_id
-
-        # Add span_id (always generate new for this event)
-        event_data[:span_id] ||= generate_span_id
-
-        # Add parent_trace_id (if job has parent trace) - C17 Resolution
-        event_data[:parent_trace_id] ||= current_parent_trace_id if current_parent_trace_id
-
-        # Add timestamp (use existing or current time)
-        event_data[:timestamp] ||= format_timestamp(Time.now.utc)
-
-        # Increment metrics
+        enrich_trace_context(event_data)
+        enrich_service_context(event_data)
         increment_metric("e11y.middleware.trace_context.processed")
-
         @app.call(event_data)
       end
 
       private
+
+      # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # Add distributed tracing fields to event data
+      # @param event_data [Hash] Event data to enrich
+      # @return [void]
+      def enrich_trace_context(event_data)
+        event_data[:trace_id] ||= current_trace_id || generate_trace_id
+        event_data[:span_id] ||= generate_span_id
+        event_data[:parent_trace_id] ||= current_parent_trace_id if current_parent_trace_id
+
+        # Format timestamp if it's a Time object
+        timestamp = event_data[:timestamp]
+        event_data[:timestamp] = if timestamp.is_a?(Time)
+                                   format_timestamp(timestamp)
+                                 else
+                                   timestamp || format_timestamp(Time.now.utc)
+                                 end
+
+        # Calculate retention_until from retention_period
+        if event_data[:retention_period] && !event_data[:retention_until]
+          # Parse timestamp back to Time to calculate retention_until
+          base_time = timestamp.is_a?(Time) ? timestamp : Time.parse(event_data[:timestamp])
+          retention_time = base_time + event_data[:retention_period]
+          event_data[:retention_until] = retention_time.iso8601
+        end
+
+        # Add audit_event flag
+        event_class = event_data[:event_class]
+        return unless event_class.respond_to?(:audit_event?)
+
+        event_data[:audit_event] = event_class.audit_event?
+      end
+      # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+
+      # Add service context fields to event data
+      # @param event_data [Hash] Event data to enrich
+      # @return [void]
+      def enrich_service_context(event_data)
+        event_data[:service_name] ||= E11y.config.service_name
+        event_data[:environment] ||= E11y.config.environment
+      end
 
       # Get current trace ID from E11y::Current or thread-local storage (request context).
       #

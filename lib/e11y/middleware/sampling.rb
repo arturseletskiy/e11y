@@ -64,38 +64,15 @@ module E11y
       # @option config [Hash] :error_spike_config ({}) Configuration for ErrorSpikeDetector
       # @option config [Boolean] :load_based_adaptive (false) Enable load-based adaptive sampling (FEAT-4842)
       # @option config [Hash] :load_monitor_config ({}) Configuration for LoadMonitor
-      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
-      # Sampling initialization requires extracting config, setting up trace cache,
-      # and conditionally initializing adaptive samplers
-      def initialize(config = {})
-        # Extract config before calling super (which sets @config)
-        config ||= {}
-        @default_sample_rate = config.fetch(:default_sample_rate, 1.0)
-        @trace_aware = config.fetch(:trace_aware, true)
-        @severity_rates = config.fetch(:severity_rates, {})
-        @trace_decisions = {} # Cache for trace-level sampling decisions
-        @trace_decisions_mutex = Mutex.new
+      def initialize(app = nil, **config)
+        # Call parent only if app provided (for production usage)
+        super(app) if app
+        @app = app
 
-        # Error-based adaptive sampling (FEAT-4838)
-        @error_based_adaptive = config.fetch(:error_based_adaptive, false)
-        if @error_based_adaptive
-          require "e11y/sampling/error_spike_detector"
-          error_spike_config = config.fetch(:error_spike_config, {})
-          @error_spike_detector = E11y::Sampling::ErrorSpikeDetector.new(error_spike_config)
-        end
-
-        # Load-based adaptive sampling (FEAT-4842)
-        @load_based_adaptive = config.fetch(:load_based_adaptive, false)
-        if @load_based_adaptive
-          require "e11y/sampling/load_monitor"
-          load_monitor_config = config.fetch(:load_monitor_config, {})
-          @load_monitor = E11y::Sampling::LoadMonitor.new(load_monitor_config)
-        end
-
-        # Call super to set @config and other base middleware state
-        super
+        setup_basic_config(config)
+        setup_error_based_sampling(config)
+        setup_load_based_sampling(config)
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
       # Process event through sampling filter
       #
@@ -137,6 +114,41 @@ module E11y
 
       private
 
+      # Setup basic sampling configuration
+      #
+      # @param config [Hash] Configuration options
+      def setup_basic_config(config)
+        @default_sample_rate = config.fetch(:default_sample_rate, 1.0)
+        @trace_aware = config.fetch(:trace_aware, true)
+        @severity_rates = config.fetch(:severity_rates, {})
+        @trace_decisions = {} # Cache for trace-level sampling decisions
+        @trace_decisions_mutex = Mutex.new
+      end
+
+      # Setup error-based adaptive sampling (FEAT-4838)
+      #
+      # @param config [Hash] Configuration options
+      def setup_error_based_sampling(config)
+        @error_based_adaptive = config.fetch(:error_based_adaptive, false)
+        return unless @error_based_adaptive
+
+        require "e11y/sampling/error_spike_detector"
+        error_spike_config = config.fetch(:error_spike_config, {})
+        @error_spike_detector = E11y::Sampling::ErrorSpikeDetector.new(error_spike_config)
+      end
+
+      # Setup load-based adaptive sampling (FEAT-4842)
+      #
+      # @param config [Hash] Configuration options
+      def setup_load_based_sampling(config)
+        @load_based_adaptive = config.fetch(:load_based_adaptive, false)
+        return unless @load_based_adaptive
+
+        require "e11y/sampling/load_monitor"
+        load_monitor_config = config.fetch(:load_monitor_config, {})
+        @load_monitor = E11y::Sampling::LoadMonitor.new(load_monitor_config)
+      end
+
       # Determine if event should be sampled
       #
       # @param event_data [Hash] The event payload
@@ -148,8 +160,7 @@ module E11y
 
         # 2. Check trace-aware sampling (C05)
         if @trace_aware && event_data[:trace_id]
-          return trace_sampling_decision(event_data[:trace_id], event_class,
-                                         event_data)
+          return trace_sampling_decision(event_data[:trace_id], event_class, event_data)
         end
 
         # 3. Get sample rate for this event

@@ -30,25 +30,34 @@ module E11y
   #
   # @see ADR-008 §3 (Railtie & Initialization)
   class Railtie < Rails::Railtie
+    # Derive service name from Rails application class
+    # @return [String] Service name (e.g., "my_app")
+    def self.derive_service_name
+      Rails.application.class.module_parent_name.underscore
+    rescue StandardError
+      "rails_app"
+    end
+
     # Run before framework initialization
     config.before_initialize do
       # Set up basic configuration from Rails
       E11y.configure do |config|
-        config.environment = Rails.env.to_s
-        config.service_name = derive_service_name
-        config.enabled = !Rails.env.test? # Disabled in tests by default
+        config.environment ||= Rails.env.to_s
+        config.service_name ||= E11y::Railtie.derive_service_name
+        # Only set enabled if not already configured
+        config.enabled = !Rails.env.test? if config.enabled.nil?
       end
     end
 
-    # Run after framework initialization
-    config.after_initialize do
+    # Setup instrumentation after Rails initialization
+    initializer "e11y.setup_instrumentation", after: :load_config_initializers do
       next unless E11y.config.enabled
 
       # Setup instruments (each can be enabled/disabled separately)
-      setup_rails_instrumentation if E11y.config.rails_instrumentation&.enabled
-      setup_logger_bridge if E11y.config.logger_bridge&.enabled
-      setup_sidekiq if defined?(::Sidekiq) && E11y.config.sidekiq&.enabled
-      setup_active_job if defined?(::ActiveJob) && E11y.config.active_job&.enabled
+      E11y::Railtie.setup_rails_instrumentation if E11y.config.rails_instrumentation&.enabled
+      E11y::Railtie.setup_logger_bridge if E11y.config.logger_bridge&.enabled
+      E11y::Railtie.setup_sidekiq if defined?(::Sidekiq) && E11y.config.sidekiq&.enabled
+      E11y::Railtie.setup_active_job if defined?(::ActiveJob) && E11y.config.active_job&.enabled
     end
 
     # Middleware insertion
@@ -79,14 +88,6 @@ module E11y
 
       # TODO: Add rake tasks (e11y:stats, e11y:test_event, etc.)
       # load 'e11y/tasks.rake'
-    end
-
-    # Derive service name from Rails application class
-    # @return [String] Service name (e.g., "my_app")
-    def self.derive_service_name
-      Rails.application.class.module_parent_name.underscore
-    rescue StandardError
-      "rails_app"
     end
 
     # Setup Rails instrumentation (ActiveSupport::Notifications → E11y)

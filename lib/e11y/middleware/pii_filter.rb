@@ -104,8 +104,7 @@ module E11y
         filtered_data = deep_dup(event_data)
 
         # Apply Rails parameter filter
-        filter = parameter_filter
-        filtered_data[:payload] = filter.filter(filtered_data[:payload])
+        filtered_data[:payload] = parameter_filter.filter(filtered_data[:payload])
 
         filtered_data
       end
@@ -261,16 +260,13 @@ module E11y
 
       # Get Rails parameter filter
       #
+      # Uses Rails.application.config.filter_parameters for PII filtering.
+      #
       # @return [ActiveSupport::ParameterFilter] Parameter filter
       def parameter_filter
-        @parameter_filter ||= if defined?(Rails)
-                                ActiveSupport::ParameterFilter.new(
-                                  Rails.application.config.filter_parameters
-                                )
-                              else
-                                # Fallback for non-Rails environments
-                                ActiveSupport::ParameterFilter.new([])
-                              end
+        @parameter_filter ||= ActiveSupport::ParameterFilter.new(
+          Rails.application.config.filter_parameters
+        )
       end
     end
     # rubocop:enable Metrics/ClassLength

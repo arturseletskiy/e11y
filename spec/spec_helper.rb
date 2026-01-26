@@ -2,6 +2,9 @@
 
 # See https://rubydoc.info/gems/rspec-core/RSpec/Core/Configuration
 
+# Load local lib path FIRST (before any requires)
+$LOAD_PATH.unshift File.expand_path("../lib", __dir__)
+
 # SimpleCov setup (must be at the very top)
 if ENV["COVERAGE"]
   require "simplecov"
@@ -129,9 +132,9 @@ RSpec.configure do |config|
     config.filter_run_excluding integration: true
   end
 
-  # Clean up after each test
-  config.after do
-    E11y.reset! if E11y.respond_to?(:reset!)
+  # Clean up after each test (but NOT for integration tests - they rely on Rails app config)
+  config.after do |example|
+    E11y.reset! if !example.metadata[:integration] && E11y.respond_to?(:reset!)
   end
 
   # Load support files

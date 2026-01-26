@@ -5,7 +5,7 @@ require "spec_helper"
 RSpec.describe E11y::Middleware::Sampling do
   let(:app) { ->(event_data) { event_data } } # Simple passthrough app
   let(:middleware) do
-    instance = described_class.new(config)
+    instance = described_class.new(**config)
     instance.instance_variable_set(:@app, app)
     instance
   end

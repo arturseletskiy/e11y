@@ -36,8 +36,13 @@ end
 # Install with: bundle install --with integration
 # Run integration tests: INTEGRATION=true bundle exec rspec --tag integration
 group :integration do
-  gem "rails", "~> 8.0" # Full Rails for integration tests
+  # Support Rails 7.0, 7.1, 8.0 (not 8.1 due to sqlite3_production_warning bug)
+  rails_version = ENV.fetch("RAILS_VERSION", "8.0")
+  gem "rails", "~> #{rails_version}.0", "< 8.1"
   gem "sqlite3", "~> 2.0" # Database for Rails integration tests
+
+  # Background job processing
+  gem "sidekiq", "~> 7.0" # Sidekiq for job processing tests
 
   # OpenTelemetry SDK for OTel adapter tests
   gem "opentelemetry-logs-api", "~> 0.1"
