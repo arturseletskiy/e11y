@@ -10,20 +10,17 @@ require "spec_helper"
 # Skip if not in integration mode (early return to avoid loading Rails for unit tests)
 return unless ENV["INTEGRATION"] == "true"
 
-# Set test-only environment variables
+# Set test-only environment variables BEFORE loading Rails
 ENV["E11Y_AUDIT_SIGNING_KEY"] ||= "test_signing_key_for_integration_tests_only"
 ENV["RAILS_ENV"] ||= "test"
-
-# CRITICAL: Set Rails root BEFORE loading Rails to ensure database.yml can be found
-# This fixes "No such file - config/database.yml" error on Rails 7.0
-dummy_root = File.expand_path("dummy", __dir__)
-ENV["RAILS_ROOT"] ||= dummy_root
-Dir.chdir(dummy_root) unless Dir.pwd == dummy_root
 
 # Load Rails environment file (but DON'T initialize yet - that happens in before(:suite))
 # Use global variable because constants don't persist across multiple file loads
 # rubocop:disable Style/GlobalVars
 unless $rails_env_loaded
+  # CRITICAL: Load dummy Rails app using absolute path from this file's location
+  # This ensures database.yml can be found regardless of current working directory
+  # See: https://rderik.com/blog/how-to-add-rspec-to-an-existing-engine/
   require File.expand_path("dummy/config/environment", __dir__)
   $rails_env_loaded = true
   # rubocop:enable Style/GlobalVars
