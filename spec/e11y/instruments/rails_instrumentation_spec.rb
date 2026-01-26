@@ -19,26 +19,26 @@ RSpec.describe E11y::Instruments::RailsInstrumentation do
     end
 
     it "includes database query mapping" do
-      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["sql.active_record"]).to eq("Events::Rails::Database::Query")
+      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["sql.active_record"]).to eq("E11y::Events::Rails::Database::Query")
     end
 
     it "includes HTTP request mapping" do
-      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["process_action.action_controller"]).to eq("Events::Rails::Http::Request")
+      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["process_action.action_controller"]).to eq("E11y::Events::Rails::Http::Request")
     end
 
     it "includes view rendering mapping" do
-      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["render_template.action_view"]).to eq("Events::Rails::View::Render")
+      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["render_template.action_view"]).to eq("E11y::Events::Rails::View::Render")
     end
 
     it "includes cache operations mappings" do
-      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["cache_read.active_support"]).to eq("Events::Rails::Cache::Read")
-      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["cache_write.active_support"]).to eq("Events::Rails::Cache::Write")
-      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["cache_delete.active_support"]).to eq("Events::Rails::Cache::Delete")
+      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["cache_read.active_support"]).to eq("E11y::Events::Rails::Cache::Read")
+      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["cache_write.active_support"]).to eq("E11y::Events::Rails::Cache::Write")
+      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["cache_delete.active_support"]).to eq("E11y::Events::Rails::Cache::Delete")
     end
 
     it "includes job processing mappings" do
-      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["enqueue.active_job"]).to eq("Events::Rails::Job::Enqueued")
-      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["perform.active_job"]).to eq("Events::Rails::Job::Completed")
+      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["enqueue.active_job"]).to eq("E11y::Events::Rails::Job::Enqueued")
+      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["perform.active_job"]).to eq("E11y::Events::Rails::Job::Completed")
     end
 
     it "is frozen" do

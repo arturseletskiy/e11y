@@ -1123,17 +1123,82 @@ Additional documentation is available in the `docs/` directory:
 
 ---
 
+## Development
+
+### Running Tests
+
+E11y has three test suites with different requirements:
+
+#### Quick Commands (recommended)
+
+```bash
+# Using rake tasks
+rake spec:unit            # Unit tests (~1672 examples, includes all e11y tests)
+rake spec:integration     # Integration tests (~36 examples, requires Rails)
+rake spec:all            # All tests (~1708 examples, unit + integration)
+rake spec:benchmark      # Benchmark tests (~44 examples, slow)
+rake spec:coverage       # With coverage
+```
+
+#### Manual Commands
+
+```bash
+# Unit tests (fast, no Rails required)
+bundle exec rspec --exclude-pattern 'spec/{integration,e11y/railtie_integration_spec.rb}/**/*_spec.rb'
+
+# Integration tests (requires: bundle install --with integration)
+INTEGRATION=true bundle exec rspec spec/integration/
+
+# Railtie integration tests
+bundle exec rspec spec/e11y/railtie_integration_spec.rb --tag railtie_integration
+
+# All tests
+bundle exec rspec
+
+# Benchmarks (optional)
+bundle exec rspec --tag benchmark
+```
+
+### Test Suite Overview
+
+- **Unit tests** (~1672 examples, ~30s): Core logic, all e11y/* tests
+- **Integration tests** (~36 examples, ~5s): Rails, ActiveJob, Sidekiq integration
+- **Benchmark tests** (~44 examples, ~30s): Performance tests (run with `rake spec:benchmark`)
+
+### Other Development Commands
+
+```bash
+# Linting
+bundle exec rubocop
+
+# Auto-fix linting issues
+bundle exec rubocop -a
+
+# Interactive console
+rake e11y:console
+
+# Generate documentation
+rake e11y:docs
+
+# Security audit
+rake e11y:audit
+
+# Run benchmarks
+rake e11y:benchmark
+```
+
+---
+
 ## Contributing
 
 Bug reports and pull requests are welcome at https://github.com/arturseletskiy/e11y.
 
-Development:
+Contributing workflow:
 1. Fork the repository
 2. Create a feature branch
-3. Run tests: `bundle exec rspec`
-4. Run benchmarks (optional): `bundle exec rspec --tag benchmark`
-5. Run linter: `bundle exec rubocop`
-6. Submit a pull request
+3. Run tests: `rake spec:all`
+4. Run linter: `bundle exec rubocop`
+5. Submit a pull request
 
 **Note:** Performance benchmarks are excluded from default test runs due to CI environment variability. Run them explicitly with `--tag benchmark` when needed.
 

@@ -106,21 +106,6 @@ require "webmock/rspec"
 # Configure WebMock
 WebMock.disable_net_connect!(allow_localhost: true)
 
-# Load Rails environment for integration tests BEFORE RSpec.configure
-# This must happen early so Rails is available when spec files are loaded
-if ENV["INTEGRATION"] == "true" || ARGV.any? { |arg| arg.include?("integration") }
-  ENV["INTEGRATION"] = "true"
-  ENV["RAILS_ENV"] ||= "test"
-  ENV["E11Y_AUDIT_SIGNING_KEY"] ||= "test_signing_key_for_integration_tests_only"
-  
-  # Load Rails ONCE
-  unless defined?(Rails) && Rails.application
-    require File.expand_path("dummy/config/environment", __dir__)
-    Rails.application.initialize! unless Rails.application.initialized?
-    require "rspec/rails" # Load RSpec::Rails helpers
-  end
-end
-
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure
   config.example_status_persistence_file_path = ".rspec_status"
@@ -140,30 +125,15 @@ RSpec.configure do |config|
   # Integration tests configuration
   # By default, exclude integration tests (requires Rails, OpenTelemetry SDK, Docker)
   # Run integration tests with: INTEGRATION=true bundle exec rspec
-  if ENV["INTEGRATION"] == "true"
-    # Run ONLY integration tests when INTEGRATION=true
+  # Or with: bundle exec rspec --tag integration
+  
+  # Detect if --tag integration is being used
+  if ARGV.any? { |arg| arg.include?("integration") } || ENV["INTEGRATION"] == "true"
+    ENV["INTEGRATION"] = "true" # Ensure rails_helper knows we're in integration mode
+    # Run ONLY integration tests
     config.filter_run_including integration: true
     puts "\n🔧 Running INTEGRATION tests (Rails, OpenTelemetry, etc.)"
     puts "   Dependencies: bundle install --with integration\n\n"
-    
-    # Setup Rails environment (Rails and rspec-rails are already loaded at top of spec_helper)
-    config.before(:suite) do
-      # Run migrations to create database schema
-      ActiveRecord::Base.establish_connection
-      ActiveRecord::Migration.suppress_messages do
-        ActiveRecord::MigrationContext.new(File.expand_path("dummy/db/migrate", __dir__)).migrate
-      end
-      
-      # Load dummy app models and controllers
-      Dir[File.expand_path("dummy/app/**/*.rb", __dir__)].each { |f| require f }
-      
-      # Setup E11y instrumentation manually
-      if E11y.config.enabled
-        E11y::Railtie.setup_rails_instrumentation if E11y.config.rails_instrumentation&.enabled
-        E11y::Railtie.setup_active_job if defined?(ActiveJob) && E11y.config.active_job&.enabled
-        E11y::Railtie.setup_sidekiq if defined?(Sidekiq) && E11y.config.sidekiq&.enabled
-      end
-    end
   else
     # Default: exclude integration tests (fast unit tests only)
     config.filter_run_excluding integration: true
