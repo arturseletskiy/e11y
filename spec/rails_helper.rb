@@ -7,13 +7,7 @@ require "spec_helper"
 
 # Only load Rails environment when running integration tests
 # This prevents conflicts when running regular specs
-# Check if we're running with --tag integration or INTEGRATION=true
-if ENV["INTEGRATION"] != "true" && ARGV.none? { |arg| arg.include?("integration") }
-  # Set ENV["INTEGRATION"] so subsequent requires know we're in integration mode
-  ENV["INTEGRATION"] = "true"
-end
-
-# Skip if not in integration mode
+# Skip if not in integration mode (early return to avoid loading Rails for unit tests)
 return unless ENV["INTEGRATION"] == "true"
 
 # Set test-only environment variables

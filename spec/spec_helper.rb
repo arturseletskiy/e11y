@@ -127,8 +127,9 @@ RSpec.configure do |config|
   # Run integration tests with: INTEGRATION=true bundle exec rspec
   # Or with: bundle exec rspec --tag integration
 
-  # Detect if --tag integration is being used
-  if ARGV.any? { |arg| arg.include?("integration") } || ENV["INTEGRATION"] == "true"
+  # Detect if --tag integration is being used (but NOT --tag ~integration which EXCLUDES integration)
+  if (ARGV.any? { |arg| arg.match?(/--tag[= ]integration\b/) } || ENV["INTEGRATION"] == "true") &&
+     ARGV.none? { |arg| arg.match?(/--tag[= ]~integration\b/) }
     ENV["INTEGRATION"] = "true" # Ensure rails_helper knows we're in integration mode
     # Run ONLY integration tests
     config.filter_run_including integration: true
