@@ -110,7 +110,11 @@ require "active_support/core_ext/numeric/time" # For 30.days, 7.years
 require "active_support/core_ext/integer/time"
 require "active_support/core_ext/object/blank" # For .present?
 require "climate_control" # For ENV manipulation in tests
-require "e11y" unless integration_run
+
+# In integration mode, ensure Rails::Railtie is defined BEFORE loading E11y
+# so E11y::Railtie registers properly and its initializers run on app boot.
+require "rails/railtie" if integration_run
+require "e11y"
 require "webmock/rspec"
 
 # Configure WebMock
