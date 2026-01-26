@@ -52,7 +52,7 @@ module E11y
         E11y::Current.request_path = request.path
 
         # Start request-scoped buffer (for debug events)
-        E11y::Buffers::RequestScopedBuffer.start! if E11y.config.request_buffer&.enabled
+        E11y::Buffers::RequestScopedBuffer.initialize! if E11y.config.request_buffer&.enabled
 
         # Track request start time for SLO
         start_time = Time.now
@@ -70,15 +70,15 @@ module E11y
         [status, headers, body]
       rescue StandardError
         # Flush request buffer on error (includes debug events)
-        E11y::Buffers::RequestScopedBuffer.flush_on_error! if E11y.config.request_buffer&.enabled
+        E11y::Buffers::RequestScopedBuffer.flush_on_error if E11y.config.request_buffer&.enabled
 
         raise # Re-raise original exception
       ensure
-        # Flush request buffer on success (not on error, already flushed above)
+        # Discard request buffer on success (not on error, already flushed above)
         # We need to check if we're here from normal completion or exception
         # If there was an exception, buffer was already flushed in rescue block
         if !$ERROR_INFO && E11y.config.request_buffer&.enabled # No exception occurred
-          E11y::Buffers::RequestScopedBuffer.flush!
+          E11y::Buffers::RequestScopedBuffer.discard
         end
 
         # Reset context
