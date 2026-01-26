@@ -5,5 +5,5 @@ module E11y
   # - MAJOR: Breaking changes (incompatible API changes)
   # - MINOR: New features (backwards-compatible)
   # - PATCH: Bug fixes (backwards-compatible)
-  VERSION = "0.1.0"
+  VERSION = "0.2.0"
 end

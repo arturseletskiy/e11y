@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+### Deprecated
+
+### Removed
+
+### Security
+
+## [0.2.0] - 2026-01-26
+
+### Added
 - Multi-Rails version support (7.0, 7.1, 8.0) (#5)
   - CI matrix testing across Ruby 3.2, 3.3 with Rails 7.0, 7.1, 8.0
   - Dynamic Gemfile dependencies based on RAILS_VERSION env var
