@@ -10,9 +10,12 @@ require "spec_helper"
 # Skip if not in integration mode (early return to avoid loading Rails for unit tests)
 return unless ENV["INTEGRATION"] == "true"
 
+# CRITICAL: Set RAILS_ENV FIRST, before loading anything else
+# This ensures Rails.env is correctly set to "test" from the start
+ENV["RAILS_ENV"] = "test"
+
 # Set test-only environment variables BEFORE loading Rails
 ENV["E11Y_AUDIT_SIGNING_KEY"] ||= "test_signing_key_for_integration_tests_only"
-ENV["RAILS_ENV"] ||= "test"
 
 # Load Rails environment file (but DON'T initialize yet - that happens in before(:suite))
 # Use global variable because constants don't persist across multiple file loads
@@ -73,8 +76,10 @@ RSpec.configure do |config|
     end
 
     # Ensure routes are loaded (they should already be loaded during Rails.application.initialize!)
-    # Just verify they're available
-    Rails.application.routes.draw { nil } if Rails.application.routes.empty?
+    # If routes are empty, reload them from config/routes.rb
+    if Rails.application.routes.empty?
+      Rails.application.routes_reloader.reload!
+    end
 
     # E11y is already configured in dummy/config/application.rb
     # Verify configuration is correct

@@ -40,7 +40,15 @@ group :integration do
   # Support Rails 7.0, 7.1, 8.0 (not 8.1 due to sqlite3_production_warning bug)
   rails_version = ENV.fetch("RAILS_VERSION", "8.0")
   gem "rails", "~> #{rails_version}.0", "< 8.1"
-  gem "sqlite3", "~> 2.0" # Database for Rails integration tests
+  
+  # sqlite3 version depends on Rails version:
+  # Rails 7.x requires sqlite3 ~> 1.4
+  # Rails 8.x requires sqlite3 ~> 2.0
+  if rails_version.to_f < 8.0
+    gem "sqlite3", "~> 1.4" # Rails 7.x compatibility
+  else
+    gem "sqlite3", "~> 2.0" # Rails 8.x compatibility
+  end
 
   # Background job processing
   gem "sidekiq", "~> 7.0" # Sidekiq for job processing tests
