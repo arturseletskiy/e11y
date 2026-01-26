@@ -70,6 +70,9 @@ module Dummy
     config.action_controller.allow_forgery_protection = false
     config.active_support.deprecation = :stderr
     config.active_support.test_order = :random
+    
+    # Fix Rails 8.1 deprecation warning for to_time timezone behavior
+    config.active_support.to_time_preserves_timezone = :zone
 
     # Secret key base (required for Rails)
     config.secret_key_base = "test_secret_key_base_for_dummy_app_integration_tests"
