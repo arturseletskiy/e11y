@@ -48,7 +48,17 @@ RSpec.describe "End-to-End Integration", :integration do
 
   describe "Error handling" do
     it "captures errors without breaking request" do
-      expect { get "/test_error" }.to raise_error(StandardError)
+      # Rails 8.0+ in RSpec request specs: exceptions are caught and converted to 500 responses
+      # Rails 7.x: exceptions can be raised with show_exceptions = false
+      # We test both behaviors depending on Rails version
+      if Rails::VERSION::MAJOR >= 8
+        # Rails 8.0+: Check for 500 error response
+        get "/test_error"
+        expect(response).to have_http_status(:internal_server_error)
+      else
+        # Rails 7.x: Expect exception to be raised
+        expect { get "/test_error" }.to raise_error(StandardError)
+      end
 
       # Events should still be captured before error
       events = memory_adapter.events
