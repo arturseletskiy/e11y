@@ -66,7 +66,7 @@ RSpec.describe "End-to-End Integration", :integration do
 
       events = memory_adapter.events
       request_events = events.select { |e| e[:event_name]&.include?("Http::Request") }
-      
+
       expect(request_events.size).to eq(5)
 
       # Each request should have unique trace_id
