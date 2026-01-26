@@ -97,6 +97,7 @@ end
 require "active_support/core_ext/numeric/time" # For 30.days, 7.years
 require "active_support/core_ext/integer/time"
 require "active_support/core_ext/object/blank" # For .present?
+require "climate_control" # For ENV manipulation in tests
 require "e11y"
 require "webmock/rspec"
 

@@ -262,6 +262,63 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
     end
   end
 
+  describe "Sentry integration" do
+    context "when Sentry is not available" do
+      it "handles missing Sentry gracefully" do
+        hide_const("Sentry")
+
+        protection_alert = described_class.new(
+          cardinality_limit: 1,
+          overflow_strategy: :alert
+        )
+
+        protection_alert.filter({ status: "paid" }, "orders.total")
+
+        expect do
+          protection_alert.filter({ status: "pending" }, "orders.total")
+        end.not_to raise_error
+      end
+    end
+  end
+
+  describe "metrics tracking" do
+    it "tracks cardinality metrics via E11y::Metrics" do
+      stub_const("E11y::Metrics", double)
+      allow(E11y::Metrics).to receive(:increment)
+      allow(E11y::Metrics).to receive(:gauge)
+
+      protection = described_class.new(cardinality_limit: 1, overflow_strategy: :drop)
+
+      protection.filter({ status: "paid" }, "orders.total")
+      protection.filter({ status: "pending" }, "orders.total")
+
+      expect(E11y::Metrics).to have_received(:increment).with(
+        :e11y_cardinality_overflow_total,
+        hash_including(metric: "orders.total", action: "drop")
+      )
+
+      # gauge is called once for each filter call (2 times total)
+      expect(E11y::Metrics).to have_received(:gauge).with(
+        :e11y_cardinality_current,
+        anything,
+        hash_including(metric: "orders.total")
+      ).at_least(:once)
+    end
+
+    it "handles metrics tracking errors gracefully" do
+      stub_const("E11y::Metrics", double)
+      allow(E11y::Metrics).to receive(:increment).and_raise(StandardError, "metrics error")
+
+      protection = described_class.new(cardinality_limit: 1, overflow_strategy: :drop)
+
+      protection.filter({ status: "paid" }, "orders.total")
+
+      expect do
+        protection.filter({ status: "pending" }, "orders.total")
+      end.to output(/Failed to track cardinality metric/).to_stderr
+    end
+  end
+
   describe "relabeling integration" do
     it "applies relabeling before cardinality tracking" do
       protection.relabel(:http_status) { |v| "#{v.to_i / 100}xx" }

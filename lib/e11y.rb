@@ -13,6 +13,8 @@ loader.inflector.inflect(
   "slo" => "SLO",
   "dlq" => "DLQ"
 )
+# Don't autoload railtie - it will be required manually when Rails is available
+loader.do_not_eager_load("#{__dir__}/e11y/railtie.rb")
 loader.setup
 
 # E11y - Event-Driven Observability for Ruby on Rails

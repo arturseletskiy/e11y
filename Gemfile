@@ -25,6 +25,7 @@ end
 
 # Testing tools
 group :test do
+  gem "climate_control", "~> 1.2" # ENV manipulation for tests
   gem "factory_bot", "~> 6.2"
   gem "faker", "~> 3.2"
   gem "rspec-benchmark", "~> 0.6"

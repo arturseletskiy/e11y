@@ -329,5 +329,57 @@ RSpec.describe E11y::Middleware::AuditSigning do
       # Keys should be sorted at all levels
       expect(canonical["payload"]["nested"].keys).to eq(%w[a z])
     end
+
+    it "handles arrays" do
+      event_data = {
+        event_class: audit_event_class,
+        event_name: "Events::TestEvent",
+        payload: {
+          items: [
+            { z: 1, a: 2 },
+            { b: 3, y: 4 }
+          ]
+        },
+        timestamp: "2026-01-18T00:00:00.000000Z",
+        version: 1
+      }
+
+      result = middleware.call(event_data)
+
+      canonical = JSON.parse(result[:audit_canonical])
+      # Keys in array items should be sorted
+      expect(canonical["payload"]["items"][0].keys).to eq(%w[a z])
+      expect(canonical["payload"]["items"][1].keys).to eq(%w[b y])
+    end
+  end
+
+  describe ".signing_key" do
+    it "uses ENV E11Y_AUDIT_SIGNING_KEY when available" do
+      ClimateControl.modify E11Y_AUDIT_SIGNING_KEY: "test_key_123" do
+        # Reset the memoized key
+        described_class.instance_variable_set(:@signing_key, nil)
+        expect(described_class.signing_key).to eq("test_key_123")
+      end
+    end
+
+    it "raises error in production without signing key" do
+      ClimateControl.modify E11Y_AUDIT_SIGNING_KEY: nil do
+        described_class.instance_variable_set(:@signing_key, nil)
+        stub_const("Rails", double(env: double(production?: true)))
+
+        expect do
+          described_class.signing_key
+        end.to raise_error(E11y::Error, /E11Y_AUDIT_SIGNING_KEY must be set in production/)
+      end
+    end
+
+    it "generates development key when not in production" do
+      ClimateControl.modify E11Y_AUDIT_SIGNING_KEY: nil do
+        described_class.instance_variable_set(:@signing_key, nil)
+
+        key = described_class.signing_key
+        expect(key).to start_with("development_key_")
+      end
+    end
   end
 end

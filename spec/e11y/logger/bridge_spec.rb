@@ -28,6 +28,21 @@ RSpec.describe E11y::Logger::Bridge do
       stub_const("E11y::Events::Rails::Log::Fatal", double(track: nil))
     end
 
+    describe "#debug" do
+      it "delegates to original logger" do
+        expect(original_logger).to receive(:debug).with("debug message")
+        bridge.debug("debug message")
+      end
+
+      it "tracks to E11y" do
+        allow(original_logger).to receive(:debug)
+        expect(E11y::Events::Rails::Log::Debug).to receive(:track).with(
+          hash_including(message: "debug message")
+        )
+        bridge.debug("debug message")
+      end
+    end
+
     describe "#info" do
       it "delegates to original logger" do
         expect(original_logger).to receive(:info).with("test message")
@@ -40,6 +55,21 @@ RSpec.describe E11y::Logger::Bridge do
           hash_including(message: "test message")
         )
         bridge.info("test message")
+      end
+    end
+
+    describe "#warn" do
+      it "delegates to original logger" do
+        expect(original_logger).to receive(:warn).with("warn message")
+        bridge.warn("warn message")
+      end
+
+      it "tracks to E11y" do
+        allow(original_logger).to receive(:warn)
+        expect(E11y::Events::Rails::Log::Warn).to receive(:track).with(
+          hash_including(message: "warn message")
+        )
+        bridge.warn("warn message")
       end
     end
 
@@ -58,6 +88,21 @@ RSpec.describe E11y::Logger::Bridge do
       end
     end
 
+    describe "#fatal" do
+      it "delegates to original logger" do
+        expect(original_logger).to receive(:fatal).with("fatal message")
+        bridge.fatal("fatal message")
+      end
+
+      it "tracks to E11y" do
+        allow(original_logger).to receive(:fatal)
+        expect(E11y::Events::Rails::Log::Fatal).to receive(:track).with(
+          hash_including(message: "fatal message")
+        )
+        bridge.fatal("fatal message")
+      end
+    end
+
     describe "#add" do
       it "delegates to original logger" do
         expect(original_logger).to receive(:add).with(Logger::INFO, "test", nil)
@@ -70,6 +115,27 @@ RSpec.describe E11y::Logger::Bridge do
           hash_including(message: "test")
         )
         bridge.add(Logger::INFO, "test")
+      end
+
+      it "handles UNKNOWN severity" do
+        allow(original_logger).to receive(:add)
+        expect(E11y::Events::Rails::Log::Warn).to receive(:track).with(
+          hash_including(message: "unknown")
+        )
+        bridge.add(Logger::UNKNOWN, "unknown")
+      end
+    end
+
+    describe "#log" do
+      before do
+        stub_const("E11y::Events::Rails::Log::Info", double(track: nil))
+      end
+
+      it "is aliased to #add" do
+        allow(E11y::Events::Rails::Log::Info).to receive(:track)
+        # log is an alias to add, so expect add to be called on underlying logger
+        expect(original_logger).to receive(:add).with(Logger::INFO, "test", nil)
+        bridge.log(Logger::INFO, "test")
       end
     end
   end
@@ -104,6 +170,33 @@ RSpec.describe E11y::Logger::Bridge do
       allow(E11y::Events::Rails::Log::Info).to receive(:track).and_raise(StandardError, "tracking failed")
 
       expect { bridge.info("test") }.not_to raise_error
+    end
+
+    it "warns about tracking errors in development" do
+      # Create a Rails mock with development environment
+      rails_env = double("RailsEnv", development?: true)
+      rails_mock = double("Rails", env: rails_env)
+      stub_const("Rails", rails_mock)
+      
+      # Allow the original logger methods to be called
+      allow(original_logger).to receive(:info).and_call_original
+      
+      # Create a stub for Warn event that doesn't raise
+      stub_const("E11y::Events::Rails::Log::Warn", double(track: nil))
+      
+      # Make track_to_e11y fail for :info
+      allow(E11y::Events::Rails::Log::Info).to receive(:track).and_raise(StandardError, "tracking failed")
+      
+      # Override the bridge's warn method to actually output to stderr
+      allow(bridge).to receive(:warn) do |msg|
+        warn msg
+        original_logger.warn(msg)
+      end
+      
+      # The warn output happens when calling info, which triggers track_to_e11y error
+      expect do
+        bridge.info("test")
+      end.to output(/E11y logger tracking failed: tracking failed/).to_stderr
     end
   end
 

@@ -1,8 +1,5 @@
 # frozen_string_literal: true
 
-# Skip Railtie if Rails is not available
-return unless defined?(Rails)
-
 require "rails/railtie"
 
 module E11y
@@ -29,6 +26,7 @@ module E11y
   #   end
   #
   # @see ADR-008 §3 (Railtie & Initialization)
+  
   class Railtie < Rails::Railtie
     # Derive service name from Rails application class
     # @return [String] Service name (e.g., "my_app")

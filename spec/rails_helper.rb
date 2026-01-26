@@ -6,12 +6,8 @@
 require "spec_helper"
 
 # Only load Rails environment when running integration tests
-# This prevents conflicts when running regular specs
-unless ENV["INTEGRATION"] == "true"
-  # When integration tests are loaded but not run (rspec without --tag integration),
-  # just skip initializing Rails - the tests will be filtered out anyway
-  return
-end
+# Set ENV["INTEGRATION"] if not already set (for --tag integration)
+ENV["INTEGRATION"] ||= "true"
 
 # Set test-only environment variables
 ENV["E11Y_AUDIT_SIGNING_KEY"] ||= "test_signing_key_for_integration_tests_only"
