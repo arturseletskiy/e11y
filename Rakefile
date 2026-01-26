@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 #
 # E11y Gem Rakefile
 #
@@ -167,7 +168,7 @@ namespace :release do
     puts "\n[4/5] Creating git tag..."
     tag_name = "v#{version}"
     tag_message = "Release v#{version}"
-    
+
     if system("git rev-parse #{tag_name} >/dev/null 2>&1")
       puts "⚠️  Warning: Tag #{tag_name} already exists"
     else
@@ -212,9 +213,9 @@ namespace :release do
     puts "This will publish #{gem_file} to RubyGems.org"
     puts "You will be prompted for your RubyGems credentials and MFA code."
     puts "\nContinue? (y/N)"
-    
+
     response = $stdin.gets.chomp.downcase
-    unless response == "y" || response == "yes"
+    unless %w[y yes].include?(response)
       puts "❌ Publication cancelled"
       exit 0
     end
@@ -269,17 +270,17 @@ namespace :release do
   desc "Complete release workflow: prep, git_push, and gem_push (interactive)"
   task :full do
     Rake::Task["release:prep"].invoke
-    
-    puts "\n" + "=" * 80
+
+    puts "\n#{'=' * 80}"
     puts "Ready to push to GitHub and publish to RubyGems?"
     puts "=" * 80
     puts "This will:"
     puts "  1. Push commits and tag to GitHub"
     puts "  2. Publish gem to RubyGems.org"
     puts "\nContinue? (y/N)"
-    
+
     response = $stdin.gets.chomp.downcase
-    unless response == "y" || response == "yes"
+    unless %w[y yes].include?(response)
       puts "\n⏸️  Release prepared but not published"
       puts "To continue later, run:"
       puts "  rake release:git_push  # Push to GitHub"
@@ -290,7 +291,7 @@ namespace :release do
     Rake::Task["release:git_push"].invoke
     Rake::Task["release:gem_push"].invoke
 
-    puts "\n" + "=" * 80
+    puts "\n#{'=' * 80}"
     puts "🎉 Release complete!"
     puts "=" * 80
     puts "\nPost-release tasks:"
