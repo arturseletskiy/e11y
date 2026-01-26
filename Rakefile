@@ -29,24 +29,24 @@ namespace :spec do
 
   desc "Run all tests (unit + integration + railtie, ~1729 examples)"
   task :all do
-    puts "\n" + "=" * 80
+    puts "\n#{'=' * 80}"
     puts "Running UNIT tests (spec/e11y + top-level specs)..."
-    puts "=" * 80 + "\n"
+    puts "#{'=' * 80}\n"
     Rake::Task["spec:unit"].invoke
 
-    puts "\n" + "=" * 80
+    puts "\n#{'=' * 80}"
     puts "Running INTEGRATION tests (spec/integration)..."
-    puts "=" * 80 + "\n"
+    puts "#{'=' * 80}\n"
     Rake::Task["spec:integration"].invoke
 
-    puts "\n" + "=" * 80
+    puts "\n#{'=' * 80}"
     puts "Running RAILTIE tests (Rails initialization)..."
-    puts "=" * 80 + "\n"
+    puts "#{'=' * 80}\n"
     Rake::Task["spec:railtie"].invoke
 
-    puts "\n" + "=" * 80
+    puts "\n#{'=' * 80}"
     puts "✅ All test suites completed!"
-    puts "=" * 80 + "\n"
+    puts "#{'=' * 80}\n"
   end
 
   desc "Run tests with coverage report"
@@ -66,17 +66,17 @@ namespace :spec do
 
   desc "Run ALL tests including benchmarks (very slow)"
   task :everything do
-    puts "\n" + "=" * 80
+    puts "\n#{'=' * 80}"
     puts "Running ALL tests (unit + integration + railtie + benchmarks)"
-    puts "=" * 80 + "\n"
+    puts "#{'=' * 80}\n"
     Rake::Task["spec:unit"].invoke
     Rake::Task["spec:integration"].invoke
     Rake::Task["spec:railtie"].invoke
     Rake::Task["spec:benchmark"].invoke
 
-    puts "\n" + "=" * 80
+    puts "\n#{'=' * 80}"
     puts "✅ All test suites including benchmarks completed!"
-    puts "=" * 80 + "\n"
+    puts "#{'=' * 80}\n"
   end
 end
 

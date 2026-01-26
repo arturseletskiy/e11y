@@ -197,7 +197,7 @@ RSpec.describe E11y::Adapters::AuditEncrypted do
     it "handles hex-encoded encryption keys" do
       # Create a 64-character hex string (32 bytes when decoded)
       key_hex = encryption_key.unpack1("H*")
-      
+
       # Use ClimateControl to set ENV and create adapter with no explicit key
       ClimateControl.modify E11Y_AUDIT_ENCRYPTION_KEY: key_hex do
         adapter = described_class.new(storage_path: temp_dir)

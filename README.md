@@ -1135,7 +1135,8 @@ E11y has three test suites with different requirements:
 # Using rake tasks
 rake spec:unit            # Unit tests (~1672 examples, includes all e11y tests)
 rake spec:integration     # Integration tests (~36 examples, requires Rails)
-rake spec:all            # All tests (~1708 examples, unit + integration)
+rake spec:railtie        # Railtie tests (~21 examples, Rails initialization)
+rake spec:all            # All tests (~1729 examples, unit + integration + railtie)
 rake spec:benchmark      # Benchmark tests (~44 examples, slow)
 rake spec:coverage       # With coverage
 ```
@@ -1163,6 +1164,7 @@ bundle exec rspec --tag benchmark
 
 - **Unit tests** (~1672 examples, ~30s): Core logic, all e11y/* tests
 - **Integration tests** (~36 examples, ~5s): Rails, ActiveJob, Sidekiq integration
+- **Railtie tests** (~21 examples, ~2s): Rails initialization and configuration
 - **Benchmark tests** (~44 examples, ~30s): Performance tests (run with `rake spec:benchmark`)
 
 ### Other Development Commands

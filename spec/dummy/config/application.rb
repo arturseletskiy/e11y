@@ -16,6 +16,7 @@ require "rails/test_unit/railtie"
 require "e11y"
 
 # Configure E11y ONCE (guard against multiple loads during test suite)
+# rubocop:disable Style/GlobalVars
 unless $e11y_dummy_configured
   E11y.configure do |config|
     config.enabled = true
@@ -49,6 +50,7 @@ unless $e11y_dummy_configured
   end
   $e11y_dummy_configured = true
 end
+# rubocop:enable Style/GlobalVars
 
 module Dummy
   # Guard against redefining Application class during test suite
@@ -70,7 +72,7 @@ module Dummy
       config.action_controller.allow_forgery_protection = false
       config.active_support.deprecation = :stderr
       config.active_support.test_order = :random
-      
+
       # Fix Rails 8.1 deprecation warning for to_time timezone behavior
       config.active_support.to_time_preserves_timezone = :zone
 

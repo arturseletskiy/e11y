@@ -177,22 +177,22 @@ RSpec.describe E11y::Logger::Bridge do
       rails_env = double("RailsEnv", development?: true)
       rails_mock = double("Rails", env: rails_env)
       stub_const("Rails", rails_mock)
-      
+
       # Allow the original logger methods to be called
       allow(original_logger).to receive(:info).and_call_original
-      
+
       # Create a stub for Warn event that doesn't raise
       stub_const("E11y::Events::Rails::Log::Warn", double(track: nil))
-      
+
       # Make track_to_e11y fail for :info
       allow(E11y::Events::Rails::Log::Info).to receive(:track).and_raise(StandardError, "tracking failed")
-      
+
       # Override the bridge's warn method to actually output to stderr
       allow(bridge).to receive(:warn) do |msg|
         warn msg
         original_logger.warn(msg)
       end
-      
+
       # The warn output happens when calling info, which triggers track_to_e11y error
       expect do
         bridge.info("test")

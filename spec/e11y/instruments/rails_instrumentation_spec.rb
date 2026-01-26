@@ -23,7 +23,8 @@ RSpec.describe E11y::Instruments::RailsInstrumentation do
     end
 
     it "includes HTTP request mapping" do
-      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["process_action.action_controller"]).to eq("E11y::Events::Rails::Http::Request")
+      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["process_action.action_controller"])
+        .to eq("E11y::Events::Rails::Http::Request")
     end
 
     it "includes view rendering mapping" do

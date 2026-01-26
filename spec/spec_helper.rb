@@ -126,7 +126,7 @@ RSpec.configure do |config|
   # By default, exclude integration tests (requires Rails, OpenTelemetry SDK, Docker)
   # Run integration tests with: INTEGRATION=true bundle exec rspec
   # Or with: bundle exec rspec --tag integration
-  
+
   # Detect if --tag integration is being used
   if ARGV.any? { |arg| arg.include?("integration") } || ENV["INTEGRATION"] == "true"
     ENV["INTEGRATION"] = "true" # Ensure rails_helper knows we're in integration mode

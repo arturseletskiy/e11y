@@ -59,20 +59,20 @@ RSpec.describe "Rails Instrumentation Integration", :integration do
       # Create some posts to render
       Post.create!(title: "Post 1", body: "Body 1")
       Post.create!(title: "Post 2", body: "Body 2")
-      
+
       memory_adapter.clear!
-      
+
       # Make a request that renders a view template
       get "/posts_list"
-      
+
       expect(response).to be_successful
-      
+
       events = memory_adapter.events
       # Rails emits render_template.action_view events for view rendering
       render_events = events.select { |e| e[:event_name]&.include?("View::Render") }
-      
+
       expect(render_events).not_to be_empty
-      
+
       # The event should include template identifier
       template_event = render_events.find { |e| e[:payload][:identifier]&.include?("posts/list") }
       expect(template_event).not_to be_nil
