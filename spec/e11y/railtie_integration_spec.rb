@@ -260,6 +260,13 @@ RSpec.describe E11y::Railtie, :railtie_integration do
       end
     end
 
+    after do
+      # CRITICAL: Restore dummy app routes to avoid breaking other tests!
+      # Rails.application.routes.draw REPLACES all routes, so we need to reload the original routes
+      Rails.application.routes.clear!
+      load File.expand_path("../../../dummy/config/routes.rb", __dir__)
+    end
+
     it "processes requests through E11y middleware" do
       # Middleware is inserted during Rails initialization
       # Just verify it's in the stack
