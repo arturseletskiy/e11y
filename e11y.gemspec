@@ -68,7 +68,7 @@ Gem::Specification.new do |spec|
   # Development dependencies
   spec.add_development_dependency "benchmark-ips", "~> 2.13" # For performance benchmarks
   spec.add_development_dependency "memory_profiler", "~> 1.0" # For memory profiling
-  spec.add_development_dependency "rack", "~> 3.0" # For Rack middleware testing
+  spec.add_development_dependency "rack", ">= 2.2.4" # For Rack middleware testing (supports Rails 7.0+)
   spec.add_development_dependency "rake", "~> 13.0"
   spec.add_development_dependency "rspec", "~> 3.12"
   spec.add_development_dependency "rubocop", "~> 1.50"
