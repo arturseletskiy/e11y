@@ -56,31 +56,36 @@ module Dummy
   # Guard against redefining Application class during test suite
   unless defined?(Application)
     class Application < Rails::Application
-      # Set root to dummy app directory (must be first)
-      config.root = DUMMY_APP_ROOT
-
-      # Rails configuration
-      # Don't load defaults to avoid version-specific settings
-      # config.load_defaults Rails::VERSION::STRING.to_f
-      config.eager_load = false # Set to false to avoid frozen array issues during multiple test runs
-      config.cache_classes = false # Set to false to allow reloading during tests
-      config.consider_all_requests_local = true
-      config.action_controller.perform_caching = false
-      config.action_dispatch.show_exceptions = :none
-      config.action_controller.allow_forgery_protection = false
-      config.active_support.deprecation = :stderr
-      config.active_support.test_order = :random
-
-      # Fix Rails 8.1 deprecation warning for to_time timezone behavior
-      config.active_support.to_time_preserves_timezone = :zone
-
-      # Secret key base (required for Rails)
-      config.secret_key_base = "test_secret_key_base_for_dummy_app_integration_tests"
-
-      # Disable Rails logs in test output (E11y will handle logging)
-      config.logger = Logger.new(nil) unless ENV["VERBOSE"]
-      config.log_level = :fatal
     end
+  end
+
+  # ALWAYS apply configuration (even if Application is already defined)
+  # This ensures settings are applied consistently across all test files
+  Application.configure do
+    # Set root to dummy app directory (must be first)
+    config.root = DUMMY_APP_ROOT
+
+    # Rails configuration
+    # Don't load defaults to avoid version-specific settings
+    # config.load_defaults Rails::VERSION::STRING.to_f
+    config.eager_load = false # Set to false to avoid frozen array issues during multiple test runs
+    config.cache_classes = false # Set to false to allow reloading during tests
+    config.consider_all_requests_local = true
+    config.action_controller.perform_caching = false
+    config.action_dispatch.show_exceptions = :none
+    config.action_controller.allow_forgery_protection = false
+    config.active_support.deprecation = :stderr
+    config.active_support.test_order = :random
+
+    # Fix Rails 8.1 deprecation warning for to_time timezone behavior
+    config.active_support.to_time_preserves_timezone = :zone
+
+    # Secret key base (required for Rails)
+    config.secret_key_base = "test_secret_key_base_for_dummy_app_integration_tests"
+
+    # Disable Rails logs in test output (E11y will handle logging)
+    config.logger = Logger.new(nil) unless ENV["VERBOSE"]
+    config.log_level = :fatal
   end
 end
 
