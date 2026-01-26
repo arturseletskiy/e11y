@@ -86,6 +86,10 @@ module Dummy
     # Disable Rails logs in test output (E11y will handle logging)
     config.logger = Logger.new(nil) unless ENV["VERBOSE"]
     config.log_level = :fatal
+
+    # Disable host authorization for testing
+    # Rails 6.1+ has HostAuthorization middleware that blocks requests without proper Host header
+    config.hosts.clear if config.respond_to?(:hosts)
   end
 end
 

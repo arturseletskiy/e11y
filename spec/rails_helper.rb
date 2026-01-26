@@ -69,6 +69,10 @@ RSpec.configure do |config|
       dummy_root = File.expand_path("dummy", __dir__)
       Rails.application.config.root = dummy_root unless Rails.application.config.root.to_s == dummy_root
 
+      # Disable host authorization BEFORE initializing
+      # Rails 6.1+ has HostAuthorization middleware that blocks requests without proper Host header
+      Rails.application.config.hosts.clear if Rails.application.config.respond_to?(:hosts)
+
       Rails.application.initialize!
       $rails_app_initialized = true
     end
@@ -93,13 +97,9 @@ RSpec.configure do |config|
     # Verify configuration is correct
     raise "E11y should be enabled for integration tests! Check dummy/config/application.rb" unless E11y.config.enabled
 
-    # Setup E11y instrumentation manually since Rails is already initialized
-    # when rails_helper is loaded (initializers don't run after Rails.application.initialize!)
-    if E11y.config.enabled
-      E11y::Railtie.setup_rails_instrumentation if E11y.config.rails_instrumentation&.enabled
-      E11y::Railtie.setup_active_job if defined?(ActiveJob) && E11y.config.active_job&.enabled
-      E11y::Railtie.setup_sidekiq if defined?(Sidekiq) && E11y.config.sidekiq&.enabled
-    end
+    # NOTE: E11y instrumentation is set up automatically by Railtie initializers
+    # DO NOT call setup methods here or it will cause double instrumentation!
+    # The initializers run as part of Rails.application.initialize! above.
   end
 
   config.before do |example|

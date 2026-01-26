@@ -57,23 +57,16 @@ RSpec.describe "End-to-End Integration", :integration do
   end
 
   describe "Performance" do
-    it "handles multiple concurrent requests" do
-      # CRITICAL: Clear adapter immediately before test to ensure clean state
-      # The before hook at describe level may not be sufficient due to test execution order
-      memory_adapter.clear!
-
-      threads = Array.new(5) do
-        Thread.new do
-          get "/posts"
-        end
+    it "handles multiple sequential requests with unique trace IDs" do
+      # Make 5 sequential requests
+      # Note: RSpec request specs don't support true concurrent requests safely
+      5.times do
+        get "/posts"
       end
 
-      threads.each(&:join)
-
       events = memory_adapter.events
-
-      # Should have events from all requests - look for Http::Request events
       request_events = events.select { |e| e[:event_name]&.include?("Http::Request") }
+      
       expect(request_events.size).to eq(5)
 
       # Each request should have unique trace_id
