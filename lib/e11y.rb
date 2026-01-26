@@ -9,8 +9,12 @@ loader = Zeitwerk::Loader.for_gem
 loader.inflector.inflect(
   "pii" => "PII",
   "pii_filter" => "PIIFilter",
-  "otel_logs" => "OTelLogs"
+  "otel_logs" => "OTelLogs",
+  "slo" => "SLO",
+  "dlq" => "DLQ"
 )
+# Don't autoload railtie - it will be required manually when Rails is available
+loader.do_not_eager_load("#{__dir__}/e11y/railtie.rb")
 loader.setup
 
 # E11y - Event-Driven Observability for Ruby on Rails
@@ -108,7 +112,7 @@ module E11y
     attr_accessor :adapters, :log_level, :enabled, :environment, :service_name, :default_retention_period,
                   :routing_rules, :fallback_adapters
     attr_reader :adapter_mapping, :pipeline, :rails_instrumentation, :logger_bridge, :request_buffer, :active_job,
-                :error_handling, :dlq_storage, :dlq_filter, :rate_limiting, :slo_tracking
+                :sidekiq, :error_handling, :dlq_storage, :dlq_filter, :rate_limiting, :slo_tracking
 
     def initialize
       initialize_basic_config
@@ -140,6 +144,7 @@ module E11y
       @logger_bridge = LoggerBridgeConfig.new
       @request_buffer = RequestBufferConfig.new
       @active_job = ActiveJobConfig.new
+      @sidekiq = SidekiqConfig.new
       @error_handling = ErrorHandlingConfig.new # ✅ C18 Resolution
       @dlq_storage = nil # Set by user (e.g., DLQ::FileStorage instance)
       @dlq_filter = nil # Set by user (e.g., DLQ::Filter instance)
@@ -155,6 +160,13 @@ module E11y
     # @return [Array<Symbol>] Adapter names (e.g., [:logs, :errors_tracker])
     def adapters_for_severity(severity)
       @adapter_mapping[severity] || @adapter_mapping[:default] || []
+    end
+
+    # Get built pipeline (cached after first call)
+    #
+    # @return [#call] Built middleware pipeline
+    def built_pipeline
+      @built_pipeline ||= @pipeline.build(->(_event_data) {})
     end
 
     private
@@ -230,12 +242,22 @@ module E11y
   end
 
   # Logger Bridge configuration
+  #
+  # Controls Rails.logger integration:
+  # - When enabled = true: wraps Rails.logger and sends logs to E11y
+  # - When enabled = false: no integration (default)
+  #
+  # @example Enable logger bridge
+  #   E11y.configure do |config|
+  #     config.logger_bridge.enabled = true  # Wrap Rails.logger + send to E11y
+  #   end
+  #
+  # @see lib/e11y/logger/bridge.rb
   class LoggerBridgeConfig
-    attr_accessor :enabled, :dual_logging
+    attr_accessor :enabled
 
     def initialize
-      @enabled = false # Opt-in
-      @dual_logging = true # Keep writing to original Rails.logger
+      @enabled = false # Opt-in: disabled by default
     end
   end
 
@@ -263,6 +285,20 @@ module E11y
 
     def initialize
       @enabled = false # Disabled by default, enabled by Railtie
+    end
+  end
+
+  # Sidekiq configuration
+  #
+  # Controls Sidekiq middleware integration for trace propagation and context setup.
+  # Automatically enabled by Railtie when Sidekiq is detected.
+  #
+  # @see ADR-008 §9 (Sidekiq Integration)
+  class SidekiqConfig
+    attr_accessor :enabled
+
+    def initialize
+      @enabled = false # Disabled by default, enabled by Railtie when Sidekiq is present
     end
   end
 

@@ -808,39 +808,6 @@ RSpec.describe E11y::Middleware::PIIFilter do
     end
   end
 
-  describe "Non-Rails Environment" do
-    let(:event_class_non_rails) do
-      Class.new(E11y::Event::Base) do
-        def self.name
-          "Events::NonRailsEvent"
-        end
-
-        schema do
-          required(:data).filled(:string)
-        end
-
-        # Tier 2: Should use Rails filters (or fallback if no Rails)
-      end
-    end
-
-    it "handles non-Rails environment gracefully (lines 266-272)" do
-      # Stub Rails as undefined
-      hide_const("Rails")
-
-      # Create new middleware without Rails
-      middleware_no_rails = described_class.new(app)
-
-      event_data = {
-        event_class: event_class_non_rails,
-        payload: {
-          data: "some data"
-        }
-      }
-
-      # Should work without Rails (fallback to empty filter)
-      expect { middleware_no_rails.call(event_data) }.not_to raise_error
-      result = middleware_no_rails.call(event_data)
-      expect(result[:payload][:data]).to eq("some data")
-    end
-  end
+  # NOTE: "Non-Rails Environment" tests removed after adding rails dependency to gemspec.
+  # E11y is now a Rails-only gem (see e11y.gemspec: spec.add_dependency "rails", ">= 7.0")
 end

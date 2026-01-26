@@ -2,6 +2,9 @@
 
 # See https://rubydoc.info/gems/rspec-core/RSpec/Core/Configuration
 
+# Load local lib path FIRST (before any requires)
+$LOAD_PATH.unshift File.expand_path("../lib", __dir__)
+
 # SimpleCov setup (must be at the very top)
 if ENV["COVERAGE"]
   require "simplecov"
@@ -91,9 +94,12 @@ if ENV["COVERAGE"]
   end
 end
 
+# Load ActiveSupport BEFORE core extensions (required for Rails 7.1+ deprecator)
+require "active_support"
 require "active_support/core_ext/numeric/time" # For 30.days, 7.years
 require "active_support/core_ext/integer/time"
 require "active_support/core_ext/object/blank" # For .present?
+require "climate_control" # For ENV manipulation in tests
 require "e11y"
 require "webmock/rspec"
 
@@ -119,8 +125,24 @@ RSpec.configure do |config|
   # Integration tests configuration
   # By default, exclude integration tests (requires Rails, OpenTelemetry SDK, Docker)
   # Run integration tests with: INTEGRATION=true bundle exec rspec
-  if ENV["INTEGRATION"] == "true"
-    # Run ONLY integration tests when INTEGRATION=true
+  # Or with: bundle exec rspec --tag integration
+
+  # Detect if --tag integration is being used (but NOT --tag ~integration which EXCLUDES integration)
+  # Handle both "--tag integration" (two args) and "--tag=integration" (one arg)
+  tag_integration = ARGV.each_cons(2).any? { |a, b| a == "--tag" && b == "integration" } ||
+                    ARGV.any?("--tag=integration") ||
+                    ENV["INTEGRATION"] == "true"
+
+  tag_exclude_integration = ARGV.each_cons(2).any? { |a, b| a == "--tag" && b == "~integration" } ||
+                            ARGV.any?("--tag=~integration")
+
+  # Detect if running integration spec files directly (e.g., spec/integration/xxx_spec.rb)
+  # In this case, we should run integration tests even without explicit --tag
+  running_integration_files = ARGV.any? { |arg| arg.include?("spec/integration/") }
+
+  if (tag_integration || running_integration_files) && !tag_exclude_integration
+    ENV["INTEGRATION"] = "true" # Ensure rails_helper knows we're in integration mode
+    # Run ONLY integration tests
     config.filter_run_including integration: true
     puts "\n🔧 Running INTEGRATION tests (Rails, OpenTelemetry, etc.)"
     puts "   Dependencies: bundle install --with integration\n\n"
@@ -129,9 +151,9 @@ RSpec.configure do |config|
     config.filter_run_excluding integration: true
   end
 
-  # Clean up after each test
-  config.after do
-    E11y.reset! if E11y.respond_to?(:reset!)
+  # Clean up after each test (but NOT for integration tests - they rely on Rails app config)
+  config.after do |example|
+    E11y.reset! if !example.metadata[:integration] && E11y.respond_to?(:reset!)
   end
 
   # Load support files

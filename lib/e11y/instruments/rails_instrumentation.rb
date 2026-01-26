@@ -30,18 +30,18 @@ module E11y
       #
       # @return [Hash<String, Class>] Event mappings
       DEFAULT_RAILS_EVENT_MAPPING = {
-        "sql.active_record" => "Events::Rails::Database::Query",
-        "process_action.action_controller" => "Events::Rails::Http::Request",
-        "render_template.action_view" => "Events::Rails::View::Render",
-        "send_file.action_controller" => "Events::Rails::Http::SendFile",
-        "redirect_to.action_controller" => "Events::Rails::Http::Redirect",
-        "cache_read.active_support" => "Events::Rails::Cache::Read",
-        "cache_write.active_support" => "Events::Rails::Cache::Write",
-        "cache_delete.active_support" => "Events::Rails::Cache::Delete",
-        "enqueue.active_job" => "Events::Rails::Job::Enqueued",
-        "enqueue_at.active_job" => "Events::Rails::Job::Scheduled",
-        "perform_start.active_job" => "Events::Rails::Job::Started",
-        "perform.active_job" => "Events::Rails::Job::Completed"
+        "sql.active_record" => "E11y::Events::Rails::Database::Query",
+        "process_action.action_controller" => "E11y::Events::Rails::Http::Request",
+        "render_template.action_view" => "E11y::Events::Rails::View::Render",
+        "send_file.action_controller" => "E11y::Events::Rails::Http::SendFile",
+        "redirect_to.action_controller" => "E11y::Events::Rails::Http::Redirect",
+        "cache_read.active_support" => "E11y::Events::Rails::Cache::Read",
+        "cache_write.active_support" => "E11y::Events::Rails::Cache::Write",
+        "cache_delete.active_support" => "E11y::Events::Rails::Cache::Delete",
+        "enqueue.active_job" => "E11y::Events::Rails::Job::Enqueued",
+        "enqueue_at.active_job" => "E11y::Events::Rails::Job::Scheduled",
+        "perform_start.active_job" => "E11y::Events::Rails::Job::Started",
+        "perform.active_job" => "E11y::Events::Rails::Job::Completed"
       }.freeze
 
       # Setup Rails instrumentation
@@ -61,9 +61,24 @@ module E11y
       end
 
       # Subscribe to a specific ASN event
+      #
+      # **Architecture Note**: We pass the entire payload to the event class.
+      # Each event class defines its own schema (via dry-schema), which:
+      # 1. **Type-checks** fields automatically
+      # 2. **Filters** only relevant fields (unknown fields ignored)
+      # 3. **Validates** payload structure
+      #
+      # This eliminates the need for manual whitelisting (DRY principle).
+      # PII filtering happens in the middleware pipeline, not here.
+      #
       # @param asn_pattern [String] ActiveSupport::Notifications pattern
       # @param e11y_event_class_name [String] E11y event class name
       # @return [void]
+      #
+      # @example
+      #   # ASN payload: { controller: "Users", action: "index", password: "secret" }
+      #   # Event schema: schema { required(:controller).string; required(:action).string }
+      #   # Result: { controller: "Users", action: "index" } - password filtered by schema
       def self.subscribe_to_event(asn_pattern, e11y_event_class_name)
         ActiveSupport::Notifications.subscribe(asn_pattern) do |name, start, finish, _id, payload|
           # Convert ASN event → E11y event
@@ -73,11 +88,14 @@ module E11y
           e11y_event_class = resolve_event_class(e11y_event_class_name)
           next unless e11y_event_class
 
-          # Track E11y event with extracted payload
+          # Extract job info from job object if present (ActiveJob events)
+          extracted_payload = extract_job_info_from_object(payload)
+
+          # Track E11y event - schema will filter relevant fields
           e11y_event_class.track(
             event_name: name,
             duration: duration,
-            **extract_relevant_payload(payload)
+            **extracted_payload # Pass all payload, schema filters
           )
         rescue StandardError => e
           # Don't crash the app if event tracking fails
@@ -109,22 +127,27 @@ module E11y
         ignore_list.include?(pattern)
       end
 
-      # Extract relevant payload fields from ASN event
+      # Extract job info from job object (ActiveJob events)
       #
-      # Filters out PII and noisy fields, keeping only relevant data.
+      # ActiveJob events pass job object, not flattened fields.
+      # This method extracts relevant fields from job object.
       #
       # @param payload [Hash] ASN event payload
-      # @return [Hash] Filtered payload
-      def self.extract_relevant_payload(payload)
-        # Extract only relevant fields (avoid PII, reduce noise)
-        # This is a basic implementation - specific event classes can override
-        payload.slice(
-          :controller, :action, :format, :status,
-          :allocations, :db_runtime, :view_runtime,
-          :name, :sql, :connection_id,
-          :key, :hit,
-          :job_class, :job_id, :queue
-        )
+      # @return [Hash] Payload with extracted job info
+      def self.extract_job_info_from_object(payload)
+        # Return early if no job object
+        return payload unless payload[:job]
+
+        # Clone payload to avoid mutation
+        result = payload.dup
+        job = result.delete(:job)
+
+        # Extract job fields if not already present
+        result[:job_class] ||= job.class.name
+        result[:job_id] ||= job.job_id
+        result[:queue] ||= job.queue_name
+
+        result
       end
 
       # Resolve event class from string name

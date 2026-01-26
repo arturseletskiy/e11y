@@ -89,20 +89,33 @@ module E11y
         #
         # @raise [E11y::ValidationError] if payload doesn't match schema (when validation runs)
         def track(**payload)
-          # 1. Validate payload against schema (respects validation_mode)
-          validate_payload!(payload) if should_validate?
+          return unless E11y.config.enabled
 
-          # 2. Build event hash with metadata (use pre-allocated template, reduce GC)
-          # Cache frequently accessed values to avoid method call overhead
-          event_severity = severity
-          event_adapters = adapters
-          event_timestamp = Time.now.utc
-          event_retention_period = retention_period
+          # Build event data hash for pipeline processing
+          event_data = {
+            event_class: self,
+            event_name: event_name,
+            payload: payload,
+            severity: severity,
+            version: version,
+            adapters: adapters,
+            timestamp: Time.now.utc,
+            retention_period: retention_period,
+            context: build_context
+          }
 
-          # 3. TODO Phase 2: Send to pipeline
-          # E11y::Pipeline.process(event_hash)
+          # Pass through middleware pipeline (ADR-001 §3.2)
+          # Pipeline handles: validation, PII filtering, rate limiting, sampling, routing
+          # Routing middleware is the LAST middleware and it writes to adapters directly
+          E11y.config.built_pipeline.call(event_data)
 
-          # 4. Return event hash (pre-allocated structure for performance)
+          # Return event data for testing/debugging
+          event_data
+        end
+
+        # Build event hash
+        # @api private
+        def build_event_hash(event_severity, event_adapters, event_timestamp, event_retention_period, payload)
           {
             event_name: event_name,
             payload: payload,
@@ -113,6 +126,18 @@ module E11y
             retention_until: (event_timestamp + event_retention_period).iso8601, # Auto-calculated
             audit_event: audit_event? # For routing rules
           }
+        end
+
+        # Build current context for event
+        # @api private
+        def build_context
+          {
+            trace_id: E11y::Current.trace_id,
+            span_id: E11y::Current.span_id,
+            parent_trace_id: E11y::Current.parent_trace_id,
+            request_id: E11y::Current.request_id,
+            user_id: E11y::Current.user_id
+          }.compact
         end
 
         # Configure validation mode for performance tuning

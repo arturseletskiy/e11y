@@ -42,6 +42,21 @@ RSpec.describe E11y::Adapters::AuditEncrypted do
       expect(files.size).to eq(1)
     end
 
+    it "returns false on write errors" do
+      # Simulate write error by making storage path read-only
+      allow(adapter).to receive(:write_to_storage).and_raise(StandardError, "Disk full")
+
+      expect(adapter.write(event_data)).to be false
+    end
+
+    it "warns on write errors" do
+      allow(adapter).to receive(:write_to_storage).and_raise(StandardError, "Disk full")
+
+      expect do
+        adapter.write(event_data)
+      end.to output(/AuditEncrypted adapter error: Disk full/).to_stderr
+    end
+
     it "encrypts data (plaintext not visible in file)" do
       adapter.write(event_data)
 
@@ -169,6 +184,47 @@ RSpec.describe E11y::Adapters::AuditEncrypted do
       )
 
       expect(Dir.exist?(new_dir)).to be true
+    end
+
+    it "uses ENV E11Y_AUDIT_ENCRYPTION_KEY when available" do
+      key_hex = encryption_key.unpack1("H*")
+      ClimateControl.modify E11Y_AUDIT_ENCRYPTION_KEY: key_hex do
+        adapter = described_class.new(storage_path: temp_dir)
+        expect(adapter.encryption_key).not_to be_nil
+      end
+    end
+
+    it "handles hex-encoded encryption keys" do
+      # Create a 64-character hex string (32 bytes when decoded)
+      key_hex = encryption_key.unpack1("H*")
+
+      # Use ClimateControl to set ENV and create adapter with no explicit key
+      ClimateControl.modify E11Y_AUDIT_ENCRYPTION_KEY: key_hex do
+        adapter = described_class.new(storage_path: temp_dir)
+
+        event_data = {
+          event_name: "Events::Test",
+          payload: { data: "test" },
+          timestamp: Time.now.utc.iso8601(6),
+          version: 1
+        }
+
+        # Should encrypt and decrypt successfully
+        expect { adapter.write(event_data) }.not_to raise_error
+      end
+    end
+
+    it "raises error in production without encryption key" do
+      ClimateControl.modify E11Y_AUDIT_ENCRYPTION_KEY: nil do
+        stub_const("Rails", double(root: temp_dir, env: double(production?: true)))
+
+        expect do
+          described_class.new(
+            storage_path: temp_dir,
+            encryption_key: nil
+          )
+        end.to raise_error(E11y::Error, /E11Y_AUDIT_ENCRYPTION_KEY must be set in production/)
+      end
     end
   end
 

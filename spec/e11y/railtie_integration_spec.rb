@@ -21,7 +21,13 @@ rescue LoadError
   return
 end
 
-RSpec.describe E11y::Railtie, :integration do
+# NOTE: This spec tests Railtie initialization process and must NOT be run
+# with other integration tests that share a Rails application instance.
+# It should be run separately: bundle exec rspec spec/e11y/railtie_integration_spec.rb
+#
+# We use :railtie_integration tag instead of :integration to avoid conflicts
+# with the shared Rails app in spec_helper.rb
+RSpec.describe E11y::Railtie, :railtie_integration do
   # Create a minimal Rails application for testing
   # rubocop:todo RSpec/LeakyConstantDeclaration
   class TestApp < Rails::Application # rubocop:todo Lint/ConstantDefinitionInBlock, RSpec/LeakyConstantDeclaration
@@ -252,6 +258,14 @@ RSpec.describe E11y::Railtie, :integration do
       Rails.application.routes.draw do
         get "/test", to: "test#index"
       end
+    end
+
+    after do
+      # CRITICAL: Restore dummy app routes to avoid breaking other tests!
+      # Rails.application.routes.draw REPLACES all routes, so we need to reload the original routes
+      Rails.application.routes.clear!
+      routes_file = File.expand_path("../../dummy/config/routes.rb", __dir__)
+      load routes_file if File.exist?(routes_file)
     end
 
     it "processes requests through E11y middleware" do

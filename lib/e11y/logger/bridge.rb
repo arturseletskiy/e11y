@@ -8,7 +8,7 @@ module E11y
     #
     # Transparent wrapper around Rails.logger that:
     # 1. Delegates all calls to the original logger (preserves Rails behavior)
-    # 2. Optionally tracks log calls as E11y events (when enabled)
+    # 2. Tracks log calls as E11y events (when logger_bridge.enabled = true)
     #
     # **Why SimpleDelegator instead of full replacement:**
     # - ✅ Simpler: No need to reimplement entire Logger API
@@ -22,8 +22,7 @@ module E11y
     #
     # @example Manual setup
     #   E11y.configure do |config|
-    #     config.logger_bridge.enabled = true
-    #     config.logger_bridge.track_to_e11y = true  # Send logs to E11y events (optional)
+    #     config.logger_bridge.enabled = true  # Wrap Rails.logger and send logs to E11y
     #   end
     #
     # @see ADR-008 §7 (Rails.logger Migration)
@@ -36,10 +35,10 @@ module E11y
       # @return [void]
       def self.setup!
         return unless E11y.config.logger_bridge&.enabled
-        return unless defined?(Rails)
+        return unless defined?(::Rails)
 
         # Wrap Rails.logger (preserves original behavior)
-        Rails.logger = Bridge.new(Rails.logger)
+        ::Rails.logger = Bridge.new(::Rails.logger)
       end
 
       # Initialize bridge wrapper
@@ -56,7 +55,7 @@ module E11y
         }
       end
 
-      # Intercept logger methods to optionally track to E11y
+      # Intercept logger methods to track to E11y
       # All calls are delegated to the original logger via SimpleDelegator
 
       # Log debug message
@@ -64,7 +63,7 @@ module E11y
       # @yield Block that returns log message
       # @return [true] Always returns true (Logger API)
       def debug(message = nil, &)
-        track_to_e11y(:debug, message, &) if should_track_severity?(:debug)
+        track_to_e11y(:debug, message, &)
         super # Delegate to original logger
       end
 
@@ -73,7 +72,7 @@ module E11y
       # @yield Block that returns log message
       # @return [true] Always returns true (Logger API)
       def info(message = nil, &)
-        track_to_e11y(:info, message, &) if should_track_severity?(:info)
+        track_to_e11y(:info, message, &)
         super # Delegate to original logger
       end
 
@@ -82,7 +81,7 @@ module E11y
       # @yield Block that returns log message
       # @return [true] Always returns true (Logger API)
       def warn(message = nil, &)
-        track_to_e11y(:warn, message, &) if should_track_severity?(:warn)
+        track_to_e11y(:warn, message, &)
         super # Delegate to original logger
       end
 
@@ -91,7 +90,7 @@ module E11y
       # @yield Block that returns log message
       # @return [true] Always returns true (Logger API)
       def error(message = nil, &)
-        track_to_e11y(:error, message, &) if should_track_severity?(:error)
+        track_to_e11y(:error, message, &)
         super # Delegate to original logger
       end
 
@@ -100,7 +99,7 @@ module E11y
       # @yield Block that returns log message
       # @return [true] Always returns true (Logger API)
       def fatal(message = nil, &)
-        track_to_e11y(:fatal, message, &) if should_track_severity?(:fatal)
+        track_to_e11y(:fatal, message, &)
         super # Delegate to original logger
       end
 
@@ -112,50 +111,13 @@ module E11y
       # @return [true] Always returns true (Logger API)
       def add(severity, message = nil, progname = nil, &)
         e11y_severity = @severity_mapping[severity] || :info
-        track_to_e11y(e11y_severity, message || progname, &) if should_track_severity?(e11y_severity)
+        track_to_e11y(e11y_severity, message || progname, &)
         super # Delegate to original logger
       end
 
       alias log add
 
       private
-
-      # Check if E11y tracking is enabled for specific severity
-      # Supports both boolean and per-severity Hash configuration
-      #
-      # @param severity [Symbol] E11y severity (:debug, :info, :warn, :error, :fatal)
-      # @return [Boolean]
-      #
-      # @example Boolean config (all or nothing)
-      #   config.logger_bridge.track_to_e11y = true  # Track all
-      #   config.logger_bridge.track_to_e11y = false # Track none
-      #
-      # @example Per-severity config (granular control)
-      #   config.logger_bridge.track_to_e11y = {
-      #     debug: false,
-      #     info: true,
-      #     warn: true,
-      #     error: true,
-      #     fatal: true
-      #   }
-      # rubocop:disable Lint/DuplicateBranch
-      # Unknown config types intentionally fallback to false (same as FalseClass)
-      def should_track_severity?(severity)
-        config = E11y.config.logger_bridge&.track_to_e11y
-        return false unless config
-
-        case config
-        when TrueClass
-          true # Track all severities
-        when FalseClass
-          false # Track none
-        when Hash
-          config[severity] || false # Check per-severity config
-        else
-          false # Unknown config type
-        end
-      end
-      # rubocop:enable Lint/DuplicateBranch
 
       # Track log message as E11y event
       # @param severity [Symbol] E11y severity
@@ -179,7 +141,7 @@ module E11y
       rescue StandardError => e
         # Silently ignore E11y tracking errors (don't break logging!)
         # In development/test, you might want to log this
-        warn "E11y logger tracking failed: #{e.message}" if defined?(Rails) && Rails.env.development?
+        warn "E11y logger tracking failed: #{e.message}" if defined?(::Rails) && ::Rails.env.development?
       end
       # rubocop:enable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 

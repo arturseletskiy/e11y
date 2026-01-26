@@ -286,9 +286,9 @@ module E11y
       def handle_drop(metric_name, key, value)
         # Silent drop (most efficient)
         # Optionally log at debug level
-        return unless defined?(Rails) && Rails.logger&.debug?
+        return unless defined?(::Rails) && ::Rails.logger&.debug?
 
-        Rails.logger.debug(
+        ::Rails.logger.debug(
           "[E11y] Cardinality limit exceeded: #{metric_name}:#{key}=#{value} (dropped)"
         )
       end
@@ -332,9 +332,9 @@ module E11y
         # Add [OTHER] to safe_labels
         safe_labels[key] = other_value
 
-        return unless defined?(Rails) && Rails.logger&.debug?
+        return unless defined?(::Rails) && ::Rails.logger&.debug?
 
-        Rails.logger.debug(
+        ::Rails.logger.debug(
           "[E11y] Cardinality limit exceeded: #{metric_name}:#{key}=#{value} " \
           "(relabeled to [OTHER])"
         )

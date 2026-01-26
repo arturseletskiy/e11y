@@ -39,14 +39,17 @@ module E11y
     class AuditSigning < Base
       middleware_zone :security
 
-      # HMAC signing key (from ENV or generated)
-      SIGNING_KEY = ENV.fetch("E11Y_AUDIT_SIGNING_KEY") do
-        # Development fallback (NOT for production!)
-        if defined?(Rails) && Rails.env.production?
-          raise E11y::Error, "E11Y_AUDIT_SIGNING_KEY must be set in production"
-        end
+      # Get HMAC signing key (from ENV or generated)
+      # @return [String] Signing key
+      def self.signing_key
+        @signing_key ||= ENV.fetch("E11Y_AUDIT_SIGNING_KEY") do
+          # Development fallback (NOT for production!)
+          if defined?(::Rails) && ::Rails.env.production?
+            raise E11y::Error, "E11Y_AUDIT_SIGNING_KEY must be set in production"
+          end
 
-        "development_key_#{SecureRandom.hex(32)}"
+          "development_key_#{SecureRandom.hex(32)}"
+        end
       end
 
       # Initialize audit signing middleware
@@ -79,7 +82,7 @@ module E11y
 
         return false unless expected_signature && canonical
 
-        actual_signature = OpenSSL::HMAC.hexdigest("SHA256", SIGNING_KEY, canonical)
+        actual_signature = OpenSSL::HMAC.hexdigest("SHA256", signing_key, canonical)
         actual_signature == expected_signature
       end
       # rubocop:enable Naming/PredicateMethod
@@ -152,7 +155,7 @@ module E11y
       # @param data [String] Data to sign
       # @return [String] Hex-encoded signature
       def generate_signature(data)
-        OpenSSL::HMAC.hexdigest("SHA256", SIGNING_KEY, data)
+        OpenSSL::HMAC.hexdigest("SHA256", self.class.signing_key, data)
       end
 
       # Sort hash recursively for deterministic JSON

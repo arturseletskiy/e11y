@@ -85,7 +85,7 @@ module E11y
         def setup_job_buffer_active_job
           return unless E11y.config.request_buffer&.enabled
 
-          E11y::Buffers::RequestScopedBuffer.start!
+          E11y::Buffers::RequestScopedBuffer.initialize!
         rescue StandardError => e
           # C18: Don't fail job if buffer setup fails
           warn "[E11y] Failed to start job buffer: #{e.message}"
@@ -95,7 +95,7 @@ module E11y
         def handle_job_error_active_job(_error)
           return unless E11y.config.request_buffer&.enabled
 
-          E11y::Buffers::RequestScopedBuffer.flush_on_error!
+          E11y::Buffers::RequestScopedBuffer.flush_on_error
         rescue StandardError => e
           # C18: Don't fail job if buffer flush fails
           warn "[E11y] Failed to flush job buffer on error: #{e.message}"
@@ -106,7 +106,7 @@ module E11y
           # Flush buffer on success (not on error, already flushed in rescue)
           if !$ERROR_INFO && E11y.config.request_buffer&.enabled
             begin
-              E11y::Buffers::RequestScopedBuffer.flush!
+              E11y::Buffers::RequestScopedBuffer.discard
             rescue StandardError => e
               # C18: Don't fail job if buffer flush fails
               warn "[E11y] Failed to flush job buffer: #{e.message}"

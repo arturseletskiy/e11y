@@ -190,7 +190,7 @@ module E11y
       #
       # @return [Boolean]
       def production?
-        defined?(Rails) && Rails.env.production?
+        defined?(::Rails) && ::Rails.env.production?
       end
 
       # Ensure storage directory exists
@@ -217,7 +217,7 @@ module E11y
       # @return [String] Encryption key
       def default_encryption_key
         key = ENV.fetch("E11Y_AUDIT_ENCRYPTION_KEY") do
-          if defined?(Rails) && Rails.env.production?
+          if defined?(::Rails) && ::Rails.env.production?
             raise E11y::Error, "E11Y_AUDIT_ENCRYPTION_KEY must be set in production"
           end
 
@@ -233,8 +233,8 @@ module E11y
       #
       # @return [String] Storage path
       def default_storage_path
-        if defined?(Rails)
-          Rails.root.join("log", "audit").to_s
+        if defined?(::Rails) && ::Rails.root
+          ::Rails.root.join("log", "audit").to_s
         else
           ::File.join(Dir.pwd, "log", "audit")
         end

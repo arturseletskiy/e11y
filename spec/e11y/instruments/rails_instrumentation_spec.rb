@@ -19,26 +19,27 @@ RSpec.describe E11y::Instruments::RailsInstrumentation do
     end
 
     it "includes database query mapping" do
-      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["sql.active_record"]).to eq("Events::Rails::Database::Query")
+      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["sql.active_record"]).to eq("E11y::Events::Rails::Database::Query")
     end
 
     it "includes HTTP request mapping" do
-      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["process_action.action_controller"]).to eq("Events::Rails::Http::Request")
+      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["process_action.action_controller"])
+        .to eq("E11y::Events::Rails::Http::Request")
     end
 
     it "includes view rendering mapping" do
-      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["render_template.action_view"]).to eq("Events::Rails::View::Render")
+      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["render_template.action_view"]).to eq("E11y::Events::Rails::View::Render")
     end
 
     it "includes cache operations mappings" do
-      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["cache_read.active_support"]).to eq("Events::Rails::Cache::Read")
-      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["cache_write.active_support"]).to eq("Events::Rails::Cache::Write")
-      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["cache_delete.active_support"]).to eq("Events::Rails::Cache::Delete")
+      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["cache_read.active_support"]).to eq("E11y::Events::Rails::Cache::Read")
+      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["cache_write.active_support"]).to eq("E11y::Events::Rails::Cache::Write")
+      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["cache_delete.active_support"]).to eq("E11y::Events::Rails::Cache::Delete")
     end
 
     it "includes job processing mappings" do
-      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["enqueue.active_job"]).to eq("Events::Rails::Job::Enqueued")
-      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["perform.active_job"]).to eq("Events::Rails::Job::Completed")
+      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["enqueue.active_job"]).to eq("E11y::Events::Rails::Job::Enqueued")
+      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["perform.active_job"]).to eq("E11y::Events::Rails::Job::Completed")
     end
 
     it "is frozen" do
@@ -149,41 +150,34 @@ RSpec.describe E11y::Instruments::RailsInstrumentation do
     end
   end
 
-  describe ".extract_relevant_payload" do
-    it "extracts controller and action" do
-      payload = { controller: "UsersController", action: "index", password: "secret" }
-      result = described_class.extract_relevant_payload(payload)
-      expect(result[:controller]).to eq("UsersController")
-      expect(result[:action]).to eq("index")
-    end
+  describe ".extract_job_info_from_object" do
+    it "extracts job info from job object" do
+      job = double("Job", class: double(name: "MyJob"), job_id: "123", queue_name: "default")
+      payload = { job: job, other: "data" }
+      result = described_class.extract_job_info_from_object(payload)
 
-    it "filters out non-relevant fields" do
-      payload = { controller: "Users", password: "secret", token: "abc123" }
-      result = described_class.extract_relevant_payload(payload)
-      expect(result).not_to have_key(:password)
-      expect(result).not_to have_key(:token)
-    end
-
-    it "includes database runtime fields" do
-      payload = { db_runtime: 123.45, view_runtime: 67.89 }
-      result = described_class.extract_relevant_payload(payload)
-      expect(result[:db_runtime]).to eq(123.45)
-      expect(result[:view_runtime]).to eq(67.89)
-    end
-
-    it "includes job fields" do
-      payload = { job_class: "MyJob", job_id: "123", queue: "default", secret: "hidden" }
-      result = described_class.extract_relevant_payload(payload)
       expect(result[:job_class]).to eq("MyJob")
       expect(result[:job_id]).to eq("123")
       expect(result[:queue]).to eq("default")
-      expect(result).not_to have_key(:secret)
+      expect(result[:other]).to eq("data")
+      expect(result).not_to have_key(:job)
     end
 
-    it "returns empty hash when no relevant fields" do
-      payload = { irrelevant: "data", other: "stuff" }
-      result = described_class.extract_relevant_payload(payload)
-      expect(result).to be_empty
+    it "returns payload unchanged when no job object" do
+      payload = { controller: "Users", action: "index" }
+      result = described_class.extract_job_info_from_object(payload)
+
+      expect(result).to eq(payload)
+    end
+
+    it "does not override existing job fields" do
+      job = double("Job", class: double(name: "NewJob"), job_id: "456", queue_name: "low")
+      payload = { job: job, job_class: "ExistingJob", job_id: "789" }
+      result = described_class.extract_job_info_from_object(payload)
+
+      expect(result[:job_class]).to eq("ExistingJob")
+      expect(result[:job_id]).to eq("789")
+      expect(result[:queue]).to eq("low")
     end
   end
 
@@ -233,15 +227,16 @@ RSpec.describe E11y::Instruments::RailsInstrumentation do
       described_class.subscribe_to_event("test.event", "TestEventClass")
     end
 
-    it "extracts relevant payload and filters PII" do
-      payload = { controller: "Users", password: "secret" }
+    it "passes all payload fields to event class" do
+      payload = { controller: "Users", action: "index", custom_field: "value" }
       allow(ActiveSupport::Notifications).to receive(:subscribe).and_yield(
         "test.event", Time.now, Time.now, "id", payload
       )
 
       expect(event_class).to receive(:track) do |args|
         expect(args[:controller]).to eq("Users")
-        expect(args).not_to have_key(:password)
+        expect(args[:action]).to eq("index")
+        expect(args[:custom_field]).to eq("value")
       end
       described_class.subscribe_to_event("test.event", "TestEventClass")
     end

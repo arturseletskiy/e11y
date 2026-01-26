@@ -33,14 +33,22 @@ RSpec.describe E11y::Instruments::ActiveJob, :integration do
 
   let(:job) { TestJob.new }
 
-  before do
+  around do |example|
+    # Store original config value
+    original_buffer_enabled = E11y.config.request_buffer.enabled
+
     E11y.configure do |config|
       config.request_buffer.enabled = false # Disable buffer for simpler tests
     end
-  end
 
-  after do
+    example.run
+
     E11y::Current.reset
+
+    # Restore original config to avoid affecting other tests
+    E11y.configure do |config|
+      config.request_buffer.enabled = original_buffer_enabled
+    end
   end
 
   describe "before_enqueue callback" do
