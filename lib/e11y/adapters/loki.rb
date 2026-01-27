@@ -305,7 +305,17 @@ module E11y
       # @param event_data [Hash] Event data
       # @return [Array] [timestamp_ns, line]
       def format_loki_entry(event_data)
-        timestamp_ns = (event_data[:timestamp] || Time.now).to_f * 1_000_000_000
+        # Parse timestamp - can be Time object, ISO8601 string, or nil
+        timestamp = event_data[:timestamp]
+        timestamp = if timestamp.is_a?(String)
+                      Time.parse(timestamp)
+                    elsif timestamp.nil?
+                      Time.now
+                    else
+                      timestamp
+                    end
+        
+        timestamp_ns = timestamp.to_f * 1_000_000_000
         line = event_data.to_json
 
         [timestamp_ns.to_i.to_s, line]

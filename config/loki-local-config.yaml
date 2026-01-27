@@ -26,6 +26,18 @@ schema_config:
         prefix: index_
         period: 24h
 
+# Fast flush for integration tests
+ingester:
+  chunk_idle_period: 1s       # Flush chunks after 1 second of inactivity
+  chunk_retain_period: 1s     # Keep chunks in memory for 1 second before flush
+  max_chunk_age: 2s           # Force flush after 2 seconds
+  chunk_target_size: 0        # Disable size-based flush delay
+  chunk_encoding: snappy
+  wal:
+    enabled: true
+    dir: /tmp/loki/wal
+    replay_memory_ceiling: 100MB
+
 ruler:
   alertmanager_url: http://localhost:9093
 
