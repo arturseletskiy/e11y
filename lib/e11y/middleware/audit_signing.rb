@@ -73,19 +73,54 @@ module E11y
 
       # Verify signature (for testing/validation)
       #
+      # Recomputes canonical representation from current event data and verifies signature.
+      # This ensures tampering is detected even if audit_canonical field is present.
+      #
       # @param event_data [Hash] Event data with signature
       # @return [Boolean] true if signature is valid
       # rubocop:disable Naming/PredicateMethod
       def self.verify_signature(event_data)
         expected_signature = event_data[:audit_signature]
-        canonical = event_data[:audit_canonical]
+        return false unless expected_signature
 
-        return false unless expected_signature && canonical
-
+        # Recompute canonical from current event data (detects tampering)
+        canonical = canonical_representation(event_data)
         actual_signature = OpenSSL::HMAC.hexdigest("SHA256", signing_key, canonical)
         actual_signature == expected_signature
       end
       # rubocop:enable Naming/PredicateMethod
+
+      # Create canonical representation for signing (class method for verification)
+      #
+      # @param event_data [Hash] Event data
+      # @return [String] Canonical JSON string
+      def self.canonical_representation(event_data)
+        # Extract fields that should be signed
+        signable_data = {
+          event_name: event_data[:event_name],
+          payload: event_data[:payload],
+          timestamp: event_data[:timestamp],
+          version: event_data[:version]
+        }
+
+        # Convert to sorted JSON (deterministic)
+        JSON.generate(sort_hash(signable_data))
+      end
+
+      # Sort hash recursively for deterministic JSON (class method)
+      #
+      # @param obj [Object] Object to sort
+      # @return [Object] Sorted object
+      def self.sort_hash(obj)
+        case obj
+        when Hash
+          obj.keys.sort.to_h { |k| [k, sort_hash(obj[k])] }
+        when Array
+          obj.map { |v| sort_hash(v) }
+        else
+          obj
+        end
+      end
 
       private
 

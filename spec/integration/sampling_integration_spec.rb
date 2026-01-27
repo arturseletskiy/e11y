@@ -24,8 +24,8 @@ RSpec.describe "Sampling Middleware Integration", :integration do
     memory_adapter.clear!
     Timecop.freeze(Time.now)
 
-    # Reset Yabeda if available
-    Yabeda.reset! if defined?(Yabeda)
+    # CRITICAL: Don't reset Yabeda in Rails environment - it breaks metric registration
+    # Yabeda.reset! destroys the :e11y group and all metrics configured by Railtie
 
     # Configure Yabeda adapter if needed for metrics tests
     if yabeda_adapter
@@ -34,12 +34,8 @@ RSpec.describe "Sampling Middleware Integration", :integration do
       )
       E11y.config.adapters[:yabeda] = yabeda_adapter_instance
 
-      Yabeda.configure do
-        group :e11y do
-          # Metrics will be registered automatically if needed
-        end
-      end
-      Yabeda.configure!
+      # Metrics will be registered automatically via auto_register
+      # Don't call Yabeda.configure! - it was already called by Railtie
     end
 
     # Configure routing to send events to memory adapter
@@ -53,7 +49,7 @@ RSpec.describe "Sampling Middleware Integration", :integration do
   after do
     memory_adapter.clear!
     Timecop.return
-    Yabeda.reset! if defined?(Yabeda)
+    # Don't reset Yabeda - it breaks metric registration for subsequent tests
   end
 
   describe "Scenario 1: Basic sampling (per-event sample rates)" do

@@ -33,14 +33,14 @@ RSpec.describe "Audit Trail Integration", :integration do
     # Configure audit signing key
     ENV["E11Y_AUDIT_SIGNING_KEY"] = test_signing_key
 
-    # Ensure audit pipeline is configured
-    E11y.config.pipeline.use E11y::Middleware::AuditSigning
-
     # Configure routing for audit events: Route audit events to audit_encrypted adapter
     E11y.config.routing_rules = [
       ->(event) { :audit_encrypted if event[:audit_event] }
     ]
     E11y.config.fallback_adapters = [:audit_encrypted]
+
+    # Clear cached pipeline to rebuild with new configuration
+    E11y.config.instance_variable_set(:@built_pipeline, nil)
   end
 
   after do
@@ -210,6 +210,9 @@ RSpec.describe "Audit Trail Integration", :integration do
       encrypted_files_old = Dir.glob(File.join(storage_path, "*.enc"))
       expect(encrypted_files_old.size).to eq(1)
 
+      # Save reference to old adapter before rotation
+      old_adapter = audit_adapter
+
       # Rotate key: Create new adapter with new key
       new_key = OpenSSL::Random.random_bytes(32)
       new_storage_path = Dir.mktmpdir("audit_test_new")
@@ -217,6 +220,9 @@ RSpec.describe "Audit Trail Integration", :integration do
         storage_path: new_storage_path,
         encryption_key: new_key
       )
+
+      # Update config to use new adapter
+      E11y.config.adapters[:audit_encrypted] = new_adapter
 
       # Track new events: Verify new events encrypted with new key
       Events::UserDeleted.track(user_id: 789, deleted_by: 456, ip_address: "192.168.1.2")
@@ -227,7 +233,7 @@ RSpec.describe "Audit Trail Integration", :integration do
 
       # Verify old events readable: Can decrypt events encrypted with old key
       old_filename = File.basename(encrypted_files_old.first)
-      old_decrypted = audit_adapter.read(old_filename)
+      old_decrypted = old_adapter.read(old_filename)
       expect(old_decrypted[:payload][:user_id]).to eq(123)
 
       # Verify new events use new key: Can decrypt with new adapter
@@ -278,7 +284,12 @@ RSpec.describe "Audit Trail Integration", :integration do
         # Verify signature prevents tampering
         tampered = event.dup
         tampered[:payload] = tampered[:payload].dup
-        tampered[:payload][:user_id] = 999 if tampered[:payload][:user_id]
+        # Modify a field that exists in the event (try user_id, patient_id, or any integer field)
+        if tampered[:payload][:user_id]
+          tampered[:payload][:user_id] = 999
+        elsif tampered[:payload][:patient_id]
+          tampered[:payload][:patient_id] = 999
+        end
         expect(E11y::Middleware::AuditSigning.verify_signature(tampered)).to be(false)
 
         # Verify retention: Events stored for compliance period (file exists in storage)

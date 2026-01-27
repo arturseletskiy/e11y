@@ -98,6 +98,24 @@ RSpec.configure do |config|
     # If routes are empty, reload them from config/routes.rb
     Rails.application.routes_reloader.reload! if Rails.application.routes.empty?
 
+    # Configure Yabeda ONCE for the test suite
+    # This creates the :e11y group so that Yabeda.e11y is accessible in tests
+    # Individual tests can add more metrics using Yabeda.configure (without bang)
+    begin
+      require "yabeda"
+      unless Yabeda.configured?
+        Yabeda.configure do
+          group :e11y do
+            # Empty group - metrics will be added by tests or event classes
+          end
+        end
+        Yabeda.configure!
+      end
+    rescue LoadError
+      # Yabeda not available - skip configuration
+      # Tests that require Yabeda will check for it explicitly
+    end
+
     # E11y is already configured in dummy/config/application.rb
     # Verify configuration is correct
     raise "E11y should be enabled for integration tests! Check dummy/config/application.rb" unless E11y.config.enabled

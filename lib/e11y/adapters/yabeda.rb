@@ -289,6 +289,9 @@ module E11y
         metric_type = metric_config[:type]
         tags = metric_config[:tags] || []
 
+        # Skip if metric already exists (prevents re-registration errors)
+        return if ::Yabeda.metrics.key?("e11y_#{metric_name}")
+
         # Define metric in Yabeda group
         ::Yabeda.configure do
           group :e11y do
@@ -360,20 +363,40 @@ module E11y
         metric_name = metric_config[:name]
         labels = extract_labels(metric_config, event_data)
 
-        # Apply cardinality protection
-        safe_labels = @cardinality_protection.filter(labels, metric_name)
+        # Apply cardinality protection (normalize metric_name to string for consistent tracking)
+        safe_labels = @cardinality_protection.filter(labels, metric_name.to_s)
 
         # Extract value for histogram/gauge
         value = extract_value(metric_config, event_data) if %i[histogram gauge].include?(metric_config[:type])
 
-        # Update Yabeda metric
+        # Get original tags from metric config - these are the tags the metric was registered with
+        original_tags = metric_config.fetch(:tags, [])
+
+        # Lazy registration: register metric if it doesn't exist in Yabeda yet
+        # CRITICAL: Use ORIGINAL tags from metric config, not filtered safe_labels.keys
+        # Prometheus requires all tags declared at registration time
+        register_metric_if_needed(
+          metric_name,
+          metric_config[:type],
+          original_tags,
+          buckets: metric_config[:buckets]
+        )
+
+        # Ensure all required tags are present in safe_labels
+        # If cardinality protection dropped a tag, add placeholder value
+        # Prometheus requires all tags declared at registration to be present in every update
+        final_labels = original_tags.each_with_object({}) do |tag, acc|
+          acc[tag] = safe_labels.key?(tag) ? safe_labels[tag] : "[DROPPED]"
+        end
+
+        # Update Yabeda metric with all required labels
         case metric_config[:type]
         when :counter
-          ::Yabeda.e11y.send(metric_name).increment(safe_labels)
+          ::Yabeda.e11y.send(metric_name).increment(final_labels)
         when :histogram
-          ::Yabeda.e11y.send(metric_name).measure(safe_labels, value)
+          ::Yabeda.e11y.send(metric_name).measure(final_labels, value)
         when :gauge
-          ::Yabeda.e11y.send(metric_name).set(safe_labels, value)
+          ::Yabeda.e11y.send(metric_name).set(final_labels, value)
         end
       rescue StandardError => e
         warn "E11y Yabeda: Error updating metric #{metric_name}: #{e.message}"

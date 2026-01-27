@@ -19,20 +19,16 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
     memory_adapter.clear!
     E11y::Current.reset
 
-    # Reset Yabeda if available
-    Yabeda.reset! if defined?(Yabeda)
+    # CRITICAL: Don't reset Yabeda in Rails - it breaks metric registration
+    # Yabeda.reset! destroys the :e11y group and all metrics configured by Railtie
 
     # Configure Yabeda adapter if needed
     if yabeda_adapter
       yabeda_adapter_instance = E11y::Adapters::Yabeda.new(auto_register: true)
       E11y.config.adapters[:yabeda] = yabeda_adapter_instance
 
-      Yabeda.configure do
-        group :e11y do
-          # Metrics will be registered automatically
-        end
-      end
-      Yabeda.configure!
+      # Metrics will be registered automatically via auto_register
+      # Don't call Yabeda.configure! - it was already called by Railtie
     end
 
     # Ensure EventSLO middleware is enabled in pipeline

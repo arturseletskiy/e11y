@@ -74,6 +74,9 @@ module E11y
                             apply_routing_rules(event_data)
                           end
 
+        # 1.5. Validate audit events have proper routing (UC-012 compliance requirement)
+        validate_audit_routing!(event_data, target_adapters)
+
         # 2. Write to selected adapters
         target_adapters.each do |adapter_name|
           adapter = E11y.configuration.adapters[adapter_name]
@@ -146,10 +149,12 @@ module E11y
           warn "E11y routing rule error: #{e.message}"
         end
 
-        # Return unique adapters or fallback
+        # Track whether fallback was used (for audit validation)
         if matched_adapters.any?
+          event_data[:routing_used_fallback] = false
           matched_adapters.uniq
         else
+          event_data[:routing_used_fallback] = true
           E11y.configuration.fallback_adapters || [:stdout]
         end
       end
@@ -181,6 +186,48 @@ module E11y
       def increment_metric(_metric_name, **_tags)
         # TODO: Integrate with Yabeda/Prometheus
         # Yabeda.e11y.middleware_routing_routed.increment(tags)
+      end
+
+      # Validate audit events have proper routing configuration.
+      #
+      # Audit events MUST be routed via explicit adapters OR routing rules.
+      # Relying on fallback routing (no rule matched) is a compliance configuration error.
+      #
+      # @param event_data [Hash] Event data
+      # @param target_adapters [Array<Symbol>] Target adapters
+      # @raise [E11y::Error] if audit event misconfigured
+      # @return [void]
+      def validate_audit_routing!(event_data, target_adapters)
+        return unless event_data[:audit_event]
+
+        # Audit events are valid if:
+        # 1. They have explicit adapters (non-empty), OR
+        # 2. They matched a routing rule (routing_used_fallback = false)
+        
+        has_explicit_adapters = event_data[:adapters]&.any?
+        return if has_explicit_adapters # Explicit adapters → valid
+
+        # Check if fallback was used (set by apply_routing_rules)
+        used_fallback = event_data[:routing_used_fallback]
+        return unless used_fallback
+
+        # CRITICAL: Audit event using fallback routing (no rule matched!)
+        error_message = <<~ERROR
+          [E11y] CRITICAL: Audit event has no routing configuration!
+          
+          Event: #{event_data[:event_name]}
+          Routed to: #{target_adapters.inspect} (fallback adapters)
+          
+          Audit events MUST be explicitly routed to compliance-grade storage.
+          
+          Fix options:
+          1. Add explicit adapters: `adapters :audit_encrypted`
+          2. Configure routing rule: `config.routing_rules = [->(e) { :audit_encrypted if e[:audit_event] }]`
+          
+          See UC-012 Audit Trail documentation for details.
+        ERROR
+
+        raise E11y::Error, error_message
       end
     end
   end

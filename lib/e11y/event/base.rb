@@ -331,6 +331,10 @@ module E11y
           return @adapters if @adapters
           return superclass.adapters if superclass != E11y::Event::Base && superclass.instance_variable_get(:@adapters)
 
+          # Audit events without explicit adapters return empty array (use routing rules)
+          # This allows routing_rules to route audit events dynamically (UC-012, UC-019)
+          return [] if audit_event?
+
           resolved_adapters
         end
 

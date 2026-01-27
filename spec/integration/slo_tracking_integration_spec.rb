@@ -37,24 +37,23 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
       config.slo_tracking.enabled = true
     end
 
-    # Configure Yabeda metrics only if not already configured
-    unless Yabeda.configured?
-      Yabeda.configure do
-        group :e11y do
-          counter :slo_http_requests_total, tags: %i[controller action status], comment: "SLO HTTP requests"
-          histogram :slo_http_request_duration_seconds, tags: %i[controller action],
-                                                        buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0], comment: "SLO HTTP request duration"
-          counter :slo_background_jobs_total, tags: %i[job_class status queue], comment: "SLO background jobs"
-          histogram :slo_background_job_duration_seconds, tags: %i[job_class queue],
-                                                          buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0], comment: "SLO background job duration"
-        end
+    # CRITICAL: In Rails environment, Yabeda.configure! was already called by Railtie
+    # We MUST NOT call Yabeda.configure! again - it will raise AlreadyConfiguredError
+    # Instead, just define metrics using Yabeda.configure (without bang) - they register immediately
+    Yabeda.configure do
+      group :e11y do
+        counter :slo_http_requests_total, tags: %i[controller action status], comment: "SLO HTTP requests"
+        histogram :slo_http_request_duration_seconds, tags: %i[controller action],
+                                                      buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0], comment: "SLO HTTP request duration"
+        counter :slo_background_jobs_total, tags: %i[job_class status queue], comment: "SLO background jobs"
+        histogram :slo_background_job_duration_seconds, tags: %i[job_class queue],
+                                                        buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0], comment: "SLO background job duration"
       end
-      Yabeda.configure!
-    else
-      # Reset Yabeda counter values between tests (without calling Yabeda.reset!)
-      # This ensures tests don't accumulate counter values
-      reset_yabeda_metrics!
     end
+    
+    # Reset Yabeda counter values between tests (without calling Yabeda.reset!)
+    # This ensures tests don't accumulate counter values
+    reset_yabeda_metrics!
 
     # Configure Yabeda adapter
     yabeda_adapter_instance = E11y::Adapters::Yabeda.new(
