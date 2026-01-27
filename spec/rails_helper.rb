@@ -27,6 +27,11 @@ ENV["RAILS_ENV"] = "test"
 # Set test-only environment variables BEFORE loading Rails
 ENV["E11Y_AUDIT_SIGNING_KEY"] ||= "test_signing_key_for_integration_tests_only"
 
+# Disable rate limiting for all integration tests (unless testing rate limiting specifically)
+# Rate limiting interferes with tests by blocking events unexpectedly
+# Tests for rate limiting feature itself will re-enable it explicitly
+ENV["E11Y_RATE_LIMITING_ENABLED"] = "false"
+
 # Load Rails environment file (but DON'T initialize yet - that happens in before(:suite))
 # Use global variable because constants don't persist across multiple file loads
 # rubocop:disable Style/GlobalVars
@@ -96,6 +101,13 @@ RSpec.configure do |config|
     # E11y is already configured in dummy/config/application.rb
     # Verify configuration is correct
     raise "E11y should be enabled for integration tests! Check dummy/config/application.rb" unless E11y.config.enabled
+
+    # Disable rate limiting globally for integration tests (unless testing rate limiting specifically)
+    # Rate limiting interferes with tests by blocking events unexpectedly
+    # Tests for UC-011 (rate limiting feature) will re-enable it explicitly
+    E11y.configure do |config|
+      config.rate_limiting.enabled = false if config.respond_to?(:rate_limiting)
+    end
 
     # NOTE: E11y instrumentation is set up automatically by Railtie initializers
     # DO NOT call setup methods here or it will cause double instrumentation!

@@ -67,6 +67,13 @@ RSpec.describe "Rate Limiting Integration", :integration do
   after do
     memory_adapter.clear!
     Timecop.return
+
+    # CRITICAL: Remove RateLimiting middleware after tests to prevent interference with other test files
+    # Without this, RateLimiting stays in pipeline and blocks events in subsequent tests
+    E11y.config.pipeline.middlewares.reject! { |m| m.middleware_class == E11y::Middleware::RateLimiting }
+
+    # Clear cached pipeline so it rebuilds without RateLimiting
+    E11y.config.instance_variable_set(:@built_pipeline, nil)
   end
 
   describe "Scenario 1: Under limit" do
@@ -250,20 +257,6 @@ RSpec.describe "Rate Limiting Integration", :integration do
       #   Test: Endpoint B sends 15 events → first 10 pass (separate bucket)
       #
       # Current: Skip this scenario until per-context rate limiting is implemented
-    end
-  end
-
-  describe "Scenario 7: Redis failover" do
-    it "degrades gracefully when Redis unavailable" do
-      skip "Redis integration removed by design decision (in-memory only). " \
-           "This test is kept for documentation purposes only."
-
-      # Status: ✅ REMOVED - Redis integration removed by design decision
-      # Design Decision: Redis removed from rate limiting implementation.
-      #                  In-memory token bucket is sufficient for event tracking workloads.
-      #                  Per-process rate limiting is appropriate for most use cases.
-      #
-      # Current: Skip this scenario (not applicable - Redis removed)
     end
   end
 

@@ -322,8 +322,8 @@ module E11y
       # rubocop:disable Metrics/MethodLength
       # Metric registration requires case/when for different metric types
       def register_metric_if_needed(name, type, tags, buckets: nil)
-        # Check if metric already exists
-        return if ::Yabeda.metrics.key?(:"e11y_#{name}")
+        # Check if metric already exists (Yabeda stores metric keys as strings)
+        return if ::Yabeda.metrics.key?("e11y_#{name}")
 
         ::Yabeda.configure do
           group :e11y do

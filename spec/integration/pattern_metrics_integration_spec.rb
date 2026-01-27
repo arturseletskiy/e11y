@@ -30,7 +30,8 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
 
   before do
     memory_adapter.clear!
-    Yabeda.reset! if defined?(Yabeda)
+    # Don't reset Yabeda - it breaks metric registration for subsequent tests
+    # Yabeda.reset! destroys the :e11y group and all metrics
 
     # NOTE: We don't clear registry here because event classes register metrics at load time
     # If we clear registry, metrics won't be re-registered unless classes are reloaded
@@ -56,8 +57,8 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
 
   after do
     memory_adapter.clear!
-    Yabeda.reset! if defined?(Yabeda)
-    registry.clear!
+    # Don't reset Yabeda - it breaks metric registration
+    # Don't clear registry - event classes register metrics at load time
   end
 
   describe "Scenario 1: Counter metrics" do
@@ -196,16 +197,6 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
       adapter = E11y.config.adapters[:yabeda]
       adapter.register_metrics_from_registry! if adapter.respond_to?(:register_metrics_from_registry!)
 
-      # Configure Yabeda for this metric (if not auto-registered)
-      Yabeda.configure do
-        group :e11y do
-          counter :orders_payment_total, tags: %i[currency payment_method status], comment: "Order payments"
-        end
-      end
-      # Reset Yabeda before reconfiguring
-      Yabeda.reset! if defined?(Yabeda)
-      Yabeda.configure!
-
       # Track event with multiple tags
       event_data = Events::OrderPayment.track(
         order_id: "123",
@@ -267,15 +258,14 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
       adapter = E11y.config.adapters[:yabeda]
       adapter.register_metrics_from_registry! if adapter.respond_to?(:register_metrics_from_registry!)
 
-      # Configure Yabeda for additional metrics (need to reset first)
-      Yabeda.reset! if defined?(Yabeda)
+      # Configure Yabeda for additional metrics (without reset)
       Yabeda.configure do
         group :e11y do
           counter :orders_all_total, tags: [], comment: "All order events"
           counter :orders_deep_total, tags: [], comment: "Deep order events"
         end
       end
-      Yabeda.configure!
+      # Don't call Yabeda.configure! - metrics are registered immediately
 
       # Track event: Events::OrderPaid
       event_data = Events::OrderPaid.track(order_id: "123", currency: "USD")
