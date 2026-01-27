@@ -79,6 +79,9 @@ module E11y
       # @param event_data [Hash] The event payload
       # @return [Hash, nil] The event payload if sampled, nil if dropped
       def call(event_data)
+        # Handle nil from upstream middleware (e.g., rate limiting)
+        return nil unless event_data
+
         event_class = event_data[:event_class]
 
         # Track errors for error-based adaptive sampling (FEAT-4838)

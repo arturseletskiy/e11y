@@ -83,7 +83,7 @@ module E11y
         end
 
         # Rate limit not exceeded - continue pipeline
-        event_data
+        @app.call(event_data)
       end
 
       private

@@ -54,6 +54,7 @@ module E11y
     # @see ADR-012 for versioning architecture
     # @see UC-020 for use cases
     class Versioning < Base
+      middleware_zone :pre_processing
       # Version extraction regex (matches V2, V3, etc. at end of class name)
       VERSION_REGEX = /V(\d+)$/
 
@@ -62,16 +63,19 @@ module E11y
       # @param event_data [Hash] Event payload
       # @return [Hash] Event data with version field (if > 1)
       def call(event_data)
-        # Extract version from event_name (class name)
-        version = extract_version(event_data[:event_name])
+        # Extract version from event_class name (original class name, not normalized event_name)
+        # Use event_class.name if available, fallback to event_name for backward compatibility
+        class_name = event_data[:event_class]&.name || event_data[:event_name]
+        version = extract_version(class_name)
 
         # Add version field only if > 1 (ADR-012 §4.2)
         event_data[:v] = version if version > 1
 
         # Normalize event_name (remove version suffix for consistent queries)
-        event_data[:event_name] = normalize_event_name(event_data[:event_name])
+        event_data[:event_name] = normalize_event_name(class_name)
 
-        event_data
+        # Pass to next middleware
+        @app&.call(event_data) || event_data
       end
 
       private

@@ -62,6 +62,10 @@ group :integration do
   gem "yabeda", "~> 0.12" # Yabeda core
   gem "yabeda-prometheus", "~> 0.9" # Prometheus exporter
 
+  # HTTP client for Loki adapter tests
+  gem "faraday", "~> 2.0" # HTTP client library
+  gem "faraday-retry", "~> 2.0" # Retry middleware for Faraday
+
   # Additional Rails dependencies
   gem "database_cleaner-active_record", "~> 2.0" # DB cleanup between tests
   gem "rspec-rails", "~> 7.0" # Rails-specific RSpec matchers

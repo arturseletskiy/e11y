@@ -151,7 +151,9 @@ module E11y
         filtered = {}
 
         payload.each do |key, value|
-          strategy = config.dig(:fields, key, :strategy) || :allow
+          # Normalize key to symbol for config lookup (config uses symbol keys)
+          normalized_key = key.is_a?(Symbol) ? key : key.to_sym
+          strategy = config.dig(:fields, normalized_key, :strategy) || :allow
 
           # rubocop:disable Lint/DuplicateBranch
           # Unknown strategies intentionally fallback to allow (same as :allow)

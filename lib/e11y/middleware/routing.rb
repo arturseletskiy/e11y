@@ -62,6 +62,9 @@ module E11y
       # Routing logic requires adapter selection, iteration with error handling,
       # metadata enrichment, and metrics tracking
       def call(event_data)
+        # Handle nil from upstream middleware (e.g., rate limiting, sampling)
+        return nil unless event_data
+
         # 1. Determine target adapters (explicit or via routing rules)
         target_adapters = if event_data[:adapters]&.any?
                             # Explicit adapters bypass routing rules

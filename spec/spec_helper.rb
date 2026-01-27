@@ -118,7 +118,14 @@ require "e11y"
 require "webmock/rspec"
 
 # Configure WebMock
-WebMock.disable_net_connect!(allow_localhost: true)
+# CRITICAL: Disable WebMock for integration tests - they must use real services
+if integration_run
+  # Integration tests use real services (Loki, Prometheus, etc.)
+  WebMock.allow_net_connect!
+else
+  # Unit tests use WebMock to prevent accidental network calls
+  WebMock.disable_net_connect!(allow_localhost: true)
+end
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure
@@ -153,9 +160,21 @@ RSpec.configure do |config|
     config.filter_run_excluding integration: true
   end
 
-  # Clean up after each test (but NOT for integration tests - they rely on Rails app config)
+  # Clean up after each test
   config.after do |example|
-    E11y.reset! if !example.metadata[:integration] && E11y.respond_to?(:reset!)
+    if example.metadata[:integration]
+      # Integration tests: Clear adapters and pipeline state, but keep Rails config
+      if E11y.configuration.respond_to?(:adapters)
+        E11y.configuration.adapters.each_value do |adapter|
+          adapter.clear! if adapter.respond_to?(:clear!)
+        end
+      end
+      # Clear pipeline state to force rebuild on next test
+      E11y.configuration.instance_variable_set(:@built_pipeline, nil) if E11y.configuration
+    else
+      # Unit tests: Full reset
+      E11y.reset! if E11y.respond_to?(:reset!)
+    end
   end
 
   # Load support files

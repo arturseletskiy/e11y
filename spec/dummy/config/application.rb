@@ -94,6 +94,17 @@ module Dummy
     # Disable host authorization for testing
     # Rails 6.1+ has HostAuthorization middleware that blocks requests without proper Host header
     config.hosts.clear if config.respond_to?(:hosts)
+
+    # Filter parameters for PII filtering integration tests
+    config.filter_parameters += %i[
+      password
+      password_confirmation
+      api_key
+      token
+      authorization
+      secret
+      cvv
+    ]
   end
 end
 
