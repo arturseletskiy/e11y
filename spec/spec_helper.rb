@@ -170,10 +170,10 @@ RSpec.configure do |config|
         end
       end
       # Clear pipeline state to force rebuild on next test
-      E11y.configuration.instance_variable_set(:@built_pipeline, nil) if E11y.configuration
-    else
+      E11y.configuration&.instance_variable_set(:@built_pipeline, nil)
+    elsif E11y.respond_to?(:reset!)
       # Unit tests: Full reset
-      E11y.reset! if E11y.respond_to?(:reset!)
+      E11y.reset!
     end
   end
 

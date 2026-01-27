@@ -13,16 +13,16 @@ module PipelineDebug
 
   def self.inspect_adapters
     log("Adapter state", {
-      configured: E11y.configuration.adapters.keys,
-      count: E11y.configuration.adapters.size
-    })
+          configured: E11y.configuration.adapters.keys,
+          count: E11y.configuration.adapters.size
+        })
   end
 
   def self.inspect_pipeline
     log("Pipeline state", {
-      built: E11y.configuration.instance_variable_get(:@built_pipeline) ? "yes" : "no",
-      middlewares: E11y.configuration.pipeline.middlewares.map(&:to_s)
-    })
+          built: E11y.configuration.instance_variable_get(:@built_pipeline) ? "yes" : "no",
+          middlewares: E11y.configuration.pipeline.middlewares.map(&:to_s)
+        })
   end
 end
 
@@ -30,24 +30,24 @@ end
 module E11y
   module Middleware
     class Routing
-      alias_method :original_call, :call
+      alias original_call call
 
       def call(event_data)
         if ENV["E11Y_DEBUG_PIPELINE"]
           PipelineDebug.log("Routing middleware called", {
-            event_name: event_data[:event_name],
-            explicit_adapters: event_data[:adapters],
-            configured_adapters: E11y.configuration.adapters.keys
-          })
+                              event_name: event_data[:event_name],
+                              explicit_adapters: event_data[:adapters],
+                              configured_adapters: E11y.configuration.adapters.keys
+                            })
         end
 
         result = original_call(event_data)
 
         if ENV["E11Y_DEBUG_PIPELINE"] && result
           PipelineDebug.log("Routing result", {
-            routed_to: result[:routing][:adapters],
-            routing_type: result[:routing][:routing_type]
-          })
+                              routed_to: result[:routing][:adapters],
+                              routing_type: result[:routing][:routing_type]
+                            })
         end
 
         result

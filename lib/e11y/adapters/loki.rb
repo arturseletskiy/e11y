@@ -314,7 +314,7 @@ module E11y
                     else
                       timestamp
                     end
-        
+
         timestamp_ns = timestamp.to_f * 1_000_000_000
         line = event_data.to_json
 

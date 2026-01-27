@@ -47,7 +47,7 @@ module LokiHelpers
     entries
   rescue StandardError => e
     warn "Loki query failed: #{e.class}: #{e.message}"
-    warn "Backtrace: #{e.backtrace.first(3).join("\n")}" if ENV['E11Y_DEBUG_LOKI']
+    warn "Backtrace: #{e.backtrace.first(3).join("\n")}" if ENV["E11Y_DEBUG_LOKI"]
     []
   end
 
