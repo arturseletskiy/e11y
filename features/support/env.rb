@@ -53,9 +53,12 @@ end
 # Ensure Rails routes are loaded.
 Rails.application.routes_reloader.reload! if Rails.application.routes.empty?
 
-# Disable rate limiting globally — it interferes with test assertions.
+# Configure E11y for Cucumber tests:
+#   - Disable rate limiting (interferes with assertions)
+#   - Set fallback adapters to :memory so events with adapters: [] are captured
 E11y.configure do |config|
   config.rate_limiting.enabled = false if config.respond_to?(:rate_limiting)
+  config.fallback_adapters = [:memory]
 end
 
 # Require Rack::Test so World modules can include it.
