@@ -411,3 +411,36 @@ namespace :release do
     puts "✅ Clean complete"
   end
 end
+
+# ---------------------------------------------------------------------------
+# Cucumber acceptance tests
+# ---------------------------------------------------------------------------
+begin
+  require "cucumber/rake/task"
+
+  namespace :cucumber do
+    desc "Run all Cucumber acceptance tests"
+    Cucumber::Rake::Task.new(:all) do |t|
+      t.cucumber_opts = ["--format", "progress", "features/"]
+    end
+
+    desc "Run only @wip (known-bug) Cucumber scenarios"
+    Cucumber::Rake::Task.new(:wip) do |t|
+      t.cucumber_opts = ["--tags", "@wip", "--format", "progress", "features/"]
+    end
+
+    desc "Run passing Cucumber scenarios (exclude @wip)"
+    Cucumber::Rake::Task.new(:passing) do |t|
+      t.cucumber_opts = ["--tags", "not @wip", "--format", "progress", "features/"]
+    end
+  end
+
+  desc "Run all Cucumber acceptance tests (alias for cucumber:all)"
+  task cucumber: "cucumber:all"
+
+rescue LoadError
+  desc "Cucumber not available — install with: bundle install --with development"
+  task :cucumber do
+    warn "Cucumber gem is not available. Run: bundle install --with development"
+  end
+end
