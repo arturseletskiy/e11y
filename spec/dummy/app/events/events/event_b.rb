@@ -5,5 +5,8 @@ module Events
     schema do
       required(:data).filled(:string)
     end
+
+    # Use fallback routing for integration tests
+    adapters []
   end
 end

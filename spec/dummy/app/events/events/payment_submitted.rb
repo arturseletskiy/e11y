@@ -17,5 +17,8 @@ module Events
       masks :cvv
       allows :payment_id, :amount, :currency, :card_number, :billing
     end
+
+    # Use fallback routing for integration tests
+    adapters []
   end
 end

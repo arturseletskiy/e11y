@@ -6,4 +6,7 @@ module Events
       required(:message).filled(:string)
     end
   end
+
+    # Use fallback routing for integration tests
+    adapters []
 end

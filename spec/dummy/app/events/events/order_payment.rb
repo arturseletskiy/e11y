@@ -12,5 +12,8 @@ module Events
     metrics do
       counter :orders_payment_total, tags: %i[currency payment_method status]
     end
+
+    # Use fallback routing for integration tests
+    adapters []
   end
 end

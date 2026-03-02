@@ -9,5 +9,8 @@ module Events
       required(:password_confirmation).filled(:string)
       required(:name).filled(:string)
     end
+
+    # Use fallback routing for integration tests
+    adapters []
   end
 end

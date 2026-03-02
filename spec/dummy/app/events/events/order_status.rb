@@ -10,5 +10,8 @@ module Events
     metrics do
       gauge :order_status, value: :status_code, tags: [:order_type]
     end
+
+    # Use fallback routing for integration tests
+    adapters []
   end
 end

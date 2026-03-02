@@ -19,5 +19,8 @@ module Events
     metrics do
       counter :orders_total, tags: [:status]
     end
+
+    # Use fallback routing for integration tests
+    adapters []
   end
 end

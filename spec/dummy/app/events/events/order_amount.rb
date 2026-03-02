@@ -11,5 +11,8 @@ module Events
     metrics do
       histogram :orders_amount, value: :amount, tags: [:currency], buckets: [10, 50, 100, 500, 1000]
     end
+
+    # Use fallback routing for integration tests
+    adapters []
   end
 end

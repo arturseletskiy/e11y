@@ -10,4 +10,7 @@ module Events
       required(:ip_address).filled(:string)
     end
   end
+
+    # Use fallback routing for integration tests
+    adapters []
 end

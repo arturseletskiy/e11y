@@ -9,5 +9,8 @@ module Events
       required(:accessed_by).filled(:integer)
       required(:access_type).filled(:string)
     end
+
+    # Use fallback routing for integration tests
+    adapters []
   end
 end

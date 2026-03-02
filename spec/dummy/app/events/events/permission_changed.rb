@@ -11,4 +11,7 @@ module Events
       required(:granted_by).filled(:integer)
     end
   end
+
+    # Use fallback routing for integration tests
+    adapters []
 end

@@ -10,5 +10,9 @@ module Events
     metrics do
       counter :orders_paid_total, tags: [:currency]
     end
+
+    # Return empty adapters array to force fallback routing
+    # This allows integration tests to control routing via fallback_adapters config
+    adapters []
   end
 end

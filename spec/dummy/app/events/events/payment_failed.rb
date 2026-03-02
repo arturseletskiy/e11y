@@ -6,5 +6,8 @@ module Events
       required(:order_id).filled(:string)
       required(:amount).filled(:float)
     end
+
+    # Use fallback routing for integration tests
+    adapters []
   end
 end

@@ -8,4 +8,7 @@ module Events
       optional(:user_agent).maybe(:string)
     end
   end
+
+    # Use fallback routing for integration tests
+    adapters []
 end

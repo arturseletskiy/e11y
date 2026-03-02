@@ -13,5 +13,8 @@ module Events
     pii_filtering do
       allows :filename, :size, :metadata
     end
+
+    # Use fallback routing for integration tests
+    adapters []
   end
 end

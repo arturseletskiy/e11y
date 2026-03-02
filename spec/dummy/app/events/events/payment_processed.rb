@@ -10,5 +10,8 @@ module Events
     metrics do
       counter :payments_total, tags: [:status]
     end
+
+    # Use fallback routing for integration tests
+    adapters []
   end
 end

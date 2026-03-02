@@ -15,4 +15,7 @@ module Events
       allows :title, :description, :employee_ids, :author
     end
   end
+
+    # Use fallback routing for integration tests
+    adapters []
 end

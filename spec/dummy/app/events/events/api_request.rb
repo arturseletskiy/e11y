@@ -11,5 +11,8 @@ module Events
     metrics do
       counter :api_requests_total, tags: %i[endpoint status]
     end
+
+    # Use fallback routing for integration tests
+    adapters []
   end
 end
