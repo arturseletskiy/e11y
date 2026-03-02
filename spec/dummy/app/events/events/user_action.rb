@@ -10,8 +10,8 @@ module Events
     metrics do
       counter :user_actions_total, tags: [:action]
     end
-  end
 
     # Use fallback routing for integration tests
     adapters []
+  end
 end

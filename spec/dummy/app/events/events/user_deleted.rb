@@ -9,8 +9,8 @@ module Events
       required(:deleted_by).filled(:integer)
       required(:ip_address).filled(:string)
     end
-  end
 
     # Use fallback routing for integration tests
     adapters []
+  end
 end

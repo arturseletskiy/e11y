@@ -10,8 +10,8 @@ module Events
       required(:action).filled(:string)
       required(:granted_by).filled(:integer)
     end
-  end
 
     # Use fallback routing for integration tests
     adapters []
+  end
 end

@@ -14,8 +14,8 @@ module Events
     pii_filtering do
       allows :title, :description, :employee_ids, :author
     end
-  end
 
     # Use fallback routing for integration tests
     adapters []
+  end
 end
