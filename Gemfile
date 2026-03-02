@@ -18,6 +18,11 @@ group :development do
   gem "pry", "~> 0.14"
   gem "pry-byebug", "~> 3.10"
 
+  # Cucumber acceptance tests
+  gem "cucumber",        "~> 9.0"
+  gem "cucumber-rails",  "~> 3.0", require: false
+  gem "rack-test",       "~> 2.1"
+
   # Documentation
   gem "redcarpet", "~> 3.6" # Markdown support for YARD
   gem "yard", "~> 0.9"
