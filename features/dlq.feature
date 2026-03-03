@@ -22,7 +22,6 @@ Feature: Dead Letter Queue (DLQ) reliability
     When a failing adapter saves an event to the DLQ
     Then the DLQ entry should have a metadata field
 
-  @wip
   Scenario: Replaying a DLQ entry re-dispatches the event through the pipeline
     # BUG: replay calls empty increment_metric, returns true, does nothing else.
     # E11y::Pipeline.dispatch is commented out — doesn't exist.
@@ -31,7 +30,6 @@ Feature: Dead Letter Queue (DLQ) reliability
     And I replay the DLQ entry
     Then the event should appear in the secondary adapter
 
-  @wip
   Scenario: Deleting a DLQ entry removes it permanently
     # BUG: delete always returns false regardless of input.
     When a failing adapter saves an event to the DLQ

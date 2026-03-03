@@ -138,17 +138,27 @@ module E11y
 
         # Replay single event from DLQ.
         #
+        # Re-dispatches the stored event_data to all registered adapters so the
+        # event reaches every adapter regardless of original routing configuration.
+        #
         # @param event_id [String] Event ID to replay
         # @return [Boolean] true if replayed successfully
         def replay(event_id)
           entry = find_entry(event_id)
           return false unless entry
 
-          # Re-dispatch event through E11y pipeline
-          # TODO: Implement E11y::Pipeline.dispatch
-          # E11y::Pipeline.dispatch(entry[:event_data], metadata: entry[:metadata].merge(replayed: true))
+          # Reconstruct event_data from stored entry (keys are symbolized after JSON parse)
+          event_data = entry[:event_data]
 
-          # For now, just mark as replayed
+          # Deliver directly to all registered adapters, bypassing routing.
+          # This ensures the replayed event reaches every adapter (including
+          # adapters added after the original event was stored in the DLQ).
+          E11y.configuration.adapters.each_value do |adapter|
+            adapter.write(event_data)
+          rescue StandardError => write_error
+            E11y.logger.error("DLQ replay write failed: #{write_error.message}")
+          end
+
           increment_metric("e11y.dlq.replayed", event_name: entry[:event_name])
           true
         rescue StandardError => e
@@ -177,17 +187,36 @@ module E11y
 
         # Delete entry from DLQ.
         #
-        # Note: This is a simplified implementation.
-        # In production, consider using a database or append-only log with tombstones.
+        # Rewrites the JSONL file excluding the line whose :id matches event_id.
+        # Returns true if an entry was found and removed, false otherwise.
         #
         # @param event_id [String] Event ID to delete
         # @return [Boolean] true if deleted
         # rubocop:disable Naming/PredicateMethod
         # delete is an action method returning boolean status, not a predicate query
-        def delete(_event_id)
-          # TODO: Implement deletion (requires rewriting file)
-          # For JSONL, deletion is expensive (requires full file rewrite)
-          # Consider marking as deleted instead or using database
+        def delete(event_id)
+          return false unless File.exist?(@file_path)
+
+          all_lines = File.readlines(@file_path).map(&:chomp).reject(&:empty?)
+          original_count = all_lines.length
+
+          remaining = all_lines.reject do |line|
+            entry = JSON.parse(line, symbolize_names: true)
+            entry[:id].to_s == event_id.to_s
+          end
+
+          return false if remaining.length == original_count
+
+          content = remaining.join("\n")
+          content += "\n" unless content.empty? || content.end_with?("\n")
+
+          @mutex.synchronize do
+            File.write(@file_path, content)
+          end
+
+          true
+        rescue StandardError => e
+          E11y.logger.error("DLQ delete failed for #{event_id}: #{e.message}")
           false
         end
         # rubocop:enable Naming/PredicateMethod
