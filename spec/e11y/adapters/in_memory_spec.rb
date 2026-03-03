@@ -242,6 +242,13 @@ RSpec.describe E11y::Adapters::InMemory do
       adapter.clear
       expect(adapter.batches).to be_empty
     end
+
+    it "resets dropped_count" do
+      # Force a drop by filling the adapter to capacity
+      adapter.instance_variable_set(:@dropped_count, 3)
+      adapter.clear
+      expect(adapter.dropped_count).to eq(0)
+    end
   end
 
   describe "#last_event" do
