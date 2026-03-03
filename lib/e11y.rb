@@ -58,11 +58,18 @@ module E11y
 
     # Track an event
     #
-    # @param event [Event] event instance to track
+    # Accepts either an event instance or an event class with an optional payload.
+    # Delegates to the event class's `.track` method.
+    #
+    # @param event_or_class [E11y::Event::Base, Class] event instance or event class
+    # @param payload [Hash] keyword arguments forwarded to EventClass.track (used with class form)
     # @return [void]
     #
-    # @example
-    #   E11y.track(Events::UserSignup.new(user_id: 123))
+    # @example Pass an event instance
+    #   E11y.track(Events::UserSignup.new)
+    #
+    # @example Pass an event class with payload
+    #   E11y.track(Events::UserSignup, user_id: 123)
     def track(event_or_class, **payload)
       event_class = event_or_class.is_a?(Class) ? event_or_class : event_or_class.class
       event_class.track(**payload)

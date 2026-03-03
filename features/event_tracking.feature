@@ -2,7 +2,7 @@
 #
 # Verifies the core event tracking API:
 #   - EventClass.track(**payload) — the working path
-#   - E11y.track(event_instance)  — @wip: currently raises NotImplementedError
+#   - E11y.track(event_instance)  — delegates to EventClass.track
 #   - Schema field capture in the memory adapter
 #   - No phantom events on failed Rails validations
 #   - Error-level events on unhandled exceptions
@@ -16,20 +16,6 @@ Feature: Core event tracking API
   Background:
     Given the application is running
 
-  # ---------------------------------------------------------------------------
-  # @wip — BUG: E11y.track(instance) raises NotImplementedError
-  #
-  # The README Quick Start shows:
-  #   E11y.track(Events::UserSignup.new(user_id: 123))
-  #
-  # In reality lib/e11y.rb:66-68 contains:
-  #   def track(event)
-  #     raise NotImplementedError, "E11y.track will be implemented in Phase 1"
-  #   end
-  #
-  # Expected (when fixed): the event reaches the memory adapter without error.
-  # Actual (current):       NotImplementedError is raised before any adapter is called.
-  # ---------------------------------------------------------------------------
   Scenario: Calling E11y.track with an event instance delivers the event
     When I call E11y.track with a new Events::OrderCreated instance
     Then no exception should have been raised
