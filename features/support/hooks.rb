@@ -4,9 +4,26 @@
 #
 # Global Cucumber hooks that apply to every scenario unless tagged otherwise.
 
-# Before each scenario: clear the memory adapter so events from one scenario
-# do not bleed into the next.
+# Capture the canonical test pipeline middleware list once, immediately after
+# env.rb has finished configuring E11y. Every Before hook restores this
+# snapshot so that features which mutate the pipeline (adaptive_sampling,
+# event_versioning) cannot pollute subsequent features.
+#
+# We dup the array so that in-place mutations (reject!, insert, unshift) made
+# during a scenario only affect the LIVE @middlewares array, not this snapshot.
+# Individual MiddlewareEntry structs are immutable (data-only), so sharing
+# references between the snapshot and the live array is safe.
+INITIAL_PIPELINE_MIDDLEWARES = E11y.config.pipeline.middlewares.dup.freeze
+
+# Before each scenario:
+#   1. Restore the pipeline to the canonical test configuration.
+#   2. Invalidate the cached built_pipeline so the next Event.track() call
+#      builds a fresh chain from the restored middlewares.
+#   3. Clear the memory adapter so events from one scenario do not bleed
+#      into the next.
 Before do
+  E11y.config.pipeline.instance_variable_set(:@middlewares, INITIAL_PIPELINE_MIDDLEWARES.dup)
+  E11y.config.instance_variable_set(:@built_pipeline, nil)
   clear_events!
 end
 
