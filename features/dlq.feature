@@ -43,7 +43,6 @@ Feature: Dead Letter Queue (DLQ) reliability
     Then the DLQ file should exist on disk
     And the DLQ file should contain valid JSONL content
 
-  @wip
   Scenario: DLQ FileStorage default path does not require Rails
     # BUG: default_file_path calls Rails.root.join("log", "e11y_dlq.jsonl")
     # Raises NameError: uninitialized constant Rails in non-Rails contexts.

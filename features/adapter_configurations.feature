@@ -64,7 +64,6 @@ Feature: Adapter configurations
 
   # BUG-013: E11y::Adapters::Sentry.new calls Sentry.init unconditionally.
   # Any existing Sentry SDK configuration is overwritten.
-  @wip
   Scenario: Sentry adapter does not reinitialize an already-configured Sentry SDK
     Given Sentry SDK is initialized with a reference DSN
     When I create an E11y Sentry adapter with a different DSN
