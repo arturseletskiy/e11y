@@ -36,7 +36,6 @@ Feature: InMemory adapter public API
   #
   # This is a significant DX bug because `last_event` is the most natural
   # thing to write when asserting the most recent event.
-  @wip
   Scenario: adapter.last_event returns the most recently tracked event
     Given I have tracked 1 order event with status "pending"
     When I call adapter.last_event
@@ -48,7 +47,6 @@ Feature: InMemory adapter public API
   # The method signature is: event_count(event_name: nil)
   # Passing a positional string argument raises:
   #   ArgumentError: wrong number of arguments (given 1, expected 0)
-  @wip
   Scenario: adapter.event_count with positional string arg returns count
     Given I have tracked 2 order events
     When I call adapter.event_count with positional argument "Events::OrderCreated"
@@ -57,7 +55,6 @@ Feature: InMemory adapter public API
   # BUG-004: adapter.clear (without bang) raises NoMethodError
   #
   # Only adapter.clear! is defined. The no-bang variant is missing.
-  @wip
   Scenario: adapter.clear without bang clears all events
     Given I have tracked 1 order event with status "pending"
     When I call adapter.clear without bang
