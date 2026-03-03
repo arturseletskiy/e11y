@@ -3,21 +3,18 @@
 Feature: Rails Railtie integration
 
   # E11y ships a Railtie that hooks into the Rails lifecycle:
-  #   - Auto-disables E11y in test environment (BUG: guard never fires)
+  #   - Auto-disables E11y in test environment (config defaults to nil, Railtie sets false)
   #   - Registers around_perform on ActiveJob for request context propagation
   #   - Subscribes to ActiveSupport::Notifications for DB queries, requests, etc.
   #
-  # BUG 1: Auto-disable guard checks enabled.nil? but @enabled defaults to true.
-  #         E11y remains enabled in test env unless user explicitly sets enabled: false.
-  # NOTE:  Double-callback bug (ApplicationJob + ActiveJob::Base both included) cannot
-  #         be demonstrated in integration tests where ActiveJob::Base is already configured.
+  # NOTE: Double-callback bug (ApplicationJob + ActiveJob::Base both included) cannot
+  #       be demonstrated in integration tests where ActiveJob::Base is already configured.
 
   Background:
     Given the application is running
 
   Scenario: E11y is automatically disabled in the test environment
-    # BUG: @enabled = true by default, so the nil? guard never triggers.
-    # E11y stays enabled — every tracked event in tests hits real adapters.
+    # Fixed: @enabled = nil by default, so the Railtie guard correctly sets false in test env.
     Then E11y should be disabled in the test environment
 
   Scenario: E11y configuration can be explicitly disabled

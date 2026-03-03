@@ -4,21 +4,19 @@
 # Step definitions for rails_integration.feature.
 
 Then("E11y should be disabled in the test environment") do
-  # Simulate a fresh configuration with @enabled = nil (the fixed default).
-  # The Railtie guard `config.enabled = !Rails.env.test? if config.enabled.nil?`
-  # should set enabled to false in the test environment.
-  original_enabled = E11y.configuration.enabled
-  begin
-    E11y.configuration.enabled = nil
-    # Re-run the Railtie guard logic as it runs in before_initialize
-    E11y.configuration.enabled = !Rails.env.test? if E11y.configuration.enabled.nil?
-    expect(E11y.configuration.enabled).to be(false),
-      "Expected Railtie guard to set enabled=false in test environment, " \
-      "but got #{E11y.configuration.enabled.inspect}. " \
-      "Rails.env.test? = #{Rails.env.test?.inspect}"
-  ensure
-    E11y.configuration.enabled = original_enabled
-  end
+  # Verify the Configuration default and the Railtie guard together.
+  # A fresh Configuration must initialize @enabled = nil (not true) so that
+  # the Railtie `config.enabled = !Rails.env.test? if config.enabled.nil?` fires.
+  fresh_config = E11y::Configuration.new
+  expect(fresh_config.enabled).to be_nil,
+    "Expected Configuration#enabled to default to nil so the Railtie guard can fire, " \
+    "but got #{fresh_config.enabled.inspect}. " \
+    "BUG: if @enabled defaults to true, the nil? guard never triggers."
+  # Simulate the Railtie guard (before_initialize callback)
+  fresh_config.enabled = !Rails.env.test? if fresh_config.enabled.nil?
+  expect(fresh_config.enabled).to be(false),
+    "Expected Railtie guard to set enabled=false in test environment, " \
+    "but got #{fresh_config.enabled.inspect}. Rails.env.test? = #{Rails.env.test?.inspect}"
 end
 
 When("I set E11y enabled to {word}") do |value|
