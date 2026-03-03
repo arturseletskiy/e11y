@@ -33,13 +33,11 @@ Feature: Default pipeline completeness
   Scenario: Default pipeline includes Routing middleware
     Then the pipeline should include the "Routing" middleware
 
-  @wip
   Scenario: Default pipeline includes RateLimiting middleware
     # BUG: RateLimiting is never added in configure_default_pipeline in lib/e11y.rb.
     # rate_limiting.enabled defaults to false and the middleware is simply not wired in.
     Then the pipeline should include the "RateLimiting" middleware
 
-  @wip
   Scenario: Default pipeline includes EventSlo middleware
     # BUG: EventSlo is never added in configure_default_pipeline in lib/e11y.rb.
     # SLO tracking requires manual pipeline.use(E11y::Middleware::EventSlo) to activate.
@@ -58,7 +56,6 @@ Feature: Default pipeline completeness
     And "Sampling" should come before "Routing" in the pipeline
     And "AuditSigning" should come before "Routing" in the pipeline
 
-  @wip
   Scenario: RateLimiting middleware blocks events over the configured limit
     # BUG: Even after setting rate_limiting.enabled = true, Builder never adds
     # RateLimiting to the chain — events flow through unchecked regardless.

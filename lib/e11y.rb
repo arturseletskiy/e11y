@@ -215,10 +215,14 @@ module E11y
       @pipeline.use E11y::Middleware::AuditSigning
 
       # Zone: :routing
+      @pipeline.use E11y::Middleware::RateLimiting
       @pipeline.use E11y::Middleware::Sampling
 
       # Zone: :adapters
       @pipeline.use E11y::Middleware::Routing
+
+      # Zone: :post_processing
+      @pipeline.use E11y::Middleware::EventSlo
     end
   end
 
