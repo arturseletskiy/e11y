@@ -134,7 +134,7 @@ module E11y
       @adapters = {} # Hash of adapter_name => adapter_instance
       @log_level = :info
       @pipeline = E11y::Pipeline::Builder.new
-      @enabled = true
+      @enabled = nil
       @environment = nil
       @service_name = nil
     end

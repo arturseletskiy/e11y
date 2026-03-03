@@ -15,7 +15,6 @@ Feature: Rails Railtie integration
   Background:
     Given the application is running
 
-  @wip
   Scenario: E11y is automatically disabled in the test environment
     # BUG: @enabled = true by default, so the nil? guard never triggers.
     # E11y stays enabled — every tracked event in tests hits real adapters.

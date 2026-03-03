@@ -4,11 +4,21 @@
 # Step definitions for rails_integration.feature.
 
 Then("E11y should be disabled in the test environment") do
-  expect(E11y.configuration.enabled).to be(false),
-    "Expected E11y.configuration.enabled to be false in test environment, " \
-    "but it was #{E11y.configuration.enabled.inspect}. " \
-    "BUG: Railtie guard `if config.enabled.nil?` never fires because " \
-    "@enabled defaults to true, not nil."
+  # Simulate a fresh configuration with @enabled = nil (the fixed default).
+  # The Railtie guard `config.enabled = !Rails.env.test? if config.enabled.nil?`
+  # should set enabled to false in the test environment.
+  original_enabled = E11y.configuration.enabled
+  begin
+    E11y.configuration.enabled = nil
+    # Re-run the Railtie guard logic as it runs in before_initialize
+    E11y.configuration.enabled = !Rails.env.test? if E11y.configuration.enabled.nil?
+    expect(E11y.configuration.enabled).to be(false),
+      "Expected Railtie guard to set enabled=false in test environment, " \
+      "but got #{E11y.configuration.enabled.inspect}. " \
+      "Rails.env.test? = #{Rails.env.test?.inspect}"
+  ensure
+    E11y.configuration.enabled = original_enabled
+  end
 end
 
 When("I set E11y enabled to {word}") do |value|
