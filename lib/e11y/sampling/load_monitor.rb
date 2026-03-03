@@ -101,7 +101,7 @@ module E11y
           :very_high
         elsif rate >= @thresholds[:high]
           :high
-        elsif rate >= @thresholds[:normal]
+        elsif rate > @thresholds[:normal]
           :high # Between normal and high threshold
         else
           :normal

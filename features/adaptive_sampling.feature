@@ -26,7 +26,6 @@ Feature: Adaptive Sampling
   # Scenario 3 (@wip): LoadMonitor returns :normal at exactly the normal threshold
   # Bug: load_level returns :high when rate == thresholds[:normal]
   # -----------------------------------------------------------------------
-  @wip
   Scenario: Load at exactly normal threshold produces :normal load level
     Given a LoadMonitor with normal threshold 100 events per second and window 1 second
     When I record exactly 100 events in 1 second in the LoadMonitor
@@ -36,7 +35,6 @@ Feature: Adaptive Sampling
   # Scenario 4 (@wip): Normal-threshold load yields 100 % sampling
   # Depends on scenario 3 bug: :high returned instead of :normal -> 50 % rate
   # -----------------------------------------------------------------------
-  @wip
   Scenario: Load at normal threshold results in 100% sampling rate
     Given a LoadMonitor with normal threshold 100 events per second and window 1 second
     When I record exactly 100 events in 1 second in the LoadMonitor
