@@ -30,7 +30,6 @@ Feature: Core event tracking API
   # Expected (when fixed): the event reaches the memory adapter without error.
   # Actual (current):       NotImplementedError is raised before any adapter is called.
   # ---------------------------------------------------------------------------
-  @wip
   Scenario: Calling E11y.track with an event instance delivers the event
     When I call E11y.track with a new Events::OrderCreated instance
     Then no exception should have been raised

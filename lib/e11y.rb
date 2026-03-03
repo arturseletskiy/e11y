@@ -63,9 +63,9 @@ module E11y
     #
     # @example
     #   E11y.track(Events::UserSignup.new(user_id: 123))
-    def track(event)
-      # TODO: Implement in Phase 1
-      raise NotImplementedError, "E11y.track will be implemented in Phase 1"
+    def track(event_or_class, **payload)
+      event_class = event_or_class.is_a?(Class) ? event_or_class : event_or_class.class
+      event_class.track(**payload)
     end
 
     # Get logger instance
