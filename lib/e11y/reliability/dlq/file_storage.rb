@@ -141,6 +141,10 @@ module E11y
         # Re-dispatches the stored event_data to all registered adapters so the
         # event reaches every adapter regardless of original routing configuration.
         #
+        # NOTE: Delivers directly to adapters, bypassing the middleware pipeline.
+        # This means middleware (PII filtering, rate limiting, routing) is NOT applied.
+        # Trade-off: ensures event reaches all registered adapters regardless of routing rules.
+        #
         # @param event_id [String] Event ID to replay
         # @return [Boolean] true if replayed successfully
         def replay(event_id)
@@ -197,24 +201,24 @@ module E11y
         def delete(event_id)
           return false unless File.exist?(@file_path)
 
-          all_lines = File.readlines(@file_path).map(&:chomp).reject(&:empty?)
-          original_count = all_lines.length
-
-          remaining = all_lines.reject do |line|
-            entry = JSON.parse(line, symbolize_names: true)
-            entry[:id].to_s == event_id.to_s
-          end
-
-          return false if remaining.length == original_count
-
-          content = remaining.join("\n")
-          content += "\n" unless content.empty? || content.end_with?("\n")
-
+          deleted = false
           @mutex.synchronize do
-            File.write(@file_path, content)
-          end
+            all_lines = File.readlines(@file_path).map(&:chomp).reject(&:empty?)
+            original_count = all_lines.length
 
-          true
+            remaining = all_lines.reject do |line|
+              entry = JSON.parse(line, symbolize_names: true)
+              entry[:id].to_s == event_id.to_s
+            end
+
+            if remaining.length < original_count
+              content = remaining.join("\n")
+              content += "\n" unless content.empty? || content.end_with?("\n")
+              File.write(@file_path, content)
+              deleted = true
+            end
+          end
+          deleted
         rescue StandardError => e
           E11y.logger.error("DLQ delete failed for #{event_id}: #{e.message}")
           false
