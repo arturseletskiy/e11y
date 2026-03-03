@@ -226,6 +226,47 @@ RSpec.describe E11y::Adapters::InMemory do
     end
   end
 
+  describe "#clear" do
+    before do
+      adapter.write(paid_order_event)
+      adapter.write(failed_order_event)
+    end
+
+    it "clears all events" do
+      adapter.clear
+      expect(adapter.events).to be_empty
+    end
+
+    it "clears all batches" do
+      adapter.write_batch([user_created_event])
+      adapter.clear
+      expect(adapter.batches).to be_empty
+    end
+  end
+
+  describe "#last_event" do
+    it "returns nil when no events have been tracked" do
+      expect(adapter.last_event).to be_nil
+    end
+
+    it "returns the last tracked event" do
+      adapter.write(paid_order_event)
+      adapter.write(failed_order_event)
+      expect(adapter.last_event).to eq(failed_order_event)
+    end
+
+    it "skips Rails instrumentation events" do
+      adapter.write(paid_order_event)
+      adapter.write({ event_name: "E11y::Events::Rails::RequestCompleted", severity: :info, payload: {} })
+      expect(adapter.last_event).to eq(paid_order_event)
+    end
+
+    it "returns nil when only Rails instrumentation events are present" do
+      adapter.write({ event_name: "E11y::Events::Rails::RequestCompleted", severity: :info, payload: {} })
+      expect(adapter.last_event).to be_nil
+    end
+  end
+
   describe "#event_count" do
     before do
       adapter.write(paid_order_event)
@@ -238,8 +279,16 @@ RSpec.describe E11y::Adapters::InMemory do
       expect(adapter.event_count).to eq(4)
     end
 
-    it "returns count for specific event_name" do
+    it "returns count for specific event_name (keyword arg)" do
       expect(adapter.event_count(event_name: "order.paid")).to eq(2)
+    end
+
+    it "returns count for specific event_name (positional string arg)" do
+      expect(adapter.event_count("order.paid")).to eq(2)
+    end
+
+    it "returns zero for non-existent event_name via positional arg" do
+      expect(adapter.event_count("nonexistent")).to eq(0)
     end
 
     it "returns zero for non-existent event_name" do
@@ -380,11 +429,13 @@ RSpec.describe E11y::Adapters::InMemory do
     it "provides query methods for testing" do
       expect(adapter).to respond_to(:find_events)
       expect(adapter).to respond_to(:event_count)
+      expect(adapter).to respond_to(:last_event)
       expect(adapter).to respond_to(:last_events)
       expect(adapter).to respond_to(:first_events)
       expect(adapter).to respond_to(:events_by_severity)
       expect(adapter).to respond_to(:any_event?)
       expect(adapter).to respond_to(:clear!)
+      expect(adapter).to respond_to(:clear)
     end
   end
 end
