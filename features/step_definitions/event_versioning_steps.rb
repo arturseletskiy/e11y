@@ -20,6 +20,8 @@
 #     works when Versioning IS active.
 #  3. Fall back to event_class.name if the class object is still present
 #     (belt-and-braces; may be nil in some reload contexts).
+#  4. Match against the class's custom event_name override (if any) —
+#     handles events where the class defines a custom event_name via DSL.
 def find_versioned_events(class_name)
   normalized = begin
     mw = E11y::Middleware::Versioning.new(nil)
