@@ -28,11 +28,22 @@ def find_versioned_events(class_name)
     nil
   end
 
+  # Also resolve the real class to get its custom event_name (if any).
+  # This handles the case where the class defines a custom event_name override
+  # that the Versioning middleware now preserves. PIIFilter deep_dup may strip
+  # the class name from e[:event_class], so we look up the class by constant.
+  real_class_event_name = begin
+    Object.const_get(class_name)&.event_name
+  rescue NameError, StandardError
+    nil
+  end
+
   memory_adapter.events.select do |e|
     stored = e[:event_name].to_s
     stored == class_name ||
       (normalized && stored == normalized) ||
-      e[:event_class]&.name == class_name
+      e[:event_class]&.name == class_name ||
+      (real_class_event_name && stored == real_class_event_name)
   end
 end
 

@@ -71,8 +71,16 @@ module E11y
         # Add version field only if > 1 (ADR-012 §4.2)
         event_data[:v] = version if version > 1
 
-        # Normalize event_name (remove version suffix for consistent queries)
-        event_data[:event_name] = normalize_event_name(class_name)
+        # Normalize event_name only when no custom override is present.
+        # A custom override is detected by checking whether event_data[:event_name]
+        # matches the class-derived name (raw class name with version suffix stripped).
+        # If the stored event_name differs, the event class has a custom event_name
+        # set via DSL (e.g. define_singleton_method or @event_name override), so we
+        # leave it untouched.
+        class_derived_name = class_name.to_s.sub(VERSION_REGEX, "")
+        if event_data[:event_name].to_s == class_derived_name
+          event_data[:event_name] = normalize_event_name(class_name)
+        end
 
         # Pass to next middleware
         @app&.call(event_data) || event_data
