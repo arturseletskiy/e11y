@@ -13,7 +13,7 @@ require "timecop"
 
 RSpec.describe "Reliability Features Integration", :integration do
   let(:memory_adapter) { E11y.config.adapters[:memory] }
-  let(:dlq_storage) { E11y::Reliability::DLQ::FileStorage.new(file_path: File.join(Dir.mktmpdir("dlq_test"), "dlq.jsonl")) }
+  let(:dlq_storage) { E11y::Reliability::DLQ::FileAdapter.new(file_path: File.join(Dir.mktmpdir("dlq_test"), "dlq.jsonl")) }
   let(:dlq_filter) { E11y::Reliability::DLQ::Filter.new }
 
   before do
@@ -382,7 +382,7 @@ RSpec.describe "Reliability Features Integration", :integration do
 
       # Create DLQ with small max_size
       temp_dir = Dir.mktmpdir("dlq_rotation_test")
-      small_dlq = E11y::Reliability::DLQ::FileStorage.new(
+      small_dlq = E11y::Reliability::DLQ::FileAdapter.new(
         file_path: File.join(temp_dir, "dlq.jsonl"),
         max_file_size_mb: 0.001 # 1KB for testing
       )

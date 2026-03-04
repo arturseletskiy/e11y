@@ -153,7 +153,7 @@ module E11y
       @active_job = ActiveJobConfig.new
       @sidekiq = SidekiqConfig.new
       @error_handling = ErrorHandlingConfig.new # ✅ C18 Resolution
-      @dlq_storage = nil # Set by user (e.g., DLQ::FileStorage instance)
+      @dlq_storage = nil # Set by user (e.g., DLQ::FileAdapter instance)
       @dlq_filter = nil # Set by user (e.g., DLQ::Filter instance)
       @rate_limiting = RateLimitingConfig.new
       @slo_tracking = SLOTrackingConfig.new # ✅ L3.14.1
