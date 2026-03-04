@@ -33,7 +33,7 @@ RSpec.describe E11y::Reliability::DLQ::Base do
           id == "good"
         end
       end
-      result = subclass.new.replay_batch(["good", "bad"])
+      result = subclass.new.replay_batch(%w[good bad])
       expect(result).to eq({ success_count: 1, failure_count: 1 })
     end
   end

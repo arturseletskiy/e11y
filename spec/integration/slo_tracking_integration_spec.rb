@@ -72,15 +72,11 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
   def reset_yabeda_metrics!
     # Reset counter and histogram values by accessing their internal storage
     # This is a hack but necessary since Yabeda.reset! breaks metric registration
-    if Yabeda.e11y.respond_to?(:slo_http_requests_total)
-      Yabeda.e11y.slo_http_requests_total.instance_variable_get(:@values)&.clear
-    end
+    Yabeda.e11y.slo_http_requests_total.instance_variable_get(:@values)&.clear if Yabeda.e11y.respond_to?(:slo_http_requests_total)
     if Yabeda.e11y.respond_to?(:slo_http_request_duration_seconds)
       Yabeda.e11y.slo_http_request_duration_seconds.instance_variable_get(:@values)&.clear
     end
-    if Yabeda.e11y.respond_to?(:slo_background_jobs_total)
-      Yabeda.e11y.slo_background_jobs_total.instance_variable_get(:@values)&.clear
-    end
+    Yabeda.e11y.slo_background_jobs_total.instance_variable_get(:@values)&.clear if Yabeda.e11y.respond_to?(:slo_background_jobs_total)
     if Yabeda.e11y.respond_to?(:slo_background_job_duration_seconds)
       Yabeda.e11y.slo_background_job_duration_seconds.instance_variable_get(:@values)&.clear
     end

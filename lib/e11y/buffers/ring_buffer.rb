@@ -208,7 +208,6 @@ module E11y
       #
       # @param event [Hash] Event that caused overflow
       # @return [Boolean] true if event was eventually added, false if dropped
-      # rubocop:disable Metrics/MethodLength
       def handle_overflow(event)
         case @overflow_strategy
         when :drop_oldest
@@ -231,7 +230,6 @@ module E11y
           end
         end
       end
-      # rubocop:enable Metrics/MethodLength
 
       # Wait for buffer space (with timeout)
       #

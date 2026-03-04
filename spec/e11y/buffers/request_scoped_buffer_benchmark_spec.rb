@@ -6,7 +6,6 @@ require "e11y/buffers/request_scoped_buffer"
 # Benchmark and stress tests for RequestScopedBuffer
 #
 # These tests verify thread-local isolation and request lifecycle performance.
-# rubocop:disable RSpec/ExampleLength
 RSpec.describe E11y::Buffers::RequestScopedBuffer, :benchmark do
   before { described_class.reset_all }
   after { described_class.reset_all }
@@ -347,4 +346,3 @@ RSpec.describe E11y::Buffers::RequestScopedBuffer, :benchmark do
     end
   end
 end
-# rubocop:enable RSpec/ExampleLength

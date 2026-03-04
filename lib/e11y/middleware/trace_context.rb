@@ -62,7 +62,7 @@ module E11y
 
       private
 
-      # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # rubocop:disable Metrics/AbcSize
       # Add distributed tracing fields to event data
       # @param event_data [Hash] Event data to enrich
       # @return [void]
@@ -93,7 +93,7 @@ module E11y
 
         event_data[:audit_event] = event_class.audit_event?
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # rubocop:enable Metrics/AbcSize
 
       # Add service context fields to event data
       # @param event_data [Hash] Event data to enrich

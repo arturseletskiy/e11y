@@ -66,7 +66,7 @@ module E11y
         #   # Error event - not buffered, triggers flush
         #   RequestScopedBuffer.add_event({ event_name: "error", severity: :error })
         #   # => false (and flushes buffer)
-        # rubocop:disable Metrics/MethodLength, Naming/PredicateMethod
+        # rubocop:disable Naming/PredicateMethod
         def add_event(event_data)
           return false unless active? # Not in request scope
 
@@ -95,7 +95,7 @@ module E11y
           increment_metric("e11y.request_buffer.events_buffered")
           true
         end
-        # rubocop:enable Metrics/MethodLength, Naming/PredicateMethod
+        # rubocop:enable Naming/PredicateMethod
 
         # Flush buffered events on error
         #

@@ -39,7 +39,6 @@ module E11y
         # @param event_data [Hash] Event data
         # @param metadata [Hash] Failure metadata (error, retry_count, adapter, etc.)
         # @return [String] Event ID (UUID)
-        # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
         # DLQ save requires building entry, writing, rotation, cleanup, and metrics
         def save(event_data, metadata: {})
           event_id = SecureRandom.uuid
@@ -66,7 +65,6 @@ module E11y
 
           event_id
         end
-        # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
         # List DLQ entries with optional filters.
         #
@@ -74,7 +72,7 @@ module E11y
         # @param offset [Integer] Number of entries to skip
         # @param filters [Hash] Filter options (event_name, after, before)
         # @return [Array<Hash>] Array of DLQ entries
-        # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+        # rubocop:disable Metrics/AbcSize
         # DLQ listing requires file iteration, pagination, multiple filters, and error handling
         def list(limit: 100, offset: 0, filters: {})
           entries = []
@@ -101,12 +99,12 @@ module E11y
           increment_metric("e11y.dlq.parse_error", error: e.class.name)
           entries
         end
-        # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+        # rubocop:enable Metrics/AbcSize
 
         # Get DLQ statistics.
         #
         # @return [Hash] Statistics (total_entries, file_size_mb, oldest_entry, newest_entry)
-        # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+        # rubocop:disable Metrics/AbcSize
         # DLQ stats requires reading file size, counting entries, extracting timestamps, and error handling
         def stats
           return default_stats unless File.exist?(@file_path)
@@ -135,7 +133,7 @@ module E11y
           increment_metric("e11y.dlq.stats_error", error: e.class.name)
           default_stats
         end
-        # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
+        # rubocop:enable Metrics/AbcSize
 
         # Replay single event from DLQ.
         #

@@ -169,7 +169,6 @@ RSpec.describe "E11y::Metrics Boot-Time Validation" do
     end
 
     context "with complex scenarios" do
-      # rubocop:disable RSpec/ExampleLength
       # Integration test requires multiple metric registrations for validation
       it "validates multiple metric groups" do
         # Group 1: orders_total (valid)
@@ -210,9 +209,7 @@ RSpec.describe "E11y::Metrics Boot-Time Validation" do
 
         expect { registry.validate_all! }.not_to raise_error
       end
-      # rubocop:enable RSpec/ExampleLength
 
-      # rubocop:disable RSpec/ExampleLength
       # Integration test requires multiple metric registrations for conflict detection
       it "detects conflict immediately during registration" do
         # Group 1: orders_total (valid)
@@ -252,7 +249,6 @@ RSpec.describe "E11y::Metrics Boot-Time Validation" do
           )
         end.to raise_error(E11y::Metrics::Registry::LabelConflictError)
       end
-      # rubocop:enable RSpec/ExampleLength
     end
   end
 

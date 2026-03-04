@@ -204,7 +204,6 @@ module E11y
       #
       # @see ADR-004 Section 7.1 (Retry Policy via gem-level middleware)
       # @see ADR-004 Section 6.1 (Connection pooling via HTTP client)
-      # rubocop:disable Metrics/MethodLength
       # HTTP client configuration requires detailed retry and connection settings
       def build_connection!
         @connection = Faraday.new(url: @url) do |f|
@@ -228,7 +227,6 @@ module E11y
           f.adapter Faraday.default_adapter
         end
       end
-      # rubocop:enable Metrics/MethodLength
 
       # Check if buffer should be flushed
       def flush_if_needed!
@@ -303,9 +301,7 @@ module E11y
 
         # C04: Apply cardinality protection if enabled (enterprise use case)
         # Disabled by default - Loki is a log system, labels are for stream filtering only
-        if @enable_cardinality_protection && @cardinality_protection
-          all_labels = @cardinality_protection.filter(all_labels, "loki.stream")
-        end
+        all_labels = @cardinality_protection.filter(all_labels, "loki.stream") if @enable_cardinality_protection && @cardinality_protection
 
         all_labels.transform_keys(&:to_s)
       end

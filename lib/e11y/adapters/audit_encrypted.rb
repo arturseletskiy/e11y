@@ -161,7 +161,6 @@ module E11y
       #
       # @param encrypted [Hash] Encrypted data with nonce and tag
       # @return [Hash] Decrypted event data
-      # rubocop:disable Metrics/AbcSize
       # Cryptographic operations require multiple steps for secure decryption
       def decrypt_event(encrypted)
         cipher = OpenSSL::Cipher.new(CIPHER)
@@ -175,7 +174,6 @@ module E11y
 
         JSON.parse(plaintext, symbolize_names: true)
       end
-      # rubocop:enable Metrics/AbcSize
 
       # Write encrypted data to storage
       #

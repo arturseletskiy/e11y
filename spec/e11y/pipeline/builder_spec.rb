@@ -163,7 +163,6 @@ RSpec.describe E11y::Pipeline::Builder do
   end
 
   describe "#build" do
-    # rubocop:disable RSpec/ExampleLength
     it "builds a functional pipeline" do
       builder.use pre_processing_middleware
       builder.use security_middleware
@@ -235,7 +234,6 @@ RSpec.describe E11y::Pipeline::Builder do
       expect(result[:custom_arg]).to eq("test_value")
       expect(result[:option]).to eq(123)
     end
-    # rubocop:enable RSpec/ExampleLength
   end
 
   describe "#validate_zones!" do

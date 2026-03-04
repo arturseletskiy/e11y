@@ -66,7 +66,6 @@ module E11y
       # Check if currently in error spike state
       #
       # @return [Boolean] true if error spike detected
-      # rubocop:disable Metrics/MethodLength
       # Error spike detection requires checking active spike, expiration, and new spike detection
       def error_spike?
         @mutex.synchronize do
@@ -94,7 +93,6 @@ module E11y
           false
         end
       end
-      # rubocop:enable Metrics/MethodLength
 
       # Record an event for error rate tracking
       #

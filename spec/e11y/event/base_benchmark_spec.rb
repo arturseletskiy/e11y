@@ -20,7 +20,6 @@ RSpec.describe E11y::Event::Base, ".track performance", :benchmark do
   let(:payload) { { user_id: 123, action: "signup" } }
 
   describe "performance requirements" do
-    # rubocop:disable RSpec/ExampleLength
     it "tracks events in <70μs (p99) with validation_mode :always" do
       # Warm-up
       10.times { event_class.track(**payload) }
@@ -127,7 +126,6 @@ RSpec.describe E11y::Event::Base, ".track performance", :benchmark do
       # DoD: <50μs p99 achievable WITHOUT validation (allow GC outliers up to 200μs)
       expect(p99).to be < 200, "P99 latency (#{p99.round(2)}μs) exceeds 200μs threshold (never)"
     end
-    # rubocop:enable RSpec/ExampleLength
   end
 
   describe "zero-allocation verification" do

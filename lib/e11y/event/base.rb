@@ -241,9 +241,7 @@ module E11y
         #   end
         def severity(value = nil)
           if value
-            unless SEVERITIES.include?(value)
-              raise ArgumentError, "Invalid severity: #{value}. Must be one of: #{SEVERITIES.join(', ')}"
-            end
+            raise ArgumentError, "Invalid severity: #{value}. Must be one of: #{SEVERITIES.join(', ')}" unless SEVERITIES.include?(value)
 
             @severity = value
           end
@@ -300,9 +298,7 @@ module E11y
           @retention_period = value if value
           # Return explicitly set retention_period OR inherit from parent (if set) OR config default OR final fallback
           return @retention_period if @retention_period
-          if superclass != E11y::Event::Base && superclass.instance_variable_get(:@retention_period)
-            return superclass.retention_period
-          end
+          return superclass.retention_period if superclass != E11y::Event::Base && superclass.instance_variable_get(:@retention_period)
 
           # Fallback to configuration or 30 days
           E11y.configuration&.default_retention_period || 30.days
@@ -381,7 +377,6 @@ module E11y
         #   class CriticalEvent < E11y::Event::Base
         #     sample_rate 1.0  # 100% sampling
         #   end
-        # rubocop:disable Metrics/CyclomaticComplexity
         def sample_rate(value = nil)
           if value
             unless value.is_a?(Numeric) && value >= 0.0 && value <= 1.0
@@ -393,13 +388,10 @@ module E11y
 
           # Return explicitly set sample_rate OR inherit from parent (if set) OR nil (use resolve_sample_rate)
           return @sample_rate if @sample_rate
-          if superclass != E11y::Event::Base && superclass.instance_variable_get(:@sample_rate)
-            return superclass.sample_rate
-          end
+          return superclass.sample_rate if superclass != E11y::Event::Base && superclass.instance_variable_get(:@sample_rate)
 
           nil
         end
-        # rubocop:enable Metrics/CyclomaticComplexity
 
         # Configure value-based sampling (FEAT-4849)
         #
@@ -476,9 +468,7 @@ module E11y
 
           # Return explicitly set config OR inherit from parent (if set) OR nil
           return @adaptive_sampling if @adaptive_sampling
-          if superclass != E11y::Event::Base && superclass.instance_variable_get(:@adaptive_sampling)
-            return superclass.adaptive_sampling
-          end
+          return superclass.adaptive_sampling if superclass != E11y::Event::Base && superclass.instance_variable_get(:@adaptive_sampling)
 
           nil
         end

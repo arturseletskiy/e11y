@@ -162,9 +162,7 @@ module E11y
         return true if event_class.respond_to?(:audit_event?) && event_class.audit_event?
 
         # 2. Check trace-aware sampling (C05)
-        if @trace_aware && event_data[:trace_id]
-          return trace_sampling_decision(event_data[:trace_id], event_class, event_data)
-        end
+        return trace_sampling_decision(event_data[:trace_id], event_class, event_data) if @trace_aware && event_data[:trace_id]
 
         # 3. Get sample rate for this event
         sample_rate = determine_sample_rate(event_class, event_data)
@@ -186,7 +184,7 @@ module E11y
       # @param event_class [Class] The event class
       # @param event_data [Hash] Event payload (for value-based sampling)
       # @return [Float] Sample rate (0.0-1.0)
-      # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
       # Sample rate determination follows priority chain: error spike → value-based →
       # load-based → severity → event-level → default
       def determine_sample_rate(event_class, event_data = nil)
@@ -231,7 +229,7 @@ module E11y
         # 4. Default/load-based rate
         base_rate
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
       # Trace-aware sampling decision (C05 Resolution)
       #

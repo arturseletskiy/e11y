@@ -44,9 +44,7 @@ module E11y
       def self.signing_key
         @signing_key ||= ENV.fetch("E11Y_AUDIT_SIGNING_KEY") do
           # Development fallback (NOT for production!)
-          if defined?(::Rails) && ::Rails.env.production?
-            raise E11y::Error, "E11Y_AUDIT_SIGNING_KEY must be set in production"
-          end
+          raise E11y::Error, "E11Y_AUDIT_SIGNING_KEY must be set in production" if defined?(::Rails) && ::Rails.env.production?
 
           "development_key_#{SecureRandom.hex(32)}"
         end
