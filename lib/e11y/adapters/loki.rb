@@ -91,6 +91,7 @@ module E11y
         @labels = config.fetch(:labels, {})
         @batch_size = config.fetch(:batch_size, DEFAULT_BATCH_SIZE)
         @batch_timeout = config.fetch(:batch_timeout, DEFAULT_BATCH_TIMEOUT)
+        @timeout = config.fetch(:timeout, 5)
         @compress = config.fetch(:compress, true)
         @tenant_id = config[:tenant_id]
         @enable_cardinality_protection = config.fetch(:enable_cardinality_protection, false)
@@ -155,11 +156,19 @@ module E11y
         end
       end
 
-      # Check if adapter is healthy
+      # Check if adapter is healthy by probing the Loki /ready endpoint.
       #
-      # @return [Boolean] True if connection is established
+      # @return [Boolean] True if Loki responds with a 2xx status
       def healthy?
-        @connection&.respond_to?(:get)
+        return false unless @connection
+
+        @connection.get("/ready") do |req|
+          req.options.timeout = [@timeout, 2].min
+          req.options.open_timeout = [@timeout, 2].min
+        end
+        true
+      rescue StandardError
+        false
       end
 
       # Adapter capabilities

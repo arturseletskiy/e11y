@@ -124,9 +124,6 @@ end
 Then("calling healthy? should not raise an error") do
   expect(@health_error).to be_nil,
     "healthy? raised: #{@health_error&.class}: #{@health_error&.message}"
-  # Documents current (buggy) stable behavior: always returns true
-  expect(@health_result).to be(true),
-    "Expected healthy? to return true (current behavior), got: #{@health_result.inspect}"
 end
 
 # ---------------------------------------------------------------------------

@@ -45,17 +45,12 @@ Feature: Adapter configurations
 
   # ─── Loki Adapter ──────────────────────────────────────────────────────────
 
-  # BUG-012: Loki#healthy? checks @connection.respond_to?(:get).
-  # A Faraday object always responds to :get, so healthy? is always true
-  # even when the Loki server is completely unreachable.
-  @wip
   Scenario: Loki healthy? returns false when the host is unreachable
     Given a Loki adapter pointing to "http://localhost:19998"
     When I call healthy? on the Loki adapter
     Then the Loki healthy? result should be false
 
-  Scenario: Loki healthy? does not raise an error (current stable behavior)
-    # Documents the current (always-true) behavior so regressions are detected.
+  Scenario: Loki healthy? does not raise an error
     Given a Loki adapter pointing to "http://localhost:19998"
     When I call healthy? on the Loki adapter
     Then calling healthy? should not raise an error
