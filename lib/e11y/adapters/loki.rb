@@ -92,6 +92,7 @@ module E11y
         @batch_size = config.fetch(:batch_size, DEFAULT_BATCH_SIZE)
         @batch_timeout = config.fetch(:batch_timeout, DEFAULT_BATCH_TIMEOUT)
         @timeout = config.fetch(:timeout, 5)
+        @health_check_timeout = [@timeout, 2].min
         @compress = config.fetch(:compress, true)
         @tenant_id = config[:tenant_id]
         @enable_cardinality_protection = config.fetch(:enable_cardinality_protection, false)
@@ -163,8 +164,8 @@ module E11y
         return false unless @connection
 
         @connection.get("/ready") do |req|
-          req.options.timeout = [@timeout, 2].min
-          req.options.open_timeout = [@timeout, 2].min
+          req.options.timeout = @health_check_timeout
+          req.options.open_timeout = @health_check_timeout
         end
         true
       rescue StandardError
