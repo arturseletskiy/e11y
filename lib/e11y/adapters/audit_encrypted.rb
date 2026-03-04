@@ -88,7 +88,7 @@ module E11y
       def read(event_id)
         encrypted_data = read_from_storage(event_id)
         decrypt_event(encrypted_data)
-      rescue OpenSSL::Cipher::CipherError, JSON::ParserError => e
+      rescue Errno::ENOENT, OpenSSL::Cipher::CipherError, JSON::ParserError => e
         warn "AuditEncrypted read error (wrong key or corrupt data): #{e.message}"
         nil
       end

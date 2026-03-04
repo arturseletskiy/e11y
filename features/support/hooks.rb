@@ -24,6 +24,8 @@ INITIAL_PIPELINE_MIDDLEWARES = E11y.config.pipeline.middlewares.dup.freeze
 Before do
   E11y.config.pipeline.instance_variable_set(:@middlewares, INITIAL_PIPELINE_MIDDLEWARES.dup)
   E11y.config.instance_variable_set(:@built_pipeline, nil)
+  E11y.config.routing_rules = []
+  E11y.config.fallback_adapters = [:memory]
   E11y.config.rate_limiting.enabled = false
   E11y.config.rate_limiting.global_limit = 10_000
   E11y.config.rate_limiting.per_event_limit = 1_000
