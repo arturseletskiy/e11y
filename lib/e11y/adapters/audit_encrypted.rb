@@ -4,6 +4,7 @@ require "openssl"
 require "json"
 require "fileutils"
 require "base64"
+require "e11y/event/base"
 
 module E11y
   module Adapters
@@ -88,12 +89,42 @@ module E11y
       def read(event_id)
         encrypted_data = read_from_storage(event_id)
         decrypt_event(encrypted_data)
-      rescue Errno::ENOENT, OpenSSL::Cipher::CipherError, JSON::ParserError => e
-        warn "AuditEncrypted read error (wrong key or corrupt data): #{e.message}"
+      rescue Errno::ENOENT => e
+        warn "AuditEncrypted read error (file not found): #{e.message}"
         nil
+      rescue JSON::ParserError => e
+        warn "AuditEncrypted read error (corrupt data): #{e.message}"
+        nil
+      rescue OpenSSL::Cipher::CipherError => e
+        # SECURITY: decryption failure indicates tampered or corrupt ciphertext.
+        # Re-raise so callers can handle it; also attempt to emit a security event.
+        track_security_event(event_id, e)
+        raise
       end
 
       private
+
+      # Emit a security event when decryption fails (potential tampering).
+      # Guards against E11y not being fully configured in non-production envs.
+      #
+      # @param event_id [String] The event ID that failed to decrypt
+      # @param error [OpenSSL::Cipher::CipherError] The decryption error
+      # @return [void]
+      def track_security_event(event_id, error)
+        E11y::Event::Base.track(
+          event_name: "e11y.security.audit_decryption_failed",
+          severity: :error,
+          payload: {
+            event_id: event_id,
+            error_class: error.class.name,
+            error_message: error.message,
+            adapter: self.class.name
+          }
+        )
+      rescue StandardError
+        warn "AuditEncrypted: decryption failure detected for #{event_id} " \
+             "(#{error.message}); security event could not be tracked"
+      end
 
       # Encrypt event data with AES-256-GCM
       #
