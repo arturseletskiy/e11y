@@ -20,6 +20,17 @@ module Events
       counter :orders_total, tags: [:status]
     end
 
+    slo do
+      enabled true
+      slo_status_from do |payload|
+        case payload[:status]
+        when "pending", "completed" then "success"
+        when "failed", "cancelled" then "failure"
+        else "success"
+        end
+      end
+    end
+
     # Use fallback routing for integration tests
     adapters []
   end

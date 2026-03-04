@@ -1,10 +1,6 @@
 # features/slo_tracking.feature
 #
 # Verifies E11y::SLO::Tracker and related SLO infrastructure.
-# Known bugs documented with @wip tag.
-#
-# Bug tags:
-#   @wip — scenario exposes a known bug; expected to FAIL.
 Feature: SLO Tracking
 
   As a platform engineer
@@ -16,16 +12,10 @@ Feature: SLO Tracking
     And the memory adapter is empty
     And SLO tracking is reset to its default state
 
-  # BUG-005: SLOTrackingConfig initializes @enabled = false
-  # The README claims "Zero-Config SLO Tracking" but the default is opt-in disabled.
-  @wip
   Scenario: SLO tracking is enabled by default without any configuration
     When I inspect the default SLO tracking configuration
     Then E11y.configuration.slo_tracking.enabled should be true
 
-  # BUG-006: E11y::SLO::Tracker.status does not exist
-  # Calling it raises NoMethodError.
-  @wip
   Scenario: E11y::SLO::Tracker.status returns a Hash with endpoint data
     Given SLO tracking is enabled
     And I POST to "/orders" with order params:
@@ -47,9 +37,6 @@ Feature: SLO Tracking
     Then the SLO tracker should have recorded a request for "posts#error"
     And the normalize_status for 500 should return "5xx"
 
-  # BUG-007: E11y::Middleware::EventSlo is NOT in the default pipeline
-  # Event-level SLO never fires without manual opt-in.
-  @wip
   Scenario: Event-level SLO fires when EventSlo middleware is in the pipeline
     Given E11y::Middleware::EventSlo is added to the pipeline
     When I POST to "/orders" with order params:
@@ -62,8 +49,8 @@ Feature: SLO Tracking
       | order[status] | pending |
     Then no SLO metrics should have been recorded
 
-  Scenario: SLO tracking requires explicit enablement
-    # Documents the current reality: default is disabled, must opt-in.
+  Scenario: SLO tracking can be explicitly disabled
+    # SLO is enabled by default; it can be opted out explicitly.
+    Given SLO tracking is explicitly disabled
     When I inspect the default SLO tracking configuration
     Then E11y.configuration.slo_tracking.enabled should be false
-    And enabling SLO tracking requires setting slo_tracking.enabled to true

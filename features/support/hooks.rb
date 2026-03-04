@@ -32,6 +32,8 @@ Before do
   E11y.config.rate_limiting.window = 1.0
   E11y.config.request_buffer.enabled = false
   E11y::Buffers::RequestScopedBuffer.reset_all
+  E11y::Metrics.reset_backend!
+  E11y::SLO::Tracker.reset!
   clear_events!
 end
 

@@ -361,7 +361,7 @@ module E11y
     attr_accessor :enabled
 
     def initialize
-      @enabled = false # Opt-in (enable explicitly)
+      @enabled = true # Zero-config: enabled by default (README: "Zero-Config SLO Tracking")
     end
   end
 end

@@ -31,7 +31,26 @@ module E11y
     # @note C11 Resolution (Sampling Correction): Not yet implemented.
     #   Requires Phase 2.8 (Stratified Sampling) for accurate SLO with sampling.
     module Tracker
+      # In-memory store for tracked request data (per endpoint).
+      # Populated by track_http_request; queryable via Tracker.status.
+      @_store = {}
+
       class << self
+        # Return a snapshot of all tracked endpoints and their request counts.
+        #
+        # @return [Hash] Map of "controller#action" => { requests: Integer }
+        def status
+          @_store.dup
+        end
+
+        # Reset the in-memory store (useful for testing and per-request isolation).
+        #
+        # @return [void]
+        # @api private
+        def reset!
+          @_store = {}
+        end
+
         # Track HTTP request for SLO metrics.
         #
         # @param controller [String] Controller name
@@ -58,6 +77,12 @@ module E11y
             labels.except(:status),
             buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10]
           )
+
+          # Store in-memory for status reporting
+          key = "#{controller}##{action}"
+          @_store ||= {}
+          @_store[key] ||= { requests: 0 }
+          @_store[key][:requests] += 1
         end
 
         # Track background job for SLO metrics.
