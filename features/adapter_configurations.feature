@@ -13,14 +13,7 @@ Feature: Adapter configurations
 
   # ─── Stdout Adapter ─────────────────────────────────────────────────────────
 
-  # BUG-011: Stdout adapter reads :pretty_print, NOT :format.
-  # Passing format: :pretty as the documented key has no effect on the output format.
-  # When user passes format: :compact expecting compact output, adapter ignores it
-  # and defaults to pretty_print: true (multi-line). Documented here via compact case.
-  @wip
-  Scenario: Stdout adapter compact output when format is not the :pretty_print key
-    # BUG: User passes pretty_print: false but uses :format key — adapter uses :pretty_print default (true)
-    # This scenario uses format: :compact expecting single-line output but gets multi-line.
+  Scenario: Stdout adapter compact output with format: :compact key
     Given a Stdout adapter with format config key "format: :compact"
     When I write an event through the Stdout adapter
     Then the Stdout output should be a single-line JSON string
