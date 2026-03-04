@@ -89,7 +89,7 @@ module E11y
         #
         # @raise [E11y::ValidationError] if payload doesn't match schema (when validation runs)
         def track(**payload)
-          return unless E11y.config.enabled
+          return if E11y.config.enabled == false
 
           # Build event data hash for pipeline processing
           event_data = {
@@ -99,6 +99,7 @@ module E11y
             severity: severity,
             version: version,
             adapters: adapters,
+            explicit_adapters: explicit_adapters?,
             timestamp: Time.now.utc,
             retention_period: retention_period,
             context: build_context
@@ -326,16 +327,27 @@ module E11y
         #     config.adapters[:errors_tracker] = E11y::Adapters::Sentry.new(...)
         #   end
         def adapters(*list)
-          @adapters = list.flatten if list.any?
+          if list.any?
+            @adapters = list.flatten
+            @explicit_adapters = true # Track that adapters were explicitly configured
+          end
           # Return explicitly set adapters OR inherit from parent (if set) OR resolve from severity
           return @adapters if @adapters
           return superclass.adapters if superclass != E11y::Event::Base && superclass.instance_variable_get(:@adapters)
 
-          # Audit events without explicit adapters return empty array (use routing rules)
-          # This allows routing_rules to route audit events dynamically (UC-012, UC-019)
-          return [] if audit_event?
-
+          # Resolve adapters from severity (audit events use routing rules via explicit_adapters? flag)
           resolved_adapters
+        end
+
+        # Check if adapters were explicitly configured (not inferred from severity)
+        #
+        # Used by routing middleware to distinguish explicit adapter routing from
+        # severity-based defaults. Audit events without explicit adapters use
+        # routing_rules dynamically (UC-012, UC-019).
+        #
+        # @return [Boolean] true if adapters were set via DSL (e.g., adapters :audit_encrypted)
+        def explicit_adapters?
+          @explicit_adapters == true
         end
 
         # Get event name (normalized)

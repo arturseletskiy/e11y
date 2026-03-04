@@ -79,7 +79,15 @@ module E11y
         end
 
         # 1. Determine target adapters (explicit or via routing rules)
-        target_adapters = if event_data[:adapters]&.any?
+        #
+        # Routing priority:
+        # - Non-audit events with adapters → use those directly (bypass routing rules)
+        # - Audit events with EXPLICIT adapters (adapters :foo DSL) → use those (bypass routing rules)
+        # - Audit events WITHOUT explicit adapters → always apply routing rules (UC-012, UC-019)
+        #   This allows audit events to be routed dynamically by routing_rules config
+        use_explicit = event_data[:adapters]&.any? &&
+                       (!event_data[:audit_event] || event_data[:explicit_adapters])
+        target_adapters = if use_explicit
                             # Explicit adapters bypass routing rules
                             event_data[:adapters]
                           else
@@ -109,7 +117,7 @@ module E11y
         event_data[:routing] = {
           adapters: target_adapters,
           routed_at: Time.now.utc,
-          routing_type: event_data[:adapters]&.any? ? :explicit : :rules
+          routing_type: use_explicit ? :explicit : :rules
         }
 
         # 4. Increment metrics

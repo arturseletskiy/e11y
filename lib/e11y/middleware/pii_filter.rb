@@ -88,6 +88,9 @@ module E11y
       # @param event_data [Hash] Event data
       # @return [Symbol] :tier1, :tier2, or :tier3
       def determine_tier(event_data)
+        # Audit events skip PII filtering (original data must be preserved for compliance)
+        return :tier1 if event_data[:audit_event]
+
         event_class = event_data[:event_class]
         return :tier2 unless event_class.respond_to?(:pii_tier)
 
