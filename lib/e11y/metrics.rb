@@ -21,6 +21,15 @@ module E11y
   # @see ADR-002 §3 (Metrics Integration)
   # @see ADR-016 §3 (Self-Monitoring Metrics)
   module Metrics
+    # No-op metrics backend used when no real backend (e.g. Yabeda) is configured.
+    # Accepts all metric calls and silently discards them so callers never
+    # need to guard against a nil backend.
+    class NullBackend
+      def increment(_name, _labels = {}, value: 1); end
+      def histogram(_name, _value, _labels = {}, buckets: nil); end
+      def gauge(_name, _value, _labels = {}); end
+    end
+
     class << self
       # Track a counter metric (monotonically increasing value).
       #
@@ -99,8 +108,8 @@ module E11y
         # rubocop:enable Style/ClassEqualityComparison
         return yabeda_adapter if yabeda_adapter
 
-        # No backend configured → noop
-        nil
+        # No Yabeda adapter configured — fall back to NullBackend
+        NullBackend.new
       end
     end
   end
