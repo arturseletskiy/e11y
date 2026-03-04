@@ -68,7 +68,8 @@ module E11y
         return nil unless event_data
 
         # 0. Buffer debug events when request-scoped buffering is active.
-        #    Debug events are held in memory and flushed only on request failure.
+        #    Only :debug severity is buffered — see ADR-001 §7 ("Request Buffer: :debug only").
+        #    On request success → buffer discarded. On request failure → flushed to adapters.
         #    Non-debug events bypass the buffer and are written immediately.
         if E11y.config.request_buffer&.enabled &&
            E11y::Buffers::RequestScopedBuffer.active? &&
