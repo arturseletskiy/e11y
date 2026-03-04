@@ -491,6 +491,9 @@ RSpec.describe E11y::Middleware::PIIFilter do
   end
 
   describe "Pattern-Based Filtering" do
+    # Fields not listed in pii_filtering config still get pattern-scanned.
+    # Fields with an explicit strategy (including :allow) are skipped by the
+    # pattern scanner — the developer's intent wins.
     let(:event_class) do
       Class.new(E11y::Event::Base) do
         def self.name
@@ -499,17 +502,34 @@ RSpec.describe E11y::Middleware::PIIFilter do
 
         schema do
           required(:message).filled(:string)
+          optional(:safe_field).maybe(:string)
         end
 
         contains_pii true
 
         pii_filtering do
+          # :safe_field has no explicit strategy — pattern filtering applies to it.
+          # :message is explicitly allowed — pattern filtering must NOT touch it.
           allows :message
         end
       end
     end
 
-    it "filters email patterns in content" do
+    it "filters email patterns in content of non-explicitly-configured fields" do
+      event_data = {
+        event_class: event_class,
+        payload: {
+          safe_field: "Contact us at support@example.com"
+        }
+      }
+
+      result = middleware.call(event_data)
+
+      expect(result[:payload][:safe_field]).not_to include("support@example.com")
+      expect(result[:payload][:safe_field]).to include("[FILTERED]")
+    end
+
+    it "does not pattern-filter an explicitly :allow-ed field" do
       event_data = {
         event_class: event_class,
         payload: {
@@ -519,47 +539,47 @@ RSpec.describe E11y::Middleware::PIIFilter do
 
       result = middleware.call(event_data)
 
-      expect(result[:payload][:message]).not_to include("support@example.com")
-      expect(result[:payload][:message]).to include("[FILTERED]")
+      # :allow means the value passes through — pattern scan must not touch it.
+      expect(result[:payload][:message]).to eq("Contact us at support@example.com")
     end
 
-    it "filters SSN patterns" do
+    it "filters SSN patterns in non-explicitly-configured fields" do
       event_data = {
         event_class: event_class,
         payload: {
-          message: "SSN: 123-45-6789"
+          safe_field: "SSN: 123-45-6789"
         }
       }
 
       result = middleware.call(event_data)
 
-      expect(result[:payload][:message]).not_to include("123-45-6789")
+      expect(result[:payload][:safe_field]).not_to include("123-45-6789")
     end
 
-    it "filters credit card patterns" do
+    it "filters credit card patterns in non-explicitly-configured fields" do
       event_data = {
         event_class: event_class,
         payload: {
-          message: "Card: 4111 1111 1111 1111"
+          safe_field: "Card: 4111 1111 1111 1111"
         }
       }
 
       result = middleware.call(event_data)
 
-      expect(result[:payload][:message]).not_to include("4111 1111 1111 1111")
+      expect(result[:payload][:safe_field]).not_to include("4111 1111 1111 1111")
     end
 
-    it "filters IP addresses" do
+    it "filters IP addresses in non-explicitly-configured fields" do
       event_data = {
         event_class: event_class,
         payload: {
-          message: "From IP: 192.168.1.100"
+          safe_field: "From IP: 192.168.1.100"
         }
       }
 
       result = middleware.call(event_data)
 
-      expect(result[:payload][:message]).not_to include("192.168.1.100")
+      expect(result[:payload][:safe_field]).not_to include("192.168.1.100")
     end
   end
 
@@ -603,10 +623,30 @@ RSpec.describe E11y::Middleware::PIIFilter do
     end
 
     context "with arrays in payload" do
+      # No explicit strategy for :items → pattern filtering applies to it.
       let(:event_class_array) do
         Class.new(E11y::Event::Base) do
           def self.name
             "Events::ArrayEvent"
+          end
+
+          schema do
+            required(:items).filled(:array)
+          end
+
+          contains_pii true
+
+          pii_filtering do
+            # :items has no explicit strategy — pattern filtering applies recursively.
+          end
+        end
+      end
+
+      # event class where :items is explicitly :allow-ed — pattern scan skips it.
+      let(:event_class_array_allowed) do
+        Class.new(E11y::Event::Base) do
+          def self.name
+            "Events::ArrayAllowedEvent"
           end
 
           schema do
@@ -657,6 +697,24 @@ RSpec.describe E11y::Middleware::PIIFilter do
         # Pattern filtering should work recursively in nested arrays
         expect(result[:payload][:items][0][0]).not_to include("email1@test.com")
         expect(result[:payload][:items][1][0]).not_to include("192.168.1.1")
+      end
+
+      it "does not pattern-filter an explicitly :allow-ed array field" do
+        event_data = {
+          event_class: event_class_array_allowed,
+          payload: {
+            items: [
+              "User email: john@example.com",
+              "No PII here"
+            ]
+          }
+        }
+
+        result = middleware.call(event_data)
+
+        # :allow means the array and its contents pass through unchanged.
+        expect(result[:payload][:items][0]).to eq("User email: john@example.com")
+        expect(result[:payload][:items][1]).to eq("No PII here")
       end
     end
   end
@@ -748,12 +806,13 @@ RSpec.describe E11y::Middleware::PIIFilter do
       # Call middleware
       result = middleware.call(event_data)
 
-      # Original should be unchanged
+      # Original should be unchanged regardless of what filtering occurred
       expect(original_payload[:data][:nested]).to eq(%w[value1 value2])
       expect(original_payload[:data][:email]).to eq("test@example.com")
 
-      # Result should be filtered
-      expect(result[:payload][:data][:email]).not_to eq("test@example.com")
+      # :data is explicitly :allow-ed so the result passes through unfiltered.
+      # The important guarantee is that the *original* object was not mutated.
+      expect(result[:payload][:data]).to eq(original_payload[:data])
     end
 
     it "handles complex nested structures with arrays (line 250)" do
