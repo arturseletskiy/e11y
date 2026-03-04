@@ -33,7 +33,6 @@ Feature: AuditEncrypted adapter
     And I read the encrypted audit file with the same key
     Then the decrypted payload should contain the original event_name
 
-  @wip
   Scenario: A new AuditEncrypted instance without explicit key cannot decrypt entries from a previous instance
     # BUG: default_encryption_key calls OpenSSL::Random.random_bytes(32) —
     # a new adapter instance gets a DIFFERENT random key on every boot.

@@ -84,10 +84,13 @@ module E11y
       # Read and decrypt audit event (for verification)
       #
       # @param event_id [String] Event ID
-      # @return [Hash] Decrypted event data
+      # @return [Hash, nil] Decrypted event data, or nil if decryption fails
       def read(event_id)
         encrypted_data = read_from_storage(event_id)
         decrypt_event(encrypted_data)
+      rescue OpenSSL::Cipher::CipherError, JSON::ParserError => e
+        warn "AuditEncrypted read error (wrong key or corrupt data): #{e.message}"
+        nil
       end
 
       private
@@ -216,17 +219,27 @@ module E11y
       #
       # @return [String] Encryption key
       def default_encryption_key
-        key = ENV.fetch("E11Y_AUDIT_ENCRYPTION_KEY") do
-          if defined?(::Rails) && ::Rails.env.production?
-            raise E11y::Error, "E11Y_AUDIT_ENCRYPTION_KEY must be set in production"
-          end
-
-          # Development fallback
-          OpenSSL::Random.random_bytes(32)
+        # Use ENV var if provided (required in production)
+        env_key = ENV["E11Y_AUDIT_ENCRYPTION_KEY"]
+        if env_key
+          return env_key.bytesize == 32 ? env_key : [env_key].pack("H*")
         end
 
-        # Ensure 32 bytes
-        key.bytesize == 32 ? key : [key].pack("H*")
+        # In production without ENV var, raise a clear error
+        if defined?(::Rails) && ::Rails.env.production?
+          raise E11y::Error,
+            "E11Y_AUDIT_ENCRYPTION_KEY must be set in production. " \
+            "Generate with: openssl rand -hex 32"
+        end
+
+        # Development/test: derive a stable key from a fixed seed.
+        # This is NOT secure for production — only for development/testing.
+        OpenSSL::PKCS5.pbkdf2_hmac_sha1(
+          "e11y-development-key-not-for-production",
+          "e11y-static-salt",
+          1000,
+          32
+        )
       end
 
       # Default storage path

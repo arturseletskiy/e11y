@@ -131,9 +131,8 @@ RSpec.describe E11y::Adapters::AuditEncrypted do
 
       event_id = File.basename(filepath)
 
-      expect do
-        adapter.read(event_id)
-      end.to raise_error(OpenSSL::Cipher::CipherError)
+      # read now returns nil on decryption failure instead of raising
+      expect(adapter.read(event_id)).to be_nil
     end
 
     it "detects tampered auth_tag" do
@@ -149,9 +148,8 @@ RSpec.describe E11y::Adapters::AuditEncrypted do
 
       event_id = File.basename(filepath)
 
-      expect do
-        adapter.read(event_id)
-      end.to raise_error(OpenSSL::Cipher::CipherError)
+      # read now returns nil on decryption failure instead of raising
+      expect(adapter.read(event_id)).to be_nil
     end
   end
 
