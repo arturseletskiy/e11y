@@ -121,8 +121,8 @@ RSpec.describe "High Cardinality Protection Integration", :integration do
       # we verify via cardinality tracking: status should have cardinality 1 (only "paid")
       # Note: metric name is :orders_total (symbol), but cardinality() expects string
       cardinalities = protection.cardinality("orders_total")
-      expect(cardinalities[:status]).to eq(1),
-                                        "Expected status cardinality to be 1 (only 'paid'), got #{cardinalities[:status]}. All cardinalities: #{cardinalities.inspect}"
+      msg = "Expected status cardinality to be 1 (only 'paid'), got #{cardinalities[:status]}. All: #{cardinalities.inspect}"
+      expect(cardinalities[:status]).to eq(1), msg
 
       # Verify order_id is NOT tracked (denylisted)
       expect(cardinalities).not_to have_key(:order_id),

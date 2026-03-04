@@ -430,7 +430,8 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
 
       # Event should still be stored (after Versioning middleware, event_name is normalized)
       all_events = memory_adapter.events
-      events = all_events.select { |e| ["metric.error.event", "Events::MetricErrorEvent"].include?(e[:event_name]) }
+      metric_error_names = ["metric.error.event", "Events::MetricErrorEvent"]
+      events = all_events.select { |e| metric_error_names.include?(e[:event_name]) }
       expect(events.count).to eq(1)
     end
   end

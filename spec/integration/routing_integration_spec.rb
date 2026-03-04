@@ -129,9 +129,9 @@ RSpec.describe "Routing Middleware Integration", :integration do
       # First rule should match (event_class name includes "Test")
       # Event should go to memory (from first rule)
       memory_events = find_events_by_class(memory_adapter, test_event_class)
-      expect(memory_events.count).to eq(1), "Routing rule should route to memory adapter. Total events: #{memory_adapter.events.count}, event_names: #{memory_adapter.events.map do |e|
-        e[:event_name]
-      end.uniq.inspect}"
+      event_names = memory_adapter.events.map { |e| e[:event_name] }.uniq.inspect
+      msg = "Routing rule should route to memory adapter. Total events: #{memory_adapter.events.count}, event_names: #{event_names}"
+      expect(memory_events.count).to eq(1), msg
     end
 
     it "routes to fallback adapters when no routing rule matches" do
@@ -160,9 +160,9 @@ RSpec.describe "Routing Middleware Integration", :integration do
 
       # Event should go to fallback adapter (memory)
       memory_events = find_events_by_class(memory_adapter, test_event_class)
-      expect(memory_events.count).to eq(1), "Event should be routed to fallback adapter when no rule matches. Total events: #{memory_adapter.events.count}, event_names: #{memory_adapter.events.map do |e|
-        e[:event_name]
-      end.uniq.inspect}"
+      event_names = memory_adapter.events.map { |e| e[:event_name] }.uniq.inspect
+      msg = "Event should be routed to fallback adapter when no rule matches. Total: #{memory_adapter.events.count}, event_names: #{event_names}"
+      expect(memory_events.count).to eq(1), msg
     end
 
     it "supports retention-based routing rules" do
@@ -195,11 +195,11 @@ RSpec.describe "Routing Middleware Integration", :integration do
 
       # Event should go to memory adapter (long retention rule matches)
       memory_events = find_events_by_class(memory_adapter, test_event_class)
-      expect(memory_events.count).to eq(1), "Long retention event should route to memory adapter based on retention rule. Total events: #{memory_adapter.events.count}, event_names: #{memory_adapter.events.map do |e|
-        e[:event_name]
-      end.uniq.inspect}, retention_until: #{memory_adapter.events.map do |e|
-                                            e[:retention_until]
-                                          end.uniq.inspect}"
+      event_names = memory_adapter.events.map { |e| e[:event_name] }.uniq.inspect
+      retention_until = memory_adapter.events.map { |e| e[:retention_until] }.uniq.inspect
+      msg = "Long retention event should route to memory adapter. Total: #{memory_adapter.events.count}, " \
+            "event_names: #{event_names}, retention_until: #{retention_until}"
+      expect(memory_events.count).to eq(1), msg
     end
   end
 

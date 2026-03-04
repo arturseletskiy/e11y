@@ -84,16 +84,11 @@ module IntegrationHelpers
     url ||= ENV.fetch(env_var, nil) if env_var
 
     # Use service-specific health check paths
-    health_path ||= case service_name.downcase
-                    when "loki"
-                      "/ready" # Loki health check endpoint
-                    when "prometheus"
-                      "/-/healthy" # Prometheus health check endpoint
-                    when "elasticsearch"
-                      "/_cluster/health" # Elasticsearch health check endpoint
-                    else
-                      nil # Use default (URL path or "/")
-                    end
+    health_path ||= {
+      "loki" => "/ready",
+      "prometheus" => "/-/healthy",
+      "elasticsearch" => "/_cluster/health"
+    }[service_name.downcase]
 
     return if url && service_available?(url, health_path: health_path)
 

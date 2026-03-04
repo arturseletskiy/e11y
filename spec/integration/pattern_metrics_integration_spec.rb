@@ -106,10 +106,9 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
       # Verify pattern matching (metrics should be registered after event class loaded)
       event_name = Events::OrderPaid.event_name
       matching_metrics = registry.find_matching(event_name)
-      expect(matching_metrics).not_to be_empty,
-                                      "Expected metrics to be registered for #{event_name}. Registry size: #{registry.size}, All metrics: #{registry.all.map do |m|
-                                        "#{m[:pattern]} -> #{m[:name]}"
-                                      end.join(', ')}"
+      all_metrics = registry.all.map { |m| "#{m[:pattern]} -> #{m[:name]}" }.join(", ")
+      msg = "Expected metrics to be registered for #{event_name}. Registry size: #{registry.size}, All metrics: #{all_metrics}"
+      expect(matching_metrics).not_to be_empty, msg
 
       # Find the specific metric we care about (ignore wildcard matches from other tests)
       orders_paid_metric = matching_metrics.find { |m| m[:name] == :orders_paid_total }
