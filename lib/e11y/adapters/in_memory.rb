@@ -151,18 +151,14 @@ module E11y
         end
       end
 
-      # Get the most recently user-tracked event (excludes E11y::Events::Rails::* auto-instrumentation)
+      # Get the most recently written event.
       #
-      # Rails instrumentation fires events after each HTTP request, which would
-      # otherwise be returned by events.last. This method skips those internal
-      # events and returns the last event explicitly tracked by application code.
-      #
-      # @return [Hash, nil] The last non-Rails-internal event, or nil if none
+      # @return [Hash, nil] The last event, or nil if none
       #
       # @example
-      #   adapter.last_event  # Most recently tracked event
+      #   adapter.last_event  # Most recently written event
       def last_event
-        events.reverse_each.find { |e| !e[:event_name].to_s.start_with?("E11y::Events::Rails::") }
+        events.last
       end
 
       # Get last N events

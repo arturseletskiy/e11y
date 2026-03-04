@@ -14,6 +14,7 @@ require "rails/test_unit/railtie"
 # Load E11y gem BEFORE defining Application class
 # This ensures Railtie is registered before Rails collects railties
 require "e11y"
+require "e11y/adapters/in_memory_test"
 
 # Configure E11y ONCE (guard against multiple loads during test suite)
 # rubocop:disable Style/GlobalVars
@@ -24,7 +25,7 @@ unless $e11y_dummy_configured
     config.environment = ENV["RAILS_ENV"] || "test"
 
     # Use in-memory adapter for testing
-    config.adapters[:memory] = E11y::Adapters::InMemory.new
+    config.adapters[:memory] = E11y::Adapters::InMemoryTest.new
 
     # Also register as :logs adapter so events go to memory by default
     config.adapters[:logs] = config.adapters[:memory]

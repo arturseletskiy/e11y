@@ -252,25 +252,21 @@ RSpec.describe E11y::Adapters::InMemory do
   end
 
   describe "#last_event" do
-    it "returns nil when no events have been tracked" do
+    it "returns nil when no events" do
       expect(adapter.last_event).to be_nil
     end
 
-    it "returns the last tracked event" do
-      adapter.write(paid_order_event)
-      adapter.write(failed_order_event)
-      expect(adapter.last_event).to eq(failed_order_event)
+    it "returns the most recently written event" do
+      adapter.write({ event_name: "order.paid", severity: :info, payload: {} })
+      adapter.write({ event_name: "order.failed", severity: :error, payload: {} })
+      expect(adapter.last_event[:event_name]).to eq("order.failed")
     end
 
-    it "skips Rails instrumentation events" do
-      adapter.write(paid_order_event)
-      adapter.write({ event_name: "E11y::Events::Rails::RequestCompleted", severity: :info, payload: {} })
-      expect(adapter.last_event).to eq(paid_order_event)
-    end
-
-    it "returns nil when only Rails instrumentation events are present" do
-      adapter.write({ event_name: "E11y::Events::Rails::RequestCompleted", severity: :info, payload: {} })
-      expect(adapter.last_event).to be_nil
+    it "includes Rails instrumentation events (no filter in base adapter)" do
+      adapter.write({ event_name: "order.paid", severity: :info, payload: {} })
+      rails_evt = { event_name: "E11y::Events::Rails::RequestCompleted", severity: :info, payload: {} }
+      adapter.write(rails_evt)
+      expect(adapter.last_event).to eq(rails_evt)
     end
   end
 
