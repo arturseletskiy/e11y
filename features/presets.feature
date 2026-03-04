@@ -15,7 +15,6 @@ Feature: Event presets
 
   # ─── AuditEvent Preset ─────────────────────────────────────────────────────
 
-  @wip
   Scenario: Event including AuditEvent preset is marked as audit_event
     # BUG: AuditEvent preset has empty class_eval — never calls audit_event true.
     # SomeClass.audit_event? returns false.
@@ -23,14 +22,13 @@ Feature: Event presets
     Given an event class including "E11y::Presets::AuditEvent"
     Then the event class should respond to audit_event? with true
 
-  @wip
   Scenario: Event including AuditEvent preset is signed when AuditSigning is in pipeline
     # BUG: Because audit_event? returns false, AuditSigning middleware
     # skips signing — no _signature field in the tracked event payload.
     Given an event class including "E11y::Presets::AuditEvent"
     And the AuditSigning middleware is in the pipeline
     When I track the preset event
-    Then the tracked event should have a "_signature" field
+    Then the tracked event should have a "audit_signature" field
 
   Scenario: Event including AuditEvent preset has resolve_sample_rate 1.0
     # resolve_sample_rate IS correctly set by the preset.
