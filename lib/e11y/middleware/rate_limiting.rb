@@ -46,6 +46,7 @@ module E11y
       def initialize(app, global_limit: nil, per_event_limit: nil, window: nil)
         super(app)
         rl_config = E11y.config.rate_limiting
+        @enabled = rl_config.enabled
         @global_limit = global_limit || rl_config.global_limit
         @per_event_limit = per_event_limit || rl_config.per_event_limit
         @window = window || rl_config.window
@@ -68,6 +69,8 @@ module E11y
       # @param event_data [Hash] Event payload
       # @return [Hash, nil] Event data if allowed, nil if rate limited
       def call(event_data)
+        return @app.call(event_data) unless @enabled
+
         event_name = event_data[:event_name]
 
         # Check global rate limit

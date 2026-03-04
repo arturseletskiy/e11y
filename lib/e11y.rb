@@ -196,12 +196,14 @@ module E11y
     # Setup default middleware pipeline
     #
     # Default pipeline order (per ADR-015):
-    # 1. TraceContext - Add trace_id, span_id, timestamp (zone: :pre_processing)
-    # 2. Validation - Schema validation (zone: :pre_processing)
-    # 3. PIIFilter - PII filtering (zone: :security)
-    # 4. AuditSigning - Audit event signing (zone: :security)
-    # 5. Sampling - Adaptive sampling (zone: :routing)
-    # 6. Routing - Buffer routing (zone: :adapters)
+    # 1. TraceContext  - Add trace_id, span_id, timestamp (zone: :pre_processing)
+    # 2. Validation    - Schema validation (zone: :pre_processing)
+    # 3. PIIFilter     - PII filtering (zone: :security)
+    # 4. AuditSigning  - Audit event signing (zone: :security)
+    # 5. RateLimiting  - Token-bucket rate limiting (zone: :routing)
+    # 6. Sampling      - Adaptive sampling (zone: :routing)
+    # 7. Routing       - Buffer routing (zone: :adapters)
+    # 8. EventSlo      - Event-driven SLO tracking (after adapters, observes dispatch)
     #
     # @return [void]
     # @see ADR-015 Middleware Execution Order
@@ -221,7 +223,7 @@ module E11y
       # Zone: :adapters
       @pipeline.use E11y::Middleware::Routing
 
-      # Zone: :post_processing
+      # After adapters: observes dispatch outcome for SLO tracking
       @pipeline.use E11y::Middleware::EventSlo
     end
   end

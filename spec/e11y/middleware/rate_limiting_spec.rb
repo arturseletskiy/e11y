@@ -5,6 +5,9 @@ require "spec_helper"
 # Rate limiting integration tests require time-sensitive scenarios,
 # token bucket state management, and multiple test configurations.
 RSpec.describe E11y::Middleware::RateLimiting do
+  before { E11y.configuration.rate_limiting.enabled = true }
+  after  { E11y.configuration.rate_limiting.enabled = false }
+
   let(:next_middleware) { ->(event) { event } }
   let(:middleware) { described_class.new(next_middleware, global_limit: 10, per_event_limit: 5, window: 1.0) }
   let(:event_data) { { event_name: "test.event", severity: :info, payload: {} } }

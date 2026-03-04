@@ -54,8 +54,6 @@ end
 Given("rate limiting is configured with global_limit {int}") do |limit|
   E11y.configuration.rate_limiting.enabled = true
   E11y.configuration.rate_limiting.global_limit = limit
-  # NOTE: This does NOT add RateLimiting to the pipeline (BUG).
-  # configure_default_pipeline already ran; live config changes are not observed.
 end
 
 When("I send {int} rapid order events") do |count|
