@@ -276,10 +276,21 @@ module E11y
 
   # Request Buffer configuration
   class RequestBufferConfig
+    # Enable request-scoped buffering (default: false).
     attr_accessor :enabled
 
+    # Explicit list of adapter names that receive flushed debug events on request failure.
+    #
+    # If nil (default), falls back to config.fallback_adapters.
+    # Set this to limit debug flushes to adapters that can handle the extra load.
+    #
+    # @example Only flush debug events to Loki (not Sentry)
+    #   config.request_buffer.debug_adapters = [:loki_logger]
+    attr_accessor :debug_adapters
+
     def initialize
-      @enabled = false # Disabled by default
+      @enabled        = false # Disabled by default
+      @debug_adapters = nil   # nil → use fallback_adapters
     end
   end
 

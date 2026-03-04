@@ -227,7 +227,13 @@ module E11y
         # @param target [Symbol, nil] Optional specific adapter to target
         # @return [void]
         def flush_event(event_data, target: nil)
-          adapter_names = target ? [target] : (E11y.configuration.fallback_adapters || [:memory])
+          adapter_names = if target
+                            [target]
+                          else
+                            E11y.configuration.request_buffer.debug_adapters ||
+                              E11y.configuration.fallback_adapters ||
+                              [:memory]
+                          end
 
           adapter_names.each do |adapter_name|
             adapter = E11y.configuration.adapters[adapter_name]
