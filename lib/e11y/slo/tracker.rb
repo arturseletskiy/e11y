@@ -32,11 +32,12 @@ module E11y
     #   Requires Phase 2.8 (Stratified Sampling) for accurate SLO with sampling.
     module Tracker
       # In-memory store for tracked request data (per endpoint).
-      # Populated by track_http_request; queryable via Tracker.status.
+      # @api private Intended for test assertions only; not part of public API.
       @_store = {}
 
       class << self
         # Return a snapshot of all tracked endpoints and their request counts.
+        # @api private Intended for test assertions only.
         #
         # @return [Hash] Map of "controller#action" => { requests: Integer }
         def status
