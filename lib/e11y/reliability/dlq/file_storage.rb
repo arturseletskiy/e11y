@@ -159,8 +159,8 @@ module E11y
           # adapters added after the original event was stored in the DLQ).
           E11y.configuration.adapters.each_value do |adapter|
             adapter.write(event_data)
-          rescue StandardError => write_error
-            E11y.logger.error("DLQ replay write failed: #{write_error.message}")
+          rescue StandardError => e
+            E11y.logger.error("DLQ replay write failed: #{e.message}")
           end
 
           increment_metric("e11y.dlq.replayed", event_name: entry[:event_name])
@@ -196,7 +196,6 @@ module E11y
         #
         # @param event_id [String] Event ID to delete
         # @return [Boolean] true if deleted
-        # rubocop:disable Naming/PredicateMethod
         # delete is an action method returning boolean status, not a predicate query
         def delete(event_id)
           return false unless File.exist?(@file_path)
@@ -223,7 +222,6 @@ module E11y
           E11y.logger.error("DLQ delete failed for #{event_id}: #{e.message}")
           false
         end
-        # rubocop:enable Naming/PredicateMethod
 
         private
 

@@ -74,7 +74,7 @@ RSpec.describe "Audit Event Routing Validation", :integration do
       E11y.config.routing_rules = [
         ->(event) { :audit_encrypted if event[:audit_event] }
       ]
-      
+
       # Set signing key
       ENV["E11Y_AUDIT_SIGNING_KEY"] = SecureRandom.hex(32)
 
@@ -128,7 +128,7 @@ RSpec.describe "Audit Event Routing Validation", :integration do
         encryption_key: test_encryption_key
       )
       E11y.config.adapters[:audit_encrypted] = audit_adapter
-      
+
       # Set signing key
       ENV["E11Y_AUDIT_SIGNING_KEY"] = SecureRandom.hex(32)
 

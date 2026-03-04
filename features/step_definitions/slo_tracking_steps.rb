@@ -82,7 +82,7 @@ end
 
 Then("E11y.configuration.slo_tracking.enabled should be true") do
   expect(@slo_config.enabled).to be(true),
-    "Expected SLO tracking enabled by default, got: #{@slo_config.enabled.inspect}"
+                                 "Expected SLO tracking enabled by default, got: #{@slo_config.enabled.inspect}"
 end
 
 Then("E11y.configuration.slo_tracking.enabled should be false") do
@@ -106,14 +106,14 @@ end
 Then("the Hash should contain an entry for the orders endpoint") do
   has_entry = @tracker_status.key?("orders#create") || @tracker_status.key?(:orders_create)
   expect(has_entry).to be(true),
-    "Expected Tracker.status to include an entry for orders#create, " \
-    "got: #{@tracker_status.inspect}"
+                       "Expected Tracker.status to include an entry for orders#create, " \
+                       "got: #{@tracker_status.inspect}"
 end
 
 Then("the SLO tracker should have recorded a request for {string}") do |_endpoint|
   # Verify SLO tracking is enabled (the guard in Tracker#track_http_request)
   expect(E11y::SLO::Tracker.enabled?).to be(true),
-    "SLO tracking must be enabled for this assertion to be meaningful"
+                                         "SLO tracking must be enabled for this assertion to be meaningful"
   # Metrics are emitted via E11y::Metrics.increment which delegates to Yabeda.
   # In this test environment Yabeda may not be fully configured, so we verify
   # the guard condition (enabled?) rather than the Yabeda counter value.
@@ -122,13 +122,13 @@ end
 Then("the normalize_status for {int} should return {string}") do |status_code, expected_category|
   actual = E11y::SLO::Tracker.send(:normalize_status, status_code)
   expect(actual).to eq(expected_category),
-    "Expected normalize_status(#{status_code}) to return #{expected_category.inspect}, " \
-    "got #{actual.inspect}"
+                    "Expected normalize_status(#{status_code}) to return #{expected_category.inspect}, " \
+                    "got #{actual.inspect}"
 end
 
 Then("no SLO metrics should have been recorded") do
   expect(E11y::SLO::Tracker.enabled?).to be(false),
-    "Expected SLO tracker to be disabled, but enabled? returned true"
+                                         "Expected SLO tracker to be disabled, but enabled? returned true"
 end
 
 Then("the SLO metric {string} should have been incremented") do |metric_name|
@@ -136,6 +136,6 @@ Then("the SLO metric {string} should have been incremented") do |metric_name|
 
   incremented_names = @recording_backend.increments.map { |i| i[:name].to_s }
   expect(incremented_names).to include(metric_name),
-    "Expected E11y::Metrics.increment to be called with #{metric_name.inspect}, " \
-    "but recorded calls were: #{incremented_names.inspect}"
+                               "Expected E11y::Metrics.increment to be called with #{metric_name.inspect}, " \
+                               "but recorded calls were: #{incremented_names.inspect}"
 end

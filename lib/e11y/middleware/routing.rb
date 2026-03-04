@@ -224,7 +224,7 @@ module E11y
         # Audit events are valid if:
         # 1. They have explicit adapters (non-empty), OR
         # 2. They matched a routing rule (routing_used_fallback = false)
-        
+
         has_explicit_adapters = event_data[:adapters]&.any?
         return if has_explicit_adapters # Explicit adapters → valid
 
@@ -235,16 +235,16 @@ module E11y
         # CRITICAL: Audit event using fallback routing (no rule matched!)
         error_message = <<~ERROR
           [E11y] CRITICAL: Audit event has no routing configuration!
-          
+
           Event: #{event_data[:event_name]}
           Routed to: #{target_adapters.inspect} (fallback adapters)
-          
+
           Audit events MUST be explicitly routed to compliance-grade storage.
-          
+
           Fix options:
           1. Add explicit adapters: `adapters :audit_encrypted`
           2. Configure routing rule: `config.routing_rules = [->(e) { :audit_encrypted if e[:audit_event] }]`
-          
+
           See UC-012 Audit Trail documentation for details.
         ERROR
 

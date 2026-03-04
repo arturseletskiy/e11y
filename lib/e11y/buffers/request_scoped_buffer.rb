@@ -230,12 +230,10 @@ module E11y
           adapter_names = target ? [target] : (E11y.configuration.fallback_adapters || [:memory])
 
           adapter_names.each do |adapter_name|
-            begin
-              adapter = E11y.configuration.adapters[adapter_name]
-              adapter&.write(event_data)
-            rescue StandardError => e
-              warn "[E11y] Error flushing buffered event to #{adapter_name}: #{e.message}"
-            end
+            adapter = E11y.configuration.adapters[adapter_name]
+            adapter&.write(event_data)
+          rescue StandardError => e
+            warn "[E11y] Error flushing buffered event to #{adapter_name}: #{e.message}"
           end
 
           increment_metric("e11y.request_buffer.event_flushed")

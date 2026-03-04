@@ -220,7 +220,7 @@ module E11y
       # @return [String] Encryption key
       def default_encryption_key
         # Use ENV var if provided (required in production)
-        env_key = ENV["E11Y_AUDIT_ENCRYPTION_KEY"]
+        env_key = ENV.fetch("E11Y_AUDIT_ENCRYPTION_KEY", nil)
         if env_key
           return env_key.bytesize == 32 ? env_key : [env_key].pack("H*")
         end
@@ -228,8 +228,8 @@ module E11y
         # In production without ENV var, raise a clear error
         if defined?(::Rails) && ::Rails.env.production?
           raise E11y::Error,
-            "E11Y_AUDIT_ENCRYPTION_KEY must be set in production. " \
-            "Generate with: openssl rand -hex 32"
+                "E11Y_AUDIT_ENCRYPTION_KEY must be set in production. " \
+                "Generate with: openssl rand -hex 32"
         end
 
         # Development/test: derive a stable key from a fixed seed.

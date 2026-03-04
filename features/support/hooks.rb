@@ -40,9 +40,7 @@ end
 # After each scenario: clean the database so ActiveRecord models (e.g. Post)
 # created during a scenario do not persist into the next.
 After do
-  if ActiveRecord::Base.connection.table_exists?("posts")
-    ActiveRecord::Base.connection.execute("DELETE FROM posts")
-  end
+  ActiveRecord::Base.connection.execute("DELETE FROM posts") if ActiveRecord::Base.connection.table_exists?("posts")
 end
 
 # Before hook for @wip scenarios: print a reminder that the scenario is

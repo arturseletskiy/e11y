@@ -64,9 +64,7 @@ module E11y
         # Rails' ShowExceptions middleware catches controller exceptions and
         # returns a 500 response rather than letting them propagate, so we
         # must inspect the status code here instead of relying on rescue alone.
-        if E11y.config.request_buffer&.enabled && status.to_i >= 500
-          E11y::Buffers::RequestScopedBuffer.flush_on_error
-        end
+        E11y::Buffers::RequestScopedBuffer.flush_on_error if E11y.config.request_buffer&.enabled && status.to_i >= 500
 
         # Track SLO metrics (if enabled)
         track_http_request_slo(env, status, start_time)
