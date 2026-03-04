@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "e11y/buffers/request_scoped_buffer"
+
 module E11y
   module Middleware
     # Routing middleware routes events to appropriate adapters based on retention policies.
@@ -64,6 +66,17 @@ module E11y
       def call(event_data)
         # Handle nil from upstream middleware (e.g., rate limiting, sampling)
         return nil unless event_data
+
+        # 0. Buffer debug events when request-scoped buffering is active.
+        #    Debug events are held in memory and flushed only on request failure.
+        #    Non-debug events bypass the buffer and are written immediately.
+        if E11y.config.request_buffer&.enabled &&
+           E11y::Buffers::RequestScopedBuffer.active? &&
+           event_data[:severity] == :debug
+          event_data[:request_id] ||= E11y::Buffers::RequestScopedBuffer.request_id
+          E11y::Buffers::RequestScopedBuffer.add_event(event_data)
+          return nil
+        end
 
         # 1. Determine target adapters (explicit or via routing rules)
         target_adapters = if event_data[:adapters]&.any?

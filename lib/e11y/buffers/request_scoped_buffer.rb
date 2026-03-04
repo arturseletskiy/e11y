@@ -220,14 +220,24 @@ module E11y
 
         # Flush single event to adapters
         #
+        # Writes event_data directly to each fallback adapter (bypassing the pipeline
+        # since events were already validated/filtered on the way in).
+        #
         # @param event_data [Hash] Event to flush
-        # @param target [Symbol, nil] Optional target adapter (not yet implemented)
+        # @param target [Symbol, nil] Optional specific adapter to target
         # @return [void]
-        def flush_event(_event_data, target: nil) # rubocop:disable Lint/UnusedMethodArgument
-          # Placeholder for E11y::Collector integration
-          # Will be implemented when Collector/Adapter classes are available
+        def flush_event(event_data, target: nil)
+          adapter_names = target ? [target] : (E11y.configuration.fallback_adapters || [:memory])
 
-          # For now, just increment metric
+          adapter_names.each do |adapter_name|
+            begin
+              adapter = E11y.configuration.adapters[adapter_name]
+              adapter&.write(event_data)
+            rescue StandardError => e
+              warn "[E11y] Error flushing buffered event to #{adapter_name}: #{e.message}"
+            end
+          end
+
           increment_metric("e11y.request_buffer.event_flushed")
         end
 

@@ -22,6 +22,10 @@ class PostsController < ApplicationController
   end
 
   def error
+    # Explicit debug event — goes into the request-scoped buffer
+    Events::PostDebug.track(message: "Loading post for error context")
+    # Explicit error event — bypasses the buffer, written to adapter immediately
+    Events::PostError.track(message: "Internal server error", error_class: "StandardError")
     raise StandardError, "Test error for E11y instrumentation"
   end
 

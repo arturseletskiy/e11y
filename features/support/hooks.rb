@@ -30,6 +30,8 @@ Before do
   E11y.config.rate_limiting.global_limit = 10_000
   E11y.config.rate_limiting.per_event_limit = 1_000
   E11y.config.rate_limiting.window = 1.0
+  E11y.config.request_buffer.enabled = false
+  E11y::Buffers::RequestScopedBuffer.reset_all
   clear_events!
 end
 
