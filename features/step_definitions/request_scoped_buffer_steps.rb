@@ -32,7 +32,7 @@ end
 
 Then("events with severity {string} should be in the adapter") do |severity|
   events = memory_adapter.events.select { |e| e[:severity].to_s == severity }
-  expect(events.size).to be.positive?,
+  expect(events.size).to be >= 1,
                          "Expected at least 1 #{severity}-severity event in adapter after failed request, got 0. " \
                          "BUG: flush_event stub in lib/e11y/buffers/request_scoped_buffer.rb:226."
 end

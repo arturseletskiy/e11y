@@ -82,11 +82,12 @@ module E11y
         expected_signature = event_data[:audit_signature]
         return false unless expected_signature
 
-        # Use stored canonical (not recomputed) — detects canonical tampering
-        canonical = event_data[:audit_canonical]
-        return false unless canonical
+        # Recompute canonical from CURRENT payload (detects payload tampering)
+        recomputed = canonical_representation(event_data)
+        # Verify stored canonical matches recomputed (detects canonical tampering)
+        return false if event_data[:audit_canonical] && event_data[:audit_canonical] != recomputed
 
-        actual_signature = OpenSSL::HMAC.hexdigest("SHA256", signing_key, canonical)
+        actual_signature = OpenSSL::HMAC.hexdigest("SHA256", signing_key, recomputed)
         actual_signature == expected_signature
       end
       # rubocop:enable Naming/PredicateMethod

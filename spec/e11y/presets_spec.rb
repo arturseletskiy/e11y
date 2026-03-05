@@ -45,9 +45,9 @@ RSpec.describe E11y::Presets do
       expect(audit_event_class.resolve_rate_limit).to be_nil
     end
 
-    it "adapters are based on user-defined severity" do
-      # audit_event_class has severity :info, so adapters should be [:logs]
-      expect(audit_event_class.adapters).to eq([:logs])
+    it "adapters use routing rules (not severity-based) for audit events" do
+      # Audit events without explicit adapters use routing rules (UC-012), not severity
+      expect(audit_event_class.adapters).to eq([])
     end
 
     it "can track events with user-defined severity" do

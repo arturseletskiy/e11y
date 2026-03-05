@@ -331,7 +331,9 @@ module E11y
           return @adapters if @adapters
           return superclass.adapters if superclass != E11y::Event::Base && superclass.instance_variable_get(:@adapters)
 
-          # Resolve adapters from severity (audit events use routing rules via explicit_adapters? flag)
+          # Audit events without explicit adapters use routing rules (UC-012), not severity-based fallback
+          return [] if audit_event? && !explicit_adapters?
+
           resolved_adapters
         end
 

@@ -13,7 +13,8 @@ module Events
     contains_pii true
 
     pii_filtering do
-      allows :customer, :payment, :items
+      allows :items
+      # customer, payment not in allows - nested PII filtered by pattern matching
     end
 
     metrics do

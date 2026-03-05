@@ -55,7 +55,7 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
   after do
     memory_adapter.clear!
     E11y::Current.reset
-    Yabeda.reset! if defined?(Yabeda)
+    # Don't call Yabeda.reset! - it destroys e11y group and breaks slo_tracking/other specs
     # Reset pipeline to avoid state pollution between test files
     E11y.config.instance_variable_set(:@built_pipeline, nil)
   end

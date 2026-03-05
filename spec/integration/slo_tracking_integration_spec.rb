@@ -37,20 +37,22 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
       config.slo_tracking.enabled = true
     end
 
-    # CRITICAL: In Rails environment, Yabeda.configure! was already called by Railtie
-    # We MUST NOT call Yabeda.configure! again - it will raise AlreadyConfiguredError
-    # Instead, just define metrics using Yabeda.configure (without bang) - they register immediately
-    Yabeda.configure do
-      group :e11y do
-        counter :slo_http_requests_total, tags: %i[controller action status], comment: "SLO HTTP requests"
-        histogram :slo_http_request_duration_seconds, tags: %i[controller action],
-                                                      buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
-                                                      comment: "SLO HTTP request duration"
-        counter :slo_background_jobs_total, tags: %i[job_class status queue], comment: "SLO background jobs"
-        histogram :slo_background_job_duration_seconds, tags: %i[job_class queue],
+    begin
+      Yabeda.configure do
+        group :e11y do
+          counter :slo_http_requests_total, tags: %i[controller action status], comment: "SLO HTTP requests"
+          histogram :slo_http_request_duration_seconds, tags: %i[controller action],
                                                         buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
-                                                        comment: "SLO background job duration"
+                                                        comment: "SLO HTTP request duration"
+          counter :slo_background_jobs_total, tags: %i[job_class status queue], comment: "SLO background jobs"
+          histogram :slo_background_job_duration_seconds, tags: %i[job_class queue],
+                                                          buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+                                                          comment: "SLO background job duration"
+        end
       end
+      Yabeda.configure! unless Yabeda.configured?
+    rescue Prometheus::Client::Registry::AlreadyRegisteredError
+      # Metrics already registered by previous test - reuse existing
     end
 
     # Reset Yabeda counter values between tests (without calling Yabeda.reset!)
@@ -72,8 +74,9 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
 
   # Helper method to reset Yabeda metric values without calling Yabeda.reset!
   def reset_yabeda_metrics!
+    return unless Yabeda.respond_to?(:e11y) && Yabeda.e11y
+
     # Reset counter and histogram values by accessing their internal storage
-    # This is a hack but necessary since Yabeda.reset! breaks metric registration
     Yabeda.e11y.slo_http_requests_total.instance_variable_get(:@values)&.clear if Yabeda.e11y.respond_to?(:slo_http_requests_total)
     if Yabeda.e11y.respond_to?(:slo_http_request_duration_seconds)
       Yabeda.e11y.slo_http_request_duration_seconds.instance_variable_get(:@values)&.clear
@@ -84,7 +87,6 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
     end
   rescue StandardError
     # If internal structure changed, fall back to no reset (tests may accumulate values)
-    # Silently continue - this is a best-effort reset
   end
 
   after do

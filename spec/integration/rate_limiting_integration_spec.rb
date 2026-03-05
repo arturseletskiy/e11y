@@ -25,6 +25,12 @@ RSpec.describe "Rate Limiting Integration", :integration do
     memory_adapter.clear!
     Timecop.freeze(Time.now)
 
+    # Route events with adapters [] to memory adapter (required for assertions)
+    E11y.config.fallback_adapters = [:memory]
+
+    # Enable rate limiting (disabled by default)
+    E11y.config.rate_limiting.enabled = true
+
     # Configure DLQ for critical event tests
     allow(E11y.config).to receive_messages(dlq_storage: dlq_storage, dlq_filter: dlq_filter)
     allow(dlq_storage).to receive(:save)
@@ -67,6 +73,12 @@ RSpec.describe "Rate Limiting Integration", :integration do
   after do
     memory_adapter.clear!
     Timecop.return
+
+    # Restore fallback adapters for integration tests (dummy app uses [:memory])
+    E11y.config.fallback_adapters = [:memory]
+
+    # Disable rate limiting (restore default)
+    E11y.config.rate_limiting.enabled = false
 
     # CRITICAL: Remove RateLimiting middleware after tests to prevent interference with other test files
     # Without this, RateLimiting stays in pipeline and blocks events in subsequent tests

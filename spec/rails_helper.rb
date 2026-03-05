@@ -130,13 +130,38 @@ RSpec.configure do |config|
     # NOTE: E11y instrumentation is set up automatically by Railtie initializers
     # DO NOT call setup methods here or it will cause double instrumentation!
     # The initializers run as part of Rails.application.initialize! above.
+
+    # Capture default pipeline for restoration (specs modify pipeline and must not pollute others)
+    $e11y_default_pipeline_middlewares = Marshal.load(Marshal.dump(E11y.config.pipeline.middlewares))
   end
 
   config.before do |example|
-    # Clear E11y adapter events before each test (but don't reset config!)
     if example.metadata[:integration] || %i[integration request].include?(example.metadata[:type])
+      # Clear E11y adapter events before each test (but don't reset config!)
       adapter = E11y.config.adapters[:memory]
       adapter.clear! if adapter.respond_to?(:clear!)
+      # Ensure fallback_adapters = [:memory] for consistent event routing across specs
+      E11y.config.fallback_adapters = [:memory]
+      # Restore default pipeline (specs like rate_limiting/sampling modify it)
+      if $e11y_default_pipeline_middlewares
+        E11y.config.pipeline.middlewares.replace(
+          Marshal.load(Marshal.dump($e11y_default_pipeline_middlewares))
+        )
+        E11y.config.instance_variable_set(:@built_pipeline, nil)
+      end
+      # Ensure Yabeda.e11y exists (yabeda_integration_spec may call Yabeda.reset!)
+      if defined?(Yabeda) && (!Yabeda.respond_to?(:e11y) || !Yabeda.e11y)
+        begin
+          Yabeda.configure do
+            group :e11y do
+              # Empty - specs register their own metrics
+            end
+          end
+          Yabeda.configure! unless Yabeda.configured?
+        rescue StandardError => e
+          raise "Error configuring Yabeda: #{e.message}"
+        end
+      end
     end
   end
 

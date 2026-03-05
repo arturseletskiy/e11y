@@ -30,6 +30,9 @@ unless $e11y_dummy_configured
     # Also register as :logs adapter so events go to memory by default
     config.adapters[:logs] = config.adapters[:memory]
 
+    # Route events with adapters [] to memory (required for integration tests)
+    config.fallback_adapters = [:memory]
+
     # Enable instrumentation
     config.rails_instrumentation.enabled = true
     config.active_job.enabled = true
