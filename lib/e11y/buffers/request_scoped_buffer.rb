@@ -24,7 +24,7 @@ module E11y
     #   RequestScopedBuffer.discard
     #
     # @see UC-001 Request-Scoped Debug Buffering
-    class RequestScopedBuffer
+    class RequestScopedBuffer # rubocop:todo Metrics/ClassLength
       # Thread-local storage keys
       THREAD_KEY_BUFFER = :e11y_request_buffer
       THREAD_KEY_REQUEST_ID = :e11y_request_id

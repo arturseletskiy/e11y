@@ -342,7 +342,7 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
       original_metrics.each { |m| registry.register(m) }
     end
 
-    it "meets performance requirements (<10μs per pattern match)" do
+    it "meets performance requirements (<10μs per pattern match)" do # rubocop:todo RSpec/ExampleLength
       # Setup: 100 registered metrics with various patterns
       # Test: Benchmark pattern matching speed for 10,000 events
       # Expected: Pattern matching speed <10μs per pattern match, no performance degradation

@@ -355,7 +355,7 @@ module E11y
       # @return [void]
       # rubocop:disable Metrics/AbcSize
       # Metric update requires multiple steps for label extraction and value handling
-      def update_metric(metric_config, event_data)
+      def update_metric(metric_config, event_data) # rubocop:todo Metrics/MethodLength
         metric_name = metric_config[:name]
         labels = extract_labels(metric_config, event_data)
 

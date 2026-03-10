@@ -132,7 +132,7 @@ RSpec.configure do |config|
     # The initializers run as part of Rails.application.initialize! above.
 
     # Capture default pipeline for restoration (specs modify pipeline and must not pollute others)
-    $e11y_default_pipeline_middlewares = Marshal.load(Marshal.dump(E11y.config.pipeline.middlewares))
+    $e11y_default_pipeline_middlewares = Marshal.load(Marshal.dump(E11y.config.pipeline.middlewares)) # rubocop:todo Style/GlobalVars
   end
 
   config.before do |example|
@@ -143,9 +143,9 @@ RSpec.configure do |config|
       # Ensure fallback_adapters = [:memory] for consistent event routing across specs
       E11y.config.fallback_adapters = [:memory]
       # Restore default pipeline (specs like rate_limiting/sampling modify it)
-      if $e11y_default_pipeline_middlewares
+      if $e11y_default_pipeline_middlewares # rubocop:todo Style/GlobalVars
         E11y.config.pipeline.middlewares.replace(
-          Marshal.load(Marshal.dump($e11y_default_pipeline_middlewares))
+          Marshal.load(Marshal.dump($e11y_default_pipeline_middlewares)) # rubocop:todo Style/GlobalVars
         )
         E11y.config.instance_variable_set(:@built_pipeline, nil)
       end

@@ -116,7 +116,7 @@ RSpec.describe "Reliability Features Integration", :integration do
         retry_handler.with_retry(adapter: failing_adapter, event: event_data) do
           failing_adapter.write(event_data)
         end
-      end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError) do |error|
+      end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError) do |error| # rubocop:todo Style/MultilineBlockChain
         expect(error.retry_count).to eq(3)
         expect(error.original_error).to be_a(Errno::ECONNREFUSED)
       end

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# rubocop:disable Performance/CollectionLiteralInLoop, Lint/MissingCopEnableDirective
+
 require "rails_helper"
 
 # EventSLO Middleware Integration Tests for ADR-014, UC-004
@@ -105,6 +107,7 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
       # Event should still be stored (after Versioning middleware, event_name is normalized)
       all_events = memory_adapter.events
       events = all_events.select { |e| ["payment.processed", "Events::PaymentProcessed"].include?(e[:event_name]) }
+
       expect(events.count).to eq(1), "Event should be stored. Total events: #{all_events.count}, event_names: #{all_events.map do |e|
         e[:event_name]
       end.uniq.inspect}"

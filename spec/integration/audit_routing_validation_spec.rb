@@ -51,7 +51,7 @@ RSpec.describe "Audit Event Routing Validation", :integration do
   it "includes helpful error message with fix options" do
     expect do
       audit_event_class.track(user_id: 123, action: "test")
-    end.to raise_error do |error|
+    end.to raise_error do |error| # rubocop:todo Style/MultilineBlockChain
       expect(error.message).to include("Add explicit adapters")
       expect(error.message).to include("Configure routing rule")
       expect(error.message).to include("audit_encrypted")

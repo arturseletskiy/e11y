@@ -350,9 +350,9 @@ module E11y
 
         name = event_name.sub(/^Events::/, "").sub(/V\d+$/, "").gsub("::", ".")
         name.gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
-           .gsub(/([a-z\d])([A-Z])/, '\1_\2')
-           .downcase
-           .tr("_", ".")
+            .gsub(/([a-z\d])([A-Z])/, '\1_\2')
+            .downcase
+            .tr("_", ".")
       end
 
       # Build HTTP headers

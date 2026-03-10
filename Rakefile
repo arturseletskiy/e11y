@@ -199,10 +199,11 @@ namespace :release do
       # No [Unreleased] section, just add version entry
 
       # Find where to insert (after the header, before first version)
+
       if /(## \[\d+\.\d+\.\d+\])/.match?(changelog_content)
         updated_changelog = changelog_content.sub(
           /(## \[\d+\.\d+\.\d+\])/,
-          "## [Unreleased]\n\n### Added\n\n### Changed\n\n### Fixed\n\n### Deprecated\n\n### Removed\n\n### Security\n\n## [#{new_version}] - #{today}\n\n### Added\n- Version bump\n\n\\1"
+          "## [Unreleased]\n\n### Added\n\n### Changed\n\n### Fixed\n\n### Deprecated\n\n### Removed\n\n### Security\n\n## [#{new_version}] - #{today}\n\n### Added\n- Version bump\n\n\\1" # rubocop:disable Layout/LineLength
         )
       else
         # No previous versions, add after header

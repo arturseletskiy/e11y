@@ -404,7 +404,7 @@ RSpec.describe "Validation Middleware Integration", :integration do
       expect(events.count).to eq(1), msg
     end
 
-    it "validates V1 and V2 events independently" do
+    it "validates V1 and V2 events independently" do # rubocop:todo RSpec/ExampleLength
       # Setup: V1 and V2 events with different schemas
       # Test: Track both events
       # Expected: Each validated against its own schema

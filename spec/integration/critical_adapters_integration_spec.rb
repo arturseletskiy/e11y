@@ -125,7 +125,7 @@ RSpec.describe "Critical Adapters Integration", :integration do
                               "All 5 events should appear in Loki (got #{entries.size}). " \
                               "Query: event_name=#{event_name_normalized}"
       # Verify all test_ids 0-4 are present (payload may be nested; may have duplicates from other runs)
-      test_ids = entries.map { |e| (e[:log]["payload"] || e[:log])["test_id"] }.compact.uniq.sort
+      test_ids = entries.filter_map { |e| (e[:log]["payload"] || e[:log])["test_id"] }.uniq.sort
       expect(test_ids).to include(0, 1, 2, 3, 4)
     end
 
@@ -236,7 +236,7 @@ RSpec.describe "Critical Adapters Integration", :integration do
       )
 
       expect(entries.size).to be > initial_count, "Event should appear in Loki after flush"
-      entry = entries.find { |e| ((e[:log]["payload"] || e[:log])["test_id"]) == 1 }
+      entry = entries.find { |e| (e[:log]["payload"] || e[:log])["test_id"] == 1 }
       log_data = entry&.dig(:log)
       expect(log_data).not_to be_nil, "Flushed event should be in Loki"
       payload = log_data["payload"] || log_data
@@ -326,10 +326,10 @@ RSpec.describe "Critical Adapters Integration", :integration do
       otel_adapter.instance_variable_set(:@logger, logger)
 
       expect(logger).to receive(:on_emit).with(hash_including(
-        body: "Events::TestOTel",
-        severity_number: 9,
-        severity_text: "INFO"
-      ))
+                                                 body: "Events::TestOTel",
+                                                 severity_number: 9,
+                                                 severity_text: "INFO"
+                                               ))
 
       Events::TestOTel.track(test_id: 1, message: "OTel integration test")
     end

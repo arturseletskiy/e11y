@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# rubocop:disable Layout/LineLength, Lint/MissingCopEnableDirective
+
 # features/step_definitions/sampling_steps.rb
 # Step definitions for adaptive_sampling.feature.
 
@@ -220,7 +222,7 @@ end
 # Helpers (accessible via World module)
 # ---------------------------------------------------------------------------
 
-module SamplingStepHelpers
+module SamplingStepHelpers # rubocop:todo Style/Documentation
   def reconfigure_sampling_middleware(options)
     cfg = E11y.config
     cfg.pipeline.middlewares.reject! { |m| m.middleware_class == E11y::Middleware::Sampling }

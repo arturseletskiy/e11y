@@ -27,7 +27,7 @@ module Events
         case payload[:status]
         when "pending", "completed" then "success"
         when "failed", "cancelled" then "failure"
-        else "success"
+        else "success" # rubocop:todo Lint/DuplicateBranch
         end
       end
     end

@@ -32,7 +32,7 @@ module E11y
       # @param name [Symbol] Metric name
       # @param value [Numeric] Observed value
       # @param labels [Hash] Metric labels
-      def histogram(name, value, labels = {}, buckets: nil)
+      def histogram(name, value, labels = {}, buckets: nil) # rubocop:todo Lint/UnusedMethodArgument
         @histograms << { name: name, value: value, labels: labels }
       end
 

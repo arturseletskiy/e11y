@@ -98,7 +98,7 @@ RSpec::Matchers.define :preserve_structure do |original|
     same_structure?(original, filtered)
   end
 
-  def same_structure?(obj1, obj2, path = [])
+  def same_structure?(obj1, obj2, path = []) # rubocop:todo Metrics/AbcSize
     case obj1
     when Hash
       return false unless obj2.is_a?(Hash)

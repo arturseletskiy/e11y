@@ -155,7 +155,7 @@ Then("all items in the result should have event_name {string}") do |event_name|
 end
 
 Then("the result's payload field {string} should equal {string}") do |field, expected_value|
-  payload = @adapter_result[:payload] || @adapter_result[:payload]
+  payload = @adapter_result[:payload]
   expect(payload).not_to be_nil,
                          "Result has no :payload key.\nResult: #{@adapter_result.inspect}"
   actual_value = payload[field.to_sym] || payload[field]

@@ -242,30 +242,6 @@ RSpec.describe "Rate Limiting Integration", :integration do
     end
   end
 
-  describe "Scenario 5: Per-user rate limiting" do
-    it "limits events per user separately" do
-      # Status: ✅ Implemented and working
-      # If implemented:
-      #   Setup: Per-user limit: 10 events/min
-      #   Test: User A sends 15 events → first 10 pass, last 5 rate-limited
-      #   Test: User B sends 15 events → first 10 pass (separate bucket)
-      #
-      # Current: Skip this scenario until per-context rate limiting is implemented
-    end
-  end
-
-  describe "Scenario 6: Per-endpoint rate limiting" do
-    it "limits events per endpoint separately" do
-      # Status: ✅ Implemented and working
-      # If implemented:
-      #   Setup: Per-endpoint limit: 10 events/min
-      #   Test: Endpoint A sends 15 events → first 10 pass, last 5 rate-limited
-      #   Test: Endpoint B sends 15 events → first 10 pass (separate bucket)
-      #
-      # Current: Skip this scenario until per-context rate limiting is implemented
-    end
-  end
-
   describe "Scenario 8: Burst handling" do
     it "allows burst up to token bucket capacity" do
       # Setup: Global limit: 10 events/sec (capacity: 10 tokens), Window: 1 second

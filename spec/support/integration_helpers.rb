@@ -18,7 +18,7 @@ module IntegrationHelpers
   # @param timeout [Integer] Timeout in seconds (default: 5)
   # @param health_path [String] Health check path (default: "/")
   # @return [Boolean] true if service responds
-  def service_available?(url, timeout: 5, health_path: nil)
+  def service_available?(url, timeout: 5, health_path: nil) # rubocop:todo Metrics/AbcSize
     require "net/http"
     require "uri"
 
@@ -129,7 +129,7 @@ module IntegrationHelpers
   # @example
   #   events = find_events_by_class(memory_adapter, Events::TestEvent)
   #   events = find_events_by_class(memory_adapter, "Events::TestEvent", normalized_name: "test.event")
-  def find_events_by_class(memory_adapter, event_class, normalized_name: nil)
+  def find_events_by_class(memory_adapter, event_class, normalized_name: nil) # rubocop:todo Metrics/AbcSize
     all_events = memory_adapter.events
 
     # Get class name for matching

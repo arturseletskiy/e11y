@@ -111,7 +111,7 @@ Then("the new adapter should fail to decrypt the previously written entry") do
   # First adapter used explicit key (@audit_key). Second adapter has no key, so uses
   # default_encryption_key (PBKDF2-derived stable key for dev/test). These are DIFFERENT keys,
   # so decryption with the second adapter must fail.
-  expect {
+  expect do
     @second_adapter.read(@audit_filename)
-  }.to raise_error(OpenSSL::Cipher::CipherError)
+  end.to raise_error(OpenSSL::Cipher::CipherError)
 end

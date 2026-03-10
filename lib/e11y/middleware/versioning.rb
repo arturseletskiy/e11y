@@ -62,7 +62,7 @@ module E11y
       #
       # @param event_data [Hash] Event payload
       # @return [Hash] Event data with version field (if > 1)
-      def call(event_data)
+      def call(event_data) # rubocop:todo Metrics/AbcSize
         # Extract version from event_class name (original class name, not normalized event_name)
         # Use event_class.name if available, fallback to event_name for backward compatibility
         class_name = event_data[:event_class]&.name || event_data[:event_name]

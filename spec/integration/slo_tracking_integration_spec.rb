@@ -73,7 +73,7 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
   end
 
   # Helper method to reset Yabeda metric values without calling Yabeda.reset!
-  def reset_yabeda_metrics!
+  def reset_yabeda_metrics! # rubocop:todo Metrics/AbcSize
     return unless Yabeda.respond_to?(:e11y) && Yabeda.e11y
 
     # Reset counter and histogram values by accessing their internal storage
@@ -97,7 +97,7 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
   end
 
   describe "Scenario 1: Availability SLO" do
-    it "calculates availability SLO (successes/total)" do
+    it "calculates availability SLO (successes/total)" do # rubocop:todo RSpec/ExampleLength
       # Setup: SLO target 99.9% availability, track 1000 HTTP requests (950 success, 50 errors)
       # Test: Track requests, calculate availability, verify SLO breach
       # Expected: Availability = 95%, breach detected (95% < 99.9%)

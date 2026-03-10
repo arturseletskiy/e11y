@@ -30,7 +30,7 @@ module PIIHelpers
   end
 
   # Get sample PII by type
-  def sample_pii(type, variant: :valid)
+  def sample_pii(type, variant: :valid) # rubocop:todo Metrics/CyclomaticComplexity, Metrics/AbcSize
     case type
     when :email
       pii_samples.dig("emails", variant.to_s)&.sample || random_email

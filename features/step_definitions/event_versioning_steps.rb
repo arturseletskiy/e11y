@@ -36,7 +36,7 @@ def find_versioned_events(class_name)
   # the class name from e[:event_class], so we look up the class by constant.
   real_class_event_name = begin
     Object.const_get(class_name)&.event_name
-  rescue NameError, StandardError
+  rescue NameError
     nil
   end
 

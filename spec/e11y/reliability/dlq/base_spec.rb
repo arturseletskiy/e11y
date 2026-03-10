@@ -29,7 +29,7 @@ RSpec.describe E11y::Reliability::DLQ::Base do
   describe "#replay_batch" do
     it "delegates to replay for each id" do
       subclass = Class.new(described_class) do
-        def replay(id)
+        def replay(id) # rubocop:todo Naming/PredicateMethod
           id == "good"
         end
       end
