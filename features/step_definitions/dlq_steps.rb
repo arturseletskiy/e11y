@@ -43,7 +43,7 @@ end
 Then("the DLQ should contain at least {int} entry") do |min|
   entries = @dlq_storage.list
   expect(entries.size).to be >= min,
-    "Expected DLQ to contain >= #{min} entries, got #{entries.size}."
+                          "Expected DLQ to contain >= #{min} entries, got #{entries.size}."
 end
 
 Then("the DLQ entry should have an event_name field") do
@@ -52,7 +52,7 @@ Then("the DLQ entry should have an event_name field") do
   entry = entries.first
   has_name = entry.key?(:event_name) || entry.key?("event_name")
   expect(has_name).to be(true),
-    "DLQ entry missing :event_name. Keys: #{entry.keys.inspect}"
+                      "DLQ entry missing :event_name. Keys: #{entry.keys.inspect}"
 end
 
 Then("the DLQ entry should have a metadata field") do
@@ -61,7 +61,7 @@ Then("the DLQ entry should have a metadata field") do
   entry = entries.first
   has_meta = entry.key?(:metadata) || entry.key?("metadata")
   expect(has_meta).to be(true),
-    "DLQ entry missing :metadata. Keys: #{entry.keys.inspect}"
+                      "DLQ entry missing :metadata. Keys: #{entry.keys.inspect}"
 end
 
 # ---------------------------------------------------------------------------
@@ -79,8 +79,8 @@ end
 
 Then("the event should appear in the secondary adapter") do
   expect(@secondary_adapter.event_count).to be >= 1,
-    "Expected replayed event in secondary adapter, got 0. " \
-    "BUG: DLQ#replay is a stub — E11y::Pipeline.dispatch is commented out."
+                                            "Expected replayed event in secondary adapter, got 0. " \
+                                            "BUG: DLQ#replay is a stub — E11y::Pipeline.dispatch is commented out."
 end
 
 # ---------------------------------------------------------------------------
@@ -93,8 +93,8 @@ end
 
 Then("the delete result should be true") do
   expect(@delete_result).to be(true),
-    "Expected delete to return true, got #{@delete_result.inspect}. " \
-    "BUG: DLQ#delete always returns false (unimplemented TODO)."
+                            "Expected delete to return true, got #{@delete_result.inspect}. " \
+                            "BUG: DLQ#delete always returns false (unimplemented TODO)."
 end
 
 # ---------------------------------------------------------------------------
@@ -103,16 +103,20 @@ end
 
 Then("the DLQ file should exist on disk") do
   expect(File.exist?(@dlq_temp.path)).to be(true),
-    "DLQ file not found at #{@dlq_temp.path}"
+                                         "DLQ file not found at #{@dlq_temp.path}"
 end
 
 Then("the DLQ file should contain valid JSONL content") do
   lines = File.readlines(@dlq_temp.path).map(&:strip).reject(&:empty?)
   expect(lines.size).to be >= 1, "DLQ file is empty"
   lines.each_with_index do |line, i|
-    parsed = JSON.parse(line) rescue nil
+    parsed = begin
+      JSON.parse(line)
+    rescue StandardError
+      nil
+    end
     expect(parsed).not_to be_nil,
-      "Line #{i + 1} is not valid JSON: #{line.inspect}"
+                          "Line #{i + 1} is not valid JSON: #{line.inspect}"
   end
 end
 
@@ -132,6 +136,6 @@ end
 
 Then("no NameError should be raised") do
   expect(@dlq_init_error).to be_nil,
-    "Got NameError: #{@dlq_init_error&.message}. " \
-    "BUG: DLQ::FileStorage#default_file_path calls Rails.root — requires Rails to be loaded."
+                             "Got NameError: #{@dlq_init_error&.message}. " \
+                             "BUG: DLQ::FileStorage#default_file_path calls Rails.root — requires Rails to be loaded."
 end

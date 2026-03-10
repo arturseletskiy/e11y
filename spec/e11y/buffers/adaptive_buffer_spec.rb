@@ -391,7 +391,6 @@ RSpec.describe E11y::Buffers::AdaptiveBuffer do
   describe "thread safety" do
     let(:options) { { memory_limit_mb: 10 } }
 
-    # rubocop:disable RSpec/ExampleLength
     it "handles concurrent add_event calls" do
       threads = Array.new(10) do |thread_id|
         Thread.new do
@@ -475,6 +474,5 @@ RSpec.describe E11y::Buffers::AdaptiveBuffer do
       expect(stats[:current_bytes]).to be < (100 * 1024 * 1024),
                                        "Expected <100MB memory, got #{memory_mb}MB"
     end
-    # rubocop:enable RSpec/ExampleLength
   end
 end

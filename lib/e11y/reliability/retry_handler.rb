@@ -50,12 +50,14 @@ module E11y
       # @option config [Float] :max_delay_ms Maximum delay in milliseconds (default: 5000)
       # @option config [Float] :jitter_factor Jitter factor (0.0-1.0, default: 0.1)
       # @option config [Boolean] :fail_on_error Raise error after max retries (default: true)
-      def initialize(config: {})
+      # @param retry_rate_limiter [RetryRateLimiter, nil] Optional rate limiter for thundering herd prevention (C06)
+      def initialize(config: {}, retry_rate_limiter: nil)
         @max_attempts = config[:max_attempts] || 3
         @base_delay_ms = config[:base_delay_ms] || 100.0
         @max_delay_ms = config[:max_delay_ms] || 5000.0
         @jitter_factor = config[:jitter_factor] || 0.1
         @fail_on_error = config.fetch(:fail_on_error, true)
+        @retry_rate_limiter = retry_rate_limiter
       end
 
       # Execute block with retry logic.
@@ -65,8 +67,8 @@ module E11y
       # @yield Block to execute (adapter send)
       # @return [Object] Result of block execution
       # @raise [RetryExhaustedError] if all retries fail and fail_on_error is true
-      # rubocop:disable Metrics/MethodLength
-      # Retry logic requires error handling, retriability check, backoff calculation, and callbacks
+      # rubocop:disable Metrics/MethodLength, Metrics/AbcSize
+      # Retry logic requires error handling, retriability check, rate limiting, backoff calculation, and callbacks
       def with_retry(adapter:, event:)
         attempt = 0
 
@@ -94,6 +96,14 @@ module E11y
               return nil
             end
 
+            # Check rate limiter before retry (C06: thundering herd prevention)
+            if @retry_rate_limiter && !@retry_rate_limiter.allow?(adapter.class.name, event)
+              on_max_retries_exhausted(adapter, event, e, attempt)
+              raise RetryExhaustedError.new(e, retry_count: attempt) if @fail_on_error
+
+              return nil
+            end
+
             # Calculate backoff delay
             delay_ms = calculate_backoff_delay(attempt)
             on_retry_attempt(adapter, event, e, attempt, delay_ms)
@@ -103,7 +113,7 @@ module E11y
           end
         end
       end
-      # rubocop:enable Metrics/MethodLength
+      # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
 
       private
 

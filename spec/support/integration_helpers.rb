@@ -18,7 +18,7 @@ module IntegrationHelpers
   # @param timeout [Integer] Timeout in seconds (default: 5)
   # @param health_path [String] Health check path (default: "/")
   # @return [Boolean] true if service responds
-  def service_available?(url, timeout: 5, health_path: nil)
+  def service_available?(url, timeout: 5, health_path: nil) # rubocop:todo Metrics/AbcSize
     require "net/http"
     require "uri"
 
@@ -84,16 +84,11 @@ module IntegrationHelpers
     url ||= ENV.fetch(env_var, nil) if env_var
 
     # Use service-specific health check paths
-    health_path ||= case service_name.downcase
-                    when "loki"
-                      "/ready" # Loki health check endpoint
-                    when "prometheus"
-                      "/-/healthy" # Prometheus health check endpoint
-                    when "elasticsearch"
-                      "/_cluster/health" # Elasticsearch health check endpoint
-                    else
-                      nil # Use default (URL path or "/")
-                    end
+    health_path ||= {
+      "loki" => "/ready",
+      "prometheus" => "/-/healthy",
+      "elasticsearch" => "/_cluster/health"
+    }[service_name.downcase]
 
     return if url && service_available?(url, health_path: health_path)
 
@@ -134,7 +129,7 @@ module IntegrationHelpers
   # @example
   #   events = find_events_by_class(memory_adapter, Events::TestEvent)
   #   events = find_events_by_class(memory_adapter, "Events::TestEvent", normalized_name: "test.event")
-  def find_events_by_class(memory_adapter, event_class, normalized_name: nil)
+  def find_events_by_class(memory_adapter, event_class, normalized_name: nil) # rubocop:todo Metrics/AbcSize
     all_events = memory_adapter.events
 
     # Get class name for matching

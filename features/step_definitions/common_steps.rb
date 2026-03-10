@@ -46,14 +46,14 @@ end
 
 Then("the response status should be {int}") do |expected_status|
   expect(last_response.status).to eq(expected_status),
-    "Expected HTTP #{expected_status} but got #{last_response.status}.\n" \
-    "Response body: #{last_response.body}"
+                                  "Expected HTTP #{expected_status} but got #{last_response.status}.\n" \
+                                  "Response body: #{last_response.body}"
 end
 
 Then("the response body should contain {string}") do |expected_text|
   expect(last_response.body).to include(expected_text),
-    "Expected response body to contain #{expected_text.inspect}.\n" \
-    "Actual body: #{last_response.body}"
+                                "Expected response body to contain #{expected_text.inspect}.\n" \
+                                "Actual body: #{last_response.body}"
 end
 
 Then("the response body should be valid JSON") do
@@ -68,23 +68,23 @@ end
 Then("{int} event(s) of type {string} should have been tracked") do |count, event_type|
   events = tracked_events(event_type)
   expect(events.size).to eq(count),
-    "Expected #{count} event(s) of type '#{event_type}', " \
-    "but found #{events.size}.\n" \
-    "All events in adapter: #{memory_adapter.events.map { |e| e[:event_name] }.inspect}"
+                         "Expected #{count} event(s) of type '#{event_type}', " \
+                         "but found #{events.size}.\n" \
+                         "All events in adapter: #{memory_adapter.events.map { |e| e[:event_name] }.inspect}"
 end
 
 Then("no event of type {string} should have been tracked") do |event_type|
   events = tracked_events(event_type)
   expect(events).to be_empty,
-    "Expected no events of type '#{event_type}', but found #{events.size}.\n" \
-    "Events: #{events.inspect}"
+                    "Expected no events of type '#{event_type}', but found #{events.size}.\n" \
+                    "Events: #{events.inspect}"
 end
 
 Then("at least {int} event(s) of type {string} should have been tracked") do |min_count, event_type|
   events = tracked_events(event_type)
   expect(events.size).to be >= min_count,
-    "Expected at least #{min_count} event(s) of type '#{event_type}', " \
-    "but found #{events.size}."
+                         "Expected at least #{min_count} event(s) of type '#{event_type}', " \
+                         "but found #{events.size}."
 end
 
 # ---------------------------------------------------------------------------
@@ -96,25 +96,25 @@ end
 Then("the last {string} event's field {string} should equal {string}") do |event_type, field, expected_value|
   payload = find_event_payload(event_type)
   expect(payload).not_to be_nil,
-    "No event of type '#{event_type}' was tracked. " \
-    "Tracked event types: #{memory_adapter.events.map { |e| e[:event_name] }.uniq.inspect}"
+                         "No event of type '#{event_type}' was tracked. " \
+                         "Tracked event types: #{memory_adapter.events.map { |e| e[:event_name] }.uniq.inspect}"
 
   actual_value = payload[field.to_sym] || payload[field]
   expect(actual_value.to_s).to eq(expected_value),
-    "Expected field '#{field}' to equal #{expected_value.inspect}, " \
-    "but got #{actual_value.inspect}.\nFull payload: #{payload.inspect}"
+                               "Expected field '#{field}' to equal #{expected_value.inspect}, " \
+                               "but got #{actual_value.inspect}.\nFull payload: #{payload.inspect}"
 end
 
 # Checks the payload field against a Ruby Regexp pattern (passed as a string).
 Then("the last {string} event's field {string} should match {string}") do |event_type, field, pattern_string|
   payload = find_event_payload(event_type)
   expect(payload).not_to be_nil,
-    "No event of type '#{event_type}' was tracked."
+                         "No event of type '#{event_type}' was tracked."
 
   actual_value = payload[field.to_sym] || payload[field]
   expect(actual_value.to_s).to match(Regexp.new(pattern_string)),
-    "Expected field '#{field}' to match /#{pattern_string}/, " \
-    "but got #{actual_value.inspect}."
+                               "Expected field '#{field}' to match /#{pattern_string}/, " \
+                               "but got #{actual_value.inspect}."
 end
 
 # Checks that a payload field has been filtered by the PII middleware.
@@ -122,13 +122,13 @@ end
 Then("the last {string} event's field {string} should be filtered") do |event_type, field|
   payload = find_event_payload(event_type)
   expect(payload).not_to be_nil,
-    "No event of type '#{event_type}' was tracked."
+                         "No event of type '#{event_type}' was tracked."
 
   actual_value = payload[field.to_sym] || payload[field]
   filtered_patterns = [
     "[FILTERED]",  # mask strategy
     nil,           # redact strategy removes the key
-    /\A[0-9a-f]{64}\z/  # hash strategy (SHA256 hex)
+    /\A[0-9a-f]{64}\z/ # hash strategy (SHA256 hex)
   ]
 
   is_filtered = filtered_patterns.any? do |pattern|
@@ -140,21 +140,21 @@ Then("the last {string} event's field {string} should be filtered") do |event_ty
   end
 
   expect(is_filtered).to be(true),
-    "Expected field '#{field}' to be filtered (nil, '[FILTERED]', or SHA256 hash), " \
-    "but got: #{actual_value.inspect}.\nFull payload: #{payload.inspect}"
+                         "Expected field '#{field}' to be filtered (nil, '[FILTERED]', or SHA256 hash), " \
+                         "but got: #{actual_value.inspect}.\nFull payload: #{payload.inspect}"
 end
 
 # Checks that a payload field is NOT filtered (i.e., value passes through unchanged).
 Then("the last {string} event's field {string} should not be filtered") do |event_type, field|
   payload = find_event_payload(event_type)
   expect(payload).not_to be_nil,
-    "No event of type '#{event_type}' was tracked."
+                         "No event of type '#{event_type}' was tracked."
 
   actual_value = payload[field.to_sym] || payload[field]
   expect(actual_value).not_to eq("[FILTERED]"),
-    "Field '#{field}' was unexpectedly filtered.\nFull payload: #{payload.inspect}"
+                              "Field '#{field}' was unexpectedly filtered.\nFull payload: #{payload.inspect}"
   expect(actual_value).not_to be_nil,
-    "Field '#{field}' was unexpectedly nil (redacted).\nFull payload: #{payload.inspect}"
+                              "Field '#{field}' was unexpectedly nil (redacted).\nFull payload: #{payload.inspect}"
 end
 
 # ---------------------------------------------------------------------------
@@ -163,13 +163,13 @@ end
 
 Then("the memory adapter should have {int} total event(s)") do |count|
   expect(memory_adapter.event_count).to eq(count),
-    "Expected #{count} total events in adapter, " \
-    "but found #{memory_adapter.event_count}.\n" \
-    "Event types: #{memory_adapter.events.map { |e| e[:event_name] }.inspect}"
+                                        "Expected #{count} total events in adapter, " \
+                                        "but found #{memory_adapter.event_count}.\n" \
+                                        "Event types: #{memory_adapter.events.map { |e| e[:event_name] }.inspect}"
 end
 
 Then("the memory adapter should be empty") do
   expect(memory_adapter.event_count).to eq(0),
-    "Expected adapter to be empty but found #{memory_adapter.event_count} events.\n" \
-    "Event types: #{memory_adapter.events.map { |e| e[:event_name] }.inspect}"
+                                        "Expected adapter to be empty but found #{memory_adapter.event_count} events.\n" \
+                                        "Event types: #{memory_adapter.events.map { |e| e[:event_name] }.inspect}"
 end

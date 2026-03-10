@@ -5,12 +5,6 @@ Feature: Default pipeline completeness
   # The E11y pipeline processes every event through a chain of middleware.
   # README and docs list these as part of the default pipeline:
   #   TraceContext → Validation → PIIFilter → AuditSigning → Sampling → Routing
-  # Plus (advertised but missing): RateLimiting, EventSlo
-  #
-  # BUG 1: E11y::Middleware::RateLimiting is absent from the default pipeline chain —
-  #         rate limiting silently never fires.
-  # BUG 2: E11y::Middleware::EventSlo is absent from the default pipeline chain —
-  #         SLO tracking never fires unless added manually.
 
   Background:
     Given the application is running
@@ -33,16 +27,10 @@ Feature: Default pipeline completeness
   Scenario: Default pipeline includes Routing middleware
     Then the pipeline should include the "Routing" middleware
 
-  @wip
   Scenario: Default pipeline includes RateLimiting middleware
-    # BUG: RateLimiting is never added in configure_default_pipeline in lib/e11y.rb.
-    # rate_limiting.enabled defaults to false and the middleware is simply not wired in.
     Then the pipeline should include the "RateLimiting" middleware
 
-  @wip
   Scenario: Default pipeline includes EventSlo middleware
-    # BUG: EventSlo is never added in configure_default_pipeline in lib/e11y.rb.
-    # SLO tracking requires manual pipeline.use(E11y::Middleware::EventSlo) to activate.
     Then the pipeline should include the "EventSlo" middleware
 
   Scenario: Event tracked via HTTP request arrives in the memory adapter
@@ -58,10 +46,7 @@ Feature: Default pipeline completeness
     And "Sampling" should come before "Routing" in the pipeline
     And "AuditSigning" should come before "Routing" in the pipeline
 
-  @wip
   Scenario: RateLimiting middleware blocks events over the configured limit
-    # BUG: Even after setting rate_limiting.enabled = true, Builder never adds
-    # RateLimiting to the chain — events flow through unchecked regardless.
     Given rate limiting is configured with global_limit 2
     When I send 5 rapid order events
     Then fewer than 5 events should arrive in the adapter

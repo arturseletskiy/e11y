@@ -88,6 +88,9 @@ module E11y
       # @param event_data [Hash] Event data
       # @return [Symbol] :tier1, :tier2, or :tier3
       def determine_tier(event_data)
+        # Audit events skip PII filtering (original data must be preserved for compliance)
+        return :tier1 if event_data[:audit_event]
+
         event_class = event_data[:event_class]
         return :tier2 unless event_class.respond_to?(:pii_tier)
 
@@ -130,9 +133,14 @@ module E11y
           pii_config
         )
 
-        # Apply pattern-based filtering
+        # Collect fields that have explicit strategies so pattern scanning does not
+        # override the :allow (or any other) strategy that was already applied above.
+        explicitly_configured = pii_config[:fields]&.keys&.map(&:to_s) || []
+
+        # Apply pattern-based filtering, skipping explicitly-configured fields
         filtered_data[:payload] = apply_pattern_filtering(
-          filtered_data[:payload]
+          filtered_data[:payload],
+          skip_fields: explicitly_configured
         )
 
         filtered_data
@@ -143,7 +151,7 @@ module E11y
       # @param payload [Hash] Payload to filter
       # @param config [Hash] PII configuration
       # @return [Hash] Filtered payload
-      # rubocop:disable Metrics/CyclomaticComplexity, Metrics/MethodLength
+      # rubocop:disable Metrics/MethodLength
       # Field strategies require case/when for each PII filtering strategy type
       def apply_field_strategies(payload, config)
         return payload unless config
@@ -176,16 +184,24 @@ module E11y
 
         filtered
       end
-      # rubocop:enable Metrics/CyclomaticComplexity, Metrics/MethodLength
+      # rubocop:enable Metrics/MethodLength
 
       # Apply pattern-based filtering to string values
       #
       # @param data [Object] Data to filter (recursively)
+      # @param skip_fields [Array<String>] Field names (as strings) to skip at the top level
       # @return [Object] Filtered data
-      def apply_pattern_filtering(data)
+      def apply_pattern_filtering(data, skip_fields: [])
         case data
         when Hash
-          data.transform_values { |v| apply_pattern_filtering(v) }
+          data.each_with_object({}) do |(k, v), result|
+            field_name = k.to_s
+            result[k] = if skip_fields.include?(field_name)
+                          v
+                        else
+                          apply_pattern_filtering(v)
+                        end
+          end
         when Array
           data.map { |v| apply_pattern_filtering(v) }
         when String

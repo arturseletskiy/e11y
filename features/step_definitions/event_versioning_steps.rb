@@ -20,6 +20,8 @@
 #     works when Versioning IS active.
 #  3. Fall back to event_class.name if the class object is still present
 #     (belt-and-braces; may be nil in some reload contexts).
+#  4. Match against the class's custom event_name override (if any) —
+#     handles events where the class defines a custom event_name via DSL.
 def find_versioned_events(class_name)
   normalized = begin
     mw = E11y::Middleware::Versioning.new(nil)
@@ -28,11 +30,22 @@ def find_versioned_events(class_name)
     nil
   end
 
+  # Also resolve the real class to get its custom event_name (if any).
+  # This handles the case where the class defines a custom event_name override
+  # that the Versioning middleware now preserves. PIIFilter deep_dup may strip
+  # the class name from e[:event_class], so we look up the class by constant.
+  real_class_event_name = begin
+    Object.const_get(class_name)&.event_name
+  rescue NameError
+    nil
+  end
+
   memory_adapter.events.select do |e|
     stored = e[:event_name].to_s
     stored == class_name ||
       (normalized && stored == normalized) ||
-      e[:event_class]&.name == class_name
+      e[:event_class]&.name == class_name ||
+      (real_class_event_name && stored == real_class_event_name)
   end
 end
 
@@ -141,22 +154,22 @@ end
 Then("the last versioned {string} event is present") do |event_class_name|
   events = find_versioned_events(event_class_name)
   expect(events).not_to be_empty,
-    "Expected at least one event for class #{event_class_name} but found none. " \
-    "All stored event_names: #{memory_adapter.events.map { |e| e[:event_name] }.inspect}"
+                        "Expected at least one event for class #{event_class_name} but found none. " \
+                        "All stored event_names: #{memory_adapter.events.map { |e| e[:event_name] }.inspect}"
 end
 
 Then("the last versioned {string} event has event_name {string}") do |event_class_name, expected_name|
   events = find_versioned_events(event_class_name)
   expect(events).not_to be_empty,
-    "No events found for class #{event_class_name}. " \
-    "All stored event_names: #{memory_adapter.events.map { |e| e[:event_name] }.inspect}"
+                        "No events found for class #{event_class_name}. " \
+                        "All stored event_names: #{memory_adapter.events.map { |e| e[:event_name] }.inspect}"
 
   actual = events.last[:event_name]
   expect(actual).to eq(expected_name),
-    "Expected event_name '#{expected_name}' for #{event_class_name} " \
-    "but got '#{actual}'. " \
-    "BUG (if @wip): Versioning#call unconditionally overwrites event_data[:event_name] " \
-    "using normalize_event_name(class_name) even when a custom event_name is defined."
+                    "Expected event_name '#{expected_name}' for #{event_class_name} " \
+                    "but got '#{actual}'. " \
+                    "BUG (if @wip): Versioning#call unconditionally overwrites event_data[:event_name] " \
+                    "using normalize_event_name(class_name) even when a custom event_name is defined."
 end
 
 Then("the last versioned {string} event does not have a {string} field") do |event_class_name, field_name|
@@ -166,19 +179,19 @@ Then("the last versioned {string} event does not have a {string} field") do |eve
   last_event = events.last
   key = field_name.to_sym
   expect(last_event).not_to have_key(key),
-    "Expected event for #{event_class_name} to NOT have field '#{field_name}' " \
-    "but it was present with value: #{last_event[key].inspect}"
+                            "Expected event for #{event_class_name} to NOT have field '#{field_name}' " \
+                            "but it was present with value: #{last_event[key].inspect}"
 end
 
 Then("the last versioned {string} event has a {string} field equal to {int}") do |event_class_name, field_name, expected_value|
   events = find_versioned_events(event_class_name)
   expect(events).not_to be_empty,
-    "No events found for class #{event_class_name}"
+                        "No events found for class #{event_class_name}"
 
   last_event = events.last
   actual = last_event[field_name.to_sym]
   expect(actual).to eq(expected_value),
-    "Expected field '#{field_name}' to equal #{expected_value} " \
-    "for #{event_class_name} but got #{actual.inspect}. " \
-    "event_name stored: #{last_event[:event_name].inspect}"
+                    "Expected field '#{field_name}' to equal #{expected_value} " \
+                    "for #{event_class_name} but got #{actual.inspect}. " \
+                    "event_name stored: #{last_event[:event_name].inspect}"
 end

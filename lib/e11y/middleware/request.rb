@@ -32,7 +32,7 @@ module E11y
       # Process request
       # @param env [Hash] Rack environment
       # @return [Array] Rack response [status, headers, body]
-      # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
       # Rack middleware request processing requires sequential setup of tracing, context, buffer, and SLO tracking
       def call(env)
         request = Rack::Request.new(env)
@@ -60,6 +60,12 @@ module E11y
         # Call next middleware/app
         status, headers, body = @app.call(env)
 
+        # Flush buffer on 5xx responses.
+        # Rails' ShowExceptions middleware catches controller exceptions and
+        # returns a 500 response rather than letting them propagate, so we
+        # must inspect the status code here instead of relying on rescue alone.
+        E11y::Buffers::RequestScopedBuffer.flush_on_error if E11y.config.request_buffer&.enabled && status.to_i >= 500
+
         # Track SLO metrics (if enabled)
         track_http_request_slo(env, status, start_time)
 
@@ -69,22 +75,23 @@ module E11y
 
         [status, headers, body]
       rescue StandardError
-        # Flush request buffer on error (includes debug events)
+        # Fallback: flush buffer if exception propagated past ShowExceptions
+        # (e.g., custom middleware ordering or non-Rails Rack apps)
         E11y::Buffers::RequestScopedBuffer.flush_on_error if E11y.config.request_buffer&.enabled
 
         raise # Re-raise original exception
       ensure
-        # Discard request buffer on success (not on error, already flushed above)
-        # We need to check if we're here from normal completion or exception
-        # If there was an exception, buffer was already flushed in rescue block
-        if !$ERROR_INFO && E11y.config.request_buffer&.enabled # No exception occurred
-          E11y::Buffers::RequestScopedBuffer.discard
+        if E11y.config.request_buffer&.enabled
+          # Discard remaining events on success (noop if buffer already flushed/empty)
+          E11y::Buffers::RequestScopedBuffer.discard unless $ERROR_INFO
+          # Always reset thread-local buffer so next request starts clean
+          E11y::Buffers::RequestScopedBuffer.reset_all
         end
 
         # Reset context
         E11y::Current.reset
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
       private
 
@@ -141,7 +148,6 @@ module E11y
       # @param start_time [Time] Request start time
       # @return [void]
       # @api private
-      # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity
       # SLO tracking requires extracting controller/action, calculating duration, and error handling
       def track_http_request_slo(env, status, start_time)
         return unless E11y.config.slo_tracking&.enabled
@@ -163,7 +169,6 @@ module E11y
         # Don't fail if SLO tracking fails
         warn "[E11y] SLO tracking error: #{e.message}"
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity
     end
   end
 end

@@ -361,6 +361,10 @@ RSpec.describe "Validation Middleware Integration", :integration do
           "Events::OrderPaidV2"
         end
 
+        def self.event_name
+          "order.paid"
+        end
+
         adapters :memory
 
         schema do
@@ -394,14 +398,13 @@ RSpec.describe "Validation Middleware Integration", :integration do
       events = all_events.select do |e|
         e[:event_name] == "order.paid" || e[:event_name]&.include?("OrderPaidV2") || e[:event_class] == v2_event_class
       end
-      expect(events.count).to eq(1), "Only valid V2 event should be stored. Total events: #{all_events.count}, event_names: #{all_events.map do |e|
-        e[:event_name]
-      end.uniq.inspect}, event_classes: #{all_events.map do |e|
-                                          e[:event_class]&.name
-                                        end.uniq.inspect}"
+      event_names = all_events.map { |e| e[:event_name] }.uniq.inspect
+      event_classes = all_events.map { |e| e[:event_class]&.name }.uniq.inspect
+      msg = "Only valid V2 event should be stored. Total: #{all_events.count}, event_names: #{event_names}, event_classes: #{event_classes}"
+      expect(events.count).to eq(1), msg
     end
 
-    it "validates V1 and V2 events independently" do
+    it "validates V1 and V2 events independently" do # rubocop:todo RSpec/ExampleLength
       # Setup: V1 and V2 events with different schemas
       # Test: Track both events
       # Expected: Each validated against its own schema
@@ -412,6 +415,10 @@ RSpec.describe "Validation Middleware Integration", :integration do
       v1_event_class = Class.new(E11y::Event::Base) do
         def self.name
           "Events::OrderPaid"
+        end
+
+        def self.event_name
+          "order.paid"
         end
 
         adapters :memory
@@ -427,6 +434,10 @@ RSpec.describe "Validation Middleware Integration", :integration do
       v2_event_class = Class.new(E11y::Event::Base) do
         def self.name
           "Events::OrderPaidV2"
+        end
+
+        def self.event_name
+          "order.paid"
         end
 
         adapters :memory
@@ -460,15 +471,14 @@ RSpec.describe "Validation Middleware Integration", :integration do
       # Only valid events should be stored (after Versioning middleware, event_name is normalized to "order.paid")
       all_events = memory_adapter.events
       # Both V1 and V2 events have normalized event_name "order.paid" after Versioning middleware
+      order_paid_classes = [v1_event_class, v2_event_class]
       events_with_order_paid = all_events.select do |e|
-        e[:event_name] == "order.paid" || e[:event_name]&.include?("OrderPaid") || [v1_event_class,
-                                                                                    v2_event_class].include?(e[:event_class])
+        e[:event_name] == "order.paid" || e[:event_name]&.include?("OrderPaid") || order_paid_classes.include?(e[:event_class])
       end
-      expect(events_with_order_paid.count).to eq(2), "Both V1 and V2 valid events should be stored. Total events: #{all_events.count}, event_names: #{all_events.map do |e|
-        e[:event_name]
-      end.uniq.inspect}, event_classes: #{all_events.map do |e|
-                                          e[:event_class]&.name
-                                        end.uniq.inspect}"
+      event_names = all_events.map { |e| e[:event_name] }.uniq.inspect
+      event_classes = all_events.map { |e| e[:event_class]&.name }.uniq.inspect
+      msg = "Both V1 and V2 valid events should be stored. Total: #{all_events.count}, event_names: #{event_names}, event_classes: #{event_classes}"
+      expect(events_with_order_paid.count).to eq(2), msg
     end
   end
 end

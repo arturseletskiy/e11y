@@ -194,6 +194,38 @@ RSpec.describe E11y::Reliability::RetryHandler do
         expect(result).to be_nil
       end
     end
+
+    context "with retry_rate_limiter (BUG-002: thundering herd prevention)" do
+      let(:rate_limiter) { E11y::Reliability::RetryRateLimiter.new(limit: 2, window: 1.0) }
+      let(:rate_limited_handler) do
+        described_class.new(
+          config: { max_attempts: 5, base_delay_ms: 1, fail_on_error: false },
+          retry_rate_limiter: rate_limiter
+        )
+      end
+
+      it "accepts retry_rate_limiter kwarg without error" do
+        expect do
+          described_class.new(
+            config: { max_attempts: 3 },
+            retry_rate_limiter: rate_limiter
+          )
+        end.not_to raise_error
+      end
+
+      it "stops retrying when rate limiter blocks (prevents thundering herd)" do
+        attempt = 0
+
+        result = rate_limited_handler.with_retry(adapter: adapter, event: event_data) do
+          attempt += 1
+          raise Timeout::Error
+        end
+
+        # limit: 2 means only 2 retries allowed, so total attempts should be <= 3 (1 initial + 2 retries)
+        expect(attempt).to be <= 3
+        expect(result).to be_nil
+      end
+    end
   end
 
   describe "backoff calculation" do

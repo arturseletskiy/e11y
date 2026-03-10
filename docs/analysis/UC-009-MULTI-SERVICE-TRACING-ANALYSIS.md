@@ -557,5 +557,68 @@ end
 
 ---
 
-**Analysis Complete:** 2026-01-26  
+**Analysis Complete:** 2026-01-26
 **Next Step:** UC-009 Phase 2: Planning Complete
+
+---
+
+## 🔍 Production Readiness Audit — 2026-03-10
+
+**Audit Date:** 2026-03-10
+**Status:** ✅ PRODUCTION-READY для single-service; ⚠️ Known limitation для outgoing HTTP propagation
+
+### Обновлённый статус компонентов
+
+| Компонент | Статус | Notes |
+|-----------|--------|-------|
+| TraceContext middleware | ✅ PRODUCTION-READY | trace_id, span_id, parent_trace_id во всех events |
+| Request middleware | ✅ PRODUCTION-READY | Extracts from traceparent, X-Request-ID, X-Trace-ID |
+| E11y::Current | ✅ PRODUCTION-READY | Thread-local, ActiveSupport::CurrentAttributes |
+| W3C Trace Context (incoming) | ✅ PRODUCTION-READY | Basic traceparent parsing works |
+| Parent-child (background jobs) | ✅ PRODUCTION-READY | parent_trace_id tested in Sidekiq integration |
+| **Outgoing HTTP propagation** | ❌ → **v1.1 Backlog** | Faraday/Net::HTTP не поддерживаются автоматически |
+| Baggage propagation | ⚠️ PARTIAL | E11y::Current.baggage существует, API не доступен |
+| Distributed sampling | ⚠️ PARTIAL | sampled flag есть, distributed decision нет |
+
+### v1.1 Backlog: Outgoing HTTP Propagation
+
+**Что не работает сейчас:**
+- Faraday, Net::HTTP, HTTParty не получают автоматически `traceparent` header
+- При вызове downstream сервисов trace context теряется на стыке
+- Нет Faraday middleware для автоматического inject
+
+**Временный workaround для v1.0 пользователей:**
+```ruby
+# Ручной inject traceparent при вызовах к другим сервисам
+trace_id = E11y::Current.trace_id
+span_id = E11y::Current.span_id
+headers = {
+  "traceparent" => "00-#{trace_id}-#{span_id[0..15]}-01",
+  "X-Trace-ID" => trace_id
+}
+# Передать headers в HTTP клиент
+response = faraday_client.get("/api/endpoint", nil, headers)
+```
+
+**Что нужно реализовать в v1.1:**
+1. `E11y::Instruments::FaradayMiddleware` — Rack middleware для Faraday
+2. `E11y::Instruments::NetHttpInstrumentation` — monkey-patch или prepend для Net::HTTP
+3. `config.auto_propagate_trace_context = true` — opt-in (не всегда нужно)
+4. Integration tests: cross-service trace propagation с двумя mock-сервисами
+
+### ✅ Что работает и проверено (audit)
+
+- Single-service tracing: полный flow trace_id → events ✅
+- Parent-child job tracing: tested in `sidekiq_integration_spec.rb` ✅
+- Context through middleware stack: tested in `middleware_integration_spec.rb` ✅
+- Response headers include `X-E11y-Trace-Id` и `X-E11y-Span-Id` ✅
+
+### ⚠️ W3C Compliance Note
+
+Текущий traceparent parsing — `split("-")` без полной валидации формата.
+Для полного W3C Trace Context compliance нужна валидация:
+- version field = "00"
+- trace-id = 32 hex chars
+- parent-id = 16 hex chars
+- flags = valid 8-bit integer
+Приоритет: низкий для v1.0 (большинство систем отправляют валидный traceparent).

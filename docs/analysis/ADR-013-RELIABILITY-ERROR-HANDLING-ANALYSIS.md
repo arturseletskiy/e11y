@@ -512,5 +512,103 @@ end
 
 ---
 
-**Analysis Complete:** 2026-01-26  
+**Analysis Complete:** 2026-01-26
 **Next Step:** ADR-013 Phase 2: Planning Complete
+
+---
+
+## 🔍 Production Readiness Audit — 2026-03-10
+
+**Audit Date:** 2026-03-10
+**Status:** ⚠️ PARTIALLY PRODUCTION-READY — Critical bugs must be fixed before deployment
+
+### Updated Component Status
+
+| Component | Jan 26 Status | Mar 10 Status | Notes |
+|-----------|---------------|---------------|-------|
+| RetryHandler | ✅ Implemented | ✅ PRODUCTION-READY | 5 integration tests pass |
+| CircuitBreaker | ⚠️ PARTIAL | ✅ PRODUCTION-READY | Fully implemented, 5 integration tests pass |
+| DLQ::FileAdapter | ⚠️ PARTIAL (was FileStorage) | ✅ Renamed + DLQ::Base extracted | `FileStorage` is now alias |
+| DLQ::Filter | ✅ Implemented | 🔴 BROKEN — signature bug | See BUG-001 below |
+| RetryRateLimiter | ✅ Implemented | 🔴 NOT INTEGRATED | See BUG-002 below |
+| Integration Tests | ❌ NONE | ⚠️ PARTIAL (14 of ~17 scenarios) | Created since Jan 26 |
+
+### 🔴 BUG-001: DLQ Filter Signature Mismatch (Runtime Crash)
+
+**File:** `lib/e11y/adapters/base.rb:519`
+**Severity:** CRITICAL — Production blocker
+
+**Описание:** Метод `should_save?` вызывается с двумя аргументами в `Adapters::Base`, но реализация фильтра принимает только один:
+
+```ruby
+# В lib/e11y/adapters/base.rb:519 — вызов с 2 аргументами:
+@dlq_filter&.should_save?(event_data, error)
+
+# В lib/e11y/reliability/dlq/filter.rb — принимает 1 аргумент:
+def should_save?(event_data)
+  # ...
+end
+```
+
+**Последствия:**
+- Runtime crash (`ArgumentError: wrong number of arguments (given 2, expected 1)`) при любой ошибке адаптера, когда `dlq_filter` сконфигурирован
+- C02 Resolution (критические события обходят rate limiter) полностью не работает — любая попытка сохранить в DLQ вызовет exception
+- Вместо сохранения важных событий в DLQ они теряются
+
+**Варианты исправления:**
+- **Option A (простой):** В `base.rb` передавать только `event_data`. Фильтр использует только данные события.
+- **Option B (расширенный):** Добавить `error` как второй параметр в `should_save?(event_data, error)`. Позволяет фильтровать по типу ошибки (например, сохранять только network errors, не validation errors).
+
+**Нужно добавить unit test:**
+```ruby
+it "calls dlq_filter.should_save? with correct arguments" do
+  # Verify the call signature matches implementation
+end
+```
+
+---
+
+### 🔴 BUG-002: RetryRateLimiter Not Integrated (C06 Not Resolved)
+
+**File:** `lib/e11y/reliability/retry_rate_limiter.rb` (существует, но нигде не вызывается)
+**Severity:** CRITICAL — C06 Resolution не работает
+
+**Описание:** Класс `RetryRateLimiter` реализован полностью (token bucket, per-window, jitter), имеет unit tests, но **нигде не вызывается** из цепочки обработки ошибок. Ни `RetryHandler`, ни `Adapters::Base` не используют его.
+
+**Последствия:**
+- C06 Resolution (предотвращение thundering herd при восстановлении адаптера) не работает
+- При массовых сбоях адаптера и последующем восстановлении — одновременный шторм retry-запросов
+- В production при восстановлении сервиса возможна его повторная перегрузка
+
+**Где нужно интегрировать:**
+- **Option A:** Внутри `RetryHandler#with_retry` — проверять лимит перед каждой retry-попыткой
+- **Option B:** В `Adapters::Base#write_with_reliability` — на уровне адаптера
+
+**Нужно добавить integration test:**
+```ruby
+it "limits retry rate to prevent thundering herd (C06)" do
+  # Verify retry calls are rate-limited
+end
+```
+
+---
+
+### ⚠️ Missing Integration Test Scenarios
+
+Из 7 сценариев, требуемых документом анализа, не покрыты:
+
+| Сценарий | Статус | Что нужно |
+|----------|--------|-----------|
+| Scenario 4: Retry Rate Limiting (C06) | ❌ Missing | Integration test с RetryRateLimiter (после исправления BUG-002) |
+| Scenario 5: Non-Failing Tracking (C18) | ⚠️ PARTIAL | Unit test RetryHandler с `fail_on_error=false` есть; нет E2E с background job |
+| Scenario 7: Graceful Degradation | ❌ Missing | Тест: один адаптер падает, другие работают, события первого идут в DLQ |
+| DLQ Replay E2E | ❌ Missing | Unit tests replay есть; нет integration теста, что replay доходит до адаптеров |
+| DLQ Filter + Rate Limiter (C02) | ❌ Missing | Тест: критическое событие обходит rate limiter и сохраняется в DLQ |
+
+### ✅ Что работает корректно (проверено аудитом)
+
+- RetryHandler: 5 integration tests pass ✅
+- CircuitBreaker: 3-state machine (CLOSED → OPEN → HALF_OPEN), 5 tests pass ✅
+- DLQ::FileAdapter: сохранение, ротация, очистка по retention, 4 tests pass ✅
+- DLQ::Base: абстрактный интерфейс выделен в commit 99ea2d6 ✅
+- Конфигурация error_handling в E11y.configure ✅

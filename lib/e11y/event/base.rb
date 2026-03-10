@@ -89,7 +89,7 @@ module E11y
         #
         # @raise [E11y::ValidationError] if payload doesn't match schema (when validation runs)
         def track(**payload)
-          return unless E11y.config.enabled
+          return if E11y.config.enabled == false
 
           # Build event data hash for pipeline processing
           event_data = {
@@ -99,6 +99,7 @@ module E11y
             severity: severity,
             version: version,
             adapters: adapters,
+            explicit_adapters: explicit_adapters?,
             timestamp: Time.now.utc,
             retention_period: retention_period,
             context: build_context
@@ -240,9 +241,7 @@ module E11y
         #   end
         def severity(value = nil)
           if value
-            unless SEVERITIES.include?(value)
-              raise ArgumentError, "Invalid severity: #{value}. Must be one of: #{SEVERITIES.join(', ')}"
-            end
+            raise ArgumentError, "Invalid severity: #{value}. Must be one of: #{SEVERITIES.join(', ')}" unless SEVERITIES.include?(value)
 
             @severity = value
           end
@@ -299,9 +298,7 @@ module E11y
           @retention_period = value if value
           # Return explicitly set retention_period OR inherit from parent (if set) OR config default OR final fallback
           return @retention_period if @retention_period
-          if superclass != E11y::Event::Base && superclass.instance_variable_get(:@retention_period)
-            return superclass.retention_period
-          end
+          return superclass.retention_period if superclass != E11y::Event::Base && superclass.instance_variable_get(:@retention_period)
 
           # Fallback to configuration or 30 days
           E11y.configuration&.default_retention_period || 30.days
@@ -326,16 +323,29 @@ module E11y
         #     config.adapters[:errors_tracker] = E11y::Adapters::Sentry.new(...)
         #   end
         def adapters(*list)
-          @adapters = list.flatten if list.any?
+          if list.any?
+            @adapters = list.flatten
+            @explicit_adapters = true # Track that adapters were explicitly configured
+          end
           # Return explicitly set adapters OR inherit from parent (if set) OR resolve from severity
           return @adapters if @adapters
           return superclass.adapters if superclass != E11y::Event::Base && superclass.instance_variable_get(:@adapters)
 
-          # Audit events without explicit adapters return empty array (use routing rules)
-          # This allows routing_rules to route audit events dynamically (UC-012, UC-019)
-          return [] if audit_event?
+          # Audit events without explicit adapters use routing rules (UC-012), not severity-based fallback
+          return [] if audit_event? && !explicit_adapters?
 
           resolved_adapters
+        end
+
+        # Check if adapters were explicitly configured (not inferred from severity)
+        #
+        # Used by routing middleware to distinguish explicit adapter routing from
+        # severity-based defaults. Audit events without explicit adapters use
+        # routing_rules dynamically (UC-012, UC-019).
+        #
+        # @return [Boolean] true if adapters were set via DSL (e.g., adapters :audit_encrypted)
+        def explicit_adapters?
+          @explicit_adapters == true
         end
 
         # Get event name (normalized)
@@ -369,7 +379,6 @@ module E11y
         #   class CriticalEvent < E11y::Event::Base
         #     sample_rate 1.0  # 100% sampling
         #   end
-        # rubocop:disable Metrics/CyclomaticComplexity
         def sample_rate(value = nil)
           if value
             unless value.is_a?(Numeric) && value >= 0.0 && value <= 1.0
@@ -381,13 +390,10 @@ module E11y
 
           # Return explicitly set sample_rate OR inherit from parent (if set) OR nil (use resolve_sample_rate)
           return @sample_rate if @sample_rate
-          if superclass != E11y::Event::Base && superclass.instance_variable_get(:@sample_rate)
-            return superclass.sample_rate
-          end
+          return superclass.sample_rate if superclass != E11y::Event::Base && superclass.instance_variable_get(:@sample_rate)
 
           nil
         end
-        # rubocop:enable Metrics/CyclomaticComplexity
 
         # Configure value-based sampling (FEAT-4849)
         #
@@ -464,9 +470,7 @@ module E11y
 
           # Return explicitly set config OR inherit from parent (if set) OR nil
           return @adaptive_sampling if @adaptive_sampling
-          if superclass != E11y::Event::Base && superclass.instance_variable_get(:@adaptive_sampling)
-            return superclass.adaptive_sampling
-          end
+          return superclass.adaptive_sampling if superclass != E11y::Event::Base && superclass.instance_variable_get(:@adaptive_sampling)
 
           nil
         end

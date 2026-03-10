@@ -226,6 +226,50 @@ RSpec.describe E11y::Adapters::InMemory do
     end
   end
 
+  describe "#clear" do
+    before do
+      adapter.write(paid_order_event)
+      adapter.write(failed_order_event)
+    end
+
+    it "clears all events" do
+      adapter.clear
+      expect(adapter.events).to be_empty
+    end
+
+    it "clears all batches" do
+      adapter.write_batch([user_created_event])
+      adapter.clear
+      expect(adapter.batches).to be_empty
+    end
+
+    it "resets dropped_count" do
+      # Force a drop by filling the adapter to capacity
+      adapter.instance_variable_set(:@dropped_count, 3)
+      adapter.clear
+      expect(adapter.dropped_count).to eq(0)
+    end
+  end
+
+  describe "#last_event" do
+    it "returns nil when no events" do
+      expect(adapter.last_event).to be_nil
+    end
+
+    it "returns the most recently written event" do
+      adapter.write({ event_name: "order.paid", severity: :info, payload: {} })
+      adapter.write({ event_name: "order.failed", severity: :error, payload: {} })
+      expect(adapter.last_event[:event_name]).to eq("order.failed")
+    end
+
+    it "includes Rails instrumentation events (no filter in base adapter)" do
+      adapter.write({ event_name: "order.paid", severity: :info, payload: {} })
+      rails_evt = { event_name: "E11y::Events::Rails::RequestCompleted", severity: :info, payload: {} }
+      adapter.write(rails_evt)
+      expect(adapter.last_event).to eq(rails_evt)
+    end
+  end
+
   describe "#event_count" do
     before do
       adapter.write(paid_order_event)
@@ -238,8 +282,16 @@ RSpec.describe E11y::Adapters::InMemory do
       expect(adapter.event_count).to eq(4)
     end
 
-    it "returns count for specific event_name" do
+    it "returns count for specific event_name (keyword arg)" do
       expect(adapter.event_count(event_name: "order.paid")).to eq(2)
+    end
+
+    it "returns count for specific event_name (positional string arg)" do
+      expect(adapter.event_count("order.paid")).to eq(2)
+    end
+
+    it "returns zero for non-existent event_name via positional arg" do
+      expect(adapter.event_count("nonexistent")).to eq(0)
     end
 
     it "returns zero for non-existent event_name" do
@@ -380,11 +432,13 @@ RSpec.describe E11y::Adapters::InMemory do
     it "provides query methods for testing" do
       expect(adapter).to respond_to(:find_events)
       expect(adapter).to respond_to(:event_count)
+      expect(adapter).to respond_to(:last_event)
       expect(adapter).to respond_to(:last_events)
       expect(adapter).to respond_to(:first_events)
       expect(adapter).to respond_to(:events_by_severity)
       expect(adapter).to respond_to(:any_event?)
       expect(adapter).to respond_to(:clear!)
+      expect(adapter).to respond_to(:clear)
     end
   end
 end

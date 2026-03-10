@@ -38,8 +38,7 @@ module E11y
     module AuditEvent
       def self.included(base)
         base.class_eval do
-          # Audit events will use audit pipeline (Phase 4)
-          # Severity is NOT set by preset - user decides based on event criticality
+          audit_event true
         end
 
         # Extend class with audit-specific methods

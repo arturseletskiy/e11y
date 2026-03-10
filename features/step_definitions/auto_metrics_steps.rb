@@ -22,7 +22,7 @@ Then("defining an event class with a metrics block should not raise") do
     error = e
   end
   expect(error).to be_nil,
-    "Defining an event class with a metrics block raised: #{error&.class}: #{error&.message}"
+                   "Defining an event class with a metrics block raised: #{error&.class}: #{error&.message}"
 end
 
 When("I define an event class with a counter named {string}") do |counter_name|
@@ -39,8 +39,10 @@ Then("the Metrics Registry should contain a counter named {string}") do |counter
   registry = E11y::Metrics::Registry.instance
   entry = registry.all.find { |m| m[:name] == counter_name.to_sym && m[:type] == :counter }
   expect(entry).not_to be_nil,
-    "Expected Metrics Registry to contain a counter named #{counter_name.inspect}, " \
-    "but it was not found. Registry contents: #{registry.all.map { |m| [m[:type], m[:name]] }.inspect}"
+                       "Expected Metrics Registry to contain a counter named #{counter_name.inspect}, " \
+                       "but it was not found. Registry contents: #{registry.all.map do |m|
+                         [m[:type], m[:name]]
+                       end.inspect}"
 end
 
 When("I define an event class with a histogram {string} and buckets {int} {int} {int} {int}") do |name, b1, b2, b3, b4|
@@ -60,11 +62,11 @@ Then("the Metrics Registry should contain a histogram {string} with buckets {int
   registry = E11y::Metrics::Registry.instance
   entry = registry.all.find { |m| m[:name] == name.to_sym && m[:type] == :histogram }
   expect(entry).not_to be_nil,
-    "Expected Metrics Registry to contain a histogram named #{name.inspect}, " \
-    "but it was not found."
+                       "Expected Metrics Registry to contain a histogram named #{name.inspect}, " \
+                       "but it was not found."
   expect(entry[:buckets]).to eq(expected_buckets),
-    "Expected histogram #{name.inspect} to have buckets #{expected_buckets.inspect}, " \
-    "but found: #{entry[:buckets].inspect}"
+                             "Expected histogram #{name.inspect} to have buckets #{expected_buckets.inspect}, " \
+                             "but found: #{entry[:buckets].inspect}"
 end
 
 When("I define two event classes using metric name {string} with different types") do |metric_name|
@@ -93,9 +95,9 @@ end
 
 Then("a TypeConflictError should have been raised") do
   expect(@type_conflict_error).not_to be_nil,
-    "Expected E11y::Metrics::Registry::TypeConflictError to be raised " \
-    "when two event classes define the same metric name with different types, " \
-    "but no error was raised."
+                                      "Expected E11y::Metrics::Registry::TypeConflictError to be raised " \
+                                      "when two event classes define the same metric name with different types, " \
+                                      "but no error was raised."
   expect(@type_conflict_error).to be_a(E11y::Metrics::Registry::TypeConflictError)
 end
 
@@ -104,11 +106,11 @@ Then("E11y::Metrics should have a configured backend") do
   E11y::Metrics.reset_backend!
   backend = E11y::Metrics.backend
   expect(backend).not_to be_nil,
-    "Expected E11y::Metrics.backend to return a configured adapter, " \
-    "but it returned nil. " \
-    "BUG: No Yabeda adapter is auto-configured in the default E11y setup. " \
-    "All E11y::Metrics.increment/histogram/gauge calls are silently discarded. " \
-    "Users must manually add the Yabeda adapter to the pipeline."
+                         "Expected E11y::Metrics.backend to return a configured adapter, " \
+                         "but it returned nil. " \
+                         "BUG: No Yabeda adapter is auto-configured in the default E11y setup. " \
+                         "All E11y::Metrics.increment/histogram/gauge calls are silently discarded. " \
+                         "Users must manually add the Yabeda adapter to the pipeline."
 end
 
 # @wip: BUG 2 — increment_metric in middleware is an empty stub
@@ -149,15 +151,15 @@ Then("at least 1 internal middleware metric should have been tracked") do
   # increment_metric is called but is a stub — it never reaches a real metrics backend.
   # We first verify the stub IS called, then check the stub doesn't produce actual tracking.
   expect(calls.size).to be >= 1,
-    "Expected at least 1 call to increment_metric in TraceContext middleware, " \
-    "but 0 calls were detected. Check that the spy is wired correctly."
+                        "Expected at least 1 call to increment_metric in TraceContext middleware, " \
+                        "but 0 calls were detected. Check that the spy is wired correctly."
 
   # Now verify the stub's no-op nature: E11y::Metrics.increment was NOT called.
   E11y::Metrics.reset_backend!
   backend = E11y::Metrics.backend
   expect(backend).not_to be_nil,
-    "increment_metric was called #{calls.size} time(s) with: #{calls.inspect}, " \
-    "but E11y::Metrics.backend is nil — metric calls go nowhere. " \
-    "BUG: increment_metric in middleware is an empty stub " \
-    "(body contains only a TODO comment, no real metric recording)."
+                         "increment_metric was called #{calls.size} time(s) with: #{calls.inspect}, " \
+                         "but E11y::Metrics.backend is nil — metric calls go nowhere. " \
+                         "BUG: increment_metric in middleware is an empty stub " \
+                         "(body contains only a TODO comment, no real metric recording)."
 end

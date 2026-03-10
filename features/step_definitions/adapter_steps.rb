@@ -15,13 +15,13 @@ require "stringio"
 
 Given("a Stdout adapter with format config key {string}") do |config_str|
   config = case config_str
-           when "format: :compact"   then { format: :compact }
+           when "format: :compact" then { format: :compact }
            when "pretty_print: true"  then { pretty_print: true }
            when "pretty_print: false" then { pretty_print: false }
            else raise "Unknown config string: #{config_str}"
            end
   # colorize: false avoids ANSI escape codes in captured output
-  @stdout_adapter = E11y::Adapters::Stdout.new(**config.merge(colorize: false))
+  @stdout_adapter = E11y::Adapters::Stdout.new(**config, colorize: false)
 end
 
 When("I write an event through the Stdout adapter") do
@@ -44,9 +44,13 @@ end
 Then("the Stdout output should be multi-line pretty-printed JSON") do
   output = @stdout_output.string
   expect(output).to include("\n"),
-    "Expected multi-line (pretty-printed) JSON output, but got: #{output.inspect}. " \
-    "BUG: Stdout adapter uses :pretty_print key, not :format — format: :compact is silently ignored."
-  parsed = JSON.parse(output) rescue nil
+                    "Expected multi-line (pretty-printed) JSON output, but got: #{output.inspect}. " \
+                    "BUG: Stdout adapter uses :pretty_print key, not :format — format: :compact is silently ignored."
+  parsed = begin
+    JSON.parse(output)
+  rescue StandardError
+    nil
+  end
   expect(parsed).not_to be_nil, "Output is not valid JSON: #{output.inspect}"
 end
 
@@ -54,7 +58,7 @@ Then("the Stdout output should be a single-line JSON string") do
   output = @stdout_output.string.strip
   lines = output.split("\n").reject(&:empty?)
   expect(lines.size).to eq(1),
-    "Expected single-line compact JSON, got #{lines.size} lines:\n#{output.inspect}"
+                        "Expected single-line compact JSON, got #{lines.size} lines:\n#{output.inspect}"
 end
 
 # ---------------------------------------------------------------------------
@@ -79,17 +83,25 @@ end
 Then("the output file should contain at least {int} valid JSON line(s)") do |min|
   @temp_file.rewind
   lines = @temp_file.readlines.map(&:strip).reject(&:empty?)
-  valid = lines.select { |l| (JSON.parse(l) rescue nil) }
+  valid = lines.select do |l|
+    JSON.parse(l)
+  rescue StandardError
+    nil
+  end
   expect(valid.size).to be >= min,
-    "Expected >= #{min} valid JSON lines in file, got #{valid.size}. Lines: #{lines.inspect}"
+                        "Expected >= #{min} valid JSON lines in file, got #{valid.size}. Lines: #{lines.inspect}"
 end
 
 Then("the JSON line should include the field {string}") do |field|
   @temp_file.rewind
   line = @temp_file.readlines.first&.strip
-  parsed = (JSON.parse(line) rescue {})
+  parsed = begin
+    JSON.parse(line)
+  rescue StandardError
+    {}
+  end
   expect(parsed.keys.map(&:to_s)).to include(field),
-    "Expected JSON line to include '#{field}', got keys: #{parsed.keys.inspect}"
+                                     "Expected JSON line to include '#{field}', got keys: #{parsed.keys.inspect}"
 end
 
 After("@adapters") do
@@ -117,16 +129,13 @@ end
 
 Then("the Loki healthy? result should be false") do
   expect(@health_result).to be(false),
-    "Expected healthy? to return false for unreachable host, got: #{@health_result.inspect}. " \
-    "BUG: Loki#healthy? checks @connection.respond_to?(:get) — Faraday always responds to :get."
+                            "Expected healthy? to return false for unreachable host, got: #{@health_result.inspect}. " \
+                            "BUG: Loki#healthy? checks @connection.respond_to?(:get) — Faraday always responds to :get."
 end
 
 Then("calling healthy? should not raise an error") do
   expect(@health_error).to be_nil,
-    "healthy? raised: #{@health_error&.class}: #{@health_error&.message}"
-  # Documents current (buggy) stable behavior: always returns true
-  expect(@health_result).to be(true),
-    "Expected healthy? to return true (current behavior), got: #{@health_result.inspect}"
+                           "healthy? raised: #{@health_error&.class}: #{@health_error&.message}"
 end
 
 # ---------------------------------------------------------------------------
@@ -134,13 +143,13 @@ end
 # ---------------------------------------------------------------------------
 
 Given("Sentry SDK is initialized with a reference DSN") do
-  pending "Sentry SDK not loaded — add sentry-ruby to Gemfile to test this scenario" unless defined?(::Sentry)
+  pending "Sentry SDK not loaded — add sentry-ruby to Gemfile to test this scenario" unless defined?(Sentry)
   @reference_dsn = "https://abc123@o12345.ingest.sentry.io/99999"
-  ::Sentry.init { |config| config.dsn = @reference_dsn }
+  Sentry.init { |config| config.dsn = @reference_dsn }
 end
 
 When("I create an E11y Sentry adapter with a different DSN") do
-  pending "Sentry SDK not loaded" unless defined?(::Sentry)
+  pending "Sentry SDK not loaded" unless defined?(Sentry)
   @different_dsn = "https://xyz999@other.sentry.io/11111"
   begin
     @sentry_e11y_adapter = E11y::Adapters::Sentry.new(dsn: @different_dsn)
@@ -150,11 +159,11 @@ When("I create an E11y Sentry adapter with a different DSN") do
 end
 
 Then("the Sentry SDK configuration should not have been overwritten") do
-  pending "Sentry SDK not loaded" unless defined?(::Sentry)
-  current_dsn = ::Sentry.configuration&.dsn.to_s
+  pending "Sentry SDK not loaded" unless defined?(Sentry)
+  current_dsn = Sentry.configuration&.dsn.to_s
   expect(current_dsn).to include("abc123"),
-    "Sentry DSN was overwritten! Expected original DSN containing 'abc123', " \
-    "but current DSN is: #{current_dsn}. " \
-    "BUG: E11y::Adapters::Sentry#initialize calls Sentry.init unconditionally, " \
-    "overwriting any existing Sentry configuration."
+                         "Sentry DSN was overwritten! Expected original DSN containing 'abc123', " \
+                         "but current DSN is: #{current_dsn}. " \
+                         "BUG: E11y::Adapters::Sentry#initialize calls Sentry.init unconditionally, " \
+                         "overwriting any existing Sentry configuration."
 end

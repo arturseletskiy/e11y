@@ -4,6 +4,7 @@ require "openssl"
 require "json"
 require "fileutils"
 require "base64"
+require "e11y/event/base"
 
 module E11y
   module Adapters
@@ -84,13 +85,46 @@ module E11y
       # Read and decrypt audit event (for verification)
       #
       # @param event_id [String] Event ID
-      # @return [Hash] Decrypted event data
+      # @return [Hash, nil] Decrypted event data, or nil if decryption fails
       def read(event_id)
         encrypted_data = read_from_storage(event_id)
         decrypt_event(encrypted_data)
+      rescue Errno::ENOENT => e
+        warn "AuditEncrypted read error (file not found): #{e.message}"
+        nil
+      rescue JSON::ParserError => e
+        warn "AuditEncrypted read error (corrupt data): #{e.message}"
+        nil
+      rescue OpenSSL::Cipher::CipherError => e
+        # SECURITY: decryption failure indicates tampered or corrupt ciphertext.
+        # Re-raise so callers can handle it; also attempt to emit a security event.
+        track_security_event(event_id, e)
+        raise
       end
 
       private
+
+      # Emit a security event when decryption fails (potential tampering).
+      # Guards against E11y not being fully configured in non-production envs.
+      #
+      # @param event_id [String] The event ID that failed to decrypt
+      # @param error [OpenSSL::Cipher::CipherError] The decryption error
+      # @return [void]
+      def track_security_event(event_id, error)
+        E11y::Event::Base.track(
+          event_name: "e11y.security.audit_decryption_failed",
+          severity: :error,
+          payload: {
+            event_id: event_id,
+            error_class: error.class.name,
+            error_message: error.message,
+            adapter: self.class.name
+          }
+        )
+      rescue StandardError
+        warn "AuditEncrypted: decryption failure detected for #{event_id} " \
+             "(#{error.message}); security event could not be tracked"
+      end
 
       # Encrypt event data with AES-256-GCM
       #
@@ -127,7 +161,6 @@ module E11y
       #
       # @param encrypted [Hash] Encrypted data with nonce and tag
       # @return [Hash] Decrypted event data
-      # rubocop:disable Metrics/AbcSize
       # Cryptographic operations require multiple steps for secure decryption
       def decrypt_event(encrypted)
         cipher = OpenSSL::Cipher.new(CIPHER)
@@ -141,7 +174,6 @@ module E11y
 
         JSON.parse(plaintext, symbolize_names: true)
       end
-      # rubocop:enable Metrics/AbcSize
 
       # Write encrypted data to storage
       #
@@ -216,17 +248,27 @@ module E11y
       #
       # @return [String] Encryption key
       def default_encryption_key
-        key = ENV.fetch("E11Y_AUDIT_ENCRYPTION_KEY") do
-          if defined?(::Rails) && ::Rails.env.production?
-            raise E11y::Error, "E11Y_AUDIT_ENCRYPTION_KEY must be set in production"
-          end
-
-          # Development fallback
-          OpenSSL::Random.random_bytes(32)
+        # Use ENV var if provided (required in production)
+        env_key = ENV.fetch("E11Y_AUDIT_ENCRYPTION_KEY", nil)
+        if env_key
+          return env_key.bytesize == 32 ? env_key : [env_key].pack("H*")
         end
 
-        # Ensure 32 bytes
-        key.bytesize == 32 ? key : [key].pack("H*")
+        # In production without ENV var, raise a clear error
+        if defined?(::Rails) && ::Rails.env.production?
+          raise E11y::Error,
+                "E11Y_AUDIT_ENCRYPTION_KEY must be set in production. " \
+                "Generate with: openssl rand -hex 32"
+        end
+
+        # Development/test: derive a stable key from a fixed seed.
+        # This is NOT secure for production — only for development/testing.
+        OpenSSL::PKCS5.pbkdf2_hmac_sha1(
+          "e11y-development-key-not-for-production",
+          "e11y-static-salt",
+          1000,
+          32
+        )
       end
 
       # Default storage path

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "e11y/buffers/request_scoped_buffer"
+
 module E11y
   module Middleware
     # Routing middleware routes events to appropriate adapters based on retention policies.
@@ -65,8 +67,28 @@ module E11y
         # Handle nil from upstream middleware (e.g., rate limiting, sampling)
         return nil unless event_data
 
+        # 0. Buffer debug events when request-scoped buffering is active.
+        #    Only :debug severity is buffered — see ADR-001 §7 ("Request Buffer: :debug only").
+        #    On request success → buffer discarded. On request failure → flushed to adapters.
+        #    Non-debug events bypass the buffer and are written immediately.
+        if E11y.config.request_buffer&.enabled &&
+           E11y::Buffers::RequestScopedBuffer.active? &&
+           event_data[:severity] == :debug
+          event_data[:request_id] ||= E11y::Buffers::RequestScopedBuffer.request_id
+          E11y::Buffers::RequestScopedBuffer.add_event(event_data)
+          return nil
+        end
+
         # 1. Determine target adapters (explicit or via routing rules)
-        target_adapters = if event_data[:adapters]&.any?
+        #
+        # Routing priority:
+        # - Non-audit events with adapters → use those directly (bypass routing rules)
+        # - Audit events with EXPLICIT adapters (adapters :foo DSL) → use those (bypass routing rules)
+        # - Audit events WITHOUT explicit adapters → always apply routing rules (UC-012, UC-019)
+        #   This allows audit events to be routed dynamically by routing_rules config
+        use_explicit = event_data[:adapters]&.any? &&
+                       (!event_data[:audit_event] || event_data[:explicit_adapters])
+        target_adapters = if use_explicit
                             # Explicit adapters bypass routing rules
                             event_data[:adapters]
                           else
@@ -96,7 +118,7 @@ module E11y
         event_data[:routing] = {
           adapters: target_adapters,
           routed_at: Time.now.utc,
-          routing_type: event_data[:adapters]&.any? ? :explicit : :rules
+          routing_type: use_explicit ? :explicit : :rules
         }
 
         # 4. Increment metrics
@@ -203,7 +225,7 @@ module E11y
         # Audit events are valid if:
         # 1. They have explicit adapters (non-empty), OR
         # 2. They matched a routing rule (routing_used_fallback = false)
-        
+
         has_explicit_adapters = event_data[:adapters]&.any?
         return if has_explicit_adapters # Explicit adapters → valid
 
@@ -214,16 +236,16 @@ module E11y
         # CRITICAL: Audit event using fallback routing (no rule matched!)
         error_message = <<~ERROR
           [E11y] CRITICAL: Audit event has no routing configuration!
-          
+
           Event: #{event_data[:event_name]}
           Routed to: #{target_adapters.inspect} (fallback adapters)
-          
+
           Audit events MUST be explicitly routed to compliance-grade storage.
-          
+
           Fix options:
           1. Add explicit adapters: `adapters :audit_encrypted`
           2. Configure routing rule: `config.routing_rules = [->(e) { :audit_encrypted if e[:audit_event] }]`
-          
+
           See UC-012 Audit Trail documentation for details.
         ERROR
 

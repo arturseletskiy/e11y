@@ -58,14 +58,21 @@ module E11y
 
     # Track an event
     #
-    # @param event [Event] event instance to track
+    # Accepts either an event instance or an event class with an optional payload.
+    # Delegates to the event class's `.track` method.
+    #
+    # @param event_or_class [E11y::Event::Base, Class] event instance or event class
+    # @param payload [Hash] keyword arguments forwarded to EventClass.track (used with class form)
     # @return [void]
     #
-    # @example
-    #   E11y.track(Events::UserSignup.new(user_id: 123))
-    def track(event)
-      # TODO: Implement in Phase 1
-      raise NotImplementedError, "E11y.track will be implemented in Phase 1"
+    # @example Pass an event instance
+    #   E11y.track(Events::UserSignup.new)
+    #
+    # @example Pass an event class with payload
+    #   E11y.track(Events::UserSignup, user_id: 123)
+    def track(event_or_class, **payload)
+      event_class = event_or_class.is_a?(Class) ? event_or_class : event_or_class.class
+      event_class.track(**payload)
     end
 
     # Get logger instance
@@ -127,7 +134,7 @@ module E11y
       @adapters = {} # Hash of adapter_name => adapter_instance
       @log_level = :info
       @pipeline = E11y::Pipeline::Builder.new
-      @enabled = true
+      @enabled = nil
       @environment = nil
       @service_name = nil
     end
@@ -146,7 +153,7 @@ module E11y
       @active_job = ActiveJobConfig.new
       @sidekiq = SidekiqConfig.new
       @error_handling = ErrorHandlingConfig.new # ✅ C18 Resolution
-      @dlq_storage = nil # Set by user (e.g., DLQ::FileStorage instance)
+      @dlq_storage = nil # Set by user (e.g., DLQ::FileAdapter instance)
       @dlq_filter = nil # Set by user (e.g., DLQ::Filter instance)
       @rate_limiting = RateLimitingConfig.new
       @slo_tracking = SLOTrackingConfig.new # ✅ L3.14.1
@@ -189,12 +196,14 @@ module E11y
     # Setup default middleware pipeline
     #
     # Default pipeline order (per ADR-015):
-    # 1. TraceContext - Add trace_id, span_id, timestamp (zone: :pre_processing)
-    # 2. Validation - Schema validation (zone: :pre_processing)
-    # 3. PIIFilter - PII filtering (zone: :security)
-    # 4. AuditSigning - Audit event signing (zone: :security)
-    # 5. Sampling - Adaptive sampling (zone: :routing)
-    # 6. Routing - Buffer routing (zone: :adapters)
+    # 1. TraceContext  - Add trace_id, span_id, timestamp (zone: :pre_processing)
+    # 2. Validation    - Schema validation (zone: :pre_processing)
+    # 3. PIIFilter     - PII filtering (zone: :security)
+    # 4. AuditSigning  - Audit event signing (zone: :security)
+    # 5. RateLimiting  - Token-bucket rate limiting (zone: :routing)
+    # 6. Sampling      - Adaptive sampling (zone: :routing)
+    # 7. Routing       - Buffer routing (zone: :adapters)
+    # 8. EventSlo      - Event-driven SLO tracking (after adapters, observes dispatch)
     #
     # @return [void]
     # @see ADR-015 Middleware Execution Order
@@ -208,10 +217,14 @@ module E11y
       @pipeline.use E11y::Middleware::AuditSigning
 
       # Zone: :routing
+      @pipeline.use E11y::Middleware::RateLimiting
       @pipeline.use E11y::Middleware::Sampling
 
       # Zone: :adapters
       @pipeline.use E11y::Middleware::Routing
+
+      # After adapters: observes dispatch outcome for SLO tracking
+      @pipeline.use E11y::Middleware::EventSlo
     end
   end
 
@@ -263,10 +276,21 @@ module E11y
 
   # Request Buffer configuration
   class RequestBufferConfig
+    # Enable request-scoped buffering (default: false).
     attr_accessor :enabled
 
+    # Explicit list of adapter names that receive flushed debug events on request failure.
+    #
+    # If nil (default), falls back to config.fallback_adapters.
+    # Set this to limit debug flushes to adapters that can handle the extra load.
+    #
+    # @example Only flush debug events to Loki (not Sentry)
+    #   config.request_buffer.debug_adapters = [:loki_logger]
+    attr_accessor :debug_adapters
+
     def initialize
-      @enabled = false # Disabled by default
+      @enabled        = false # Disabled by default
+      @debug_adapters = nil   # nil → use fallback_adapters
     end
   end
 
@@ -348,7 +372,7 @@ module E11y
     attr_accessor :enabled
 
     def initialize
-      @enabled = false # Opt-in (enable explicitly)
+      @enabled = true # Zero-config: enabled by default (README: "Zero-Config SLO Tracking")
     end
   end
 end

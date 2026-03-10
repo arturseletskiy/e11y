@@ -546,5 +546,68 @@ end
 
 ---
 
-**Analysis Complete:** 2026-01-26  
+**Analysis Complete:** 2026-01-26
 **Next Step:** UC-014 Phase 2: Planning Complete
+
+---
+
+## 🔍 Production Readiness Audit — 2026-03-10
+
+**Audit Date:** 2026-03-10
+**Status:** ✅ 85% PRODUCTION-READY — Core sampling работает; нужны 3 integration tests
+
+### Обновлённый статус компонентов
+
+| Компонент | Статус | Notes |
+|-----------|--------|-------|
+| ErrorSpikeDetector | ✅ Implemented + Integration test | 100% sampling during error spikes |
+| LoadMonitor | ✅ Implemented + Integration test | Off-by-one bug исправлен (commit 8ab4bd8) |
+| Trace-aware sampling (C05) | ✅ Implemented + Integration test | Same trace_id → same decision |
+| Sampling Middleware | ✅ Implemented | Correct priority chain |
+| ValueExtractor + DSL | ✅ Implemented, unit-tested | ❌ Missing integration test |
+| StratifiedTracker | ✅ Implemented, unit-tested | ❌ Missing integration test |
+| Budget exhaustion | ❌ → v1.1 (UC-015) | |
+
+### ⚠️ Missing Integration Tests (блокируют отметку UC-014 как DONE)
+
+Из 5 сценариев анализа, не покрыты:
+
+| Сценарий | Статус | Файл для теста |
+|----------|--------|----------------|
+| Value-based sampling E2E | ❌ Missing | `spec/integration/sampling_integration_spec.rb` Scenario 7 |
+| Stratified sampling E2E | ❌ Missing | `spec/integration/sampling_integration_spec.rb` Scenario 8 |
+| Pattern-based sampling | ❌ Missing | `spec/integration/sampling_integration_spec.rb` Scenario 3 (закомментирован) |
+
+**Требуемые сценарии:**
+
+**Scenario 7 — Value-based sampling:**
+```ruby
+context "value-based sampling" do
+  it "samples events by payload value (sample_by_value DSL)" do
+    # Настроить event с sample_by_value :amount, greater_than: 1000
+    # Track events с amount > 1000 → должны сэмплироваться чаще
+    # Track events с amount < 1000 → пониженная частота
+    # Verify: ratio соответствует настроенным значениям
+  end
+end
+```
+
+**Scenario 8 — Stratified sampling:**
+```ruby
+context "stratified sampling (C11 Resolution)" do
+  it "preserves error/success ratio in sampled data" do
+    # Track 1000 events: 50 error, 950 success
+    # Apply 10% sampling
+    # Verify: в выборке ~5 error + ~95 success (10% от каждой страты)
+    # Verify: correction factor = 10 применяется к метрикам
+  end
+end
+```
+
+### ✅ Что работает и проверено
+
+- 11 integration tests pass ✅
+- Error-spike: 100% sampling при >10 ошибках за 60 секунд ✅
+- Load-based: tiered sampling 100%/50%/10%/1% ✅
+- Trace-aware: cache consistency across same trace_id ✅
+- Off-by-one fix в LoadMonitor: граничный case `>` вместо `>=` ✅

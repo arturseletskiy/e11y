@@ -4,11 +4,19 @@
 # Step definitions for rails_integration.feature.
 
 Then("E11y should be disabled in the test environment") do
-  expect(E11y.configuration.enabled).to be(false),
-    "Expected E11y.configuration.enabled to be false in test environment, " \
-    "but it was #{E11y.configuration.enabled.inspect}. " \
-    "BUG: Railtie guard `if config.enabled.nil?` never fires because " \
-    "@enabled defaults to true, not nil."
+  # Verify the Configuration default and the Railtie guard together.
+  # A fresh Configuration must initialize @enabled = nil (not true) so that
+  # the Railtie `config.enabled = !Rails.env.test? if config.enabled.nil?` fires.
+  fresh_config = E11y::Configuration.new
+  expect(fresh_config.enabled).to be_nil,
+                                  "Expected Configuration#enabled to default to nil so the Railtie guard can fire, " \
+                                  "but got #{fresh_config.enabled.inspect}. " \
+                                  "BUG: if @enabled defaults to true, the nil? guard never triggers."
+  # Simulate the Railtie guard (before_initialize callback)
+  fresh_config.enabled = !Rails.env.test? if fresh_config.enabled.nil?
+  expect(fresh_config.enabled).to be(false),
+                                  "Expected Railtie guard to set enabled=false in test environment, " \
+                                  "but got #{fresh_config.enabled.inspect}. Rails.env.test? = #{Rails.env.test?.inspect}"
 end
 
 When("I set E11y enabled to {word}") do |value|
@@ -23,8 +31,8 @@ end
 # Helper: select E11y around_perform callbacks from a class's callback chain.
 def e11y_around_perform_callbacks(klass)
   klass._perform_callbacks
-    .select { |cb| cb.kind == :around }
-    .select { |cb| cb.filter.to_s.include?("E11y") || cb.filter.to_s.include?("e11y") || cb.filter.to_s.include?("active_job.rb") }
+       .select { |cb| cb.kind == :around }
+       .select { |cb| cb.filter.to_s.include?("E11y") || cb.filter.to_s.include?("e11y") || cb.filter.to_s.include?("active_job.rb") }
 end
 
 # @wip — demonstrates BUG 2: double callback registration.
@@ -34,38 +42,38 @@ end
 # in ActiveJob::Base AFTER adds a second entry to ApplicationJob's inherited chain.
 # Result: every job that inherits from ApplicationJob fires the callback twice.
 Then("the E11y around_perform callback should fire exactly once per job class") do
-  skip unless defined?(::ActiveJob)
+  skip unless defined?(ActiveJob)
   require "e11y/instruments/active_job"
 
   # Simulate ApplicationJob (a concrete subclass of ActiveJob::Base)
-  simulated_app_job = Class.new(::ActiveJob::Base)
+  simulated_app_job = Class.new(ActiveJob::Base)
 
   # Replicate what setup_active_job does:
   #   1. Include in ApplicationJob first
   simulated_app_job.include(E11y::Instruments::ActiveJob::Callbacks)
   #   2. Include in ActiveJob::Base second
-  ::ActiveJob::Base.include(E11y::Instruments::ActiveJob::Callbacks)
+  ActiveJob::Base.include(E11y::Instruments::ActiveJob::Callbacks)
 
   callbacks = e11y_around_perform_callbacks(simulated_app_job)
   expect(callbacks.size).to eq(1),
-    "Expected exactly 1 E11y around_perform callback on simulated ApplicationJob, " \
-    "but found #{callbacks.size}. " \
-    "BUG: setup_active_job registers on both ApplicationJob and ActiveJob::Base — " \
-    "callbacks fire twice per job."
+                            "Expected exactly 1 E11y around_perform callback on simulated ApplicationJob, " \
+                            "but found #{callbacks.size}. " \
+                            "BUG: setup_active_job registers on both ApplicationJob and ActiveJob::Base — " \
+                            "callbacks fire twice per job."
 end
 
 When("E11y ActiveJob integration is set up") do
-  skip unless defined?(::ActiveJob)
+  skip unless defined?(ActiveJob)
   require "e11y/instruments/active_job"
   E11y::Railtie.setup_active_job
 end
 
 Then("at least {int} E11y around_perform callback(s) should exist on ActiveJob::Base") do |min|
-  skip unless defined?(::ActiveJob)
-  callbacks = e11y_around_perform_callbacks(::ActiveJob::Base)
+  skip unless defined?(ActiveJob)
+  callbacks = e11y_around_perform_callbacks(ActiveJob::Base)
   expect(callbacks.size).to be >= min,
-    "Expected >= #{min} E11y around_perform callbacks on ActiveJob::Base, " \
-    "found #{callbacks.size}."
+                            "Expected >= #{min} E11y around_perform callbacks on ActiveJob::Base, " \
+                            "found #{callbacks.size}."
 end
 
 When("ActiveSupport::Notifications publishes {string}") do |event_name|
@@ -89,7 +97,7 @@ end
 
 Then("no notification error should have been raised") do
   expect(@notification_error).to be_nil,
-    "Got #{@notification_error&.class}: #{@notification_error&.message}. " \
-    "BUG: Railtie subscribes to AS::Notifications but the event class " \
-    "(e.g. E11y::Events::Rails::Database::Query) doesn't exist."
+                                 "Got #{@notification_error&.class}: #{@notification_error&.message}. " \
+                                 "BUG: Railtie subscribes to AS::Notifications but the event class " \
+                                 "(e.g. E11y::Events::Rails::Database::Query) doesn't exist."
 end

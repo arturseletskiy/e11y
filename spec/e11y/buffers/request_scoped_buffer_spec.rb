@@ -2,6 +2,7 @@
 
 require "spec_helper"
 require "e11y/buffers/request_scoped_buffer"
+require "e11y/adapters/in_memory"
 
 RSpec.describe E11y::Buffers::RequestScopedBuffer do
   # Reset thread-local storage before each test
@@ -391,6 +392,55 @@ RSpec.describe E11y::Buffers::RequestScopedBuffer do
 
       # Only 2 debug events flushed (from failed request)
       expect(flushed_count).to eq(2)
+    end
+  end
+
+  describe ".flush_event with debug_adapters configured" do
+    let(:adapter_a) { E11y::Adapters::InMemory.new }
+    let(:adapter_b) { E11y::Adapters::InMemory.new }
+
+    before do
+      E11y.configure do |config|
+        config.adapters[:log_adapter] = adapter_a
+        config.adapters[:debug_log_adapter] = adapter_b
+        config.fallback_adapters = [:log_adapter]
+        config.request_buffer.debug_adapters = [:debug_log_adapter]
+      end
+      described_class.initialize!
+    end
+
+    after { E11y.reset! }
+
+    it "flushes to debug_adapters, not fallback_adapters" do
+      event = { event_name: "test.debug", severity: :debug, payload: {} }
+      described_class.add_event(event)
+      described_class.flush_on_error
+
+      expect(adapter_b.events).to include(event)
+      expect(adapter_a.events).to be_empty
+    end
+  end
+
+  describe ".flush_event without debug_adapters (default)" do
+    let(:fallback_adapter) { E11y::Adapters::InMemory.new }
+
+    before do
+      E11y.configure do |config|
+        config.adapters[:fallback] = fallback_adapter
+        config.fallback_adapters = [:fallback]
+        # request_buffer.debug_adapters NOT set — should default to nil
+      end
+      described_class.initialize!
+    end
+
+    after { E11y.reset! }
+
+    it "falls back to fallback_adapters when debug_adapters is nil" do
+      event = { event_name: "test.debug", severity: :debug, payload: {} }
+      described_class.add_event(event)
+      described_class.flush_on_error
+
+      expect(fallback_adapter.events).to include(event)
     end
   end
 end

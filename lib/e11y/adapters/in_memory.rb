@@ -118,6 +118,8 @@ module E11y
         end
       end
 
+      alias clear clear!
+
       # Find events matching pattern
       #
       # @param pattern [String, Regexp] Pattern to match against event_name
@@ -138,13 +140,25 @@ module E11y
       #
       # @example
       #   adapter.event_count  # Total events
-      #   adapter.event_count("order.paid")  # Specific event count
-      def event_count(event_name: nil)
+      #   adapter.event_count("order.paid")  # Specific event count (positional)
+      #   adapter.event_count(event_name: "order.paid")  # Specific event count (keyword)
+      def event_count(event_name = nil, **kwargs)
+        event_name ||= kwargs[:event_name]
         if event_name
           @events.count { |event| event[:event_name] == event_name }
         else
           @events.size
         end
+      end
+
+      # Get the most recently written event.
+      #
+      # @return [Hash, nil] The last event, or nil if none
+      #
+      # @example
+      #   adapter.last_event  # Most recently written event
+      def last_event
+        events.last
       end
 
       # Get last N events

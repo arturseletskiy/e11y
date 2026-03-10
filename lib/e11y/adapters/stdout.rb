@@ -44,7 +44,11 @@ module E11y
       # @option config [Boolean] :pretty_print (true) Enable pretty-printed JSON
       def initialize(config = {})
         @colorize = config.fetch(:colorize, true)
-        @pretty_print = config.fetch(:pretty_print, true)
+        @pretty_print = if config.key?(:format)
+                          config[:format] != :compact
+                        else
+                          config.fetch(:pretty_print, true)
+                        end
 
         super
       end

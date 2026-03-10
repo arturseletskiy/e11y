@@ -38,7 +38,7 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
     Yabeda.metrics.each do |metric_name, metric|
       # Filter only :e11y group metrics
       next unless metric_name.to_s.start_with?("e11y_")
-      
+
       # Access internal storage and clear values
       # This works for Counter, Gauge, and Histogram
       values = metric.instance_variable_get(:@values)
@@ -78,7 +78,7 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
     memory_adapter.clear!
     # Reset Yabeda metric values for test isolation
     reset_yabeda_values!
-    # Note: Registry is managed per-scenario (see Scenario 6 around hook)
+    # NOTE: Registry is managed per-scenario (see Scenario 6 around hook)
   end
 
   describe "Scenario 1: Counter metrics" do
@@ -94,7 +94,7 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
       adapter.register_metrics_from_registry! if adapter.respond_to?(:register_metrics_from_registry!)
 
       # Track event (this will trigger event class loading and metric registration)
-      event_data = Events::OrderPaid.track(
+      Events::OrderPaid.track(
         order_id: "123",
         currency: "USD"
       )
@@ -106,11 +106,10 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
       # Verify pattern matching (metrics should be registered after event class loaded)
       event_name = Events::OrderPaid.event_name
       matching_metrics = registry.find_matching(event_name)
-      expect(matching_metrics).not_to be_empty,
-                                      "Expected metrics to be registered for #{event_name}. Registry size: #{registry.size}, All metrics: #{registry.all.map do |m|
-                                        "#{m[:pattern]} -> #{m[:name]}"
-                                      end.join(', ')}"
-      
+      all_metrics = registry.all.map { |m| "#{m[:pattern]} -> #{m[:name]}" }.join(", ")
+      msg = "Expected metrics to be registered for #{event_name}. Registry size: #{registry.size}, All metrics: #{all_metrics}"
+      expect(matching_metrics).not_to be_empty, msg
+
       # Find the specific metric we care about (ignore wildcard matches from other tests)
       orders_paid_metric = matching_metrics.find { |m| m[:name] == :orders_paid_total }
       expect(orders_paid_metric).not_to be_nil,
@@ -155,9 +154,9 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
 
       # Verify value extraction: Value should be in event payload
       expect(event_data[:payload][:status_code]).to eq(1),
-                                                     "Expected status_code value to be extracted from payload"
+                                                    "Expected status_code value to be extracted from payload"
 
-      # Note: Event already routed to yabeda adapter via fallback_adapters
+      # NOTE: Event already routed to yabeda adapter via fallback_adapters
       # No need to call adapter.write() manually
 
       # Verify gauge set in Yabeda with numeric value
@@ -192,7 +191,7 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
         Events::OrderAmount.track(**payload)
       end
 
-      # Note: Events already routed to yabeda adapter via fallback_adapters
+      # NOTE: Events already routed to yabeda adapter via fallback_adapters
       # No need to call adapter.write() manually
 
       # Verify events were tracked
@@ -205,7 +204,7 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
       # We just verify that the histogram metric exists and was updated
       histogram_value = Yabeda.e11y.orders_amount.get(currency: "USD")
       expect(histogram_value).not_to be_nil,
-                                 "Expected histogram to be updated (not nil)"
+                                     "Expected histogram to be updated (not nil)"
       expect(histogram_value).to be > 0,
                                  "Expected histogram to have positive value, got #{histogram_value}"
     end
@@ -240,7 +239,7 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
       expect(event_data[:payload][:payment_method]).to eq("stripe")
       expect(event_data[:payload][:status]).to eq("success")
 
-      # Note: Event already routed to yabeda adapter via fallback_adapters
+      # NOTE: Event already routed to yabeda adapter via fallback_adapters
       # No need to call adapter.write() manually
 
       # Verify labels exported to Yabeda correctly
@@ -301,7 +300,7 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
       # Track event: Events::OrderPaid
       Events::OrderPaid.track(order_id: "123", currency: "USD")
 
-      # Note: Event already routed to yabeda adapter via fallback_adapters
+      # NOTE: Event already routed to yabeda adapter via fallback_adapters
       # No need to call adapter.write() manually
 
       # Verify exact pattern matches
@@ -335,15 +334,15 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
     around do |example|
       # Save original metrics
       original_metrics = registry.all
-      
+
       example.run
-      
+
       # Restore original metrics (remove test pollution)
       registry.clear!
       original_metrics.each { |m| registry.register(m) }
     end
 
-    it "meets performance requirements (<10μs per pattern match)" do
+    it "meets performance requirements (<10μs per pattern match)" do # rubocop:todo RSpec/ExampleLength
       # Setup: 100 registered metrics with various patterns
       # Test: Benchmark pattern matching speed for 10,000 events
       # Expected: Pattern matching speed <10μs per pattern match, no performance degradation

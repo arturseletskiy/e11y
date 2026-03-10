@@ -51,7 +51,7 @@ RSpec.describe "Audit Event Routing Validation", :integration do
   it "includes helpful error message with fix options" do
     expect do
       audit_event_class.track(user_id: 123, action: "test")
-    end.to raise_error do |error|
+    end.to raise_error do |error| # rubocop:todo Style/MultilineBlockChain
       expect(error.message).to include("Add explicit adapters")
       expect(error.message).to include("Configure routing rule")
       expect(error.message).to include("audit_encrypted")
@@ -74,7 +74,7 @@ RSpec.describe "Audit Event Routing Validation", :integration do
       E11y.config.routing_rules = [
         ->(event) { :audit_encrypted if event[:audit_event] }
       ]
-      
+
       # Set signing key
       ENV["E11Y_AUDIT_SIGNING_KEY"] = SecureRandom.hex(32)
 
@@ -128,7 +128,7 @@ RSpec.describe "Audit Event Routing Validation", :integration do
         encryption_key: test_encryption_key
       )
       E11y.config.adapters[:audit_encrypted] = audit_adapter
-      
+
       # Set signing key
       ENV["E11Y_AUDIT_SIGNING_KEY"] = SecureRandom.hex(32)
 

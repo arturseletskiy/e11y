@@ -51,6 +51,8 @@ module E11y
     #         }
     #       }
     #   end
+    # rubocop:disable Metrics/ClassLength
+    # Class has 6 adaptive sampling strategies each requiring dedicated setup + private methods
     class Sampling < Base
       middleware_zone :routing
 
@@ -124,6 +126,7 @@ module E11y
         @default_sample_rate = config.fetch(:default_sample_rate, 1.0)
         @trace_aware = config.fetch(:trace_aware, true)
         @severity_rates = config.fetch(:severity_rates, {})
+        @pattern_rates = config.fetch(:pattern_rates, []) # [[Regexp, Float], ...]
         @trace_decisions = {} # Cache for trace-level sampling decisions
         @trace_decisions_mutex = Mutex.new
       end
@@ -162,9 +165,7 @@ module E11y
         return true if event_class.respond_to?(:audit_event?) && event_class.audit_event?
 
         # 2. Check trace-aware sampling (C05)
-        if @trace_aware && event_data[:trace_id]
-          return trace_sampling_decision(event_data[:trace_id], event_class, event_data)
-        end
+        return trace_sampling_decision(event_data[:trace_id], event_class, event_data) if @trace_aware && event_data[:trace_id]
 
         # 3. Get sample rate for this event
         sample_rate = determine_sample_rate(event_class, event_data)
@@ -186,13 +187,22 @@ module E11y
       # @param event_class [Class] The event class
       # @param event_data [Hash] Event payload (for value-based sampling)
       # @return [Float] Sample rate (0.0-1.0)
-      # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
-      # Sample rate determination follows priority chain: error spike → value-based →
-      # load-based → severity → event-level → default
+      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+      # Sample rate determination follows a 6-step priority chain:
+      # error spike (0) → pattern-based (0.5) → value-based (1) →
+      # load-based (2) → severity (3) → event-level (4) → default (5)
       def determine_sample_rate(event_class, event_data = nil)
         # 0. Error-based adaptive sampling (FEAT-4838) - highest priority!
         if @error_based_adaptive && @error_spike_detector&.error_spike?
           return 1.0 # 100% sampling during error spike
+        end
+
+        # 0.5. Pattern-based sampling (by event_name) - overrides event-level config
+        if event_data && !@pattern_rates.empty?
+          event_name = event_data[:event_name].to_s
+          @pattern_rates.each do |pattern, rate|
+            return rate if pattern.match?(event_name)
+          end
         end
 
         # 1. Value-based sampling (FEAT-4849) - high-value events always sampled
@@ -231,7 +241,7 @@ module E11y
         # 4. Default/load-based rate
         base_rate
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
       # Trace-aware sampling decision (C05 Resolution)
       #
@@ -272,5 +282,6 @@ module E11y
         keys_to_remove.each { |key| @trace_decisions.delete(key) }
       end
     end
+    # rubocop:enable Metrics/ClassLength
   end
 end

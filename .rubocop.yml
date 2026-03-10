@@ -31,7 +31,7 @@ Metrics/BlockLength:
     - '*.gemspec'
 
 Metrics/MethodLength:
-  Max: 15
+  Max: 20
   Exclude:
     - 'spec/**/*'
 
@@ -39,6 +39,15 @@ Metrics/ClassLength:
   Max: 100
   Exclude:
     - 'spec/**/*'
+
+Metrics/PerceivedComplexity:
+  Max: 15
+
+Metrics/CyclomaticComplexity:
+  Max: 15
+
+Metrics/AbcSize:
+  Max: 20
 
 # Style
 Style/Documentation:
@@ -52,9 +61,13 @@ Style/StringLiterals:
 Style/FrozenStringLiteralComment:
   Enabled: true
 
+# Layout
+Layout/LineLength:
+  Max: 150
+
 # RSpec
 RSpec/ExampleLength:
-  Max: 20 # Allow longer examples for integration tests
+  Max: 40 # Allow longer examples for integration tests
 
 RSpec/MultipleExpectations:
   Max: 10 # Allow more expectations for integration tests

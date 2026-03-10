@@ -6,7 +6,6 @@ require "e11y/buffers/adaptive_buffer"
 # Benchmark and stress tests for AdaptiveBuffer
 #
 # These tests verify memory management and backpressure under load.
-# rubocop:disable RSpec/ExampleLength
 RSpec.describe E11y::Buffers::AdaptiveBuffer, :benchmark do
   let(:memory_limit_mb) { 10 } # Smaller than production (100MB) for faster tests
   let(:buffer) { described_class.new(memory_limit_mb: memory_limit_mb) }
@@ -367,4 +366,3 @@ RSpec.describe E11y::Buffers::AdaptiveBuffer, :benchmark do
     end
   end
 end
-# rubocop:enable RSpec/ExampleLength

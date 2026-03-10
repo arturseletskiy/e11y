@@ -570,5 +570,45 @@ end
 
 ---
 
-**Analysis Complete:** 2026-01-26  
+**Analysis Complete:** 2026-01-26
 **Next Step:** UC-021 Phase 2: Planning Complete
+
+---
+
+## 🔍 Production Readiness Audit — 2026-03-10
+
+**Audit Date:** 2026-03-10
+**Status:** ⚠️ PARTIALLY PRODUCTION-READY — те же критические баги что в ADR-013
+
+### Обновлённый статус (пересекается с ADR-013)
+
+UC-021 полностью перекрывается с ADR-013 по реализации. Все находки ADR-013 применимы здесь:
+- **BUG-001:** DLQ Filter signature mismatch — см. ADR-013 Audit Section
+- **BUG-002:** RetryRateLimiter not integrated — см. ADR-013 Audit Section
+
+### ⚠️ Покрытие интеграционных тестов UC-021
+
+Из 9 сценариев UC-021:
+
+| Сценарий | Статус |
+|----------|--------|
+| 1. Retry policies (exponential backoff) | ✅ Tested (5 retry tests) |
+| 2. Exponential backoff delays | ✅ Tested |
+| 3. DLQ (failed events stored after retries) | ✅ Tested (4 DLQ tests) |
+| 4. Circuit breaker (failures trigger open) | ✅ Tested (5 CB tests) |
+| 5. Timeout handling | ❌ Missing — `Timeout::Error` не покрыт в integration |
+| 6. Non-failing tracking (C18 E2E) | ⚠️ PARTIAL — unit-уровень, не full job context |
+| 7. DLQ Replay | ❌ Missing — unit tests есть, integration нет |
+| 8. DLQ Filter + Rate Limiter (C02) | ❌ Missing + BROKEN (BUG-001) |
+| 9. Retry Rate Limiting (C06) | ❌ Missing + NOT INTEGRATED (BUG-002) |
+
+### Требуемые исправления (TODO)
+
+1. **BUG-001:** Исправить сигнатуру `should_save?` в `DLQ::Filter` или в `Adapters::Base`
+2. **BUG-002:** Интегрировать `RetryRateLimiter` в `RetryHandler` или `Adapters::Base`
+3. **Добавить integration tests:**
+   - Timeout handling (Timeout::Error → retry → DLQ)
+   - DLQ Replay E2E (replay event → reaches adapter)
+   - C02: critical event bypasses rate limiter → saved to DLQ
+   - C06: retry rate is limited (after BUG-002 fix)
+   - C18: background job succeeds when tracking fails

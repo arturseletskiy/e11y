@@ -95,11 +95,13 @@ module E11y
 
       # Write event to OTel Logs API
       #
+      # Uses Logger#on_emit (OTel SDK 0.4+) with keyword arguments.
+      #
       # @param event_data [Hash] Event payload
       # @return [Boolean] true on success
       def write(event_data)
-        log_record = build_log_record(event_data)
-        @logger.emit_log_record(log_record)
+        emit_params = build_emit_params(event_data)
+        @logger.on_emit(**emit_params)
         true
       rescue StandardError => e
         warn "[E11y::OTelLogs] Failed to write event: #{e.message}"
@@ -136,12 +138,12 @@ module E11y
         )
       end
 
-      # Build OTel log record from E11y event
+      # Build params hash for Logger#on_emit
       #
       # @param event_data [Hash] E11y event payload
-      # @return [OpenTelemetry::SDK::Logs::LogRecord] OTel log record
-      def build_log_record(event_data)
-        OpenTelemetry::SDK::Logs::LogRecord.new(
+      # @return [Hash] Keyword args for on_emit
+      def build_emit_params(event_data)
+        {
           timestamp: event_data[:timestamp] || Time.now.utc,
           observed_timestamp: Time.now.utc,
           severity_number: map_severity(event_data[:severity]),
@@ -151,7 +153,16 @@ module E11y
           trace_id: event_data[:trace_id],
           span_id: event_data[:span_id],
           trace_flags: nil
-        )
+        }
+      end
+
+      # Build OTel log record from E11y event (for testing/validation)
+      #
+      # @param event_data [Hash] E11y event payload
+      # @return [OpenTelemetry::SDK::Logs::LogRecord] OTel log record
+      def build_log_record(event_data)
+        params = build_emit_params(event_data)
+        OpenTelemetry::SDK::Logs::LogRecord.new(**params)
       end
 
       # Map E11y severity to OTel severity

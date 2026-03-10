@@ -62,7 +62,7 @@ module E11y
       #
       # @param event_data [Hash] Event payload
       # @return [Hash] Event data with version field (if > 1)
-      def call(event_data)
+      def call(event_data) # rubocop:todo Metrics/AbcSize
         # Extract version from event_class name (original class name, not normalized event_name)
         # Use event_class.name if available, fallback to event_name for backward compatibility
         class_name = event_data[:event_class]&.name || event_data[:event_name]
@@ -71,8 +71,32 @@ module E11y
         # Add version field only if > 1 (ADR-012 §4.2)
         event_data[:v] = version if version > 1
 
-        # Normalize event_name (remove version suffix for consistent queries)
-        event_data[:event_name] = normalize_event_name(class_name)
+        # Normalize event_name, respecting custom overrides.
+        # Three cases:
+        # 1. event_class absent → always normalize (backward-compat / unit test path)
+        # 2. event_class present + no custom event_name → normalize
+        # 3. event_class present + custom event_name → preserve it
+        #
+        # A "custom" event_name is one that differs from the class-derived default
+        # (i.e. the class name with the version suffix stripped). The auto-derived
+        # event_class.event_name returns the class name minus version suffix, which
+        # is NOT a custom name — only values explicitly set by the user (e.g. via
+        # define_singleton_method) that differ from this auto-derived value count.
+        if event_data[:event_class].nil?
+          # No event_class available — always normalize (backward-compat / unit test path)
+          event_data[:event_name] = normalize_event_name(class_name)
+        else
+          class_default_name = normalize_event_name(class_name)
+          # The auto-derived name is the class name with version suffix stripped.
+          # A custom name is anything that differs from this auto-derived value.
+          auto_derived_name = event_data[:event_class].name.to_s.sub(VERSION_REGEX, "")
+          reported_name = event_data[:event_class].event_name.to_s
+          if reported_name == auto_derived_name
+            # No custom override — normalize to dot-notation
+            event_data[:event_name] = class_default_name
+          end
+          # Otherwise: custom name differs from auto-derived, leave event_data[:event_name] untouched
+        end
 
         # Pass to next middleware
         @app&.call(event_data) || event_data

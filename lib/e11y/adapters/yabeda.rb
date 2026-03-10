@@ -208,9 +208,7 @@ module E11y
         super
 
         # Validate cardinality_limit
-        if @config[:cardinality_limit] && !@config[:cardinality_limit].is_a?(Integer)
-          raise ArgumentError, "cardinality_limit must be an Integer"
-        end
+        raise ArgumentError, "cardinality_limit must be an Integer" if @config[:cardinality_limit] && !@config[:cardinality_limit].is_a?(Integer)
 
         # Validate forbidden_labels
         return unless @config[:forbidden_labels] && !@config[:forbidden_labels].is_a?(Array)
@@ -322,7 +320,6 @@ module E11y
       # @param buckets [Array<Numeric>, nil] Optional histogram buckets
       # @return [void]
       # @api private
-      # rubocop:disable Metrics/MethodLength
       # Metric registration requires case/when for different metric types
       def register_metric_if_needed(name, type, tags, buckets: nil)
         # Check if metric already exists (Yabeda stores metric keys as strings)
@@ -350,7 +347,6 @@ module E11y
         # Metric might already be registered - that's OK
         E11y.logger.warn("Could not register Yabeda metric #{name}: #{e.message}")
       end
-      # rubocop:enable Metrics/MethodLength
 
       # Update a single metric based on event data
       #
@@ -359,7 +355,7 @@ module E11y
       # @return [void]
       # rubocop:disable Metrics/AbcSize
       # Metric update requires multiple steps for label extraction and value handling
-      def update_metric(metric_config, event_data)
+      def update_metric(metric_config, event_data) # rubocop:todo Metrics/MethodLength
         metric_name = metric_config[:name]
         labels = extract_labels(metric_config, event_data)
 

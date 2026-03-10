@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# rubocop:disable Performance/CollectionLiteralInLoop, Lint/MissingCopEnableDirective
+
 require "rails_helper"
 
 # EventSLO Middleware Integration Tests for ADR-014, UC-004
@@ -55,7 +57,6 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
   after do
     memory_adapter.clear!
     E11y::Current.reset
-    Yabeda.reset! if defined?(Yabeda)
     # Reset pipeline to avoid state pollution between test files
     E11y.config.instance_variable_set(:@built_pipeline, nil)
   end
@@ -106,6 +107,7 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
       # Event should still be stored (after Versioning middleware, event_name is normalized)
       all_events = memory_adapter.events
       events = all_events.select { |e| ["payment.processed", "Events::PaymentProcessed"].include?(e[:event_name]) }
+
       expect(events.count).to eq(1), "Event should be stored. Total events: #{all_events.count}, event_names: #{all_events.map do |e|
         e[:event_name]
       end.uniq.inspect}"
@@ -430,7 +432,8 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
 
       # Event should still be stored (after Versioning middleware, event_name is normalized)
       all_events = memory_adapter.events
-      events = all_events.select { |e| ["metric.error.event", "Events::MetricErrorEvent"].include?(e[:event_name]) }
+      metric_error_names = ["metric.error.event", "Events::MetricErrorEvent"]
+      events = all_events.select { |e| metric_error_names.include?(e[:event_name]) }
       expect(events.count).to eq(1)
     end
   end

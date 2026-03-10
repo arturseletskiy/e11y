@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# rubocop:disable Layout/LineLength, Lint/MissingCopEnableDirective
+
 # features/step_definitions/sampling_steps.rb
 # Step definitions for adaptive_sampling.feature.
 
@@ -85,7 +87,7 @@ When("I track {int} error events to trigger the spike detector") do |count|
       adapters []
       sample_rate 1.0
     end
-    events_mod.const_set("SamplingError", klass)
+    events_mod.const_set(:SamplingError, klass)
   end
   count.times { |i| Events::SamplingError.track(seq: i) }
 end
@@ -101,7 +103,7 @@ Then("the memory adapter should contain exactly {int} {string} events") do |coun
       e[:event_class]&.name == class_name
   end
   expect(events.size).to eq(count),
-    "Expected #{count} #{class_name} events in memory adapter, got #{events.size}"
+                         "Expected #{count} #{class_name} events in memory adapter, got #{events.size}"
 end
 
 # ---------------------------------------------------------------------------
@@ -150,21 +152,21 @@ end
 Then("the LoadMonitor load_level should be :normal") do
   level = @load_monitor.load_level
   expect(level).to eq(:normal),
-    "Expected LoadMonitor#load_level to be :normal but got :#{level}. " \
-    "Known bug: when rate == thresholds[:normal], load_monitor.rb returns :high instead of :normal."
+                   "Expected LoadMonitor#load_level to be :normal but got :#{level}. " \
+                   "Known bug: when rate == thresholds[:normal], load_monitor.rb returns :high instead of :normal."
 end
 
 Then("the LoadMonitor recommended_sample_rate should be {float}") do |expected_rate|
   rate = @load_monitor.recommended_sample_rate
   expect(rate).to eq(expected_rate),
-    "Expected recommended_sample_rate #{expected_rate} but got #{rate}. " \
-    "Known bug: off-by-one in load_level causes 50% rate at normal load."
+                  "Expected recommended_sample_rate #{expected_rate} but got #{rate}. " \
+                  "Known bug: off-by-one in load_level causes 50% rate at normal load."
 end
 
 Then("the LoadMonitor recommended_sample_rate should be less than {float}") do |threshold|
   rate = @load_monitor.recommended_sample_rate
   expect(rate).to be < threshold,
-    "Expected recommended_sample_rate < #{threshold} but got #{rate}"
+                  "Expected recommended_sample_rate < #{threshold} but got #{rate}"
 end
 
 # ---------------------------------------------------------------------------
@@ -179,8 +181,8 @@ Then("the error spike detector should be active") do
   detector = sampling.instance_variable_get(:@error_spike_detector)
   expect(detector).not_to be_nil, "Error spike detector not initialized"
   expect(detector.error_spike?).to be(true),
-    "Expected error spike to be active after tracking 15 error events. " \
-    "absolute_threshold=10, tracked=15, but spike not detected."
+                                   "Expected error spike to be active after tracking 15 error events. " \
+                                   "absolute_threshold=10, tracked=15, but spike not detected."
 end
 
 # ---------------------------------------------------------------------------
@@ -210,17 +212,17 @@ Then("all {int} {string} events should have the same sampling outcome") do |coun
   end
   actual = events.size
   expect(actual).to be_in([0, count]),
-    "Expected all #{count} #{class_name} events to have the same outcome " \
-    "(either all 0 or all #{count}), got #{actual}. " \
-    "Known bug: cleanup_trace_decisions in sampling.rb randomly evicts 50% of cache " \
-    "keys, breaking trace-level consistency."
+                    "Expected all #{count} #{class_name} events to have the same outcome " \
+                    "(either all 0 or all #{count}), got #{actual}. " \
+                    "Known bug: cleanup_trace_decisions in sampling.rb randomly evicts 50% of cache " \
+                    "keys, breaking trace-level consistency."
 end
 
 # ---------------------------------------------------------------------------
 # Helpers (accessible via World module)
 # ---------------------------------------------------------------------------
 
-module SamplingStepHelpers
+module SamplingStepHelpers # rubocop:todo Style/Documentation
   def reconfigure_sampling_middleware(options)
     cfg = E11y.config
     cfg.pipeline.middlewares.reject! { |m| m.middleware_class == E11y::Middleware::Sampling }

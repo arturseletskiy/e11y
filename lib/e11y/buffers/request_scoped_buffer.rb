@@ -24,7 +24,7 @@ module E11y
     #   RequestScopedBuffer.discard
     #
     # @see UC-001 Request-Scoped Debug Buffering
-    class RequestScopedBuffer
+    class RequestScopedBuffer # rubocop:todo Metrics/ClassLength
       # Thread-local storage keys
       THREAD_KEY_BUFFER = :e11y_request_buffer
       THREAD_KEY_REQUEST_ID = :e11y_request_id
@@ -66,7 +66,7 @@ module E11y
         #   # Error event - not buffered, triggers flush
         #   RequestScopedBuffer.add_event({ event_name: "error", severity: :error })
         #   # => false (and flushes buffer)
-        # rubocop:disable Metrics/MethodLength, Naming/PredicateMethod
+        # rubocop:disable Naming/PredicateMethod
         def add_event(event_data)
           return false unless active? # Not in request scope
 
@@ -95,7 +95,7 @@ module E11y
           increment_metric("e11y.request_buffer.events_buffered")
           true
         end
-        # rubocop:enable Metrics/MethodLength, Naming/PredicateMethod
+        # rubocop:enable Naming/PredicateMethod
 
         # Flush buffered events on error
         #
@@ -220,14 +220,28 @@ module E11y
 
         # Flush single event to adapters
         #
+        # Writes event_data directly to each fallback adapter (bypassing the pipeline
+        # since events were already validated/filtered on the way in).
+        #
         # @param event_data [Hash] Event to flush
-        # @param target [Symbol, nil] Optional target adapter (not yet implemented)
+        # @param target [Symbol, nil] Optional specific adapter to target
         # @return [void]
-        def flush_event(_event_data, target: nil) # rubocop:disable Lint/UnusedMethodArgument
-          # Placeholder for E11y::Collector integration
-          # Will be implemented when Collector/Adapter classes are available
+        def flush_event(event_data, target: nil)
+          adapter_names = if target
+                            [target]
+                          else
+                            E11y.configuration.request_buffer.debug_adapters ||
+                              E11y.configuration.fallback_adapters ||
+                              [:memory]
+                          end
 
-          # For now, just increment metric
+          adapter_names.each do |adapter_name|
+            adapter = E11y.configuration.adapters[adapter_name]
+            adapter&.write(event_data)
+          rescue StandardError => e
+            warn "[E11y] Error flushing buffered event to #{adapter_name}: #{e.message}"
+          end
+
           increment_metric("e11y.request_buffer.event_flushed")
         end
 

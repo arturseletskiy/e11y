@@ -14,6 +14,7 @@ require "rails/test_unit/railtie"
 # Load E11y gem BEFORE defining Application class
 # This ensures Railtie is registered before Rails collects railties
 require "e11y"
+require "e11y/adapters/in_memory_test"
 
 # Configure E11y ONCE (guard against multiple loads during test suite)
 # rubocop:disable Style/GlobalVars
@@ -24,10 +25,13 @@ unless $e11y_dummy_configured
     config.environment = ENV["RAILS_ENV"] || "test"
 
     # Use in-memory adapter for testing
-    config.adapters[:memory] = E11y::Adapters::InMemory.new
+    config.adapters[:memory] = E11y::Adapters::InMemoryTest.new
 
     # Also register as :logs adapter so events go to memory by default
     config.adapters[:logs] = config.adapters[:memory]
+
+    # Route events with adapters [] to memory (required for integration tests)
+    config.fallback_adapters = [:memory]
 
     # Enable instrumentation
     config.rails_instrumentation.enabled = true
@@ -42,11 +46,13 @@ unless $e11y_dummy_configured
     config.pipeline.use E11y::Middleware::Validation
     config.pipeline.use E11y::Middleware::PIIFilter
     config.pipeline.use E11y::Middleware::AuditSigning
+    config.pipeline.use E11y::Middleware::RateLimiting
     config.pipeline.use E11y::Middleware::Sampling,
                         default_sample_rate: 1.0,
                         trace_aware: false,
                         severity_rates: { debug: 1.0, info: 1.0, warn: 1.0, error: 1.0, fatal: 1.0 }
     config.pipeline.use E11y::Middleware::Routing
+    config.pipeline.use E11y::Middleware::EventSlo
   end
   $e11y_dummy_configured = true
 end

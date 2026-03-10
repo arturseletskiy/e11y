@@ -59,7 +59,7 @@ RSpec.describe E11y::Adapters::OTelLogs, :integration do
     let(:logger) { instance_double(OpenTelemetry::SDK::Logs::Logger) }
 
     before do
-      allow(adapter.instance_variable_get(:@logger)).to receive(:emit_log_record)
+      allow(adapter.instance_variable_get(:@logger)).to receive(:on_emit)
     end
 
     it "emits log record to OTel logger" do
@@ -67,7 +67,7 @@ RSpec.describe E11y::Adapters::OTelLogs, :integration do
     end
 
     it "returns false on error" do
-      allow(adapter).to receive(:build_log_record).and_raise(StandardError, "OTel error")
+      allow(adapter).to receive(:build_emit_params).and_raise(StandardError, "OTel error")
       expect(adapter.write(event_data)).to be false
     end
   end
@@ -226,7 +226,7 @@ RSpec.describe E11y::Adapters::OTelLogs, :integration do
   describe "UC-008 compliance (OpenTelemetry Integration)" do
     it "sends events to OpenTelemetry Logs API" do
       # UC-008: E11y events sent to OTel Collector
-      allow(adapter.instance_variable_get(:@logger)).to receive(:emit_log_record)
+      allow(adapter.instance_variable_get(:@logger)).to receive(:on_emit)
 
       result = adapter.write(event_data)
       expect(result).to be true

@@ -15,7 +15,7 @@ module E11y
       EMAIL = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/
 
       # Password-like field names
-      PASSWORD_FIELDS = /password|passwd|pwd|secret|token|api[_-]?key/i
+      PASSWORD_FIELDS = /\b(?:password|passwd|pwd|secret|token|api[_-]?key)\b/i
 
       # Social Security Number (US format: XXX-XX-XXXX)
       SSN = /\b\d{3}-\d{2}-\d{4}\b/

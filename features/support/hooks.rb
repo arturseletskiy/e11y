@@ -24,15 +24,23 @@ INITIAL_PIPELINE_MIDDLEWARES = E11y.config.pipeline.middlewares.dup.freeze
 Before do
   E11y.config.pipeline.instance_variable_set(:@middlewares, INITIAL_PIPELINE_MIDDLEWARES.dup)
   E11y.config.instance_variable_set(:@built_pipeline, nil)
+  E11y.config.routing_rules = []
+  E11y.config.fallback_adapters = [:memory]
+  E11y.config.rate_limiting.enabled = false
+  E11y.config.rate_limiting.global_limit = 10_000
+  E11y.config.rate_limiting.per_event_limit = 1_000
+  E11y.config.rate_limiting.window = 1.0
+  E11y.config.request_buffer.enabled = false
+  E11y::Buffers::RequestScopedBuffer.reset_all
+  E11y::Metrics.reset_backend!
+  E11y::SLO::Tracker.reset!
   clear_events!
 end
 
 # After each scenario: clean the database so ActiveRecord models (e.g. Post)
 # created during a scenario do not persist into the next.
 After do
-  if ActiveRecord::Base.connection.table_exists?("posts")
-    ActiveRecord::Base.connection.execute("DELETE FROM posts")
-  end
+  ActiveRecord::Base.connection.execute("DELETE FROM posts") if ActiveRecord::Base.connection.table_exists?("posts")
 end
 
 # Before hook for @wip scenarios: print a reminder that the scenario is

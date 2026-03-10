@@ -114,6 +114,13 @@ RSpec.describe E11y::Reliability::DLQ::Filter do
       end
     end
 
+    it "accepts optional error argument (prevents BUG-001 crash)" do
+      error = StandardError.new("Adapter failed")
+      # Should not raise ArgumentError — base.rb calls with 2 args
+      expect { filter.should_save?(event_data, error) }.not_to raise_error
+      expect(filter.should_save?(event_data, error)).to be true
+    end
+
     context "with default_behavior (lowest priority)" do
       it "saves by default when :save" do
         filter_save = described_class.new(default_behavior: :save)

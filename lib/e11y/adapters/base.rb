@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../reliability/retry_handler"
+require_relative "../reliability/retry_rate_limiter"
 require_relative "../reliability/circuit_breaker"
 
 module E11y
@@ -105,7 +106,6 @@ module E11y
       # @param event_data [Hash] Event payload
       # @return [Boolean] true on success
       # @raise [RetryExhaustedError, CircuitOpenError] if fail_on_error=true
-      # rubocop:disable Metrics/MethodLength
       # Core reliability logic with retry and circuit breaker - should stay as cohesive unit
       def write_with_reliability(event_data)
         return write(event_data) unless @reliability_enabled
@@ -129,7 +129,6 @@ module E11y
           handle_reliability_error(event_data, e, :circuit_open)
         end
       end
-      # rubocop:enable Metrics/MethodLength
 
       # Write a batch of events (preferred for performance)
       #
@@ -306,7 +305,7 @@ module E11y
       #   def retriable_error?(error)
       #     super || error.is_a?(CustomTransientError)
       #   end
-      # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
       # This method checks many different error types for retryability - splitting would reduce clarity
       def retriable_error?(error)
         # Network timeout errors
@@ -334,7 +333,7 @@ module E11y
 
         false
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
       # Calculate exponential backoff delay with jitter
       #
@@ -381,16 +380,13 @@ module E11y
       #   end
       #
       # @see ADR-004 Section 7.2 (Circuit Breaker)
-      # rubocop:disable Metrics/MethodLength
       # Circuit breaker state machine logic should stay as cohesive unit
       def with_circuit_breaker(failure_threshold: 5, timeout: 60)
         init_circuit_breaker! unless @circuit_state
 
         @circuit_mutex.synchronize do
           if @circuit_state == :open
-            unless circuit_timeout_expired?(timeout)
-              raise CircuitOpenError, "Circuit breaker open for #{self.class.name}"
-            end
+            raise CircuitOpenError, "Circuit breaker open for #{self.class.name}" unless circuit_timeout_expired?(timeout)
 
             @circuit_state = :half_open
             @circuit_success_count = 0
@@ -407,7 +403,6 @@ module E11y
           raise
         end
       end
-      # rubocop:enable Metrics/MethodLength
 
       # Initialize circuit breaker state
       #
@@ -469,9 +464,13 @@ module E11y
       def setup_reliability_layer
         reliability_config = @config.fetch(:reliability, {})
 
+        # Setup RetryRateLimiter (C06: thundering herd prevention)
+        rate_limiter_config = reliability_config.fetch(:retry_rate_limiter, {})
+        retry_rate_limiter = rate_limiter_config.empty? ? nil : E11y::Reliability::RetryRateLimiter.new(**rate_limiter_config)
+
         # Setup RetryHandler
         retry_config = reliability_config.fetch(:retry, {})
-        @retry_handler = E11y::Reliability::RetryHandler.new(config: retry_config)
+        @retry_handler = E11y::Reliability::RetryHandler.new(config: retry_config, retry_rate_limiter: retry_rate_limiter)
 
         # Setup CircuitBreaker
         circuit_breaker_config = reliability_config.fetch(:circuit_breaker, {})

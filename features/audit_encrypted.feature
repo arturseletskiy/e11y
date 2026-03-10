@@ -5,11 +5,8 @@ Feature: AuditEncrypted adapter
   # AuditEncrypted stores audit events as individually-encrypted files on disk.
   # README: "Persistent encrypted audit log with key rotation support."
   #
-  # BUG 1: Key is generated randomly on each instantiation when no explicit key
-  #         is provided (OpenSSL::Random.random_bytes(32) in default_encryption_key).
-  #         Two instances started without an explicit key have different keys —
-  #         data encrypted by instance A cannot be decrypted by instance B.
-  #         "Key rotation support" is effectively key destruction on restart.
+  # Fixed: default_encryption_key now derives a stable key via PBKDF2 for dev/test,
+  #         so two instances without an explicit key share the same derived key.
   #
   # NOTE: Each event is written to its own .enc file (not a shared JSONL file),
   #       so the concurrent-write-corruption risk is lower than in JSONL adapters.
@@ -33,11 +30,7 @@ Feature: AuditEncrypted adapter
     And I read the encrypted audit file with the same key
     Then the decrypted payload should contain the original event_name
 
-  @wip
   Scenario: A new AuditEncrypted instance without explicit key cannot decrypt entries from a previous instance
-    # BUG: default_encryption_key calls OpenSSL::Random.random_bytes(32) —
-    # a new adapter instance gets a DIFFERENT random key on every boot.
-    # All previously encrypted audit events become permanently unreadable.
     Given an AuditEncrypted adapter with a known key and a temp storage directory
     When I write an event to the AuditEncrypted adapter
     And I create a new AuditEncrypted adapter without specifying the key

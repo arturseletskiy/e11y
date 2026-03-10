@@ -91,6 +91,8 @@ module E11y
         @labels = config.fetch(:labels, {})
         @batch_size = config.fetch(:batch_size, DEFAULT_BATCH_SIZE)
         @batch_timeout = config.fetch(:batch_timeout, DEFAULT_BATCH_TIMEOUT)
+        @timeout = config.fetch(:timeout, 5)
+        @health_check_timeout = [@timeout, 2].min
         @compress = config.fetch(:compress, true)
         @tenant_id = config[:tenant_id]
         @enable_cardinality_protection = config.fetch(:enable_cardinality_protection, false)
@@ -155,11 +157,19 @@ module E11y
         end
       end
 
-      # Check if adapter is healthy
+      # Check if adapter is healthy by probing the Loki /ready endpoint.
       #
-      # @return [Boolean] True if connection is established
+      # @return [Boolean] True if Loki responds with a 2xx status
       def healthy?
-        @connection&.respond_to?(:get)
+        return false unless @connection
+
+        @connection.get("/ready") do |req|
+          req.options.timeout = @health_check_timeout
+          req.options.open_timeout = @health_check_timeout
+        end
+        true
+      rescue StandardError
+        false
       end
 
       # Adapter capabilities
@@ -194,7 +204,6 @@ module E11y
       #
       # @see ADR-004 Section 7.1 (Retry Policy via gem-level middleware)
       # @see ADR-004 Section 6.1 (Connection pooling via HTTP client)
-      # rubocop:disable Metrics/MethodLength
       # HTTP client configuration requires detailed retry and connection settings
       def build_connection!
         @connection = Faraday.new(url: @url) do |f|
@@ -218,7 +227,6 @@ module E11y
           f.adapter Faraday.default_adapter
         end
       end
-      # rubocop:enable Metrics/MethodLength
 
       # Check if buffer should be flushed
       def flush_if_needed!
@@ -280,11 +288,13 @@ module E11y
 
       # Extract labels from event
       #
+      # Uses normalized event_name for consistent querying (matches Versioning middleware format).
+      #
       # @param event_data [Hash] Event data
       # @return [Hash] Labels for Loki stream
       def extract_labels(event_data)
         event_labels = {
-          event_name: event_data[:event_name].to_s,
+          event_name: normalize_event_name_for_labels(event_data[:event_name].to_s),
           severity: event_data[:severity].to_s
         }
 
@@ -293,9 +303,7 @@ module E11y
 
         # C04: Apply cardinality protection if enabled (enterprise use case)
         # Disabled by default - Loki is a log system, labels are for stream filtering only
-        if @enable_cardinality_protection && @cardinality_protection
-          all_labels = @cardinality_protection.filter(all_labels, "loki.stream")
-        end
+        all_labels = @cardinality_protection.filter(all_labels, "loki.stream") if @enable_cardinality_protection && @cardinality_protection
 
         all_labels.transform_keys(&:to_s)
       end
@@ -331,6 +339,20 @@ module E11y
         gz.write(body)
         gz.close
         io.string
+      end
+
+      # Normalize event name for Loki labels (matches Versioning middleware / query format)
+      #
+      # @param event_name [String] Raw event name (e.g., "Events::TestLoki")
+      # @return [String] Normalized name (e.g., "test.loki")
+      def normalize_event_name_for_labels(event_name)
+        return event_name unless event_name
+
+        name = event_name.sub(/^Events::/, "").sub(/V\d+$/, "").gsub("::", ".")
+        name.gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
+            .gsub(/([a-z\d])([A-Z])/, '\1_\2')
+            .downcase
+            .tr("_", ".")
       end
 
       # Build HTTP headers
