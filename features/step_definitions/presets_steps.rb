@@ -49,6 +49,8 @@ end
 When("I track the preset event") do
   E11y.configuration.adapters[:memory] ||= E11y::Adapters::InMemory.new
   E11y.configuration.fallback_adapters = [:memory]
+  # Route audit events to memory adapter (required for audit event validation)
+  E11y.configuration.routing_rules.unshift(->(e) { :memory if e[:audit_event] })
   E11y.configuration.instance_variable_set(:@built_pipeline, nil)
   @preset_event_class.track(id: "preset-#{SecureRandom.hex(4)}")
 end

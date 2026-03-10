@@ -120,7 +120,7 @@ Then("the new adapter should fail to decrypt the previously written entry") do
                                      "New adapter with a different random key successfully decrypted the entry! " \
                                      "This should NOT succeed — if it does, encryption is not working correctly. " \
                                      "Decrypted: #{result.inspect}"
-  rescue OpenSSL::Cipher::CipherError, JSON::ParserError, RuntimeError, StandardError => e
+  rescue OpenSSL::Cipher::CipherError, JSON::ParserError, RuntimeError => e
     # Getting an error means decryption failed — exactly what we want to document as failing.
     # For @wip, this scenario SHOULD raise an error but we want it to succeed silently
     # to show the user that data IS unrecoverable. So we raise an expectation failure.

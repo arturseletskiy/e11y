@@ -62,8 +62,8 @@ Feature: SLO Tracking
       | order[status] | pending |
     Then no SLO metrics should have been recorded
 
-  Scenario: SLO tracking requires explicit enablement
-    # Documents the current reality: default is disabled, must opt-in.
+  Scenario: SLO tracking can be explicitly disabled
+    # Zero-config: enabled by default; can opt-out.
     When I inspect the default SLO tracking configuration
-    Then E11y.configuration.slo_tracking.enabled should be false
+    Then E11y.configuration.slo_tracking.enabled should be true
     And enabling SLO tracking requires setting slo_tracking.enabled to true

@@ -39,19 +39,21 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
 
     # CRITICAL: In Rails environment, Yabeda.configure! was already called by Railtie
     # We MUST NOT call Yabeda.configure! again - it will raise AlreadyConfiguredError
-    # Instead, just define metrics using Yabeda.configure (without bang) - they register immediately
-    Yabeda.configure do
-      group :e11y do
-        counter :slo_http_requests_total, tags: %i[controller action status], comment: "SLO HTTP requests"
-        histogram :slo_http_request_duration_seconds,
-                  tags: %i[controller action],
-                  buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
-                  comment: "SLO HTTP request duration"
-        counter :slo_background_jobs_total, tags: %i[job_class status queue], comment: "SLO background jobs"
-        histogram :slo_background_job_duration_seconds,
-                  tags: %i[job_class queue],
-                  buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
-                  comment: "SLO background job duration"
+    # Only register metrics if not already registered (Prometheus raises AlreadyRegisteredError)
+    unless Yabeda.metrics.key?("e11y_slo_http_requests_total")
+      Yabeda.configure do
+        group :e11y do
+          counter :slo_http_requests_total, tags: %i[controller action status], comment: "SLO HTTP requests"
+          histogram :slo_http_request_duration_seconds,
+                    tags: %i[controller action],
+                    buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+                    comment: "SLO HTTP request duration"
+          counter :slo_background_jobs_total, tags: %i[job_class status queue], comment: "SLO background jobs"
+          histogram :slo_background_job_duration_seconds,
+                    tags: %i[job_class queue],
+                    buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+                    comment: "SLO background job duration"
+        end
       end
     end
 

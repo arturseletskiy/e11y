@@ -7,6 +7,8 @@ RSpec.describe E11y::Instruments::Sidekiq do
     let(:middleware) { described_class::ClientMiddleware.new }
     let(:job) { {} }
 
+    before { E11y::Current.reset }
+
     describe "C17 Hybrid Tracing: Propagate parent trace context" do
       it "injects parent_trace_id from E11y::Current.trace_id" do
         E11y::Current.trace_id = "trace123"

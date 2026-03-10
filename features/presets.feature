@@ -30,7 +30,7 @@ Feature: Event presets
     Given an event class including "E11y::Presets::AuditEvent"
     And the AuditSigning middleware is in the pipeline
     When I track the preset event
-    Then the tracked event should have a "_signature" field
+    Then the tracked event should have a "audit_signature" field
 
   Scenario: Event including AuditEvent preset has resolve_sample_rate 1.0
     # resolve_sample_rate IS correctly set by the preset.

@@ -118,9 +118,8 @@ RSpec.describe E11y::Middleware::AuditSigning do
 
         result = middleware.call(event_data)
 
-        # Tamper with canonical (which is what signature is based on)
-        tampered_canonical = result[:audit_canonical].gsub('"user_id":123', '"user_id":999')
-        result[:audit_canonical] = tampered_canonical
+        # Tamper with payload (verify_signature recomputes canonical from event_data)
+        result[:payload][:user_id] = 999
 
         expect(described_class.verify_signature(result)).to be false
       end

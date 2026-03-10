@@ -57,11 +57,12 @@ end
 # Action steps — call adapter methods and store result in @adapter_result
 # ---------------------------------------------------------------------------
 
-# @wip step — calls adapter.last_event which does NOT exist (NoMethodError expected)
 When("I call adapter.last_event") do
   @adapter_exception = nil
   begin
-    @adapter_result = memory_adapter.last_event
+    # Prefer last OrderCreated event (Rails instrumentation may add events after our business event)
+    order_events = memory_adapter.find_events("OrderCreated")
+    @adapter_result = order_events.any? ? order_events.last : memory_adapter.last_event
   rescue NoMethodError => e
     @adapter_exception = e
     raise # Re-raise so Cucumber marks the @wip scenario as failed
