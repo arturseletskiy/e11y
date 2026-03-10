@@ -14,10 +14,10 @@ module MemoryHelpers
   # @yield the operation to profile (called count + warmup times total)
   # @return [MemoryProfiler::Results]
   def measure_allocations(count: 100, warmup: 10, &block)
-    warmup.times { block.call }
+    warmup.times(&block)
     GC.start
     GC.compact if GC.respond_to?(:compact)
-    MemoryProfiler.report { count.times { block.call } }
+    MemoryProfiler.report { count.times(&block) }
   end
 end
 

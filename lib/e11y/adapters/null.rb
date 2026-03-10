@@ -26,11 +26,11 @@ module E11y
         super(config.merge(reliability: { enabled: false }))
       end
 
-      def write(_event_data)
+      def write(_event_data) # rubocop:disable Naming/PredicateMethod
         true
       end
 
-      def write_batch(_events)
+      def write_batch(_events) # rubocop:disable Naming/PredicateMethod
         true
       end
 

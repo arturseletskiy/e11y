@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
-# rubocop:disable RSpec/FilePath, RSpec/SpecFilePathFormat
 require "spec_helper"
 
-RSpec.describe E11y::Event::Base, ".track performance", :benchmark do
+RSpec.describe E11y::Event::Base, ".track performance", :benchmark do # rubocop:disable RSpec/MultipleDescribes
   let(:event_class) do
     Class.new(described_class) do
       def self.name
@@ -158,14 +157,13 @@ RSpec.describe E11y::Event::Base, ".track performance", :benchmark do
       expect(result1[:severity]).to eq(result2[:severity])
       expect(result1[:version]).to eq(result2[:version])
     end
-
   end
 end
 
 # Memory tests for BenchmarkEvent — tagged :memory only (not :benchmark).
 # Placed outside the :benchmark describe so the default :benchmark exclude
 # in spec_helper does not prevent them from running under spec:memory.
-RSpec.describe E11y::Event::Base, ".track memory profile", :memory do # rubocop:disable RSpec/SpecFilePathFormat
+RSpec.describe E11y::Event::Base, ".track memory profile", :memory do
   let(:event_class) do
     Class.new(described_class) do
       def self.name = "BenchmarkEvent"
@@ -193,11 +191,11 @@ RSpec.describe E11y::Event::Base, ".track memory profile", :memory do # rubocop:
 
     aggregate_failures do
       expect(report.total_retained).to eq(0),
-        "Memory leak: #{report.total_retained} objects retained"
+                                       "Memory leak: #{report.total_retained} objects retained"
 
       expect(per_event).to be <= 72,
-        "#{per_event.round(2)} allocations/event exceeds <=72 target " \
-        "(validation_mode :always default). See docs/ADR-001-architecture.md §5."
+                           "#{per_event.round(2)} allocations/event exceeds <=72 target " \
+                           "(validation_mode :always default). See docs/ADR-001-architecture.md §5."
     end
   end
 
@@ -205,8 +203,7 @@ RSpec.describe E11y::Event::Base, ".track memory profile", :memory do # rubocop:
     report = measure_allocations(count: 100) { event_class.track(**payload) }
 
     expect(report.total_retained).to eq(0),
-      "#{report.total_retained} objects retained — potential memory leak. " \
-      "Run benchmarks/allocation_profiling.rb for detailed retained-object analysis."
+                                     "#{report.total_retained} objects retained — potential memory leak. " \
+                                     "Run benchmarks/allocation_profiling.rb for detailed retained-object analysis."
   end
 end
-# rubocop:enable RSpec/FilePath, RSpec/SpecFilePathFormat

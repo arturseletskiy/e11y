@@ -594,17 +594,17 @@ RSpec.describe "High Cardinality Protection Integration", :integration do
       # O(unique_values), NOT O(events). With 100 unique statuses and ~20 objects/value
       # (string, hash entries, cardinality counters), ≤2000 is a reasonable ceiling.
       expect(report.total_retained).to be <= 2000,
-        "Retention #{report.total_retained} objects exceeds 2000 for 100 unique labels. " \
-        "Expected O(unique_label_values), not O(events)."
+                                       "Retention #{report.total_retained} objects exceeds 2000 for 100 unique labels. " \
+                                       "Expected O(unique_label_values), not O(events)."
 
       # Soft: generous threshold — 10MB for 100 events is 100x the unit-test target
       expect(allocated_mb).to be < 10,
-        "Memory usage #{allocated_mb.round(2)} MB exceeds 10 MB for 100 high-cardinality events"
+                              "Memory usage #{allocated_mb.round(2)} MB exceeds 10 MB for 100 high-cardinality events"
 
       # Functional: cardinality is still tracked correctly under profiling
       status_cardinality = new_protection.cardinality("orders_total")[:status] || 0
       expect(status_cardinality).to eq(100),
-        "Expected status cardinality to be 100, got #{status_cardinality}"
+                                    "Expected status cardinality to be 100, got #{status_cardinality}"
     end
   end
 end

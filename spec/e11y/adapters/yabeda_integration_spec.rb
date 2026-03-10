@@ -24,14 +24,16 @@ RSpec.describe E11y::Adapters::Yabeda, :integration do
   let(:registry) { E11y::Metrics::Registry.instance }
   let(:adapter) { described_class.new(auto_register: false) }
 
+  let(:saved_registry_metrics) { registry.all.dup }
+
   before do
-    # Save Registry state before clearing so we can restore it in the after hook.
+    # Memoize before clearing so we can restore in the after hook.
     # Event classes call register_metrics_in_registry! exactly once at load time
     # (Zeitwerk autoload). After registry.clear! they cannot self-register again,
     # so without an explicit restore the Registry stays empty for all subsequent
     # tests in the same process — causing find_matching to return [] and
     # cardinality tracking to silently produce zeros.
-    @saved_registry_metrics = registry.all.dup
+    saved_registry_metrics
 
     # Clear Yabeda configuration
     Yabeda.reset!
@@ -47,7 +49,7 @@ RSpec.describe E11y::Adapters::Yabeda, :integration do
     # Restore the metrics that were registered by event class definitions so that
     # tests running after this spec (e.g. high_cardinality_protection) still find
     # their event → metric mappings via E11y::Metrics::Registry.find_matching.
-    @saved_registry_metrics.each do |config|
+    saved_registry_metrics.each do |config|
       registry.register(config.except(:pattern_regex))
     rescue E11y::Metrics::Registry::LabelConflictError,
            E11y::Metrics::Registry::TypeConflictError

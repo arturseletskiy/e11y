@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
-# rubocop:disable RSpec/FilePath, RSpec/SpecFilePathFormat
 require "spec_helper"
 
-RSpec.describe "E11y Memory Profile", :memory do
+RSpec.describe "E11y Memory Profile", :memory do # rubocop:disable RSpec/DescribeClass
   # Anonymous event classes — no Rails, no adapters, no Docker.
   # Defined as let-blocks to avoid cross-example state from class definitions.
 
@@ -35,7 +34,7 @@ RSpec.describe "E11y Memory Profile", :memory do
   # Group 1: Event.track allocations by validation_mode
   # -------------------------------------------------------------------------
   describe "Event.track allocations" do
-    context "validation_mode :always (default)" do
+    context "with validation_mode :always (default)" do
       let(:event_class) do
         Class.new(E11y::Event::Base) do
           def self.name = "MemoryTestAlwaysEvent"
@@ -52,18 +51,18 @@ RSpec.describe "E11y Memory Profile", :memory do
         aggregate_failures do
           # Strict: retained > 0 means a real memory leak — must fix, not tune threshold.
           expect(report.total_retained).to eq(0),
-            "Memory leak: #{report.total_retained} objects retained after 100 events"
+                                           "Memory leak: #{report.total_retained} objects retained after 100 events"
 
           # Soft: measured baseline is ~47/event on Ruby 3.3 (dry-schema overhead).
           # Threshold = ceil(47 * 1.5) = 72. See benchmarks/allocation_profiling.rb.
           expect(per_event).to be <= 72,
-            "Allocation regression: #{per_event.round(2)} objects/event exceeds <=72 target. " \
-            "Run benchmarks/allocation_profiling.rb for detailed source analysis."
+                               "Allocation regression: #{per_event.round(2)} objects/event exceeds <=72 target. " \
+                               "Run benchmarks/allocation_profiling.rb for detailed source analysis."
         end
       end
     end
 
-    context "validation_mode :never" do
+    context "with validation_mode :never" do
       let(:event_class_never) do
         Class.new(E11y::Event::Base) do
           def self.name = "MemoryTestNeverEvent"
@@ -80,18 +79,18 @@ RSpec.describe "E11y Memory Profile", :memory do
 
         aggregate_failures do
           expect(report.total_retained).to eq(0),
-            "Memory leak: #{report.total_retained} objects retained after 100 events"
+                                           "Memory leak: #{report.total_retained} objects retained after 100 events"
 
           # Measured baseline: ~33/event on Ruby 3.3 (pipeline overhead without dry-schema).
           # Threshold = ceil(33 * 1.5) = 50. See benchmarks/allocation_profiling.rb.
           expect(per_event).to be <= 50,
-            "Allocation regression: #{per_event.round(2)} objects/event exceeds <=50 target " \
-            "for :never mode. See benchmarks/allocation_profiling.rb."
+                               "Allocation regression: #{per_event.round(2)} objects/event exceeds <=50 target " \
+                               "for :never mode. See benchmarks/allocation_profiling.rb."
         end
       end
     end
 
-    context "validation_mode :sampled (50%)" do
+    context "with validation_mode :sampled (50%)" do
       let(:event_class_sampled) do
         Class.new(E11y::Event::Base) do
           def self.name = "MemoryTestSampledEvent"
@@ -111,12 +110,12 @@ RSpec.describe "E11y Memory Profile", :memory do
 
         aggregate_failures do
           expect(report.total_retained).to eq(0),
-            "Memory leak: #{report.total_retained} objects retained after 100 events"
+                                           "Memory leak: #{report.total_retained} objects retained after 100 events"
 
           # Measured baseline: ~33–47/event on Ruby 3.3 (50% validates → midpoint).
           # Upper bound matches :always threshold (ceil(47 * 1.5) = 72).
           expect(per_event).to be <= 72,
-            "Allocation regression: #{per_event.round(2)} objects/event exceeds <=72 target."
+                               "Allocation regression: #{per_event.round(2)} objects/event exceeds <=72 target."
         end
       end
     end
@@ -140,10 +139,10 @@ RSpec.describe "E11y Memory Profile", :memory do
       return "" if report.total_retained.zero?
 
       # retained_memory_by_class returns [{data: ClassName, count: N}, ...]
-      "\nTop retained classes:\n" +
-        report.retained_memory_by_class.first(5)
-              .map { |entry| "  #{entry[:data]}: #{entry[:count]} objects" }
-              .join("\n")
+      top = report.retained_memory_by_class.first(5)
+                  .map { |entry| "  #{entry[:data]}: #{entry[:count]} objects" }
+                  .join("\n")
+      "\nTop retained classes:\n#{top}"
     end
 
     it "retains 0 objects after 1K events" do
@@ -151,7 +150,7 @@ RSpec.describe "E11y Memory Profile", :memory do
       print_allocation_summary(report, label: "1K events leak check", event_count: 1_000)
 
       expect(report.total_retained).to eq(0),
-        "Memory leak at 1K events: #{report.total_retained} objects retained.#{leak_detail(report)}"
+                                       "Memory leak at 1K events: #{report.total_retained} objects retained.#{leak_detail(report)}"
     end
 
     it "retains 0 objects after 10K events" do
@@ -159,7 +158,7 @@ RSpec.describe "E11y Memory Profile", :memory do
       print_allocation_summary(report, label: "10K events leak check", event_count: 10_000)
 
       expect(report.total_retained).to eq(0),
-        "Memory leak at 10K events: #{report.total_retained} objects retained.#{leak_detail(report)}"
+                                       "Memory leak at 10K events: #{report.total_retained} objects retained.#{leak_detail(report)}"
     end
   end
 
@@ -184,9 +183,8 @@ RSpec.describe "E11y Memory Profile", :memory do
       puts "     target:    < 100 MB  (benchmarks/README.md Small Scale)"
 
       expect(allocated_mb).to be < 100,
-        "Memory consumption #{allocated_mb.round(2)} MB exceeds 100 MB target " \
-        "(benchmarks/README.md Small Scale: track() latency <50us, memory <100MB)."
+                              "Memory consumption #{allocated_mb.round(2)} MB exceeds 100 MB target " \
+                              "(benchmarks/README.md Small Scale: track() latency <50us, memory <100MB)."
     end
   end
 end
-# rubocop:enable RSpec/FilePath, RSpec/SpecFilePathFormat

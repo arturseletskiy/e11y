@@ -34,7 +34,7 @@ RSpec.describe "Realistic Memory Profile", :integration do
     Thread.current[:e11y_trace_id] = nil
   end
 
-  def print_profile(report, label:, event_count:)
+  def print_profile(report, label:, event_count:) # rubocop:disable Metrics/AbcSize
     per_event = report.total_allocated.to_f / event_count
     kb_total  = report.total_allocated_memsize / 1024.0
 
@@ -45,8 +45,8 @@ RSpec.describe "Realistic Memory Profile", :integration do
 
     return unless report.total_retained.positive?
 
-    by_count  = report.retained_objects_by_class.first(5).map { |e| [e[:data], e[:count]] }.to_h
-    by_memory = report.retained_memory_by_class.first(10).map { |e| [e[:data], e[:count]] }.to_h
+    by_count  = report.retained_objects_by_class.first(5).to_h { |e| [e[:data], e[:count]] }
+    by_memory = report.retained_memory_by_class.first(10).to_h { |e| [e[:data], e[:count]] }
     puts "     top retained:"
     by_count.each do |klass, count|
       kb = (by_memory[klass].to_i / 1024.0).round(1)
@@ -59,7 +59,8 @@ RSpec.describe "Realistic Memory Profile", :integration do
   shared_examples "clean pipeline" do |event_count: 100, warmup_count: 20|
     it "allocates objects and retains 0 (NullAdapter)" do
       warmup_count.times { |i| in_request(i) { subject.call } }
-      GC.start; GC.compact if GC.respond_to?(:compact)
+      GC.start
+      GC.compact if GC.respond_to?(:compact)
 
       report = MemoryProfiler.report do
         event_count.times { |i| in_request(warmup_count + i) { subject.call } }
@@ -69,9 +70,9 @@ RSpec.describe "Realistic Memory Profile", :integration do
 
       expect(report.total_allocated).to be_positive
       expect(report.total_retained).to eq(0),
-        "Pipeline leak: #{report.total_retained} objects retained.\n" \
-        "NullAdapter stores nothing — retained objects come from the middleware pipeline.\n" \
-        "Run benchmarks/allocation_profiling.rb for detailed retained-object analysis."
+                                       "Pipeline leak: #{report.total_retained} objects retained.\n" \
+                                       "NullAdapter stores nothing — retained objects come from the middleware pipeline.\n" \
+                                       "Run benchmarks/allocation_profiling.rb for detailed retained-object analysis."
     end
   end
 
@@ -80,8 +81,9 @@ RSpec.describe "Realistic Memory Profile", :integration do
   # UserAction: schema validation + Yabeda counter — no PII filtering path.
   # -------------------------------------------------------------------------
   describe "Events::UserAction (no PII, metrics)" do
-    let(:label)   { "UserAction (no PII, metrics)" }
-    let(:subject) { -> { Events::UserAction.track(user_id: "user-42", action: "click") } }
+    subject { -> { Events::UserAction.track(user_id: "user-42", action: "click") } }
+
+    let(:label) { "UserAction (no PII, metrics)" }
 
     include_examples "clean pipeline"
   end
@@ -92,17 +94,18 @@ RSpec.describe "Realistic Memory Profile", :integration do
   # pii_filtering allows list, Yabeda counter + SLO status classification.
   # -------------------------------------------------------------------------
   describe "Events::OrderCreated (contains_pii true, PII filter, metrics, SLO)" do
-    let(:label) { "OrderCreated (PII filter + SLO)" }
-    let(:subject) do
-      -> {
+    subject do
+      lambda {
         Events::OrderCreated.track(
           order_id: "ord-1", status: "pending",
           customer: { name: "Jane Doe", email: "jane@example.com", phone: "+1-555-0100" },
-          payment:  { amount: 99.99, currency: "USD", card_last4: "4242" },
-          items:    [{ sku: "SKU-001", qty: 2 }]
+          payment: { amount: 99.99, currency: "USD", card_last4: "4242" },
+          items: [{ sku: "SKU-001", qty: 2 }]
         )
       }
     end
+
+    let(:label) { "OrderCreated (PII filter + SLO)" }
 
     include_examples "clean pipeline"
   end
@@ -112,9 +115,8 @@ RSpec.describe "Realistic Memory Profile", :integration do
   # PaymentSubmitted: contains_pii true, masks :cvv (not just filters).
   # -------------------------------------------------------------------------
   describe "Events::PaymentSubmitted (contains_pii true, masks cvv)" do
-    let(:label) { "PaymentSubmitted (PII masking)" }
-    let(:subject) do
-      -> {
+    subject do
+      lambda {
         Events::PaymentSubmitted.track(
           payment_id: "pay-1",
           card_number: "4111111111111111",
@@ -125,6 +127,8 @@ RSpec.describe "Realistic Memory Profile", :integration do
         )
       }
     end
+
+    let(:label) { "PaymentSubmitted (PII masking)" }
 
     include_examples "clean pipeline"
   end
@@ -154,7 +158,8 @@ RSpec.describe "Realistic Memory Profile", :integration do
       end
 
       20.times { |i| in_request(i) { track_request.call } }
-      GC.start; GC.compact if GC.respond_to?(:compact)
+      GC.start
+      GC.compact if GC.respond_to?(:compact)
 
       report = MemoryProfiler.report do
         request_count.times { |i| in_request(20 + i) { track_request.call } }
@@ -166,8 +171,8 @@ RSpec.describe "Realistic Memory Profile", :integration do
 
       expect(report.total_allocated).to be_positive
       expect(report.total_retained).to eq(0),
-        "Pipeline leak: #{report.total_retained} objects retained. " \
-        "NullAdapter stores nothing — investigate the middleware pipeline."
+                                       "Pipeline leak: #{report.total_retained} objects retained. " \
+                                       "NullAdapter stores nothing — investigate the middleware pipeline."
     end
   end
 end
