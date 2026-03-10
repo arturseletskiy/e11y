@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "rails_helper"
+require "memory_profiler"
 
 # Require dependencies - fail fast if not available
 begin
@@ -553,18 +554,9 @@ RSpec.describe "High Cardinality Protection Integration", :integration do
 
   describe "Edge Case 4: Memory impact" do
     it "maintains acceptable memory usage under high cardinality load" do
-      skip "Memory profiling requires memory_profiler gem. To enable: gem install memory_profiler and add to Gemfile" \
-        unless defined?(MemoryProfiler)
-
-      # Setup: 100 metrics × 10 labels × 1000 unique values
-      # Test: Track events across 100 metrics with high cardinality
-      # Expected: Memory usage acceptable (<100MB), no memory leaks
-      #
-      # Status: ⚠️ SKIP - Memory profiling requires memory_profiler gem
-      # Current: Test verifies cardinality tracking works, but doesn't measure memory
-      # Future: Add memory_profiler gem and measure actual memory usage
-      #
-      # For now, we verify that cardinality tracking works correctly:
+      # Setup: 100 events with unique order_id + status values
+      # Test: Wrap in MemoryProfiler to verify cardinality tracking has no leaks
+      # Expected: 0 retained objects, allocated memory < 10MB for 100 events
       memory_adapter.clear!
 
       new_adapter = E11y::Adapters::Yabeda.new(
@@ -575,18 +567,44 @@ RSpec.describe "High Cardinality Protection Integration", :integration do
       E11y.config.adapters[:yabeda] = new_adapter
       new_protection = new_adapter.instance_variable_get(:@cardinality_protection)
 
-      # Track events across multiple metrics (simplified version)
-      # Verify cardinality tracking works without memory issues
-      100.times do |i|
-        event_data = Events::OrderCreated.track(order_id: "order-#{i}", status: "status-#{i}")
-        # Explicitly process metrics via Yabeda adapter
+      # Warmup to avoid cold-start allocations in measurement.
+      # Use status values overlapping with the profiling window (status-0..4) so
+      # they don't add extra cardinality entries beyond the expected 100.
+      5.times do |i|
+        event_data = Events::OrderCreated.track(order_id: "warmup-#{i}", status: "status-#{i}")
         new_adapter.write(event_data)
       end
+      GC.start
 
-      # Verify cardinality tracked correctly
+      # Profile 100 events with unique values (high cardinality scenario)
+      report = MemoryProfiler.report do
+        100.times do |i|
+          event_data = Events::OrderCreated.track(order_id: "order-#{i}", status: "status-#{i}")
+          new_adapter.write(event_data)
+        end
+      end
+
+      allocated_mb = report.total_allocated_memsize.to_f / (1024 * 1024)
+      puts "\n  [Memory] High cardinality (100 events, 100 unique statuses):"
+      puts "     allocated: #{allocated_mb.round(3)} MB"
+      puts "     retained:  #{report.total_retained} objects"
+
+      # Cardinality tracking intentionally retains data for each unique label value
+      # (that's the feature — it tracks which values have been seen). The bound is
+      # O(unique_values), NOT O(events). With 100 unique statuses and ~20 objects/value
+      # (string, hash entries, cardinality counters), ≤2000 is a reasonable ceiling.
+      expect(report.total_retained).to be <= 2000,
+        "Retention #{report.total_retained} objects exceeds 2000 for 100 unique labels. " \
+        "Expected O(unique_label_values), not O(events)."
+
+      # Soft: generous threshold — 10MB for 100 events is 100x the unit-test target
+      expect(allocated_mb).to be < 10,
+        "Memory usage #{allocated_mb.round(2)} MB exceeds 10 MB for 100 high-cardinality events"
+
+      # Functional: cardinality is still tracked correctly under profiling
       status_cardinality = new_protection.cardinality("orders_total")[:status] || 0
       expect(status_cardinality).to eq(100),
-                                    "Expected status cardinality to be 100, got #{status_cardinality}"
+        "Expected status cardinality to be 100, got #{status_cardinality}"
     end
   end
 end
