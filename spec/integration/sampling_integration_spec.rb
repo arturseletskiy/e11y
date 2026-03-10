@@ -573,8 +573,173 @@ RSpec.describe "Sampling Middleware Integration", :integration do
     end
   end
 
-  # Additional scenarios will be added in subsequent tasks
-  # Scenario 3: Pattern-based sampling
-  # Scenario 7: Value-based sampling
-  # Scenario 8: Stratified sampling
+  describe "Scenario 3: Pattern-based sampling" do
+    before do
+      E11y.config.pipeline.middlewares.reject! { |m| m.middleware_class == E11y::Middleware::Sampling }
+
+      pii_filter_index = E11y.config.pipeline.middlewares.index { |m| m.middleware_class == E11y::Middleware::PIIFilter }
+      insert_index = pii_filter_index ? pii_filter_index + 1 : E11y.config.pipeline.middlewares.length
+
+      E11y.config.pipeline.middlewares.insert(
+        insert_index,
+        E11y::Pipeline::Builder::MiddlewareEntry.new(
+          middleware_class: E11y::Middleware::Sampling,
+          args: [],
+          options: {
+            default_sample_rate: 1.0,
+            trace_aware: false,
+            pattern_rates: [
+              [/DebugPattern/, 0.0],   # Drop events whose class name contains "DebugPattern"
+              [/PaymentPattern/, 1.0]  # Always sample events with "PaymentPattern" in name
+            ]
+          }
+        )
+      )
+      E11y.config.instance_variable_set(:@built_pipeline, nil)
+    end
+
+    it "drops events matching pattern rate 0.0 regardless of event-level sample_rate" do
+      debug_class = Class.new(E11y::Event::Base) { sample_rate 1.0 }
+      stub_const("Events::DebugPattern", debug_class)
+
+      memory_adapter.clear!
+      E11y::Current.reset
+
+      10.times { |i| Events::DebugPattern.track(test_id: i) }
+      events = memory_adapter.find_events("Events::DebugPattern")
+
+      expect(events.count).to eq(0),
+        "DebugPattern events should be dropped by pattern rate 0.0, got #{events.count}"
+    end
+
+    it "always samples events matching pattern rate 1.0 regardless of event-level sample_rate" do
+      payment_class = Class.new(E11y::Event::Base) { sample_rate 0.0 }
+      stub_const("Events::PaymentPattern", payment_class)
+
+      memory_adapter.clear!
+      E11y::Current.reset
+
+      10.times { |i| Events::PaymentPattern.track(test_id: i, amount: 100) }
+      events = memory_adapter.find_events("Events::PaymentPattern")
+
+      expect(events.count).to eq(10),
+        "PaymentPattern events should always pass with pattern rate 1.0, got #{events.count}"
+    end
+  end
+
+  describe "Scenario 7: Value-based sampling (FEAT-4849)" do
+    before do
+      E11y.config.pipeline.middlewares.reject! { |m| m.middleware_class == E11y::Middleware::Sampling }
+
+      pii_filter_index = E11y.config.pipeline.middlewares.index { |m| m.middleware_class == E11y::Middleware::PIIFilter }
+      insert_index = pii_filter_index ? pii_filter_index + 1 : E11y.config.pipeline.middlewares.length
+
+      E11y.config.pipeline.middlewares.insert(
+        insert_index,
+        E11y::Pipeline::Builder::MiddlewareEntry.new(
+          middleware_class: E11y::Middleware::Sampling,
+          args: [],
+          options: { default_sample_rate: 0.0, trace_aware: false }
+        )
+      )
+      E11y.config.instance_variable_set(:@built_pipeline, nil)
+    end
+
+    it "always samples high-value events (amount > 1000) even when default_sample_rate is 0.0" do
+      high_value_class = Class.new(E11y::Event::Base) do
+        sample_rate 0.0
+        sample_by_value "payload.amount", greater_than: 1000
+      end
+      stub_const("Events::HighValueOrder", high_value_class)
+
+      memory_adapter.clear!
+      E11y::Current.reset
+
+      5.times { |i| Events::HighValueOrder.track(test_id: i, amount: 50) }
+      low_value_events = memory_adapter.find_events("Events::HighValueOrder")
+
+      memory_adapter.clear!
+
+      5.times { |i| Events::HighValueOrder.track(test_id: i, amount: 1500) }
+      high_value_events = memory_adapter.find_events("Events::HighValueOrder")
+
+      expect(low_value_events.count).to eq(0),
+        "Low-value events (amount=50) should be dropped (default_sample_rate=0.0)"
+      expect(high_value_events.count).to eq(5),
+        "High-value events (amount=1500 > 1000) should always be sampled"
+    end
+
+    it "samples events matching in_range value condition" do
+      range_class = Class.new(E11y::Event::Base) do
+        sample_rate 0.0
+        sample_by_value "payload.score", in_range: 80..100
+      end
+      stub_const("Events::ScoredEvent", range_class)
+
+      memory_adapter.clear!
+      E11y::Current.reset
+
+      3.times { |i| Events::ScoredEvent.track(test_id: i, score: 50) }
+      outside_range = memory_adapter.find_events("Events::ScoredEvent")
+
+      memory_adapter.clear!
+
+      3.times { |i| Events::ScoredEvent.track(test_id: i, score: 95) }
+      inside_range = memory_adapter.find_events("Events::ScoredEvent")
+
+      expect(outside_range.count).to eq(0), "Score=50 is outside 80..100, should be dropped"
+      expect(inside_range.count).to eq(3),  "Score=95 is inside 80..100, should be sampled"
+    end
+  end
+
+  describe "Scenario 8: Stratified sampling (C11 Resolution)" do
+    let(:stratified_tracker) { E11y::Sampling::StratifiedTracker.new }
+
+    it "records sampling decisions by severity stratum" do
+      stratified_tracker.record_sample(severity: :error,   sample_rate: 1.0, sampled: true)
+      stratified_tracker.record_sample(severity: :error,   sample_rate: 1.0, sampled: true)
+      stratified_tracker.record_sample(severity: :success, sample_rate: 0.1, sampled: true)
+      stratified_tracker.record_sample(severity: :success, sample_rate: 0.1, sampled: false)
+      stratified_tracker.record_sample(severity: :success, sample_rate: 0.1, sampled: false)
+
+      error_stats   = stratified_tracker.stratum_stats(:error)
+      success_stats = stratified_tracker.stratum_stats(:success)
+
+      expect(error_stats[:total_count]).to eq(2)
+      expect(error_stats[:sampled_count]).to eq(2)
+      expect(success_stats[:total_count]).to eq(3)
+      expect(success_stats[:sampled_count]).to eq(1)
+    end
+
+    it "calculates correct correction factor for SLO calculations (1 / sample_rate)" do
+      10.times { stratified_tracker.record_sample(severity: :info, sample_rate: 0.1, sampled: true) }
+
+      correction = stratified_tracker.sampling_correction(:info)
+      expect(correction).to be_within(0.01).of(10.0)
+    end
+
+    it "preserves stratum proportions across severities at 10% sampling" do
+      tracker = E11y::Sampling::StratifiedTracker.new
+
+      50.times  { tracker.record_sample(severity: :error,   sample_rate: 0.1, sampled: rand < 0.1) }
+      950.times { tracker.record_sample(severity: :success, sample_rate: 0.1, sampled: rand < 0.1) }
+
+      error_correction   = tracker.sampling_correction(:error)
+      success_correction = tracker.sampling_correction(:success)
+
+      expect(error_correction).to be_within(0.5).of(10.0),
+        "Error correction should be ~10.0 (1/0.1), got #{error_correction}"
+      expect(success_correction).to be_within(0.5).of(10.0),
+        "Success correction should be ~10.0 (1/0.1), got #{success_correction}"
+
+      error_sampled   = tracker.stratum_stats(:error)[:sampled_count]
+      success_sampled = tracker.stratum_stats(:success)[:sampled_count]
+      expect(error_sampled).to be > 0
+      expect(success_sampled).to be > 0
+
+      ratio = error_sampled.to_f / (error_sampled + success_sampled)
+      expect(ratio).to be_within(0.04).of(0.05), # ~5% error rate, allow ±4%
+        "Error ratio in sample should be ~5%, got #{(ratio * 100).round(1)}%"
+    end
+  end
 end

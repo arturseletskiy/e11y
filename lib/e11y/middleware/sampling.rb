@@ -124,6 +124,7 @@ module E11y
         @default_sample_rate = config.fetch(:default_sample_rate, 1.0)
         @trace_aware = config.fetch(:trace_aware, true)
         @severity_rates = config.fetch(:severity_rates, {})
+        @pattern_rates = config.fetch(:pattern_rates, []) # [[Regexp, Float], ...]
         @trace_decisions = {} # Cache for trace-level sampling decisions
         @trace_decisions_mutex = Mutex.new
       end
@@ -191,6 +192,14 @@ module E11y
         # 0. Error-based adaptive sampling (FEAT-4838) - highest priority!
         if @error_based_adaptive && @error_spike_detector&.error_spike?
           return 1.0 # 100% sampling during error spike
+        end
+
+        # 0.5. Pattern-based sampling (by event_name) - overrides event-level config
+        if event_data && !@pattern_rates.empty?
+          event_name = event_data[:event_name].to_s
+          @pattern_rates.each do |pattern, rate|
+            return rate if pattern.match?(event_name)
+          end
         end
 
         # 1. Value-based sampling (FEAT-4849) - high-value events always sampled
