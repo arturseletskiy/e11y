@@ -91,29 +91,32 @@ RSpec.describe "E11y Memory Profile", :memory do
       end
     end
 
-    context "validation_mode :sampled (1%)" do
+    context "validation_mode :sampled (50%)" do
       let(:event_class_sampled) do
         Class.new(E11y::Event::Base) do
           def self.name = "MemoryTestSampledEvent"
           contains_pii false
-          validation_mode :sampled, sample_rate: 0.01
+          # 50% rate ensures dry-schema is compiled in warmup (1-(0.5^10) ≈ 99.9%).
+          # Lower rates (e.g. 1%) make schema compilation probabilistic, causing
+          # non-deterministic retained-object counts from class-level caching.
+          validation_mode :sampled, sample_rate: 0.5
           schema { required(:value).filled(:integer) }
         end
       end
 
-      it "allocates <=50 objects per event and retains 0" do
+      it "allocates <=72 objects per event and retains 0" do
         report = measure_allocations(count: 100) { event_class_sampled.track(**payload) }
         per_event = report.total_allocated.to_f / 100
-        print_allocation_summary(report, label: "validation_mode :sampled (1%)", event_count: 100)
+        print_allocation_summary(report, label: "validation_mode :sampled (50%)", event_count: 100)
 
         aggregate_failures do
           expect(report.total_retained).to eq(0),
             "Memory leak: #{report.total_retained} objects retained after 100 events"
 
-          # Measured baseline: ~33/event on Ruby 3.3 (validates ~1% so mostly like :never).
-          # Threshold = ceil(33 * 1.5) = 50.
-          expect(per_event).to be <= 50,
-            "Allocation regression: #{per_event.round(2)} objects/event exceeds <=50 target."
+          # Measured baseline: ~33–47/event on Ruby 3.3 (50% validates → midpoint).
+          # Upper bound matches :always threshold (ceil(47 * 1.5) = 72).
+          expect(per_event).to be <= 72,
+            "Allocation regression: #{per_event.round(2)} objects/event exceeds <=72 target."
         end
       end
     end
