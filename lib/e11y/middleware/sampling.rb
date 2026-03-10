@@ -51,6 +51,8 @@ module E11y
     #         }
     #       }
     #   end
+    # rubocop:disable Metrics/ClassLength
+    # Class has 6 adaptive sampling strategies each requiring dedicated setup + private methods
     class Sampling < Base
       middleware_zone :routing
 
@@ -185,9 +187,10 @@ module E11y
       # @param event_class [Class] The event class
       # @param event_data [Hash] Event payload (for value-based sampling)
       # @return [Float] Sample rate (0.0-1.0)
-      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
-      # Sample rate determination follows priority chain: error spike → value-based →
-      # load-based → severity → event-level → default
+      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+      # Sample rate determination follows a 6-step priority chain:
+      # error spike (0) → pattern-based (0.5) → value-based (1) →
+      # load-based (2) → severity (3) → event-level (4) → default (5)
       def determine_sample_rate(event_class, event_data = nil)
         # 0. Error-based adaptive sampling (FEAT-4838) - highest priority!
         if @error_based_adaptive && @error_spike_detector&.error_spike?
@@ -238,7 +241,7 @@ module E11y
         # 4. Default/load-based rate
         base_rate
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
+      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
       # Trace-aware sampling decision (C05 Resolution)
       #
@@ -279,5 +282,6 @@ module E11y
         keys_to_remove.each { |key| @trace_decisions.delete(key) }
       end
     end
+    # rubocop:enable Metrics/ClassLength
   end
 end
