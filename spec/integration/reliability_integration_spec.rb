@@ -112,14 +112,17 @@ RSpec.describe "Reliability Features Integration", :integration do
       end
 
       # Should raise RetryExhaustedError after 3 attempts
-      expect do
+      error = nil
+      failing_action = proc do
         retry_handler.with_retry(adapter: failing_adapter, event: event_data) do
           failing_adapter.write(event_data)
         end
-      end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError) do |error|
-        expect(error.retry_count).to eq(3)
-        expect(error.original_error).to be_a(Errno::ECONNREFUSED)
       end
+      expect { failing_action.call }.to raise_error(
+        E11y::Reliability::RetryHandler::RetryExhaustedError
+      ) { |e| error = e }
+      expect(error.retry_count).to eq(3)
+      expect(error.original_error).to be_a(Errno::ECONNREFUSED)
 
       # Should attempt 3 times
       expect(call_count).to eq(3)

@@ -121,12 +121,12 @@ RSpec.describe "High Cardinality Protection Integration", :integration do
       # we verify via cardinality tracking: status should have cardinality 1 (only "paid")
       # Note: metric name is :orders_total (symbol), but cardinality() expects string
       cardinalities = protection.cardinality("orders_total")
-      expect(cardinalities[:status]).to eq(1),
-                                        "Expected status cardinality to be 1 (only 'paid'), got #{cardinalities[:status]}. All cardinalities: #{cardinalities.inspect}"
+      msg1 = "Expected status cardinality 1 (only 'paid'), got #{cardinalities[:status]}. All: #{cardinalities.inspect}"
+      expect(cardinalities[:status]).to eq(1), msg1
 
       # Verify order_id is NOT tracked (denylisted)
-      expect(cardinalities).not_to have_key(:order_id),
-                                   "Expected order_id to be denylisted (not tracked). Cardinalities: #{cardinalities.inspect}"
+      msg2 = "Expected order_id to be denylisted (not tracked). Cardinalities: #{cardinalities.inspect}"
+      expect(cardinalities).not_to have_key(:order_id), msg2
     end
   end
 
@@ -170,8 +170,8 @@ RSpec.describe "High Cardinality Protection Integration", :integration do
       # Note: Since overflow_strategy is :drop, values beyond limit are dropped
       # So cardinality should be exactly 100 (the limit)
       endpoint_cardinality = new_protection.cardinality("api_requests_total")[:endpoint] || 0
-      expect(endpoint_cardinality).to eq(100),
-                                      "Expected endpoint cardinality to be 100 (limit reached), got #{endpoint_cardinality}"
+      msg = "Expected endpoint cardinality to be 100 (limit reached), got #{endpoint_cardinality}"
+      expect(endpoint_cardinality).to eq(100), msg
 
       # Verify status cardinality is 1 (only "success")
       expect(new_protection.cardinality("api_requests_total")[:status]).to eq(1),
@@ -220,12 +220,12 @@ RSpec.describe "High Cardinality Protection Integration", :integration do
       payments_cardinality = new_protection.cardinality("payments_total")[:status] || 0
       user_actions_cardinality = new_protection.cardinality("user_actions_total")[:action] || 0
 
-      expect(orders_cardinality).to eq(100),
-                                    "Expected orders_total:status cardinality to be 100, got #{orders_cardinality}"
-      expect(payments_cardinality).to eq(100),
-                                      "Expected payments_total:status cardinality to be 100, got #{payments_cardinality}"
-      expect(user_actions_cardinality).to eq(100),
-                                          "Expected user_actions_total:action cardinality to be 100, got #{user_actions_cardinality}"
+      msg_o = "Expected orders_total:status cardinality to be 100, got #{orders_cardinality}"
+      expect(orders_cardinality).to eq(100), msg_o
+      msg_p = "Expected payments_total:status cardinality to be 100, got #{payments_cardinality}"
+      expect(payments_cardinality).to eq(100), msg_p
+      msg_u = "Expected user_actions_total:action cardinality to be 100, got #{user_actions_cardinality}"
+      expect(user_actions_cardinality).to eq(100), msg_u
 
       # Verify limits enforced per metric (not globally)
       # All three metrics should have reached their limit independently
@@ -267,8 +267,8 @@ RSpec.describe "High Cardinality Protection Integration", :integration do
 
       # Verify cardinality limit enforced: exactly 10 unique values tracked
       status_cardinality = new_protection.cardinality("orders_total")[:status] || 0
-      expect(status_cardinality).to eq(10),
-                                    "Expected status cardinality to be 10 (limit reached), got #{status_cardinality}"
+      msg = "Expected status cardinality to be 10 (limit reached), got #{status_cardinality}"
+      expect(status_cardinality).to eq(10), msg
 
       # Verify events were tracked (all 15 events tracked, but only 10 unique status values)
       events = memory_adapter.find_events("Events::OrderCreated")
@@ -306,12 +306,12 @@ RSpec.describe "High Cardinality Protection Integration", :integration do
 
       # Verify cardinality: 10 unique values + [OTHER] = 11 total
       status_cardinality = new_protection.cardinality("orders_total")[:status] || 0
-      expect(status_cardinality).to eq(11),
-                                    "Expected status cardinality to be 11 (10 unique + [OTHER]), got #{status_cardinality}"
+      msg1 = "Expected status cardinality to be 11 (10 unique + [OTHER]), got #{status_cardinality}"
+      expect(status_cardinality).to eq(11), msg1
 
       # Verify [OTHER] is tracked (force_track bypasses limit)
-      expect(new_protection.tracker.cardinality("orders_total", :status)).to eq(11),
-                                                                             "Expected tracker to show 11 values (10 unique + [OTHER])"
+      msg2 = "Expected tracker to show 11 values (10 unique + [OTHER])"
+      expect(new_protection.tracker.cardinality("orders_total", :status)).to eq(11), msg2
     end
   end
 
@@ -406,8 +406,8 @@ RSpec.describe "High Cardinality Protection Integration", :integration do
       # Since http_status is not in the metric tags, we verify via direct filter call
       test_labels = { http_status: 200, endpoint: "/api/test", status: "success" }
       filtered = protection.filter(test_labels, "api_requests_total")
-      expect(filtered[:http_status]).to eq("2xx"),
-                                        "Expected http_status 200 to be relabeled to '2xx', got #{filtered[:http_status]}"
+      msg = "Expected http_status 200 to be relabeled to '2xx', got #{filtered[:http_status]}"
+      expect(filtered[:http_status]).to eq("2xx"), msg
 
       # Verify cardinality is reduced: should be 5 unique values (1xx, 2xx, 3xx, 4xx, 5xx)
       # But since http_status is not in metric tags, we can't verify via cardinality()
@@ -416,8 +416,8 @@ RSpec.describe "High Cardinality Protection Integration", :integration do
         expected_class = "#{code / 100}xx"
         test_labels = { http_status: code, endpoint: "/api/test", status: "success" }
         filtered = protection.filter(test_labels, "api_requests_total")
-        expect(filtered[:http_status]).to eq(expected_class),
-                                          "Expected http_status #{code} to be relabeled to '#{expected_class}', got #{filtered[:http_status]}"
+        msg = "Expected http_status #{code} to be relabeled to '#{expected_class}', got #{filtered[:http_status]}"
+        expect(filtered[:http_status]).to eq(expected_class), msg
       end
     end
   end
@@ -520,8 +520,8 @@ RSpec.describe "High Cardinality Protection Integration", :integration do
 
       # Verify cardinality limit enforced: exactly 100 unique endpoints tracked
       endpoint_cardinality = protection.cardinality("api_requests_total")[:endpoint] || 0
-      expect(endpoint_cardinality).to eq(100),
-                                      "Expected endpoint cardinality to be 100 (limit reached), got #{endpoint_cardinality}"
+      msg = "Expected endpoint cardinality to be 100 (limit reached), got #{endpoint_cardinality}"
+      expect(endpoint_cardinality).to eq(100), msg
 
       # Verify per-metric limit caught the high-cardinality field
       # (endpoint is NOT in denylist, so per-metric limit is what catches it)

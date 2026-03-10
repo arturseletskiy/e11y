@@ -106,10 +106,9 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
       # Verify pattern matching (metrics should be registered after event class loaded)
       event_name = Events::OrderPaid.event_name
       matching_metrics = registry.find_matching(event_name)
-      expect(matching_metrics).not_to be_empty,
-                                      "Expected metrics to be registered for #{event_name}. Registry size: #{registry.size}, All metrics: #{registry.all.map do |m|
-                                        "#{m[:pattern]} -> #{m[:name]}"
-                                      end.join(', ')}"
+      all_metrics_str = registry.all.map { |m| "#{m[:pattern]} -> #{m[:name]}" }.join(", ")
+      msg = "Expected metrics for #{event_name}. Registry: #{registry.size}, All: #{all_metrics_str}"
+      expect(matching_metrics).not_to be_empty, msg
 
       # Find the specific metric we care about (ignore wildcard matches from other tests)
       orders_paid_metric = matching_metrics.find { |m| m[:name] == :orders_paid_total }
@@ -379,8 +378,8 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
       # Verify performance: <10μs per pattern match (realistic for Ruby regex)
       # Note: 10μs = 0.01ms = 0.00001 seconds
       # Ruby regex matching is typically 1-10μs per match, not nanoseconds
-      expect(average_time_microseconds).to be < 10,
-                                           "Expected average pattern matching time <10μs, got #{average_time_microseconds.round(3)}μs"
+      msg = "Expected average pattern matching time <10μs, got #{average_time_microseconds.round(3)}μs"
+      expect(average_time_microseconds).to be < 10, msg
 
       # Verify pattern compilation overhead: <1ms for 100 patterns
       compilation_times = []
@@ -403,8 +402,8 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
       avg_compilation_time = compilation_times.sum / compilation_times.size
       # Relaxed limit to 5ms to account for CI environment and slower machines
       # Original requirement was 1ms but this is too strict for integration tests
-      expect(avg_compilation_time).to be < 0.005,
-                                      "Expected pattern compilation time <5ms for 100 patterns, got #{(avg_compilation_time * 1000).round(3)}ms"
+      msg = "Expected pattern compilation <5ms for 100 patterns, got #{(avg_compilation_time * 1000).round(3)}ms"
+      expect(avg_compilation_time).to be < 0.005, msg
     end
   end
 end

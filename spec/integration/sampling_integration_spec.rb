@@ -272,8 +272,8 @@ RSpec.describe "Sampling Middleware Integration", :integration do
       end
 
       # All info events should pass (100% sampling during spike)
-      expect(passed_count).to eq(20),
-                              "Expected all 20 info events to pass during error spike (100% sampling), got #{passed_count}"
+      msg = "Expected all 20 info events to pass during error spike (100% sampling), got #{passed_count}"
+      expect(passed_count).to eq(20), msg
     end
 
     it "returns to normal sampling after spike ends" do

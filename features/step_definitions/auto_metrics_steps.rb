@@ -57,7 +57,9 @@ When("I define an event class with a histogram {string} and buckets {int} {int} 
   end
 end
 
+# rubocop:disable Layout/LineLength
 Then("the Metrics Registry should contain a histogram {string} with buckets {int} {int} {int} {int}") do |name, b1, b2, b3, b4|
+  # rubocop:enable Layout/LineLength
   expected_buckets = [b1, b2, b3, b4]
   registry = E11y::Metrics::Registry.instance
   entry = registry.all.find { |m| m[:name] == name.to_sym && m[:type] == :histogram }

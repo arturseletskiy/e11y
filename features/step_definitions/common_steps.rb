@@ -169,7 +169,7 @@ Then("the memory adapter should have {int} total event(s)") do |count|
 end
 
 Then("the memory adapter should be empty") do
-  expect(memory_adapter.event_count).to eq(0),
-                                        "Expected adapter to be empty but found #{memory_adapter.event_count} events.\n" \
-                                        "Event types: #{memory_adapter.events.map { |e| e[:event_name] }.inspect}"
+  msg = "Expected adapter to be empty but found #{memory_adapter.event_count} events.\n" \
+        "Event types: #{memory_adapter.events.map { |e| e[:event_name] }.inspect}"
+  expect(memory_adapter.event_count).to eq(0), msg
 end

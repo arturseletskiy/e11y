@@ -357,7 +357,7 @@ module E11y
       # @param metric_config [Hash] Metric configuration
       # @param event_data [Hash] Event data
       # @return [void]
-      # rubocop:disable Metrics/AbcSize
+      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
       # Metric update requires multiple steps for label extraction and value handling
       def update_metric(metric_config, event_data)
         metric_name = metric_config[:name]
@@ -401,7 +401,7 @@ module E11y
       rescue StandardError => e
         warn "E11y Yabeda: Error updating metric #{metric_name}: #{e.message}"
       end
-      # rubocop:enable Metrics/AbcSize
+      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
       # Extract labels from event data
       #

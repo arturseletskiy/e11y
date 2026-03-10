@@ -43,11 +43,15 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
     Yabeda.configure do
       group :e11y do
         counter :slo_http_requests_total, tags: %i[controller action status], comment: "SLO HTTP requests"
-        histogram :slo_http_request_duration_seconds, tags: %i[controller action],
-                                                      buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0], comment: "SLO HTTP request duration"
+        histogram :slo_http_request_duration_seconds,
+                  tags: %i[controller action],
+                  buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+                  comment: "SLO HTTP request duration"
         counter :slo_background_jobs_total, tags: %i[job_class status queue], comment: "SLO background jobs"
-        histogram :slo_background_job_duration_seconds, tags: %i[job_class queue],
-                                                        buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0], comment: "SLO background job duration"
+        histogram :slo_background_job_duration_seconds,
+                  tags: %i[job_class queue],
+                  buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+                  comment: "SLO background job duration"
       end
     end
 
@@ -219,7 +223,7 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
 
       memory_adapter.clear!
 
-      # Track HTTP requests with durations including outliers: [50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000] ms
+      # Track HTTP requests with durations including outliers (50..1000 ms)
       # 66 requests each for first 14 durations, 10 requests at 1000ms for P99
       durations = [50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000]
       durations[0..13].each do |duration_ms|
@@ -335,8 +339,8 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
 
       # Expected error budget: (1 - 0.999) * 30 days = 43.2 minutes
       expected_budget_minutes = 43.2
-      expect(error_budget_minutes).to be_within(0.1).of(expected_budget_minutes),
-                                      "Expected error budget #{expected_budget_minutes} minutes, got #{error_budget_minutes}"
+      msg = "Expected error budget #{expected_budget_minutes} minutes, got #{error_budget_minutes}"
+      expect(error_budget_minutes).to be_within(0.1).of(expected_budget_minutes), msg
 
       # Track requests with errors
       error_durations = [100, 200, 300] # ms

@@ -67,8 +67,8 @@ end
 Then("a {string} exception should have been raised") do |exception_class_name|
   expect(@last_exception).not_to be_nil,
                                  "Expected a #{exception_class_name} to be raised but no exception occurred."
-  expect(@last_exception.class.name).to eq(exception_class_name),
-                                        "Expected #{exception_class_name} but got #{@last_exception.class.name}: #{@last_exception.message}"
+  msg = "Expected #{exception_class_name} but got #{@last_exception.class.name}: #{@last_exception.message}"
+  expect(@last_exception.class.name).to eq(exception_class_name), msg
 end
 
 # ---------------------------------------------------------------------------

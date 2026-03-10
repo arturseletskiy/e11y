@@ -28,7 +28,9 @@ Given("the Sampling middleware is reconfigured with trace_aware false and defaul
   reconfigure_sampling_middleware(default_sample_rate: rate, trace_aware: false)
 end
 
+# rubocop:disable Layout/LineLength
 Given("the Sampling middleware is reconfigured with error_based_adaptive true and default_sample_rate {float}") do |rate|
+  # rubocop:enable Layout/LineLength
   reconfigure_sampling_middleware(
     default_sample_rate: rate,
     trace_aware: false,
@@ -115,14 +117,18 @@ Given("a LoadMonitor with normal threshold {int} events per second and window {i
   )
 end
 
+# rubocop:disable Layout/LineLength
 Given("a LoadMonitor with normal threshold {int}, high threshold {int} events per second and window {int} second") do |normal, high, window|
+  # rubocop:enable Layout/LineLength
   @load_monitor = E11y::Sampling::LoadMonitor.new(
     window: window,
     thresholds: { normal: normal, high: high, very_high: high * 2, overload: high * 4 }
   )
 end
 
+# rubocop:disable Layout/LineLength
 Given("a LoadMonitor with normal threshold {int}, high threshold {int}, very_high threshold {int}, overload threshold {int} events per second and window {int} second") do |normal, high, very_high, overload, window|
+  # rubocop:enable Layout/LineLength
   @load_monitor = E11y::Sampling::LoadMonitor.new(
     window: window,
     thresholds: { normal: normal, high: high, very_high: very_high, overload: overload }
@@ -220,6 +226,7 @@ end
 # Helpers (accessible via World module)
 # ---------------------------------------------------------------------------
 
+# Helpers for sampling-related Cucumber steps (LoadMonitor, reconfigure, etc.)
 module SamplingStepHelpers
   def reconfigure_sampling_middleware(options)
     cfg = E11y.config

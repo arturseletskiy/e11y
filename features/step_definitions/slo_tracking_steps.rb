@@ -85,9 +85,8 @@ Then("the SLO status result should be a Hash") do
 end
 
 Then("the Hash should contain an entry for the orders endpoint") do
-  expect(@tracker_status).to include("orders#create").or include(:orders_create),
-                                                         "Expected Tracker.status to include an entry for orders#create, " \
-                                                         "got: #{@tracker_status.inspect}"
+  msg = "Expected Tracker.status to include an entry for orders#create, got: #{@tracker_status.inspect}"
+  expect(@tracker_status).to include("orders#create").or include(:orders_create), msg
 end
 
 Then("the SLO tracker should have recorded a request for {string}") do |_endpoint|

@@ -22,9 +22,13 @@ end
 
 # Helper: select E11y around_perform callbacks from a class's callback chain.
 def e11y_around_perform_callbacks(klass)
+  e11y_filter = lambda do |cb|
+    f = cb.filter.to_s
+    f.include?("E11y") || f.include?("e11y") || f.include?("active_job.rb")
+  end
   klass._perform_callbacks
        .select { |cb| cb.kind == :around }
-       .select { |cb| cb.filter.to_s.include?("E11y") || cb.filter.to_s.include?("e11y") || cb.filter.to_s.include?("active_job.rb") }
+       .select(&e11y_filter)
 end
 
 # @wip — demonstrates BUG 2: double callback registration.

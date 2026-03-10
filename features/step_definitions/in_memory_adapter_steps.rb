@@ -180,18 +180,18 @@ Then("the result's payload field {string} should equal {string}") do |field, exp
   expect(payload).not_to be_nil,
                          "Result has no :payload key.\nResult: #{@adapter_result.inspect}"
   actual_value = payload[field.to_sym] || payload[field]
-  expect(actual_value.to_s).to eq(expected_value),
-                               "Expected payload[:#{field}] to equal #{expected_value.inspect} but got #{actual_value.inspect}."
+  msg = "Expected payload[:#{field}] to equal #{expected_value.inspect} but got #{actual_value.inspect}."
+  expect(actual_value.to_s).to eq(expected_value), msg
 end
 
 Then("the adapter events array should have {int} items") do |count|
-  expect(memory_adapter.events.size).to eq(count),
-                                        "Expected adapter.events.size to be #{count} but got #{memory_adapter.events.size}."
+  msg = "Expected adapter.events.size to be #{count} but got #{memory_adapter.events.size}."
+  expect(memory_adapter.events.size).to eq(count), msg
 end
 
 Then("the adapter events array should have at least {int} items") do |min_count|
-  expect(memory_adapter.events.size).to be >= min_count,
-                                        "Expected adapter.events.size >= #{min_count} but got #{memory_adapter.events.size}."
+  msg = "Expected adapter.events.size >= #{min_count} but got #{memory_adapter.events.size}."
+  expect(memory_adapter.events.size).to be >= min_count, msg
 end
 
 Then("the result should be at least {int}") do |min_value|

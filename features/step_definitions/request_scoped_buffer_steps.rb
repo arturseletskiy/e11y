@@ -6,9 +6,9 @@
 # Exercises the RequestBufferConfig and the (stub) flush_event mechanism.
 
 Then("request buffering should be disabled in the configuration") do
-  expect(E11y.configuration.request_buffer.enabled).to be(false),
-                                                       "Expected request buffering to be disabled by default, but it was enabled. " \
-                                                       "README says 'automatically captures' but config defaults to enabled: false."
+  msg = "Expected request buffering to be disabled by default, but it was enabled. " \
+        "README says 'automatically captures' but config defaults to enabled: false."
+  expect(E11y.configuration.request_buffer.enabled).to be(false), msg
 end
 
 Given("request buffering is enabled in the configuration") do
@@ -55,6 +55,6 @@ end
 
 Then("the request buffer should be empty between requests") do
   buffer = Thread.current[:e11y_request_buffer]
-  expect(buffer.nil? || buffer.empty?).to be(true),
-                                          "Expected request buffer to be cleared after successful request, but it still has events."
+  msg = "Expected request buffer to be cleared after successful request, but it still has events."
+  expect(buffer.nil? || buffer.empty?).to be(true), msg
 end

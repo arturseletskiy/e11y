@@ -186,9 +186,11 @@ namespace :release do
       )
 
       # Add new [Unreleased] section at the top
+      unreleased = "## [Unreleased]\n\n### Added\n\n### Changed\n\n### Fixed\n\n"
+      unreleased += "### Deprecated\n\n### Removed\n\n### Security\n\n\\1"
       updated_changelog = updated_changelog.sub(
         /(## \[#{Regexp.escape(new_version)}\] - #{today})/,
-        "## [Unreleased]\n\n### Added\n\n### Changed\n\n### Fixed\n\n### Deprecated\n\n### Removed\n\n### Security\n\n\\1"
+        unreleased
       )
 
       File.write(changelog_file, updated_changelog)
@@ -200,10 +202,10 @@ namespace :release do
 
       # Find where to insert (after the header, before first version)
       if /(## \[\d+\.\d+\.\d+\])/.match?(changelog_content)
-        updated_changelog = changelog_content.sub(
-          /(## \[\d+\.\d+\.\d+\])/,
-          "## [Unreleased]\n\n### Added\n\n### Changed\n\n### Fixed\n\n### Deprecated\n\n### Removed\n\n### Security\n\n## [#{new_version}] - #{today}\n\n### Added\n- Version bump\n\n\\1"
-        )
+        new_section = "## [Unreleased]\n\n### Added\n\n### Changed\n\n### Fixed\n\n"
+        new_section += "### Deprecated\n\n### Removed\n\n### Security\n\n"
+        new_section += "## [#{new_version}] - #{today}\n\n### Added\n- Version bump\n\n\\1"
+        updated_changelog = changelog_content.sub(/(## \[\d+\.\d+\.\d+\])/, new_section)
       else
         # No previous versions, add after header
         header_end = changelog_content.index("\n\n") || 0
