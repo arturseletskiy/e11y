@@ -18,7 +18,7 @@ Given("I have tracked {int} order event(s)") do |count|
   count.times do
     post "/orders", { "order[status]" => "pending" }
     expect(last_response.status).to eq(201),
-      "POST /orders failed with #{last_response.status}: #{last_response.body}"
+                                    "POST /orders failed with #{last_response.status}: #{last_response.body}"
   end
 end
 
@@ -26,7 +26,7 @@ Given("I have tracked {int} order event(s) with status {string}") do |count, sta
   count.times do
     post "/orders", { "order[status]" => status }
     expect(last_response.status).to eq(201),
-      "POST /orders failed with #{last_response.status}: #{last_response.body}"
+                                    "POST /orders failed with #{last_response.status}: #{last_response.body}"
   end
 end
 
@@ -36,20 +36,20 @@ Given("I have tracked {int} order events with statuses {string}, {string}, {stri
   [s1, s2, s3].each do |status|
     post "/orders", { "order[status]" => status }
     expect(last_response.status).to eq(201),
-      "POST /orders failed with #{last_response.status}: #{last_response.body}"
+                                    "POST /orders failed with #{last_response.status}: #{last_response.body}"
   end
 end
 
 Given("I have tracked {int} user registration event(s)") do |count|
   count.times do |i|
     post "/users", {
-      "user[email]"                 => "user#{i}@example.com",
-      "user[password]"              => "password123",
+      "user[email]" => "user#{i}@example.com",
+      "user[password]" => "password123",
       "user[password_confirmation]" => "password123",
-      "user[name]"                  => "User #{i}"
+      "user[name]" => "User #{i}"
     }
     expect(last_response.status).to eq(201),
-      "POST /users failed with #{last_response.status}: #{last_response.body}"
+                                    "POST /users failed with #{last_response.status}: #{last_response.body}"
   end
 end
 
@@ -136,33 +136,33 @@ end
 
 Then("the result should be a Hash") do
   expect(@adapter_result).to be_a(Hash),
-    "Expected a Hash but got #{@adapter_result.class}: #{@adapter_result.inspect}"
+                             "Expected a Hash but got #{@adapter_result.class}: #{@adapter_result.inspect}"
 end
 
 Then("the result should equal {int}") do |expected_int|
   expect(@adapter_result).to eq(expected_int),
-    "Expected #{expected_int} but got #{@adapter_result.inspect}"
+                             "Expected #{expected_int} but got #{@adapter_result.inspect}"
 end
 
 Then("the result should contain {int} item(s)") do |count|
   expect(@adapter_result).to be_an(Array),
-    "Expected an Array but got #{@adapter_result.class}"
+                             "Expected an Array but got #{@adapter_result.class}"
   expect(@adapter_result.size).to eq(count),
-    "Expected #{count} items but got #{@adapter_result.size}.\n" \
-    "Items: #{@adapter_result.inspect}"
+                                  "Expected #{count} items but got #{@adapter_result.size}.\n" \
+                                  "Items: #{@adapter_result.inspect}"
 end
 
 Then("the result should contain at least {int} item(s)") do |min_count|
   expect(@adapter_result).to be_an(Array),
-    "Expected an Array but got #{@adapter_result.class}"
+                             "Expected an Array but got #{@adapter_result.class}"
   expect(@adapter_result.size).to be >= min_count,
-    "Expected at least #{min_count} items but got #{@adapter_result.size}."
+                                  "Expected at least #{min_count} items but got #{@adapter_result.size}."
 end
 
 Then("the boolean result should be {word}") do |bool_string|
   expected = (bool_string == "true")
   expect(@adapter_result).to eq(expected),
-    "Expected #{expected.inspect} but got #{@adapter_result.inspect}"
+                             "Expected #{expected.inspect} but got #{@adapter_result.inspect}"
 end
 
 Then("all items in the result should have event_name {string}") do |event_name|
@@ -170,31 +170,31 @@ Then("all items in the result should have event_name {string}") do |event_name|
   @adapter_result.each_with_index do |item, idx|
     actual_name = item[:event_name]
     expect(actual_name).to eq(event_name),
-      "Item #{idx} has event_name #{actual_name.inspect}, expected #{event_name.inspect}.\n" \
-      "Item: #{item.inspect}"
+                           "Item #{idx} has event_name #{actual_name.inspect}, expected #{event_name.inspect}.\n" \
+                           "Item: #{item.inspect}"
   end
 end
 
 Then("the result's payload field {string} should equal {string}") do |field, expected_value|
-  payload = @adapter_result[:payload] || @adapter_result.dig(:payload)
+  payload = @adapter_result[:payload]
   expect(payload).not_to be_nil,
-    "Result has no :payload key.\nResult: #{@adapter_result.inspect}"
+                         "Result has no :payload key.\nResult: #{@adapter_result.inspect}"
   actual_value = payload[field.to_sym] || payload[field]
   expect(actual_value.to_s).to eq(expected_value),
-    "Expected payload[:#{field}] to equal #{expected_value.inspect} but got #{actual_value.inspect}."
+                               "Expected payload[:#{field}] to equal #{expected_value.inspect} but got #{actual_value.inspect}."
 end
 
 Then("the adapter events array should have {int} items") do |count|
   expect(memory_adapter.events.size).to eq(count),
-    "Expected adapter.events.size to be #{count} but got #{memory_adapter.events.size}."
+                                        "Expected adapter.events.size to be #{count} but got #{memory_adapter.events.size}."
 end
 
 Then("the adapter events array should have at least {int} items") do |min_count|
   expect(memory_adapter.events.size).to be >= min_count,
-    "Expected adapter.events.size >= #{min_count} but got #{memory_adapter.events.size}."
+                                        "Expected adapter.events.size >= #{min_count} but got #{memory_adapter.events.size}."
 end
 
 Then("the result should be at least {int}") do |min_value|
   expect(@adapter_result).to be >= min_value,
-    "Expected result >= #{min_value} but got #{@adapter_result.inspect}"
+                             "Expected result >= #{min_value} but got #{@adapter_result.inspect}"
 end

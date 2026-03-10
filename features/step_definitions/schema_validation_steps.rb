@@ -13,27 +13,27 @@ Then("the last event payload in the memory adapter should include {string}") do 
   events = memory_adapter.find_events("Events::OrderCreated")
   event = events.last
   expect(event).not_to be_nil,
-    "No Events::OrderCreated event found in memory adapter. " \
-    "All stored event_names: #{memory_adapter.events.map { |e| e[:event_name] }.inspect}"
+                       "No Events::OrderCreated event found in memory adapter. " \
+                       "All stored event_names: #{memory_adapter.events.map { |e| e[:event_name] }.inspect}"
 
   payload = event[:payload] || {}
   has_field = payload.key?(field.to_sym) || payload.key?(field)
   expect(has_field).to be(true),
-    "Expected last OrderCreated event payload to include field '#{field}'. " \
-    "Payload keys: #{payload.keys.inspect}"
+                       "Expected last OrderCreated event payload to include field '#{field}'. " \
+                       "Payload keys: #{payload.keys.inspect}"
 end
 
 Then("the last event payload field {string} should be a string") do |field|
   events = memory_adapter.find_events("Events::OrderCreated")
   event = events.last
   expect(event).not_to be_nil,
-    "No Events::OrderCreated event found in memory adapter."
+                       "No Events::OrderCreated event found in memory adapter."
 
   payload = event[:payload] || {}
   value = payload[field.to_sym] || payload[field]
   expect(value).to be_a(String),
-    "Expected payload field '#{field}' to be a String, " \
-    "got #{value.class}: #{value.inspect}"
+                   "Expected payload field '#{field}' to be a String, " \
+                   "got #{value.class}: #{value.inspect}"
 end
 
 Then("defining an event class with a valid schema block should not raise") do
@@ -50,8 +50,8 @@ Then("defining an event class with a valid schema block should not raise") do
     error = e
   end
   expect(error).to be_nil,
-    "Defining an event class with a schema block raised: " \
-    "#{error&.class}: #{error&.message}"
+                   "Defining an event class with a schema block raised: " \
+                   "#{error&.class}: #{error&.message}"
 end
 
 Then("defining and tracking an event class without a schema block should not raise") do
@@ -66,5 +66,5 @@ Then("defining and tracking an event class without a schema block should not rai
     error = e
   end
   expect(error).to be_nil,
-    "Schemaless event tracking raised: #{error&.class}: #{error&.message}"
+                   "Schemaless event tracking raised: #{error&.class}: #{error&.message}"
 end

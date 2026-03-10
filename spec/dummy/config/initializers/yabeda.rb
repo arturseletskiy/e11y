@@ -7,6 +7,4 @@ return unless defined?(Yabeda)
 
 # Configure Yabeda once (Railtie will handle this in real Rails apps)
 # In tests, we need to configure it manually before any metrics are registered
-unless Yabeda.configured?
-  Yabeda.configure!
-end
+Yabeda.configure! unless Yabeda.configured?

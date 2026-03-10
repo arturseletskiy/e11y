@@ -437,7 +437,6 @@ begin
 
   desc "Run all Cucumber acceptance tests (alias for cucumber:all)"
   task cucumber: "cucumber:all"
-
 rescue LoadError
   desc "Cucumber not available — install with: bundle install --with development"
   task :cucumber do

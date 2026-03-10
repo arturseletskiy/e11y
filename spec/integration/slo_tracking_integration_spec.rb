@@ -31,7 +31,7 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
 
   before do
     memory_adapter.clear!
-    
+
     # Enable SLO tracking
     E11y.configure do |config|
       config.slo_tracking.enabled = true
@@ -50,7 +50,7 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
                                                         buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0], comment: "SLO background job duration"
       end
     end
-    
+
     # Reset Yabeda counter values between tests (without calling Yabeda.reset!)
     # This ensures tests don't accumulate counter values
     reset_yabeda_metrics!
@@ -67,16 +67,24 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
     # Configure routing to send events to both memory and yabeda adapters
     E11y.config.fallback_adapters = %i[memory yabeda]
   end
-  
+
   # Helper method to reset Yabeda metric values without calling Yabeda.reset!
   def reset_yabeda_metrics!
     # Reset counter and histogram values by accessing their internal storage
     # This is a hack but necessary since Yabeda.reset! breaks metric registration
-    Yabeda.e11y.slo_http_requests_total.instance_variable_get(:@values)&.clear if Yabeda.e11y.respond_to?(:slo_http_requests_total)
-    Yabeda.e11y.slo_http_request_duration_seconds.instance_variable_get(:@values)&.clear if Yabeda.e11y.respond_to?(:slo_http_request_duration_seconds)
-    Yabeda.e11y.slo_background_jobs_total.instance_variable_get(:@values)&.clear if Yabeda.e11y.respond_to?(:slo_background_jobs_total)
-    Yabeda.e11y.slo_background_job_duration_seconds.instance_variable_get(:@values)&.clear if Yabeda.e11y.respond_to?(:slo_background_job_duration_seconds)
-  rescue StandardError => e
+    if Yabeda.e11y.respond_to?(:slo_http_requests_total)
+      Yabeda.e11y.slo_http_requests_total.instance_variable_get(:@values)&.clear
+    end
+    if Yabeda.e11y.respond_to?(:slo_http_request_duration_seconds)
+      Yabeda.e11y.slo_http_request_duration_seconds.instance_variable_get(:@values)&.clear
+    end
+    if Yabeda.e11y.respond_to?(:slo_background_jobs_total)
+      Yabeda.e11y.slo_background_jobs_total.instance_variable_get(:@values)&.clear
+    end
+    if Yabeda.e11y.respond_to?(:slo_background_job_duration_seconds)
+      Yabeda.e11y.slo_background_job_duration_seconds.instance_variable_get(:@values)&.clear
+    end
+  rescue StandardError
     # If internal structure changed, fall back to no reset (tests may accumulate values)
     # Silently continue - this is a best-effort reset
   end
@@ -186,14 +194,14 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
       )
 
       expect(histogram_value).to be_a(Numeric),
-                                "Expected histogram value to be numeric, got #{histogram_value.class}"
+                                 "Expected histogram value to be numeric, got #{histogram_value.class}"
 
       # Calculate P95 latency from histogram buckets
       # Note: Yabeda histograms track bucket data internally, P95 calculation is done in Prometheus
       # For integration test, we verify histogram is tracking values (last value should be > 0)
       # P95 would be approximately 450ms (95th percentile of sorted durations)
       expect(histogram_value).to be > 0,
-                                    "Expected histogram to be tracking values"
+                                 "Expected histogram to be tracking values"
 
       # Verify SLO breach: P95 > 300ms (conceptual - actual P95 calculation in Prometheus)
       # For test purposes, we verify that requests with duration > 300ms were tracked
@@ -243,9 +251,9 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
       )
 
       expect(histogram_value).to be_a(Numeric),
-                                "Expected histogram value to be numeric"
+                                 "Expected histogram value to be numeric"
       expect(histogram_value).to be > 0,
-                                    "Expected histogram to be tracking values"
+                                 "Expected histogram to be tracking values"
 
       # Verify outliers tracked: Requests with duration > 500ms
       outlier_count = durations.count { |d| d > 500 }

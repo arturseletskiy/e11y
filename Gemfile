@@ -64,9 +64,9 @@ group :integration do
   gem "opentelemetry-sdk", "~> 1.0"
 
   # Yabeda for Yabeda adapter tests
+  gem "anyway_config", "~> 2.7" # anyway_config 2.8+ calls Rails.env at load time, breaking yabeda specs
   gem "yabeda", "~> 0.12" # Yabeda core
   gem "yabeda-prometheus", "~> 0.9" # Prometheus exporter
-  gem "anyway_config", "~> 2.7" # anyway_config 2.8+ calls Rails.env at load time, breaking yabeda specs
 
   # HTTP client for Loki adapter tests
   gem "faraday", "~> 2.0" # HTTP client library
@@ -81,7 +81,7 @@ end
 group :development, :test do
   gem "bundler-audit", "~> 0.9" # Check for vulnerable dependencies
   gem "rubocop-performance", "~> 1.21" # Performance cops
-  gem "rubocop-rspec_rails", "~> 2.30" # 2.30+ required for rubocop >= 1.85 compatibility
+  gem "rubocop-rspec_rails", "~> 2.29.1" # 2.30+ required for rubocop >= 1.85 compatibility
   gem "simplecov", require: false
   gem "simplecov-cobertura", require: false
 end

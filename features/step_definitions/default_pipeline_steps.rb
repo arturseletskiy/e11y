@@ -20,9 +20,9 @@ end
 Then("the pipeline should include the {string} middleware") do |name|
   names = pipeline_middleware_names
   expect(names).to include(name),
-    "Expected default pipeline to include '#{name}' middleware, but it was absent. " \
-    "Actual pipeline: #{names.join(' → ')}. " \
-    "BUG: #{name} is defined but never added in configure_default_pipeline (lib/e11y.rb)."
+                   "Expected default pipeline to include '#{name}' middleware, but it was absent. " \
+                   "Actual pipeline: #{names.join(' → ')}. " \
+                   "BUG: #{name} is defined but never added in configure_default_pipeline (lib/e11y.rb)."
 end
 
 When("I POST to {string} with json params {string}") do |path, json_params|
@@ -32,8 +32,8 @@ end
 Then("at least {int} event should be in the memory adapter") do |min|
   count = memory_adapter.event_count
   expect(count).to be >= min,
-    "Expected >= #{min} event(s) in memory adapter after POST, but got #{count}. " \
-    "The event may have been dropped or blocked by the pipeline."
+                   "Expected >= #{min} event(s) in memory adapter after POST, but got #{count}. " \
+                   "The event may have been dropped or blocked by the pipeline."
 end
 
 Then("{string} should come before {string} in the pipeline") do |first, second|
@@ -42,13 +42,13 @@ Then("{string} should come before {string} in the pipeline") do |first, second|
   idx_second = names.index(second)
 
   expect(idx_first).not_to be_nil,
-    "Middleware '#{first}' not found in pipeline. Actual: #{names.join(' → ')}"
+                           "Middleware '#{first}' not found in pipeline. Actual: #{names.join(' → ')}"
   expect(idx_second).not_to be_nil,
-    "Middleware '#{second}' not found in pipeline. Actual: #{names.join(' → ')}"
+                            "Middleware '#{second}' not found in pipeline. Actual: #{names.join(' → ')}"
   expect(idx_first).to be < idx_second,
-    "Expected '#{first}' (position #{idx_first}) to come before " \
-    "'#{second}' (position #{idx_second}). " \
-    "ADR-015 requires this ordering. Actual pipeline: #{names.join(' → ')}"
+                       "Expected '#{first}' (position #{idx_first}) to come before " \
+                       "'#{second}' (position #{idx_second}). " \
+                       "ADR-015 requires this ordering. Actual pipeline: #{names.join(' → ')}"
 end
 
 Given("rate limiting is configured with global_limit {int}") do |limit|
@@ -71,8 +71,8 @@ end
 Then("fewer than {int} events should arrive in the adapter") do |threshold|
   arrived = memory_adapter.event_count
   expect(arrived).to be < threshold,
-    "Expected rate limiting to block some of #{@rapid_events_sent} events. " \
-    "Arrived: #{arrived}. " \
-    "BUG: RateLimiting middleware is absent from the default pipeline — " \
-    "all #{arrived} events passed through unchecked."
+                     "Expected rate limiting to block some of #{@rapid_events_sent} events. " \
+                     "Arrived: #{arrived}. " \
+                     "BUG: RateLimiting middleware is absent from the default pipeline — " \
+                     "all #{arrived} events passed through unchecked."
 end

@@ -46,7 +46,7 @@ end
 # Eagerly load all dummy app Ruby files.
 # The dummy app disables eager_load to avoid issues during multiple test runs,
 # so we manually require every file here once.
-Dir[File.join(DUMMY_APP_PATH, "app/**/*.rb")].sort.each do |file|
+Dir[File.join(DUMMY_APP_PATH, "app/**/*.rb")].each do |file|
   require file unless File.basename(file).start_with?(".")
 end
 
