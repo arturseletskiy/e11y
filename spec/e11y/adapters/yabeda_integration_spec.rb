@@ -25,16 +25,34 @@ RSpec.describe E11y::Adapters::Yabeda, :integration do
   let(:adapter) { described_class.new(auto_register: false) }
 
   before do
+    # Save Registry state before clearing so we can restore it in the after hook.
+    # Event classes call register_metrics_in_registry! exactly once at load time
+    # (Zeitwerk autoload). After registry.clear! they cannot self-register again,
+    # so without an explicit restore the Registry stays empty for all subsequent
+    # tests in the same process — causing find_matching to return [] and
+    # cardinality tracking to silently produce zeros.
+    @saved_registry_metrics = registry.all.dup
+
     # Clear Yabeda configuration
     Yabeda.reset!
 
-    # Clear E11y registry
+    # Clear E11y registry (needed so each example starts with a predictable state)
     registry.clear!
   end
 
   after do
     Yabeda.reset!
     registry.clear!
+
+    # Restore the metrics that were registered by event class definitions so that
+    # tests running after this spec (e.g. high_cardinality_protection) still find
+    # their event → metric mappings via E11y::Metrics::Registry.find_matching.
+    @saved_registry_metrics.each do |config|
+      registry.register(config.except(:pattern_regex))
+    rescue E11y::Metrics::Registry::LabelConflictError,
+           E11y::Metrics::Registry::TypeConflictError
+      nil # already present from a concurrent re-registration, safe to skip
+    end
   end
 
   describe "real Yabeda integration" do

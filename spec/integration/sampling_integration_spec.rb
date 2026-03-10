@@ -609,7 +609,7 @@ RSpec.describe "Sampling Middleware Integration", :integration do
       events = memory_adapter.find_events("Events::DebugPattern")
 
       expect(events.count).to eq(0),
-        "DebugPattern events should be dropped by pattern rate 0.0, got #{events.count}"
+                              "DebugPattern events should be dropped by pattern rate 0.0, got #{events.count}"
     end
 
     it "always samples events matching pattern rate 1.0 regardless of event-level sample_rate" do
@@ -623,7 +623,7 @@ RSpec.describe "Sampling Middleware Integration", :integration do
       events = memory_adapter.find_events("Events::PaymentPattern")
 
       expect(events.count).to eq(10),
-        "PaymentPattern events should always pass with pattern rate 1.0, got #{events.count}"
+                              "PaymentPattern events should always pass with pattern rate 1.0, got #{events.count}"
     end
   end
 
@@ -664,9 +664,9 @@ RSpec.describe "Sampling Middleware Integration", :integration do
       high_value_events = memory_adapter.find_events("Events::HighValueOrder")
 
       expect(low_value_events.count).to eq(0),
-        "Low-value events (amount=50) should be dropped (default_sample_rate=0.0)"
+                                        "Low-value events (amount=50) should be dropped (default_sample_rate=0.0)"
       expect(high_value_events.count).to eq(5),
-        "High-value events (amount=1500 > 1000) should always be sampled"
+                                         "High-value events (amount=1500 > 1000) should always be sampled"
     end
 
     it "samples events matching in_range value condition" do
@@ -728,9 +728,9 @@ RSpec.describe "Sampling Middleware Integration", :integration do
       success_correction = tracker.sampling_correction(:success)
 
       expect(error_correction).to be_within(0.5).of(10.0),
-        "Error correction should be ~10.0 (1/0.1), got #{error_correction}"
+                                  "Error correction should be ~10.0 (1/0.1), got #{error_correction}"
       expect(success_correction).to be_within(0.5).of(10.0),
-        "Success correction should be ~10.0 (1/0.1), got #{success_correction}"
+                                    "Success correction should be ~10.0 (1/0.1), got #{success_correction}"
 
       error_sampled   = tracker.stratum_stats(:error)[:sampled_count]
       success_sampled = tracker.stratum_stats(:success)[:sampled_count]
@@ -739,7 +739,7 @@ RSpec.describe "Sampling Middleware Integration", :integration do
 
       ratio = error_sampled.to_f / (error_sampled + success_sampled)
       expect(ratio).to be_within(0.04).of(0.05), # ~5% error rate, allow ±4%
-        "Error ratio in sample should be ~5%, got #{(ratio * 100).round(1)}%"
+                       "Error ratio in sample should be ~5%, got #{(ratio * 100).round(1)}%"
     end
   end
 end

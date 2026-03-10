@@ -67,7 +67,7 @@ RSpec.describe E11y::Adapters::OTelLogs, :integration do
     end
 
     it "returns false on error" do
-      allow(adapter).to receive(:build_log_record).and_raise(StandardError, "OTel error")
+      allow(adapter).to receive(:build_emit_params).and_raise(StandardError, "OTel error")
       expect(adapter.write(event_data)).to be false
     end
   end

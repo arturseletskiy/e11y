@@ -581,7 +581,7 @@ RSpec.describe "Reliability Features Integration", :integration do
         # Replay: re-process each DLQ event via working adapter
         memory_adapter.clear!
         dlq_events.each do |dlq_entry|
-          event_data = dlq_entry.reject { |k, _| k == :dlq_metadata }
+          event_data = dlq_entry.except(:dlq_metadata)
           memory_adapter.write(event_data)
         end
 
