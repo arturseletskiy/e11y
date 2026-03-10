@@ -148,6 +148,57 @@ RSpec.describe "Reliability Features Integration", :integration do
       expect(call_count).to eq(3), "Should retry multiple times with exponential backoff"
     end
 
+    describe "C06: Retry rate limiting (thundering herd prevention)" do
+      it "stops retrying when retry rate limit is exceeded" do
+        rate_limiter = E11y::Reliability::RetryRateLimiter.new(limit: 2, window: 1.0)
+        handler = E11y::Reliability::RetryHandler.new(
+          config: { max_attempts: 10, base_delay_ms: 1, fail_on_error: false },
+          retry_rate_limiter: rate_limiter
+        )
+
+        adapter = double("SlowAdapter")
+        allow(adapter).to receive(:class).and_return(double(name: "SlowAdapter"))
+
+        call_count = 0
+        allow(adapter).to receive(:write) do
+          call_count += 1
+          raise Errno::ECONNREFUSED, "refused"
+        end
+
+        result = handler.with_retry(adapter: adapter, event: {}) do
+          adapter.write({})
+        end
+
+        # Rate limiter allows 2 retries → stops well before max_attempts (10)
+        expect(call_count).to be <= 4
+        expect(result).to be_nil
+      end
+    end
+
+    it "retries Timeout::Error as a transient error" do
+      handler = E11y::Reliability::RetryHandler.new(
+        config: { max_attempts: 3, base_delay_ms: 1, fail_on_error: false }
+      )
+
+      adapter = double("TimeoutAdapter")
+      allow(adapter).to receive(:class).and_return(double(name: "TimeoutAdapter"))
+
+      call_count = 0
+      allow(adapter).to receive(:write) do
+        call_count += 1
+        raise Timeout::Error, "timed out" if call_count < 3
+
+        true
+      end
+
+      result = handler.with_retry(adapter: adapter, event: {}) do
+        adapter.write({})
+      end
+
+      expect(result).to be true
+      expect(call_count).to eq(3), "Should retry Timeout::Error twice, succeed on 3rd"
+    end
+
     it "handles retry exhaustion gracefully when fail_on_error is false" do
       # Setup: RetryHandler with fail_on_error: false
       # Test: Execute with failing adapter
@@ -172,6 +223,27 @@ RSpec.describe "Reliability Features Integration", :integration do
 
       expect(result).to be_nil
       expect(failing_adapter).to have_received(:write).at_least(:twice)
+    end
+  end
+
+  describe "Graceful Degradation" do
+    it "working adapter receives events even when a separate adapter fails" do
+      # Two independent adapters: both write the same event
+      working_adapter = E11y::Adapters::InMemory.new
+      failing_adapter = E11y::Adapters::InMemory.new
+      allow(failing_adapter).to receive(:write).and_raise(Errno::ECONNREFUSED, "refused")
+
+      event_data = { event_name: "user.action", severity: :info, test_id: "graceful-degradation" }
+
+      # Working adapter receives the event
+      working_adapter.write(event_data)
+
+      # Failing adapter error is isolated — does not affect working adapter
+      expect { failing_adapter.write(event_data) }.to raise_error(Errno::ECONNREFUSED)
+
+      events = working_adapter.find_events("user.action")
+      expect(events).not_to be_empty
+      expect(events.first[:test_id]).to eq("graceful-degradation")
     end
   end
 
@@ -440,6 +512,83 @@ RSpec.describe "Reliability Features Integration", :integration do
       # Note: Query implementation may vary
       expect(all_events.any? { |e| e[:event_name] == "user.login" }).to be true
       expect(all_events.any? { |e| e[:event_name] == "user.logout" }).to be true
+    end
+
+    describe "C02: DLQ filter routes events based on severity" do
+      it "saves error events and discards info events (C02 Resolution)" do
+        # DLQ filter: only save :error/:fatal events
+        filter = E11y::Reliability::DLQ::Filter.new(
+          save_severities: %i[error fatal],
+          default_behavior: :discard
+        )
+
+        error = Errno::ECONNREFUSED.new("refused")
+        error_event = { event_name: "payment.failed", severity: :error }
+        info_event  = { event_name: "user.login",     severity: :info }
+
+        # BUG-001 fix: 2-arg call must not crash
+        expect { filter.should_save?(error_event, error) }.not_to raise_error
+        expect { filter.should_save?(info_event,  error) }.not_to raise_error
+
+        # Error event → saved
+        expect(filter.should_save?(error_event, error)).to be true
+        dlq_storage.save(error_event, metadata: { error: error })
+
+        # Info event → discarded
+        expect(filter.should_save?(info_event, error)).to be false
+
+        events = dlq_storage.list(limit: 10)
+        expect(events.count).to eq(1)
+        expect(events.first[:event_name]).to eq("payment.failed")
+      end
+    end
+
+    describe "C18: fail_on_error=false — swallow error, save to DLQ" do
+      it "swallows error and saves event to DLQ when fail_on_error is false (C18 Resolution)" do
+        adapter = E11y::Adapters::InMemory.new(
+          reliability: { enabled: true, retry: { max_attempts: 1, base_delay_ms: 1 } }
+        )
+
+        filter = E11y::Reliability::DLQ::Filter.new(default_behavior: :save)
+        adapter.instance_variable_set(:@dlq_filter, filter)
+        adapter.instance_variable_set(:@dlq_storage, dlq_storage)
+
+        allow(adapter).to receive(:write).and_raise(Errno::ECONNREFUSED, "refused")
+
+        error_handling = double("ErrorHandling", fail_on_error: false)
+        allow(E11y.config).to receive(:error_handling).and_return(error_handling)
+
+        event_data = { event_name: "order.created", severity: :info, payload: { amount: 100 } }
+
+        result = nil
+        # C18 guarantee: no exception raised when fail_on_error=false
+        expect { result = adapter.write_with_reliability(event_data) }.not_to raise_error
+        expect(result).to be_falsey
+      end
+    end
+
+    describe "DLQ replay E2E" do
+      it "events in DLQ can be listed and re-processed" do
+        event1 = { event_name: "order.failed",   severity: :error, payload: { order_id: "o-001" } }
+        event2 = { event_name: "payment.failed", severity: :error, payload: { amount: 99.99 } }
+
+        dlq_storage.save(event1, metadata: { error: StandardError.new("Adapter down"), reason: "retry_exhausted" })
+        dlq_storage.save(event2, metadata: { error: StandardError.new("Adapter down"), reason: "retry_exhausted" })
+
+        dlq_events = dlq_storage.list(limit: 10)
+        expect(dlq_events.count).to eq(2)
+
+        # Replay: re-process each DLQ event via working adapter
+        memory_adapter.clear!
+        dlq_events.each do |dlq_entry|
+          event_data = dlq_entry.reject { |k, _| k == :dlq_metadata }
+          memory_adapter.write(event_data)
+        end
+
+        replayed = memory_adapter.find_events(/.*/)
+        expect(replayed.count).to eq(2)
+        expect(replayed.map { |e| e[:event_name] }).to contain_exactly("order.failed", "payment.failed")
+      end
     end
 
     it "cleans up old events based on retention" do
