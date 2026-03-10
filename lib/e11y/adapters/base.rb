@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../reliability/retry_handler"
+require_relative "../reliability/retry_rate_limiter"
 require_relative "../reliability/circuit_breaker"
 
 module E11y
@@ -463,9 +464,13 @@ module E11y
       def setup_reliability_layer
         reliability_config = @config.fetch(:reliability, {})
 
+        # Setup RetryRateLimiter (C06: thundering herd prevention)
+        rate_limiter_config = reliability_config.fetch(:retry_rate_limiter, {})
+        retry_rate_limiter = rate_limiter_config.empty? ? nil : E11y::Reliability::RetryRateLimiter.new(**rate_limiter_config)
+
         # Setup RetryHandler
         retry_config = reliability_config.fetch(:retry, {})
-        @retry_handler = E11y::Reliability::RetryHandler.new(config: retry_config)
+        @retry_handler = E11y::Reliability::RetryHandler.new(config: retry_config, retry_rate_limiter: retry_rate_limiter)
 
         # Setup CircuitBreaker
         circuit_breaker_config = reliability_config.fetch(:circuit_breaker, {})
