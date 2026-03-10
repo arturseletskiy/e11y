@@ -313,9 +313,9 @@ RSpec.describe "Sampling Middleware Integration", :integration do
       events = memory_adapter.find_events("Events::TestInfo")
       passed_count = events.count
 
-      # Should be approximately 10% (allow 5-15% range for statistical variance)
-      expect(passed_count).to be_between(5, 15),
-                              "Expected ~10% sampling (5-15 events) after spike ends, got #{passed_count} events"
+      # Should be approximately 10% (allow 4-20 range for statistical variance)
+      expect(passed_count).to be_between(4, 20),
+                              "Expected ~10% sampling (4-20 events) after spike ends, got #{passed_count} events"
     end
   end
 

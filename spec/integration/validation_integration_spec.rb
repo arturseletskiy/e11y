@@ -361,6 +361,10 @@ RSpec.describe "Validation Middleware Integration", :integration do
           "Events::OrderPaidV2"
         end
 
+        def self.event_name
+          "order.paid"
+        end
+
         adapters :memory
 
         schema do
@@ -413,6 +417,10 @@ RSpec.describe "Validation Middleware Integration", :integration do
           "Events::OrderPaid"
         end
 
+        def self.event_name
+          "order.paid"
+        end
+
         adapters :memory
 
         schema do
@@ -426,6 +434,10 @@ RSpec.describe "Validation Middleware Integration", :integration do
       v2_event_class = Class.new(E11y::Event::Base) do
         def self.name
           "Events::OrderPaidV2"
+        end
+
+        def self.event_name
+          "order.paid"
         end
 
         adapters :memory

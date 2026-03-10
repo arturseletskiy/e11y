@@ -288,11 +288,13 @@ module E11y
 
       # Extract labels from event
       #
+      # Uses normalized event_name for consistent querying (matches Versioning middleware format).
+      #
       # @param event_data [Hash] Event data
       # @return [Hash] Labels for Loki stream
       def extract_labels(event_data)
         event_labels = {
-          event_name: event_data[:event_name].to_s,
+          event_name: normalize_event_name_for_labels(event_data[:event_name].to_s),
           severity: event_data[:severity].to_s
         }
 
@@ -337,6 +339,20 @@ module E11y
         gz.write(body)
         gz.close
         io.string
+      end
+
+      # Normalize event name for Loki labels (matches Versioning middleware / query format)
+      #
+      # @param event_name [String] Raw event name (e.g., "Events::TestLoki")
+      # @return [String] Normalized name (e.g., "test.loki")
+      def normalize_event_name_for_labels(event_name)
+        return event_name unless event_name
+
+        name = event_name.sub(/^Events::/, "").sub(/V\d+$/, "").gsub("::", ".")
+        name.gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
+           .gsub(/([a-z\d])([A-Z])/, '\1_\2')
+           .downcase
+           .tr("_", ".")
       end
 
       # Build HTTP headers
