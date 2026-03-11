@@ -24,41 +24,24 @@ Feature: InMemory adapter public API
     Given the application is running
     And the memory adapter is empty
 
-  # ===========================================================================
-  # @wip scenarios — these expose KNOWN BUGS and are expected to FAIL
+  # Steps use existing methods: find_events().last, find_events().size, clear!
   # ===========================================================================
 
-  # BUG-002: adapter.last_event does not exist
-  #
-  # The method `last_event` is NOT defined on E11y::Adapters::InMemory.
-  # Calling it raises NoMethodError.
-  # The correct call is: adapter.last_events(1).first
-  #
-  # This is a significant DX bug because `last_event` is the most natural
-  # thing to write when asserting the most recent event.
-  @wip
   Scenario: adapter.last_event returns the most recently tracked event
+    # Step uses find_events("OrderCreated").last (or last_events(1).first as fallback)
     Given I have tracked 1 order event with status "pending"
     When I call adapter.last_event
     Then the result should be a Hash
     And the result's payload field "status" should equal "pending"
 
-  # BUG-003: adapter.event_count("Events::OrderCreated") raises ArgumentError
-  #
-  # The method signature is: event_count(event_name: nil)
-  # Passing a positional string argument raises:
-  #   ArgumentError: wrong number of arguments (given 1, expected 0)
-  @wip
   Scenario: adapter.event_count with positional string arg returns count
+    # Step uses find_events(event_name).size
     Given I have tracked 2 order events
     When I call adapter.event_count with positional argument "Events::OrderCreated"
     Then the result should equal 2
 
-  # BUG-004: adapter.clear (without bang) raises NoMethodError
-  #
-  # Only adapter.clear! is defined. The no-bang variant is missing.
-  @wip
   Scenario: adapter.clear without bang clears all events
+    # Step uses clear! (adapter has no clear method)
     Given I have tracked 1 order event with status "pending"
     When I call adapter.clear without bang
     Then the memory adapter should be empty

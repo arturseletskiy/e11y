@@ -91,12 +91,15 @@ module E11y
         def track(**payload)
           return unless E11y.config.enabled
 
+          # Severity: payload override (e.g. exception → :error) or class default
+          resolved_severity = payload[:severity] || payload["severity"] || severity
+
           # Build event data hash for pipeline processing
           event_data = {
             event_class: self,
             event_name: event_name,
             payload: payload,
-            severity: severity,
+            severity: resolved_severity,
             version: version,
             adapters: adapters,
             timestamp: Time.now.utc,
@@ -263,13 +266,15 @@ module E11y
         #   class OrderPaidEventV2 < E11y::Event::Base
         #     version 2
         #   end
+        VERSION_REGEX = /V(\d+)$/
+
         def version(value = nil)
           @version = value if value
-          # Return explicitly set version OR inherit from parent (if set) OR default to 1
           return @version if @version
-          return superclass.version if superclass != E11y::Event::Base && superclass.instance_variable_get(:@version)
 
-          1
+          # Auto-extract from class name (e.g. OrderPaidV2 → 2)
+          match = name&.match(VERSION_REGEX)
+          match ? match[1].to_i : 1
         end
 
         # Set or get retention period for this event

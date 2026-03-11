@@ -20,9 +20,8 @@ module Events
       enabled true
       slo_status_from do |payload|
         case payload[:status].to_s
-        when "pending", "completed" then "success"
         when "failed", "cancelled" then "failure"
-        else "success" # default for SLO cucumber scenario
+        else "success" # pending, completed, or default for SLO cucumber scenario
         end
       end
     end

@@ -2409,7 +2409,7 @@ Implemented **Self-Monitoring infrastructure** for E11y (L3.14.2):
    - Methods: `increment`, `histogram`, `gauge`
 
 2. **Performance Monitoring** (`lib/e11y/self_monitoring/performance_monitor.rb`):
-   - Track E11y.track() latency (target: p99 <1ms)
+   - Track EventClass.track() latency (target: p99 <1ms)
    - Track middleware latency (0.01ms to 5ms buckets)
    - Track adapter latency (1ms to 5s buckets)
    - Track buffer flush latency with event count bucketing

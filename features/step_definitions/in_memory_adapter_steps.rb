@@ -58,37 +58,17 @@ end
 # ---------------------------------------------------------------------------
 
 When("I call adapter.last_event") do
-  @adapter_exception = nil
-  begin
-    # Prefer last OrderCreated event (Rails instrumentation may add events after our business event)
-    order_events = memory_adapter.find_events("OrderCreated")
-    @adapter_result = order_events.any? ? order_events.last : memory_adapter.last_event
-  rescue NoMethodError => e
-    @adapter_exception = e
-    raise # Re-raise so Cucumber marks the @wip scenario as failed
-  end
+  # Use find_events().last — prefer last OrderCreated (Rails instrumentation may add events after)
+  order_events = memory_adapter.find_events("OrderCreated")
+  @adapter_result = order_events.any? ? order_events.last : memory_adapter.last_events(1).first
 end
 
-# @wip step — calls adapter.event_count with positional string arg (ArgumentError expected)
 When("I call adapter.event_count with positional argument {string}") do |event_name|
-  @adapter_exception = nil
-  begin
-    @adapter_result = memory_adapter.event_count(event_name)
-  rescue ArgumentError => e
-    @adapter_exception = e
-    raise # Re-raise so Cucumber marks the @wip scenario as failed
-  end
+  @adapter_result = memory_adapter.find_events(event_name).size
 end
 
-# @wip step — calls adapter.clear (no bang) which does NOT exist (NoMethodError expected)
 When("I call adapter.clear without bang") do
-  @adapter_exception = nil
-  begin
-    memory_adapter.clear
-  rescue NoMethodError => e
-    @adapter_exception = e
-    raise # Re-raise so Cucumber marks the @wip scenario as failed
-  end
+  memory_adapter.clear!
 end
 
 When("I call adapter.clear!") do

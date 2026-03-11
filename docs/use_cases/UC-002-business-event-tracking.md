@@ -1542,7 +1542,7 @@ E11y is designed for **high-performance production environments** with strict SL
 ```ruby
 # Benchmark: 1000 events/sec
 Benchmark.ips do |x|
-  x.report("E11y.track") do
+  x.report("EventClass.track") do
     Events::OrderPaid.track(
       order_id: 'ORD-123',
       amount: 99.99
@@ -1551,7 +1551,7 @@ Benchmark.ips do |x|
 end
 
 # Results:
-# E11y.track: 100,000 i/s → ~0.01ms per call
+# EventClass.track: 100,000 i/s → ~0.01ms per call
 # p99 latency: <1ms ✅
 ```
 

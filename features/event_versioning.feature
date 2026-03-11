@@ -4,11 +4,7 @@ Feature: Event Versioning middleware
 
   # The Versioning middleware (opt-in) extracts a version number from the
   # event class name suffix (V2, V3, …) and normalises event_name for
-  # consistent storage queries.
-  #
-  # BUG: Versioning#call unconditionally overwrites event_data[:event_name]
-  #      using normalize_event_name(class_name) even when the event class
-  #      has a custom event_name defined. Custom names are silently replaced.
+  # consistent storage queries. Custom event_name overrides are preserved.
   #
   # NOTE: The Versioning middleware is NOT in the default pipeline (opt-in).
 
@@ -40,12 +36,6 @@ Feature: Event Versioning middleware
   # Scenario 3 — Custom event_name override preserved
   # -----------------------------------------------------------------------
   Scenario: Custom event_name override on event class is preserved by Versioning middleware
-    # BUG: Versioning middleware unconditionally calls
-    #      event_data[:event_name] = normalize_event_name(class_name)
-    #      on line 75 of lib/e11y/middleware/versioning.rb.
-    # This overwrites any custom event_name the user has set on the class.
-    # Fix: check event_data[:event_name] first; only normalize when it
-    # equals the raw class name (i.e. no custom override present).
     Given the Versioning middleware is prepended to the pipeline
     And   an inline versioning event class "Events::CustomNamedEvent" with event_name "my.custom.name"
     When  the versioning event "Events::CustomNamedEvent" is tracked directly with payload:

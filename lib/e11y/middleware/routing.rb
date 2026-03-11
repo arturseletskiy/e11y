@@ -65,6 +65,16 @@ module E11y
         # Handle nil from upstream middleware (e.g., rate limiting, sampling)
         return nil unless event_data
 
+        # 0. Request-scoped buffer: buffer debug events instead of writing when enabled
+        # Skip when event is from a flush (avoid re-buffering)
+        if !event_data[:from_request_buffer_flush] &&
+           event_data[:severity] == :debug &&
+           E11y.config.request_buffer&.enabled &&
+           E11y::Buffers::RequestScopedBuffer.active? && E11y::Buffers::RequestScopedBuffer.add_event(event_data)
+          # Buffered — skip adapter writes, pass through
+          return @app&.call(event_data)
+        end
+
         # 1. Determine target adapters (explicit or via routing rules)
         target_adapters = if event_data[:adapters]&.any?
                             # Explicit adapters bypass routing rules
@@ -185,9 +195,8 @@ module E11y
       # @param metric_name [String] Metric name
       # @param tags [Hash] Metric tags
       # @return [void]
-      def increment_metric(_metric_name, **_tags)
-        # TODO: Integrate with Yabeda/Prometheus
-        # Yabeda.e11y.middleware_routing_routed.increment(tags)
+      def increment_metric(metric_name, **tags)
+        E11y::Metrics.increment(metric_name.to_sym, tags)
       end
 
       # Validate audit events have proper routing configuration.

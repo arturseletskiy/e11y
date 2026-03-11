@@ -192,22 +192,22 @@ module E11y
       # @return [Object] Filtered data
       def apply_pattern_filtering(data, pii_config = nil, path = [])
         case data
-        when Hash
-          data.each_with_object({}) do |(k, v), acc|
-            key_sym = k.is_a?(Symbol) ? k : k.to_sym
-            acc[k] = apply_pattern_filtering(v, pii_config, path + [key_sym])
-          end
-        when Array
-          data.map { |v| apply_pattern_filtering(v, pii_config, path) }
-        when String
-          if path_under_allowed_key?(path, pii_config)
-            data
-          else
-            filter_string_patterns(data)
-          end
-        else
-          data
+        when Hash then apply_pattern_filtering_hash(data, pii_config, path)
+        when Array then data.map { |v| apply_pattern_filtering(v, pii_config, path) }
+        when String then filter_string_if_needed(data, path, pii_config)
+        else data
         end
+      end
+
+      def apply_pattern_filtering_hash(data, pii_config, path)
+        data.each_with_object({}) do |(k, v), acc|
+          key_sym = k.is_a?(Symbol) ? k : k.to_sym
+          acc[k] = apply_pattern_filtering(v, pii_config, path + [key_sym])
+        end
+      end
+
+      def filter_string_if_needed(str, path, pii_config)
+        path_under_allowed_key?(path, pii_config) ? str : filter_string_patterns(str)
       end
 
       # Check if any ancestor key in path is explicitly allowed

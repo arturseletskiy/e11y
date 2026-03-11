@@ -21,23 +21,34 @@
 #  3. Fall back to event_class.name if the class object is still present
 #     (belt-and-braces; may be nil in some reload contexts).
 def find_versioned_events(class_name)
-  normalized = begin
-    mw = E11y::Middleware::Versioning.new(nil)
-    mw.send(:normalize_event_name, class_name)
-  rescue StandardError
-    nil
-  end
-
-  klass = Object.const_get(class_name) rescue nil
-  custom_event_name = klass&.respond_to?(:event_name) ? klass.event_name.to_s : nil
+  normalized = versioning_normalized_name(class_name)
+  custom_event_name = custom_event_name_for(class_name)
 
   memory_adapter.events.select do |e|
-    stored = e[:event_name].to_s
-    stored == class_name ||
-      (normalized && stored == normalized) ||
-      e[:event_class]&.name == class_name ||
-      (custom_event_name && stored == custom_event_name)
+    event_matches_versioned?(e, class_name, normalized, custom_event_name)
   end
+end
+
+def versioning_normalized_name(class_name)
+  mw = E11y::Middleware::Versioning.new(nil)
+  mw.send(:normalize_event_name, class_name)
+rescue StandardError
+  nil
+end
+
+def custom_event_name_for(class_name)
+  klass = Object.const_get(class_name)
+  klass.respond_to?(:event_name) ? klass.event_name.to_s : nil
+rescue StandardError
+  nil
+end
+
+def event_matches_versioned?(event, class_name, normalized, custom_event_name)
+  stored = event[:event_name].to_s
+  stored == class_name ||
+    (normalized && stored == normalized) ||
+    event[:event_class]&.name == class_name ||
+    (custom_event_name && stored == custom_event_name)
 end
 
 def rebuild_pipeline!
@@ -157,10 +168,7 @@ Then("the last versioned {string} event has event_name {string}") do |event_clas
 
   actual = events.last[:event_name]
   expect(actual).to eq(expected_name),
-                    "Expected event_name '#{expected_name}' for #{event_class_name} " \
-                    "but got '#{actual}'. " \
-                    "BUG (if @wip): Versioning#call unconditionally overwrites event_data[:event_name] " \
-                    "using normalize_event_name(class_name) even when a custom event_name is defined."
+                    "Expected event_name '#{expected_name}' for #{event_class_name} but got '#{actual}'"
 end
 
 Then("the last versioned {string} event does not have a {string} field") do |event_class_name, field_name|

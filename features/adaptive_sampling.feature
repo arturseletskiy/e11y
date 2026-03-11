@@ -23,20 +23,16 @@ Feature: Adaptive Sampling
     Then the memory adapter should contain exactly 0 "Events::NeverTracked" events
 
   # -----------------------------------------------------------------------
-  # Scenario 3 (@wip): LoadMonitor returns :normal at exactly the normal threshold
-  # Bug: load_level returns :high when rate == thresholds[:normal]
+  # Scenario 3: LoadMonitor returns :normal at exactly the normal threshold
   # -----------------------------------------------------------------------
-  @wip
   Scenario: Load at exactly normal threshold produces :normal load level
     Given a LoadMonitor with normal threshold 100 events per second and window 1 second
     When I record exactly 100 events in 1 second in the LoadMonitor
     Then the LoadMonitor load_level should be :normal
 
   # -----------------------------------------------------------------------
-  # Scenario 4 (@wip): Normal-threshold load yields 100 % sampling
-  # Depends on scenario 3 bug: :high returned instead of :normal -> 50 % rate
+  # Scenario 4: Normal-threshold load yields 100 % sampling
   # -----------------------------------------------------------------------
-  @wip
   Scenario: Load at normal threshold results in 100% sampling rate
     Given a LoadMonitor with normal threshold 100 events per second and window 1 second
     When I record exactly 100 events in 1 second in the LoadMonitor

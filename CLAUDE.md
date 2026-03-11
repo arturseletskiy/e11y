@@ -41,6 +41,14 @@ rake console
 
 # Run benchmarks
 rake spec:benchmark
+
+# Run Cucumber acceptance tests
+rake cucumber
+# Or: bundle exec cucumber features/
+
+# Cucumber with Loki (adapter_configurations.feature): start Loki first
+docker-compose up -d loki
+rake cucumber
 ```
 
 ## Architecture

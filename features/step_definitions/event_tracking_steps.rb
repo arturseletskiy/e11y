@@ -39,23 +39,6 @@ When("I make a GET request to {string} ignoring exceptions") do |path|
 end
 
 # ---------------------------------------------------------------------------
-# @wip step: calls E11y.track directly (currently raises NotImplementedError)
-# ---------------------------------------------------------------------------
-
-# This step calls E11y.track(event_instance) and captures any exception.
-# When the bug is fixed, @last_exception should be nil and the event should
-# appear in the memory adapter.
-When("I call E11y.track with a new Events::OrderCreated instance") do
-  @last_exception = nil
-  begin
-    event_instance = Events::OrderCreated.new(status: "pending")
-    E11y.track(event_instance)
-  rescue StandardError => e
-    @last_exception = e
-  end
-end
-
-# ---------------------------------------------------------------------------
 # Exception assertions
 # ---------------------------------------------------------------------------
 

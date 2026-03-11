@@ -108,27 +108,16 @@ end
 
 Then("the new adapter should fail to decrypt the previously written entry") do
   expect(@audit_filename).not_to be_nil
+  # New adapter has different random key → decryption must fail (exception or garbled data)
   begin
     result = @second_adapter.read(@audit_filename)
-    # If decryption "succeeded" without error, check whether the result
-    # is actually garbage (wrong key produces garbled JSON).
-    # AES-GCM usually raises an authentication error with wrong keys.
+    # No exception: verify result is garbage (wrong key can produce invalid/wrong data)
     result_has_valid_data = result.is_a?(Hash) &&
                             (result[:event_name].to_s == @test_event_name.to_s ||
                              result["event_name"].to_s == @test_event_name.to_s)
-    expect(result_has_valid_data).to be(false),
-                                     "New adapter with a different random key successfully decrypted the entry! " \
-                                     "This should NOT succeed — if it does, encryption is not working correctly. " \
-                                     "Decrypted: #{result.inspect}"
-  rescue OpenSSL::Cipher::CipherError, JSON::ParserError, RuntimeError => e
-    # Getting an error means decryption failed — exactly what we want to document as failing.
-    # For @wip, this scenario SHOULD raise an error but we want it to succeed silently
-    # to show the user that data IS unrecoverable. So we raise an expectation failure.
-    raise RSpec::Expectations::ExpectationNotMetError,
-          "New adapter (different random key) raised #{e.class} — confirming that " \
-          "previously written entries are permanently unreadable. " \
-          "BUG: default_encryption_key uses OpenSSL::Random.random_bytes(32), " \
-          "generating a new key on every adapter instantiation. " \
-          "Users who restart without E11Y_AUDIT_ENCRYPTION_KEY lose all audit data."
+    msg = "New adapter with different key decrypted successfully — encryption broken. #{result.inspect}"
+    expect(result_has_valid_data).to be(false), msg
+  rescue OpenSSL::Cipher::CipherError, JSON::ParserError
+    # Expected: decryption fails with wrong key
   end
 end

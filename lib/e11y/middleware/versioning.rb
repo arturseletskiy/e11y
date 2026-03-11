@@ -58,41 +58,45 @@ module E11y
       # Version extraction regex (matches V2, V3, etc. at end of class name)
       VERSION_REGEX = /V(\d+)$/
 
+      # Lazy cache: class name -> normalized event_name (per class, immutable)
+      NORMALIZED_CACHE = Concurrent::Map.new
+
       # Process event and add version field if needed
       #
       # @param event_data [Hash] Event payload
       # @return [Hash] Event data with version field (if > 1)
       def call(event_data)
-        # Extract version from event_class name (original class name, not normalized event_name)
-        # Use event_class.name if available, fallback to event_name for backward compatibility
-        class_name = event_data[:event_class]&.name || event_data[:event_name]
-        version = extract_version(class_name)
+        klass = event_data[:event_class]
+        class_name = klass&.name
 
-        # Add version field only if > 1 (ADR-012 §4.2)
+        version = event_data[:version].to_i
+        version = extract_version(class_name) if version <= 1
         event_data[:v] = version if version > 1
 
-        # Normalize event_name (remove version suffix for consistent queries)
-        event_data[:event_name] = normalize_event_name(class_name)
+        # event_data[:event_name] set by Base; fallback to klass.event_name for minimal event_data (tests)
+        incoming = event_data[:event_name]
+        incoming = klass.event_name if incoming.nil? && klass.respond_to?(:event_name)
+        incoming = incoming.to_s
+        # Custom uses dot notation ("order.paid"); default from Base uses "::"
+        event_data[:event_name] = (incoming != "" && !incoming.include?("::")) ? incoming : normalized_for(klass)
 
-        # Pass to next middleware
         @app&.call(event_data) || event_data
       end
 
       private
 
-      # Extract version from event class name
-      #
-      # @param class_name [String] Event class name (e.g., "Events::OrderPaidV2")
-      # @return [Integer] Version number (default: 1)
-      #
-      # @example
-      #   extract_version("Events::OrderPaid")   => 1
-      #   extract_version("Events::OrderPaidV2") => 2
-      #   extract_version("Events::OrderPaidV3") => 3
+      def normalized_for(klass)
+        return unless klass
+
+        name = klass.name
+        return unless name
+
+        NORMALIZED_CACHE.fetch(name) { NORMALIZED_CACHE[name] = normalize_event_name(name) }
+      end
+
       def extract_version(class_name)
         return 1 unless class_name
 
-        # Extract version from class name (e.g., "Events::OrderPaidV2" → 2)
         match = class_name.match(VERSION_REGEX)
         match ? match[1].to_i : 1
       end

@@ -45,9 +45,9 @@ Feature: Adapter configurations
     When I call healthy? on the Loki adapter
     Then the Loki healthy? result should be false
 
-  Scenario: Loki healthy? does not raise an error (current stable behavior)
-    # Documents the current (always-true) behavior so regressions are detected.
-    Given a Loki adapter pointing to "http://localhost:19998"
+  Scenario: Loki healthy? does not raise an error when Loki is reachable
+    # Requires Loki running: CI starts it; locally run `docker-compose up -d loki`
+    Given a Loki adapter pointing to "http://localhost:3100"
     When I call healthy? on the Loki adapter
     Then calling healthy? should not raise an error
 

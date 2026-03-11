@@ -138,17 +138,18 @@ module E11y
 
         # Replay single event from DLQ.
         #
+        # Re-dispatches event through E11y pipeline so it reaches adapters.
+        #
         # @param event_id [String] Event ID to replay
         # @return [Boolean] true if replayed successfully
         def replay(event_id)
           entry = find_entry(event_id)
           return false unless entry
 
-          # Re-dispatch event through E11y pipeline
-          # TODO: Implement E11y::Pipeline.dispatch
-          # E11y::Pipeline.dispatch(entry[:event_data], metadata: entry[:metadata].merge(replayed: true))
+          event_data = entry[:event_data]
+          return false unless event_data
 
-          # For now, just mark as replayed
+          E11y.config.built_pipeline.call(event_data)
           increment_metric("e11y.dlq.replayed", event_name: entry[:event_name])
           true
         rescue StandardError => e
@@ -177,22 +178,47 @@ module E11y
 
         # Delete entry from DLQ.
         #
-        # Note: This is a simplified implementation.
-        # In production, consider using a database or append-only log with tombstones.
+        # Rewrites file excluding the entry. For large files this is expensive.
         #
         # @param event_id [String] Event ID to delete
         # @return [Boolean] true if deleted
-        # rubocop:disable Naming/PredicateMethod
         # delete is an action method returning boolean status, not a predicate query
-        def delete(_event_id)
-          # TODO: Implement deletion (requires rewriting file)
-          # For JSONL, deletion is expensive (requires full file rewrite)
-          # Consider marking as deleted instead or using database
+        def delete(event_id)
+          return false unless File.exist?(@file_path)
+
+          entries, found = read_entries_excluding(event_id)
+          return false unless found
+
+          rewrite_file_with(entries)
+          true
+        rescue StandardError
           false
         end
-        # rubocop:enable Naming/PredicateMethod
 
         private
+
+        def read_entries_excluding(event_id)
+          entries = []
+          found = false
+          File.foreach(@file_path) do |line|
+            entry = JSON.parse(line, symbolize_names: true)
+            if entry[:id] == event_id
+              found = true
+            else
+              entries << entry
+            end
+          end
+          [entries, found]
+        end
+
+        def rewrite_file_with(entries)
+          @mutex.synchronize do
+            File.open(@file_path, "w") do |f|
+              f.flock(File::LOCK_EX)
+              entries.each { |e| f.puts(JSON.generate(e)) }
+            end
+          end
+        end
 
         # Get default file path (log/e11y_dlq.jsonl).
         def default_file_path

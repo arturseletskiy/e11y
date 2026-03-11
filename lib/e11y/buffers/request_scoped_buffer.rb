@@ -66,38 +66,13 @@ module E11y
         #   # Error event - not buffered, triggers flush
         #   RequestScopedBuffer.add_event({ event_name: "error", severity: :error })
         #   # => false (and flushes buffer)
-        # rubocop:disable Metrics/MethodLength, Naming/PredicateMethod
         def add_event(event_data)
-          return false unless active? # Not in request scope
+          return false unless active?
+          return handle_error_event(event_data) if error_severity?(event_data[:severity])
+          return false unless event_data[:severity] == :debug
 
-          severity = event_data[:severity]
-
-          # Trigger flush on error severity
-          if error_severity?(severity)
-            Thread.current[THREAD_KEY_ERROR_OCCURRED] = true
-            flush_on_error
-            return false # Error events not buffered
-          end
-
-          # Only buffer debug events
-          return false unless severity == :debug
-
-          current_buffer = buffer
-          return false if current_buffer.nil?
-
-          # Check buffer limit
-          if current_buffer.size >= buffer_limit
-            increment_metric("e11y.request_buffer.overflow")
-            return false # Buffer full, drop event
-          end
-
-          # Merge request_id for traceability when flushed
-          event_to_store = event_data.merge(request_id: request_id)
-          current_buffer << event_to_store
-          increment_metric("e11y.request_buffer.events_buffered")
-          true
+          append_to_buffer(event_data)
         end
-        # rubocop:enable Metrics/MethodLength, Naming/PredicateMethod
 
         # Flush buffered events on error
         #
@@ -196,6 +171,28 @@ module E11y
         end
 
         private
+
+        def handle_error_event(_event_data) # rubocop:disable Naming/PredicateMethod
+          Thread.current[THREAD_KEY_ERROR_OCCURRED] = true
+          flush_on_error
+          false
+        end
+
+        def append_to_buffer(event_data)
+          current_buffer = buffer
+          return false if current_buffer.nil?
+          return record_buffer_overflow if current_buffer.size >= buffer_limit
+
+          event_to_store = event_data.merge(request_id: request_id)
+          current_buffer << event_to_store
+          increment_metric("e11y.request_buffer.events_buffered")
+          true
+        end
+
+        def record_buffer_overflow # rubocop:disable Naming/PredicateMethod
+          increment_metric("e11y.request_buffer.overflow")
+          false
+        end
 
         # Get buffer limit (with fallback)
         #

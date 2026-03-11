@@ -82,12 +82,12 @@ RSpec.describe "Stratified Sampling for SLO Accuracy (C11 Resolution)" do
     # rubocop:disable RSpec/ExampleLength
     # Integration test requires load simulation and statistical calculations
     it "corrects SLO metrics under load-based adaptive sampling" do
-      # During high load: success events sampled at 10%
-      100.times do
+      # During high load: success events sampled at 10% (deterministic: every 10th)
+      100.times do |i|
         tracker.record_sample(
           severity: :success,
           sample_rate: 0.1,
-          sampled: rand < 0.1
+          sampled: (i % 10).zero?
         )
       end
 
@@ -110,10 +110,10 @@ RSpec.describe "Stratified Sampling for SLO Accuracy (C11 Resolution)" do
       corrected_total = corrected_success + corrected_errors
       corrected_success_rate = corrected_success / corrected_total
 
-      # True success rate: ~91% (100/(100+10))
-      # Note: With randomized sampling, expect wider tolerance
-      # Allow small floating point precision errors (0.9500000000000001 should pass)
-      expect(corrected_success_rate).to be_between(0.80, 0.96) # Reasonable range given sampling variance
+      # True success rate: 100/(100+10) ≈ 90.9%
+      # With deterministic sampling: 10 success samples → 10*10=100, 10 error samples → 10*1=10
+      # corrected_success_rate = 100/110 ≈ 0.909
+      expect(corrected_success_rate).to be_between(0.88, 0.94)
     end
     # rubocop:enable RSpec/ExampleLength
   end
