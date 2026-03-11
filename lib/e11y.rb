@@ -56,16 +56,21 @@ module E11y
     end
     alias config configuration
 
-    # Track an event
+    # Track an event instance
     #
-    # @param event [Event] event instance to track
-    # @return [void]
+    # Accepts an event instance (e.g. Events::OrderCreated.new(status: "pending"))
+    # and dispatches it through the pipeline via the event's class.
+    #
+    # @param event [E11y::Event::Base] event instance with payload
+    # @return [Hash, nil] event_data from pipeline, or nil if disabled
     #
     # @example
     #   E11y.track(Events::UserSignup.new(user_id: 123))
     def track(event)
-      # TODO: Implement in Phase 1
-      raise NotImplementedError, "E11y.track will be implemented in Phase 1"
+      raise ArgumentError, "event must be an E11y::Event::Base instance" unless event.is_a?(E11y::Event::Base)
+
+      payload = event.respond_to?(:payload) ? event.payload : {}
+      event.class.track(**payload)
     end
 
     # Get logger instance

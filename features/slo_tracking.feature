@@ -47,9 +47,6 @@ Feature: SLO Tracking
     Then the SLO tracker should have recorded a request for "posts#error"
     And the normalize_status for 500 should return "5xx"
 
-  # BUG-007: E11y::Middleware::EventSlo is NOT in the default pipeline
-  # Event-level SLO never fires without manual opt-in.
-  @wip
   Scenario: Event-level SLO fires when EventSlo middleware is in the pipeline
     Given E11y::Middleware::EventSlo is added to the pipeline
     When I POST to "/orders" with order params:

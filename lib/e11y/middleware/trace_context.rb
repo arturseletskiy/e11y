@@ -151,9 +151,8 @@ module E11y
       #
       # @param metric_name [String] Metric name
       # @return [void]
-      def increment_metric(_metric_name)
-        # TODO: Integrate with Yabeda/Prometheus in Phase 2
-        # Yabeda.e11y.middleware_trace_context_processed.increment
+      def increment_metric(metric_name, **tags)
+        E11y::Metrics.increment(metric_name.to_sym, tags)
       end
     end
   end

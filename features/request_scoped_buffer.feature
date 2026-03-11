@@ -25,7 +25,6 @@ Feature: Request-scoped debug buffering
     Given request buffering is enabled in the configuration
     Then request buffering should be enabled in the configuration
 
-  @wip
   Scenario: Successful request — debug events are NOT written to adapter
     # With buffering enabled, debug events should be held in memory
     # and discarded (not written) when the request succeeds.
@@ -33,7 +32,6 @@ Feature: Request-scoped debug buffering
     When I GET "/posts"
     Then 0 events with severity "debug" should be in the adapter
 
-  @wip
   Scenario: Failed request — buffered debug events ARE flushed to adapter
     # This is the core feature: on error, all buffered debug events
     # are flushed so developers get full context.
@@ -43,7 +41,6 @@ Feature: Request-scoped debug buffering
     Then events with severity "debug" should be in the adapter
     And those debug events should have been generated during that request
 
-  @wip
   Scenario: Error-level events bypass the buffer and are written immediately
     # Non-debug events (info, error, fatal) must NOT be buffered —
     # they should reach the adapter immediately regardless of buffer state.

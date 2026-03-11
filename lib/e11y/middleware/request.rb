@@ -60,6 +60,11 @@ module E11y
         # Call next middleware/app
         status, headers, body = @app.call(env)
 
+        # Flush buffer on 5xx (Rails may catch exception and return 500 instead of raising)
+        if status >= 500 && E11y.config.request_buffer&.enabled
+          E11y::Buffers::RequestScopedBuffer.flush_on_error
+        end
+
         # Track SLO metrics (if enabled)
         track_http_request_slo(env, status, start_time)
 

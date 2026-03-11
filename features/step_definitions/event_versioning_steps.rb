@@ -28,11 +28,15 @@ def find_versioned_events(class_name)
     nil
   end
 
+  klass = Object.const_get(class_name) rescue nil
+  custom_event_name = klass&.respond_to?(:event_name) ? klass.event_name.to_s : nil
+
   memory_adapter.events.select do |e|
     stored = e[:event_name].to_s
     stored == class_name ||
       (normalized && stored == normalized) ||
-      e[:event_class]&.name == class_name
+      e[:event_class]&.name == class_name ||
+      (custom_event_name && stored == custom_event_name)
   end
 end
 

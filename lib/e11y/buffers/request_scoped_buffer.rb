@@ -91,7 +91,9 @@ module E11y
             return false # Buffer full, drop event
           end
 
-          current_buffer << event_data
+          # Merge request_id for traceability when flushed
+          event_to_store = event_data.merge(request_id: request_id)
+          current_buffer << event_to_store
           increment_metric("e11y.request_buffer.events_buffered")
           true
         end
@@ -218,16 +220,17 @@ module E11y
           SecureRandom.uuid
         end
 
-        # Flush single event to adapters
+        # Flush single event to adapters via pipeline
         #
         # @param event_data [Hash] Event to flush
         # @param target [Symbol, nil] Optional target adapter (not yet implemented)
         # @return [void]
-        def flush_event(_event_data, target: nil) # rubocop:disable Lint/UnusedMethodArgument
-          # Placeholder for E11y::Collector integration
-          # Will be implemented when Collector/Adapter classes are available
+        def flush_event(event_data, target: nil) # rubocop:disable Lint/UnusedMethodArgument
+          return unless event_data
 
-          # For now, just increment metric
+          # Mark as from flush so Routing does not re-buffer
+          event_to_send = event_data.merge(from_request_buffer_flush: true)
+          E11y.config.built_pipeline.call(event_to_send)
           increment_metric("e11y.request_buffer.event_flushed")
         end
 

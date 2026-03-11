@@ -13,11 +13,6 @@ Feature: Adapter configurations
 
   # ─── Stdout Adapter ─────────────────────────────────────────────────────────
 
-  # BUG-011: Stdout adapter reads :pretty_print, NOT :format.
-  # Passing format: :pretty as the documented key has no effect on the output format.
-  # When user passes format: :compact expecting compact output, adapter ignores it
-  # and defaults to pretty_print: true (multi-line). Documented here via compact case.
-  @wip
   Scenario: Stdout adapter compact output when format is not the :pretty_print key
     # BUG: User passes pretty_print: false but uses :format key — adapter uses :pretty_print default (true)
     # This scenario uses format: :compact expecting single-line output but gets multi-line.
@@ -45,10 +40,6 @@ Feature: Adapter configurations
 
   # ─── Loki Adapter ──────────────────────────────────────────────────────────
 
-  # BUG-012: Loki#healthy? checks @connection.respond_to?(:get).
-  # A Faraday object always responds to :get, so healthy? is always true
-  # even when the Loki server is completely unreachable.
-  @wip
   Scenario: Loki healthy? returns false when the host is unreachable
     Given a Loki adapter pointing to "http://localhost:19998"
     When I call healthy? on the Loki adapter

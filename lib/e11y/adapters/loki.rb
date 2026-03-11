@@ -155,11 +155,22 @@ module E11y
         end
       end
 
-      # Check if adapter is healthy
+      # Loki health check endpoint
+      READY_PATH = "/ready"
+
+      # Check if adapter is healthy (Loki server reachable)
       #
-      # @return [Boolean] True if connection is established
+      # Performs actual HTTP GET to /ready. Returns false on connection failure,
+      # timeout, or non-2xx response.
+      #
+      # @return [Boolean] True if Loki responds with 2xx
       def healthy?
-        @connection&.respond_to?(:get)
+        return false unless @connection
+
+        response = @connection.get(READY_PATH)
+        (200..299).cover?(response.status)
+      rescue Faraday::Error, Errno::ECONNREFUSED, Errno::ETIMEDOUT
+        false
       end
 
       # Adapter capabilities

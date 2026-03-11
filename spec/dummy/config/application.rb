@@ -29,6 +29,16 @@ unless $e11y_dummy_configured
     # Also register as :logs adapter so events go to memory by default
     config.adapters[:logs] = config.adapters[:memory]
 
+    # Yabeda adapter for metrics (E11y::Metrics.backend) — requires integration deps
+    begin
+      require "yabeda"
+      require "e11y/adapters/yabeda"
+      config.adapters[:yabeda] = E11y::Adapters::Yabeda.new
+    rescue LoadError => e
+      # Yabeda not in bundle (e.g. without --with integration)
+      warn "[E11y] Yabeda not available: #{e.message}. Run: bundle install --with integration" if ENV["VERBOSE"]
+    end
+
     # Enable instrumentation
     config.rails_instrumentation.enabled = true
     config.active_job.enabled = true

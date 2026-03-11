@@ -16,6 +16,17 @@ module Events
       allows :customer, :payment, :items
     end
 
+    slo do
+      enabled true
+      slo_status_from do |payload|
+        case payload[:status].to_s
+        when "pending", "completed" then "success"
+        when "failed", "cancelled" then "failure"
+        else "success" # default for SLO cucumber scenario
+        end
+      end
+    end
+
     metrics do
       counter :orders_total, tags: [:status]
     end

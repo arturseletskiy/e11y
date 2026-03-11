@@ -91,6 +91,11 @@ module E11y
           # Extract job info from job object if present (ActiveJob events)
           extracted_payload = extract_job_info_from_object(payload)
 
+          # Override severity for process_action when exception occurred
+          if name == "process_action.action_controller" && (payload[:exception] || payload["exception"])
+            extracted_payload = extracted_payload.merge(severity: :error)
+          end
+
           # Track E11y event - schema will filter relevant fields
           e11y_event_class.track(
             event_name: name,

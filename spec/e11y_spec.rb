@@ -33,8 +33,16 @@ RSpec.describe E11y do
   end
 
   describe ".track" do
-    it "raises NotImplementedError" do
-      expect { described_class.track(double("event")) }.to raise_error(NotImplementedError, /Phase 1/)
+    it "accepts event instance and dispatches via pipeline" do
+      event_class = Class.new(E11y::Event::Base) do
+        schema { required(:id).filled(:integer) }
+      end
+      instance = event_class.new(id: 42)
+
+      pipeline = proc {}
+      allow(E11y.configuration).to receive(:built_pipeline).and_return(pipeline)
+
+      expect { described_class.track(instance) }.not_to raise_error
     end
   end
 

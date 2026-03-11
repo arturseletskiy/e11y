@@ -37,9 +37,8 @@ Feature: Event Versioning middleware
     And  the last versioned "Events::PaymentSubmitted" event does not have a "v" field
 
   # -----------------------------------------------------------------------
-  # Scenario 3 — Custom event_name override preserved  (KNOWN BUG — @wip)
+  # Scenario 3 — Custom event_name override preserved
   # -----------------------------------------------------------------------
-  @wip
   Scenario: Custom event_name override on event class is preserved by Versioning middleware
     # BUG: Versioning middleware unconditionally calls
     #      event_data[:event_name] = normalize_event_name(class_name)

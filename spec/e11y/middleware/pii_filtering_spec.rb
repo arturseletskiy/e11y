@@ -491,6 +491,7 @@ RSpec.describe E11y::Middleware::PIIFilter do
   end
 
   describe "Pattern-Based Filtering" do
+    # Use :content (not in allows) so pattern filtering runs. "allows" skips pattern filtering.
     let(:event_class) do
       Class.new(E11y::Event::Base) do
         def self.name
@@ -498,13 +499,13 @@ RSpec.describe E11y::Middleware::PIIFilter do
         end
 
         schema do
-          required(:message).filled(:string)
+          required(:content).filled(:string)
         end
 
         contains_pii true
 
         pii_filtering do
-          allows :message
+          allows :message # content is NOT allowed, so pattern filtering applies
         end
       end
     end
@@ -513,53 +514,53 @@ RSpec.describe E11y::Middleware::PIIFilter do
       event_data = {
         event_class: event_class,
         payload: {
-          message: "Contact us at support@example.com"
+          content: "Contact us at support@example.com"
         }
       }
 
       result = middleware.call(event_data)
 
-      expect(result[:payload][:message]).not_to include("support@example.com")
-      expect(result[:payload][:message]).to include("[FILTERED]")
+      expect(result[:payload][:content]).not_to include("support@example.com")
+      expect(result[:payload][:content]).to include("[FILTERED]")
     end
 
     it "filters SSN patterns" do
       event_data = {
         event_class: event_class,
         payload: {
-          message: "SSN: 123-45-6789"
+          content: "SSN: 123-45-6789"
         }
       }
 
       result = middleware.call(event_data)
 
-      expect(result[:payload][:message]).not_to include("123-45-6789")
+      expect(result[:payload][:content]).not_to include("123-45-6789")
     end
 
     it "filters credit card patterns" do
       event_data = {
         event_class: event_class,
         payload: {
-          message: "Card: 4111 1111 1111 1111"
+          content: "Card: 4111 1111 1111 1111"
         }
       }
 
       result = middleware.call(event_data)
 
-      expect(result[:payload][:message]).not_to include("4111 1111 1111 1111")
+      expect(result[:payload][:content]).not_to include("4111 1111 1111 1111")
     end
 
     it "filters IP addresses" do
       event_data = {
         event_class: event_class,
         payload: {
-          message: "From IP: 192.168.1.100"
+          content: "From IP: 192.168.1.100"
         }
       }
 
       result = middleware.call(event_data)
 
-      expect(result[:payload][:message]).not_to include("192.168.1.100")
+      expect(result[:payload][:content]).not_to include("192.168.1.100")
     end
   end
 
@@ -603,6 +604,7 @@ RSpec.describe E11y::Middleware::PIIFilter do
     end
 
     context "with arrays in payload" do
+      # Use :logs (not in allows) so pattern filtering runs on array elements
       let(:event_class_array) do
         Class.new(E11y::Event::Base) do
           def self.name
@@ -610,13 +612,13 @@ RSpec.describe E11y::Middleware::PIIFilter do
           end
 
           schema do
-            required(:items).filled(:array)
+            required(:logs).filled(:array)
           end
 
           contains_pii true
 
           pii_filtering do
-            allows :items
+            allows :items # logs is NOT allowed, so pattern filtering applies
           end
         end
       end
@@ -625,7 +627,7 @@ RSpec.describe E11y::Middleware::PIIFilter do
         event_data = {
           event_class: event_class_array,
           payload: {
-            items: [
+            logs: [
               "User email: john@example.com",
               "Another user: alice@test.com",
               "No PII here"
@@ -636,16 +638,16 @@ RSpec.describe E11y::Middleware::PIIFilter do
         result = middleware.call(event_data)
 
         # Emails should be filtered in all array elements
-        expect(result[:payload][:items][0]).not_to include("john@example.com")
-        expect(result[:payload][:items][1]).not_to include("alice@test.com")
-        expect(result[:payload][:items][2]).to eq("No PII here")
+        expect(result[:payload][:logs][0]).not_to include("john@example.com")
+        expect(result[:payload][:logs][1]).not_to include("alice@test.com")
+        expect(result[:payload][:logs][2]).to eq("No PII here")
       end
 
       it "handles nested arrays correctly" do
         event_data = {
           event_class: event_class_array,
           payload: {
-            items: [
+            logs: [
               ["email1@test.com", "email2@test.com"],
               ["192.168.1.1", "text"]
             ]
@@ -655,13 +657,14 @@ RSpec.describe E11y::Middleware::PIIFilter do
         result = middleware.call(event_data)
 
         # Pattern filtering should work recursively in nested arrays
-        expect(result[:payload][:items][0][0]).not_to include("email1@test.com")
-        expect(result[:payload][:items][1][0]).not_to include("192.168.1.1")
+        expect(result[:payload][:logs][0][0]).not_to include("email1@test.com")
+        expect(result[:payload][:logs][1][0]).not_to include("192.168.1.1")
       end
     end
   end
 
   describe "Edge Cases and Data Integrity" do
+    # Use :info (not in allows) for mutation test so pattern filtering runs on nested email
     let(:event_class_edge) do
       Class.new(E11y::Event::Base) do
         def self.name
@@ -669,13 +672,13 @@ RSpec.describe E11y::Middleware::PIIFilter do
         end
 
         schema do
-          required(:data).filled
+          required(:info).filled
         end
 
         contains_pii true
 
         pii_filtering do
-          allows :data
+          allows :data # info is NOT allowed, so pattern filtering applies
         end
       end
     end
@@ -684,57 +687,57 @@ RSpec.describe E11y::Middleware::PIIFilter do
       event_data = {
         event_class: event_class_edge,
         payload: {
-          data: nil
+          info: nil
         }
       }
 
       result = middleware.call(event_data)
 
-      expect(result[:payload][:data]).to be_nil
+      expect(result[:payload][:info]).to be_nil
     end
 
     it "handles empty strings" do
       event_data = {
         event_class: event_class_edge,
         payload: {
-          data: ""
+          info: ""
         }
       }
 
       result = middleware.call(event_data)
 
-      expect(result[:payload][:data]).to eq("")
+      expect(result[:payload][:info]).to eq("")
     end
 
     it "handles empty hashes" do
       event_data = {
         event_class: event_class_edge,
         payload: {
-          data: {}
+          info: {}
         }
       }
 
       result = middleware.call(event_data)
 
-      expect(result[:payload][:data]).to eq({})
+      expect(result[:payload][:info]).to eq({})
     end
 
     it "handles empty arrays" do
       event_data = {
         event_class: event_class_edge,
         payload: {
-          data: []
+          info: []
         }
       }
 
       result = middleware.call(event_data)
 
-      expect(result[:payload][:data]).to eq([])
+      expect(result[:payload][:info]).to eq([])
     end
 
     it "prevents mutation of original data (deep_dup)" do
       original_payload = {
-        data: {
+        info: {
           nested: %w[value1 value2],
           email: "test@example.com"
         }
@@ -749,18 +752,18 @@ RSpec.describe E11y::Middleware::PIIFilter do
       result = middleware.call(event_data)
 
       # Original should be unchanged
-      expect(original_payload[:data][:nested]).to eq(%w[value1 value2])
-      expect(original_payload[:data][:email]).to eq("test@example.com")
+      expect(original_payload[:info][:nested]).to eq(%w[value1 value2])
+      expect(original_payload[:info][:email]).to eq("test@example.com")
 
       # Result should be filtered
-      expect(result[:payload][:data][:email]).not_to eq("test@example.com")
+      expect(result[:payload][:info][:email]).not_to eq("test@example.com")
     end
 
     it "handles complex nested structures with arrays (line 250)" do
       event_data = {
         event_class: event_class_edge,
         payload: {
-          data: {
+          info: {
             users: [
               { name: "John", email: "john@test.com" },
               { name: "Alice", email: "alice@test.com" }
@@ -776,8 +779,8 @@ RSpec.describe E11y::Middleware::PIIFilter do
       result = middleware.call(event_data)
 
       # Should handle deep nesting with arrays
-      expect(result[:payload][:data][:users]).to be_an(Array)
-      expect(result[:payload][:data][:settings][:notifications]).to eq(%w[email sms])
+      expect(result[:payload][:info][:users]).to be_an(Array)
+      expect(result[:payload][:info][:settings][:notifications]).to eq(%w[email sms])
     end
 
     context "with unduplicatable objects" do
@@ -796,14 +799,14 @@ RSpec.describe E11y::Middleware::PIIFilter do
         event_data = {
           event_class: event_class_edge,
           payload: {
-            data: unduplicatable
+            info: unduplicatable
           }
         }
 
         # Should handle the error gracefully and return original
         expect { middleware.call(event_data) }.not_to raise_error
         result = middleware.call(event_data)
-        expect(result[:payload][:data]).to eq(unduplicatable)
+        expect(result[:payload][:info]).to eq(unduplicatable)
       end
     end
   end

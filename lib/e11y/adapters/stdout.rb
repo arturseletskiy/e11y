@@ -42,10 +42,10 @@ module E11y
       # @param config [Hash] Configuration options
       # @option config [Boolean] :colorize (true) Enable colored output
       # @option config [Boolean] :pretty_print (true) Enable pretty-printed JSON
+      # @option config [Symbol] :format (:pretty) Output format: :compact (single-line) or :pretty (multi-line)
       def initialize(config = {})
         @colorize = config.fetch(:colorize, true)
-        @pretty_print = config.fetch(:pretty_print, true)
-
+        @pretty_print = resolve_pretty_print(config)
         super
       end
 
@@ -81,6 +81,20 @@ module E11y
       end
 
       private
+
+      # Resolve pretty_print from format or pretty_print keys
+      #
+      # @param config [Hash] Adapter config
+      # @return [Boolean]
+      def resolve_pretty_print(config)
+        return config[:pretty_print] if config.key?(:pretty_print)
+
+        case config[:format]
+        when :compact then false
+        when :pretty then true
+        else config.fetch(:pretty_print, true)
+        end
+      end
 
       # Format event for console output
       #

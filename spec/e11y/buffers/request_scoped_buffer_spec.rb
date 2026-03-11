@@ -61,7 +61,8 @@ RSpec.describe E11y::Buffers::RequestScopedBuffer do
 
         expect(result).to be true
         expect(described_class.size).to eq(1)
-        expect(described_class.buffer).to include(event)
+        expect(described_class.buffer.first).to include(event)
+        expect(described_class.buffer.first[:request_id]).to be_a(String)
       end
 
       it "does not buffer info events" do

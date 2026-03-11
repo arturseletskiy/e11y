@@ -130,9 +130,11 @@ module E11y
           pii_config
         )
 
-        # Apply pattern-based filtering
+        # Apply pattern-based filtering (respects allows, uses VALUE_PATTERNS only)
         filtered_data[:payload] = apply_pattern_filtering(
-          filtered_data[:payload]
+          filtered_data[:payload],
+          pii_config,
+          []
         )
 
         filtered_data
@@ -180,30 +182,50 @@ module E11y
 
       # Apply pattern-based filtering to string values
       #
+      # Uses VALUE_PATTERNS only (excludes PASSWORD_FIELDS) so field-name patterns
+      # are not applied to values (avoids corrupting "process_token_renewal_completed").
+      # Skips filtering when value is under an allowed key (e.g. allows :card_number).
+      #
       # @param data [Object] Data to filter (recursively)
+      # @param pii_config [Hash] PII config with :fields (strategy per key)
+      # @param path [Array<Symbol>] Key path from payload root
       # @return [Object] Filtered data
-      def apply_pattern_filtering(data)
+      def apply_pattern_filtering(data, pii_config = nil, path = [])
         case data
         when Hash
-          data.transform_values { |v| apply_pattern_filtering(v) }
+          data.each_with_object({}) do |(k, v), acc|
+            key_sym = k.is_a?(Symbol) ? k : k.to_sym
+            acc[k] = apply_pattern_filtering(v, pii_config, path + [key_sym])
+          end
         when Array
-          data.map { |v| apply_pattern_filtering(v) }
+          data.map { |v| apply_pattern_filtering(v, pii_config, path) }
         when String
-          filter_string_patterns(data)
+          if path_under_allowed_key?(path, pii_config)
+            data
+          else
+            filter_string_patterns(data)
+          end
         else
           data
         end
       end
 
-      # Filter PII patterns in string
+      # Check if any ancestor key in path is explicitly allowed
+      def path_under_allowed_key?(path, pii_config)
+        return false unless pii_config && pii_config[:fields]
+
+        allowed_keys = pii_config[:fields].select { |_k, v| v[:strategy] == :allow }.keys
+        path.any? { |p| allowed_keys.include?(p) }
+      end
+
+      # Filter PII patterns in string (VALUE_PATTERNS only, not PASSWORD_FIELDS)
       #
       # @param str [String] String to filter
       # @return [String] Filtered string
       def filter_string_patterns(str)
         result = str.dup
 
-        # Apply all PII patterns
-        E11y::PII::Patterns::ALL.each do |pattern|
+        E11y::PII::Patterns::VALUE_PATTERNS.each do |pattern|
           result = result.gsub(pattern, "[FILTERED]")
         end
 
