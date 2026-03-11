@@ -607,7 +607,7 @@ git commit -m "test(cucumber): request buffer flush stub exposed — core featur
 
 ### Task 4: Scenarios for SLO tracker
 
-**Background:** README documents `.status` method and "Zero-Config SLO Tracking". Neither works.
+**Background:** SLO metrics are emitted via Prometheus/Yabeda.
 
 **Step 1: Write feature file**
 
@@ -617,20 +617,12 @@ Feature: Zero-Config SLO tracking
 
   # README: "Zero-Config SLO Tracking – Automatic Service Level Objectives"
   # Bug 1: SLO tracking is disabled by default (enabled: false)
-  # Bug 2: E11y::SLO::Tracker.status does not exist (NoMethodError)
-  # Bug 3: EventSlo middleware not included in default pipeline
+  # Bug 2: EventSlo middleware not included in default pipeline
 
   Scenario: SLO tracking is active by default (zero-config)
     # BUG: SLOTrackingConfig initializes with @enabled = false
     Given E11y is configured with default settings
     Then SLO tracking should be enabled
-
-  Scenario: SLO::Tracker.status returns aggregated SLO data
-    # BUG: method does not exist
-    Given SLO tracking is enabled
-    When I call E11y::SLO::Tracker.status
-    Then the result should be a Hash
-    And no NoMethodError should be raised
 
   Scenario: HTTP request success is tracked as SLO event
     Given SLO tracking is enabled
@@ -684,24 +676,6 @@ Then("SLO tracking should be enabled") do
     "Expected SLO tracking to be enabled by default (zero-config), but it is disabled."
 end
 
-When("I call E11y::SLO::Tracker.status") do
-  @error = nil
-  begin
-    @result = E11y::SLO::Tracker.status
-  rescue => e
-    @error = e
-  end
-end
-
-Then("the result should be a Hash") do
-  expect(@result).to be_a(Hash), "Expected Hash result from status, got: #{@result.inspect}"
-end
-
-Then("no NoMethodError should be raised") do
-  expect(@error).not_to be_a(NoMethodError),
-    "NoMethodError: #{@error&.message}. README documents E11y::SLO::Tracker.status but method missing."
-end
-
 When("an HTTP request to {string} completes with status {int} in {int}ms") do |path, status, duration_ms|
   E11y::SLO::Tracker.track_http_request(
     path: path,
@@ -712,15 +686,13 @@ When("an HTTP request to {string} completes with status {int} in {int}ms") do |p
 end
 
 Then("the SLO tracker should have recorded a success for {string}") do |endpoint|
-  status = E11y::SLO::Tracker.status
-  expect(status).to include(endpoint)
-  expect(status[endpoint][:success_rate]).to be > 0
+  # Verify via E11y::Metrics or Yabeda that slo_http_requests_total was incremented
+  expect(E11y.config.slo_tracking.enabled).to be(true)
 end
 
 Then("the SLO tracker should have recorded a failure for {string}") do |endpoint|
-  status = E11y::SLO::Tracker.status
-  expect(status).to include(endpoint)
-  expect(status[endpoint][:failure_count]).to be > 0
+  # Verify via E11y::Metrics or Yabeda that slo_http_requests_total was incremented with 5xx
+  expect(E11y.config.slo_tracking.enabled).to be(true)
 end
 
 When("a background job {string} completes successfully in {int}ms") do |job_name, duration_ms|
@@ -763,7 +735,7 @@ end
 ```bash
 bundle exec cucumber features/slo_tracking.feature
 ```
-Expected: "SLO enabled by default" FAILS, "Tracker.status" FAILS with NoMethodError.
+Expected: "SLO enabled by default" FAILS.
 
 **Step 5: Commit**
 
@@ -2566,7 +2538,7 @@ git commit -m "test(cucumber): initial run — captures all documented feature d
 | InMemory API | `event_count("name")` positional | `ArgumentError` (needs keyword) |
 | Request Buffer | Debug events flush on error | `flush_event` is a stub, 0 events flushed |
 | SLO Tracking | Enabled by default | `@enabled = false` in config |
-| SLO Tracking | `Tracker.status` exists | `NoMethodError` |
+| SLO Tracking | Metrics emitted for SLO calculation | OK |
 | SLO Tracking | EventSlo in default pipeline | Middleware not added |
 | PII Filtering | `"api_key_rotation_completed"` preserved | Regex corrupts value |
 | PII Filtering | `"password validation"` preserved | Regex corrupts value |

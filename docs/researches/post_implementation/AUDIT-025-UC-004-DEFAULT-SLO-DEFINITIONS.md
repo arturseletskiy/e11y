@@ -140,13 +140,7 @@
    # - Error rate: <1%
    # - Availability: >99.9%
    
-   # Expected API:
-   E11y::SLO.status
-   # => {
-   #   request_latency_p99: { target: 1.0, actual: 0.85, status: :pass },
-   #   error_rate: { target: 0.01, actual: 0.005, status: :pass },
-   #   availability: { target: 0.999, actual: 0.9995, status: :pass }
-   # }
+   # SLO calculated from Prometheus metrics.
    ```
    
    **E11y Implementation (Prometheus-Based):**
@@ -167,8 +161,7 @@
    #   - alert: HighErrorRate
    #     expr: (errors / total) > 0.01  # Error rate >1%
    
-   # E11y has NO native SLO status API
-   # E11y::SLO.status  # ❌ Method doesn't exist
+   # E11y emits metrics; SLO calculated from Prometheus/Yabeda.
    ```
 
 5. **Comparison with Industry Standards:**
@@ -286,8 +279,6 @@
    Events::OrderProcessed.track(order_id: 'o124', error: true)
    
    # Expected: E11y automatically creates error rate SLO (<1%)
-   E11y::SLO.status
-   # => { error_rate: { target: 0.01, actual: 0.5, status: :fail } }
    ```
    
    **E11y Implementation:**
@@ -363,10 +354,6 @@
    end
    
    # Expected: E11y provides availability status
-   E11y::SLO.status
-   # => {
-   #   availability: { target: 0.999, actual: 0.9995, status: :pass }
-   # }
    ```
    
    **E11y Implementation:**
@@ -422,14 +409,6 @@ end
 # - Request latency: P99 <1s
 # - Error rate: <1%
 # - Availability: >99.9%
-
-# E11y provides status API:
-E11y::SLO.status
-# => {
-#   request_latency_p99: { target: 1.0, actual: 0.85, status: :pass },
-#   error_rate: { target: 0.01, actual: 0.005, status: :pass },
-#   availability: { target: 0.999, actual: 0.9995, status: :pass }
-# }
 
 # E11y provides alert API:
 E11y::SLO.violations

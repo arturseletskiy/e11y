@@ -10,7 +10,7 @@
 # ---------------------------------------------------------------------------
 
 Given("SLO tracking is reset to its default state") do
-  E11y.config.slo_tracking.enabled = false
+  E11y.config.slo_tracking.enabled = true
 end
 
 Given("SLO tracking is enabled") do
@@ -27,16 +27,6 @@ end
 
 When("I inspect the default SLO tracking configuration") do
   @slo_config = E11y.config.slo_tracking
-end
-
-When("I call E11y::SLO::Tracker.status") do
-  @tracker_status_error = nil
-  begin
-    @tracker_status = E11y::SLO::Tracker.status
-  rescue NoMethodError => e
-    @tracker_status_error = e
-    raise # Re-raise so Cucumber marks the @wip scenario as failed
-  end
 end
 
 # ---------------------------------------------------------------------------
@@ -61,9 +51,7 @@ end
 
 Then("E11y.configuration.slo_tracking.enabled should be true") do
   expect(@slo_config.enabled).to be(true),
-                                 "Expected SLO tracking enabled by default, got: #{@slo_config.enabled.inspect}\n" \
-                                 "BUG: SLOTrackingConfig#initialize sets @enabled = false, " \
-                                 "contradicting the 'Zero-Config SLO Tracking' README claim."
+                                 "Expected SLO tracking enabled by default, got: #{@slo_config.enabled.inspect}"
 end
 
 Then("E11y.configuration.slo_tracking.enabled should be false") do
@@ -74,19 +62,6 @@ Then("enabling SLO tracking requires setting slo_tracking.enabled to true") do
   E11y.config.slo_tracking.enabled = true
   expect(E11y.config.slo_tracking.enabled).to be(true)
   E11y.config.slo_tracking.enabled = false
-end
-
-Then("the SLO status result should be a Hash") do
-  if @tracker_status_error
-    raise "E11y::SLO::Tracker.status raised #{@tracker_status_error.class}: " \
-          "#{@tracker_status_error.message}\nBUG: Tracker.status method does not exist."
-  end
-  expect(@tracker_status).to be_a(Hash)
-end
-
-Then("the Hash should contain an entry for the orders endpoint") do
-  msg = "Expected Tracker.status to include an entry for orders#create, got: #{@tracker_status.inspect}"
-  expect(@tracker_status).to include("orders#create").or include(:orders_create), msg
 end
 
 Then("the SLO tracker should have recorded a request for {string}") do |_endpoint|

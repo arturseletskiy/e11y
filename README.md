@@ -136,25 +136,20 @@ E11y.configure do |config|
   config.rails_instrumentation.enabled = true
 end
 
-# That's it! E11y now tracks SLOs automatically:
+# That's it! E11y now emits SLO metrics automatically:
 # - HTTP endpoints: success rate, latency percentiles (p50, p95, p99)
 # - Background jobs: success rate, execution time, retry rate
 # - Database queries: slow query detection
 # - Cache operations: hit/miss ratios
-
-# View SLO status:
-E11y::SLO::Tracker.status
-# => {
-#   "POST /orders" => { success_rate: 99.8%, p95_latency: 250ms },
-#   "OrderProcessor" => { success_rate: 99.5%, avg_time: 1.2s }
-# }
+#
+# SLO metrics are collected via Prometheus/Yabeda; calculate SLOs from those metrics.
 ```
 
 **vs. Traditional SLO Tracking:**
 - ❌ Manual instrumentation of every endpoint
 - ❌ Complex SLO definitions and calculations
 - ❌ Separate tools for different SLOs
-- ✅ E11y: Zero config, automatic tracking, unified view
+- ✅ E11y: Zero config, automatic tracking, metrics for SLO calculation
 
 ---
 

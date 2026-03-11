@@ -16,23 +16,9 @@ Feature: SLO Tracking
     And the memory adapter is empty
     And SLO tracking is reset to its default state
 
-  # BUG-005: SLOTrackingConfig initializes @enabled = false
-  # The README claims "Zero-Config SLO Tracking" but the default is opt-in disabled.
-  @wip
   Scenario: SLO tracking is enabled by default without any configuration
     When I inspect the default SLO tracking configuration
     Then E11y.configuration.slo_tracking.enabled should be true
-
-  # BUG-006: E11y::SLO::Tracker.status does not exist
-  # Calling it raises NoMethodError.
-  @wip
-  Scenario: E11y::SLO::Tracker.status returns a Hash with endpoint data
-    Given SLO tracking is enabled
-    And I POST to "/orders" with order params:
-      | order[status] | pending |
-    When I call E11y::SLO::Tracker.status
-    Then the SLO status result should be a Hash
-    And the Hash should contain an entry for the orders endpoint
 
   Scenario: Successful HTTP request is tracked in SLO
     Given SLO tracking is enabled

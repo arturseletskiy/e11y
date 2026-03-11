@@ -6,9 +6,7 @@
 Then("E11y should be disabled in the test environment") do
   expect(E11y.configuration.enabled).to be(false),
                                         "Expected E11y.configuration.enabled to be false in test environment, " \
-                                        "but it was #{E11y.configuration.enabled.inspect}. " \
-                                        "BUG: Railtie guard `if config.enabled.nil?` never fires because " \
-                                        "@enabled defaults to true, not nil."
+                                        "but it was #{E11y.configuration.enabled.inspect}"
 end
 
 When("I set E11y enabled to {word}") do |value|

@@ -47,8 +47,8 @@ module E11y
       E11y.configure do |config|
         config.environment ||= Rails.env.to_s
         config.service_name ||= E11y::Railtie.derive_service_name
-        # Only set enabled if not already configured
-        config.enabled = !Rails.env.test? if config.enabled.nil?
+        # Disable E11y in test by default; user can override in config/initializers/e11y.rb
+        config.enabled = false if Rails.env.test?
       end
     end
 

@@ -15,6 +15,16 @@
 # references between the snapshot and the live array is safe.
 INITIAL_PIPELINE_MIDDLEWARES = E11y.config.pipeline.middlewares.dup.freeze
 
+# Railtie disables E11y in test; enable for features that need event tracking.
+Before("not @rails") do
+  E11y.config.enabled = true
+end
+
+# @rails scenarios verify Railtie behavior; ensure E11y stays disabled.
+Before("@rails") do
+  E11y.config.enabled = false
+end
+
 # Before each scenario:
 #   1. Restore the pipeline to the canonical test configuration.
 #   2. Invalidate the cached built_pipeline so the next Event.track() call

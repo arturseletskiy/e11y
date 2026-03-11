@@ -8,8 +8,8 @@
 
 **Known bugs covered:**
 - `SLOTrackingConfig` initializes with `@enabled = false` — contradicts "Zero-Config SLO Tracking" claim (scenario 1)
-- `E11y::SLO::Tracker.status` method does not exist — calling it raises `NoMethodError` (scenario 2)
 - `E11y::Middleware::EventSlo` is NOT included in the default pipeline — event-level SLO never fires without manual opt-in (scenario 5)
+
 - `E11y::SLO::Tracker.track_http_request` and `track_background_job` both guard with `enabled?` which checks `E11y.config.slo_tracking&.enabled` — so HTTP SLO also never fires with the default config
 
 ---
@@ -45,15 +45,6 @@ Feature: SLO Tracking
     # The README claims "Zero-Config SLO Tracking" but the default is disabled.
     When I inspect the default SLO tracking configuration
     Then E11y.configuration.slo_tracking.enabled should be true
-
-  @wip
-  Scenario: E11y::SLO::Tracker.status returns a Hash with endpoint data
-    # BUG: Tracker.status method does not exist — calling it raises NoMethodError
-    Given SLO tracking is enabled
-    And I send a POST request to "/orders" with order params
-    When I call E11y::SLO::Tracker.status
-    Then the result should be a Hash
-    And the Hash should contain an entry for the orders endpoint
 
   Scenario: Successful HTTP request is tracked in SLO
     Given SLO tracking is enabled
@@ -173,18 +164,6 @@ When("I inspect the default SLO tracking configuration") do
   @slo_config = E11y.config.slo_tracking
 end
 
-When("I call E11y::SLO::Tracker.status") do
-  # BUG: This method does not exist. The step captures the resulting error
-  # so the Then step can distinguish NoMethodError from a wrong return value.
-  begin
-    @tracker_status = E11y::SLO::Tracker.status
-    @tracker_status_error = nil
-  rescue NoMethodError => e
-    @tracker_status = nil
-    @tracker_status_error = e
-  end
-end
-
 # ---------------------------------------------------------------------------
 # Pipeline manipulation steps
 # ---------------------------------------------------------------------------
@@ -232,19 +211,6 @@ Then("enabling SLO tracking requires setting config.slo_tracking.enabled = true"
   expect(E11y.config.slo_tracking.enabled).to be(true)
   # Restore for subsequent scenarios
   E11y.config.slo_tracking.enabled = false
-end
-
-Then("the result should be a Hash") do
-  if @tracker_status_error
-    raise "E11y::SLO::Tracker.status raised #{@tracker_status_error.class}: #{@tracker_status_error.message}\n" \
-          "BUG: Tracker.status method does not exist."
-  end
-  expect(@tracker_status).to be_a(Hash)
-end
-
-Then("the Hash should contain an entry for the orders endpoint") do
-  expect(@tracker_status).to have_key("orders#create").or have_key(:orders_create),
-    "Expected Tracker.status to include an entry for orders#create, got: #{@tracker_status.inspect}"
 end
 
 Then("the SLO tracker should have recorded {int} request(s) for {string}") do |_count, _endpoint|
@@ -341,9 +307,8 @@ bundle exec cucumber features/slo_tracking.feature --tags "@wip"
 
 Expected results:
 - Non-`@wip` scenarios (3, 4, 6, 7): pass
-- `@wip` scenarios (1, 2, 5): fail with the documented bugs:
+- `@wip` scenarios (1, 5): fail with the documented bugs:
   - Scenario 1: `expected true, got false` — `@enabled = false` default
-  - Scenario 2: `NoMethodError: undefined method 'status' for E11y::SLO::Tracker:Module`
   - Scenario 5: `NoMethodError` or assertion failure — `EventSlo` not in default pipeline
 
 **Step 5: Commit**
@@ -382,8 +347,6 @@ The `E11y::SLO::Tracker` module does not maintain request counts in memory — i
 
 The step definitions above use a defensive pattern: they check for Yabeda availability and `pending` gracefully if it is absent, so the CI pipeline does not break on environments without the optional Yabeda dependency.
 
-### Bug reference: `E11y::SLO::Tracker.status`
-Searching `lib/e11y/slo/tracker.rb`: the module defines `track_http_request`, `track_background_job`, `enabled?`, and the private `normalize_status`. There is no `status` method. Any call to `E11y::SLO::Tracker.status` raises `NoMethodError: undefined method 'status' for E11y::SLO::Tracker:Module`.
 
 ### Bug reference: Default pipeline (from `lib/e11y.rb` `configure_default_pipeline`)
 ```ruby
