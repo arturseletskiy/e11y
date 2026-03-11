@@ -127,16 +127,27 @@ RSpec.configure do |config|
       config.rate_limiting.enabled = false if config.respond_to?(:rate_limiting)
     end
 
+    # Capture canonical pipeline for restoration between examples (like Cucumber hooks.rb)
+    # Prevents cross-spec pollution when specs mutate the pipeline (sampling, versioning, etc.)
+    Object.const_set(:INITIAL_PIPELINE_MIDDLEWARES, E11y.config.pipeline.middlewares.dup.freeze) \
+      unless defined?(INITIAL_PIPELINE_MIDDLEWARES)
+
     # NOTE: E11y instrumentation is set up automatically by Railtie initializers
     # DO NOT call setup methods here or it will cause double instrumentation!
     # The initializers run as part of Rails.application.initialize! above.
   end
 
   config.before do |example|
-    # Clear E11y adapter events before each test (but don't reset config!)
+    # Clear E11y adapter events and restore pipeline before each integration test
     if example.metadata[:integration] || %i[integration request].include?(example.metadata[:type])
       adapter = E11y.config.adapters[:memory]
       adapter.clear! if adapter.respond_to?(:clear!)
+
+      # Restore pipeline to prevent cross-spec pollution (like Cucumber hooks.rb)
+      if defined?(INITIAL_PIPELINE_MIDDLEWARES)
+        E11y.config.pipeline.instance_variable_set(:@middlewares, INITIAL_PIPELINE_MIDDLEWARES.dup)
+      end
+      E11y.config.instance_variable_set(:@built_pipeline, nil)
     end
   end
 

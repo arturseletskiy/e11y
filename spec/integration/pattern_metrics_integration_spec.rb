@@ -51,6 +51,17 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
 
   before do
     memory_adapter.clear!
+
+    # Ensure Yabeda.e11y group exists (recreate if destroyed by Yabeda.reset! in other specs)
+    if defined?(Yabeda) && !Yabeda.respond_to?(:e11y) && !Yabeda.configured?
+      Yabeda.configure do
+        group :e11y do
+          # Empty - metrics registered by adapter
+        end
+      end
+      Yabeda.configure!
+    end
+
     # Reset Yabeda metric values (not definitions) for test isolation
     reset_yabeda_values!
 

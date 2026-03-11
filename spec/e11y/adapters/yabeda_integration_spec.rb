@@ -25,16 +25,20 @@ RSpec.describe E11y::Adapters::Yabeda, :integration do
   let(:adapter) { described_class.new(auto_register: false) }
 
   before do
-    # Clear Yabeda configuration
+    # Clear Yabeda configuration for this spec's isolation
     Yabeda.reset!
 
-    # Clear E11y registry
+    # Save registry state (may contain event class metrics from Rails specs)
+    @saved_registry = registry.all.dup
     registry.clear!
   end
 
   after do
-    Yabeda.reset!
+    # DON'T call Yabeda.reset! — it destroys the :e11y group and breaks subsequent specs
+    # (pattern_metrics, slo_tracking, high_cardinality, etc.)
+    # Restore registry so other specs keep their event class metrics
     registry.clear!
+    @saved_registry&.each { |m| registry.register(m) }
   end
 
   describe "real Yabeda integration" do

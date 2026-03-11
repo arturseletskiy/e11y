@@ -1,9 +1,12 @@
 # frozen_string_literal: true
 
+require "ostruct"
+
 # Check if OpenTelemetry SDK is available
 begin
   require "opentelemetry/sdk"
   require "opentelemetry/logs"
+  require "opentelemetry-logs-sdk" # Provides OpenTelemetry::SDK::Logs::LoggerProvider
 rescue LoadError
   raise LoadError, <<~ERROR
     OpenTelemetry SDK not available!
@@ -11,7 +14,8 @@ rescue LoadError
     To use E11y::Adapters::OTelLogs, add to your Gemfile:
 
       gem 'opentelemetry-sdk'
-      gem 'opentelemetry-logs'
+      gem 'opentelemetry-logs-api'
+      gem 'opentelemetry-logs-sdk'
 
     Then run: bundle install
   ERROR
@@ -84,11 +88,14 @@ module E11y
       # @param service_name [String] Service name for OTel (default: from config)
       # @param baggage_allowlist [Array<Symbol>] Allowlist of safe baggage keys
       # @param max_attributes [Integer] Max attributes per log (cardinality protection)
-      def initialize(service_name: nil, baggage_allowlist: DEFAULT_BAGGAGE_ALLOWLIST, max_attributes: 50, **)
+      # @param endpoint [String, nil] OTLP endpoint (e.g. http://localhost:4318/v1/logs).
+      #   When set, logs are exported to OTel Collector. Default: in-process only.
+      def initialize(service_name: nil, baggage_allowlist: DEFAULT_BAGGAGE_ALLOWLIST, max_attributes: 50, endpoint: nil, **)
         super(**)
         @service_name = service_name
         @baggage_allowlist = baggage_allowlist
         @max_attributes = max_attributes
+        @endpoint = endpoint
 
         setup_logger_provider
       end
@@ -98,8 +105,8 @@ module E11y
       # @param event_data [Hash] Event payload
       # @return [Boolean] true on success
       def write(event_data)
-        log_record = build_log_record(event_data)
-        @logger.emit_log_record(log_record)
+        params = build_log_record_params(event_data)
+        @logger.on_emit(**params)
         true
       rescue StandardError => e
         warn "[E11y::OTelLogs] Failed to write event: #{e.message}"
@@ -130,18 +137,31 @@ module E11y
       # Setup OTel Logger Provider
       def setup_logger_provider
         @logger_provider = OpenTelemetry::SDK::Logs::LoggerProvider.new
+
+        # Add OTLP exporter when endpoint configured (sends to OTel Collector)
+        if @endpoint
+          require "opentelemetry-exporter-otlp-logs"
+          exporter = OpenTelemetry::Exporter::OTLP::Logs::LogsExporter.new(endpoint: @endpoint)
+          processor = OpenTelemetry::SDK::Logs::Export::BatchLogRecordProcessor.new(exporter)
+          @logger_provider.add_log_record_processor(processor)
+        end
+
         @logger = @logger_provider.logger(
           name: "e11y",
           version: E11y::VERSION
         )
+      rescue LoadError => e
+        warn "[E11y::OTelLogs] OTLP export requested but opentelemetry-exporter-otlp-logs not available: #{e.message}"
+        @logger_provider ||= OpenTelemetry::SDK::Logs::LoggerProvider.new
+        @logger = @logger_provider.logger(name: "e11y", version: E11y::VERSION)
       end
 
-      # Build OTel log record from E11y event
+      # Build params for Logger#on_emit from E11y event
       #
       # @param event_data [Hash] E11y event payload
-      # @return [OpenTelemetry::SDK::Logs::LogRecord] OTel log record
-      def build_log_record(event_data)
-        OpenTelemetry::SDK::Logs::LogRecord.new(
+      # @return [Hash] Keyword args for on_emit
+      def build_log_record_params(event_data)
+        {
           timestamp: event_data[:timestamp] || Time.now.utc,
           observed_timestamp: Time.now.utc,
           severity_number: map_severity(event_data[:severity]),
@@ -151,7 +171,16 @@ module E11y
           trace_id: event_data[:trace_id],
           span_id: event_data[:span_id],
           trace_flags: nil
-        )
+        }
+      end
+
+      # Build log record struct for testing (same data as build_log_record_params)
+      #
+      # @param event_data [Hash] E11y event payload
+      # @return [OpenStruct] Struct with attributes for test assertions
+      def build_log_record(event_data)
+        params = build_log_record_params(event_data)
+        OpenStruct.new(params)
       end
 
       # Map E11y severity to OTel severity

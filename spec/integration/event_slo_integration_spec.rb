@@ -55,7 +55,7 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
   after do
     memory_adapter.clear!
     E11y::Current.reset
-    Yabeda.reset! if defined?(Yabeda)
+    # Don't Yabeda.reset! — it destroys the :e11y group and breaks subsequent specs
     # Reset pipeline to avoid state pollution between test files
     E11y.config.instance_variable_set(:@built_pipeline, nil)
   end
@@ -272,8 +272,9 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
 
       Events::TaskPending.track(task_id: 1, status: "pending")
 
-      # Should not emit metric (slo_status is nil)
-      expect(E11y::Metrics).not_to have_received(:increment)
+      # Should not emit SLO metric (slo_status is nil)
+      # Note: TraceContext/Validation/Routing may call Metrics.increment — only check SLO metric
+      expect(E11y::Metrics).not_to have_received(:increment).with(:slo_event_result_total, anything)
     end
   end
 
@@ -302,8 +303,8 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
 
       Events::HealthCheck.track(service: "api", status: "ok")
 
-      # Should not emit SLO metric
-      expect(E11y::Metrics).not_to have_received(:increment)
+      # Should not emit SLO metric (TraceContext/Validation/Routing may call increment)
+      expect(E11y::Metrics).not_to have_received(:increment).with(:slo_event_result_total, anything)
 
       # Event should still be stored (after Versioning middleware, event_name is normalized)
       all_events = memory_adapter.events
@@ -342,8 +343,8 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
 
       Events::DisabledSLOEvent.track(data: "test")
 
-      # Should not emit SLO metric
-      expect(E11y::Metrics).not_to have_received(:increment)
+      # Should not emit SLO metric (TraceContext/Validation/Routing may call increment)
+      expect(E11y::Metrics).not_to have_received(:increment).with(:slo_event_result_total, anything)
 
       # Event should still be stored (after Versioning middleware, event_name is normalized)
       all_events = memory_adapter.events
@@ -426,8 +427,10 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
       end
       stub_const("Events::MetricErrorEvent", slo_event_class)
 
-      # Mock Metrics.increment to raise error
-      allow(E11y::Metrics).to receive(:increment).and_raise(StandardError.new("Metric error"))
+      # Mock Metrics.increment to raise only when EventSLO calls it (TraceContext runs first)
+      allow(E11y::Metrics).to receive(:increment).and_call_original
+      allow(E11y::Metrics).to receive(:increment).with(:slo_event_result_total, anything)
+        .and_raise(StandardError.new("Metric error"))
 
       # Should not raise error (graceful handling)
       expect do

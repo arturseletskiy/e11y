@@ -59,6 +59,7 @@ group :integration do
   gem "sidekiq", "~> 7.0" # Sidekiq for job processing tests
 
   # OpenTelemetry SDK for OTel adapter tests
+  gem "opentelemetry-exporter-otlp-logs", "~> 0.2" # OTLP export to Collector
   gem "opentelemetry-logs-api", "~> 0.1"
   gem "opentelemetry-logs-sdk", "~> 0.1"
   gem "opentelemetry-sdk", "~> 1.0"
@@ -71,6 +72,9 @@ group :integration do
   # HTTP client for Loki adapter tests
   gem "faraday", "~> 2.0" # HTTP client library
   gem "faraday-retry", "~> 2.0" # Retry middleware for Faraday
+
+  # Memory profiling for high cardinality tests
+  gem "memory_profiler", "~> 1.0"
 
   # Additional Rails dependencies
   gem "database_cleaner-active_record", "~> 2.0" # DB cleanup between tests

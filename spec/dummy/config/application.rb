@@ -55,7 +55,7 @@ unless $e11y_dummy_configured
     config.pipeline.use E11y::Middleware::Sampling,
                         default_sample_rate: 1.0,
                         trace_aware: false,
-                        severity_rates: { debug: 1.0, info: 1.0, warn: 1.0, error: 1.0, fatal: 1.0 }
+                        severity_rates: { debug: 1.0, info: 1.0, success: 1.0, warn: 1.0, error: 1.0, fatal: 1.0 }
     config.pipeline.use E11y::Middleware::Routing
   end
   $e11y_dummy_configured = true

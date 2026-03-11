@@ -8,6 +8,7 @@ RSpec.describe "Audit Event Routing Validation", :integration do
   let(:audit_event_class) do
     Class.new(E11y::Event::Base) do
       audit_event true
+      adapters [] # Force routing-rules path (no severity-based adapters)
 
       schema do
         required(:user_id).filled(:integer)

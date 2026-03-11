@@ -62,6 +62,9 @@ RSpec.describe "Rate Limiting Integration", :integration do
 
     # Clear cached pipeline so it rebuilds with new middleware
     E11y.config.instance_variable_set(:@built_pipeline, nil)
+
+    # Route events to memory adapter (TestEvent uses adapters [] → fallback)
+    E11y.config.fallback_adapters = [:memory]
   end
 
   after do
