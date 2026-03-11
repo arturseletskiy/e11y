@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "active_support/parameter_filter"
+
 module E11y
   module Middleware
     # PII Filter Middleware - 3-Tier Strategy
@@ -285,12 +287,18 @@ module E11y
       # Get Rails parameter filter
       #
       # Uses Rails.application.config.filter_parameters for PII filtering.
+      # When Rails is not loaded (e.g. unit tests), uses empty filter (no-op).
       #
       # @return [ActiveSupport::ParameterFilter] Parameter filter
       def parameter_filter
-        @parameter_filter ||= ActiveSupport::ParameterFilter.new(
+        return @parameter_filter if defined?(@parameter_filter) && !@parameter_filter.nil?
+
+        filters = if defined?(Rails) && Rails.application
           Rails.application.config.filter_parameters
-        )
+        else
+          []
+        end
+        @parameter_filter = ActiveSupport::ParameterFilter.new(filters)
       end
     end
     # rubocop:enable Metrics/ClassLength

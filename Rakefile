@@ -49,7 +49,7 @@ namespace :spec do
     sh "bundle exec rspec spec/e11y/railtie_integration_spec.rb --tag railtie_integration"
   end
 
-  desc "Run all tests (unit + integration + railtie, ~1729 examples)"
+  desc "Run all tests (unit + integration + railtie + cucumber, ~1729 examples)"
   task :all do
     puts "\n#{'=' * 80}"
     puts "Running UNIT tests (spec/e11y + top-level specs)..."
@@ -65,6 +65,15 @@ namespace :spec do
     puts "Running RAILTIE tests (Rails initialization)..."
     puts "#{'=' * 80}\n"
     Rake::Task["spec:railtie"].invoke
+
+    if Rake::Task.task_defined?("cucumber:passing")
+      puts "\n#{'=' * 80}"
+      puts "Running CUCUMBER tests (features/, exclude @wip)..."
+      puts "#{'=' * 80}\n"
+      Rake::Task["cucumber:passing"].invoke
+    else
+      puts "\n⚠️  Skipping Cucumber (bundle install --with development)"
+    end
 
     puts "\n#{'=' * 80}"
     puts "✅ All test suites completed!"
@@ -86,14 +95,17 @@ namespace :spec do
     sh "bundle exec rspec spec/e11y --tag benchmark"
   end
 
-  desc "Run ALL tests including benchmarks (very slow)"
+  desc "Run ALL tests including benchmarks and cucumber (very slow)"
   task :everything do
     puts "\n#{'=' * 80}"
-    puts "Running ALL tests (unit + integration + railtie + benchmarks)"
+    puts "Running ALL tests (unit + integration + railtie + cucumber + benchmarks)"
     puts "#{'=' * 80}\n"
     Rake::Task["spec:unit"].invoke
     Rake::Task["spec:integration"].invoke
     Rake::Task["spec:railtie"].invoke
+    if Rake::Task.task_defined?("cucumber:passing")
+      Rake::Task["cucumber:passing"].invoke
+    end
     Rake::Task["spec:benchmark"].invoke
 
     puts "\n#{'=' * 80}"
