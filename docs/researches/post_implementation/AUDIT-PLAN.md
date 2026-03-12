@@ -471,7 +471,7 @@ Detailed verification steps for each document (5-10 checks per doc)
 ---
 
 #### AUDIT-024: UC-003 Pattern-Based Metrics
-**Document:** `docs/use_cases/UC-003-pattern-based-metrics.md`  
+**Document:** `docs/use_cases/UC-003-event-metrics.md`  
 **Complexity:** 7/10 (Metrics automation)  
 **Estimated Time:** 2-3 hours
 

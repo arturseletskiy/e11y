@@ -1,4 +1,4 @@
-# UC-003: Pattern-Based Metrics - Summary
+# UC-003: Event Metrics - Summary
 
 **Document:** UC-003  
 **Created:** 2026-01-15  
@@ -23,17 +23,16 @@
 
 **Problem:** Manual metric definitions duplicate event tracking, no auto-metrics, boilerplate code.
 
-**Solution:** Pattern-based auto-metrics from events - `counter_for(pattern: 'order.*')`, `histogram_for(pattern: '*.paid', value: amount)`, zero duplication.
+**Solution:** Event-level `metrics do` in event classes.
 
 ---
 
 ## 📝 Key Requirements
 
 ### Must Have
-- [x] Pattern-based auto-metrics (counter, histogram, gauge, success_rate)
-- [x] 100% coverage (all events auto-metric-ed)
+- [x] Event-level metrics (counter, histogram in `metrics do` block)
 - [x] <0.1ms overhead per event
-- [x] Yabeda integration (default metrics backend)
+- [x] Yabeda integration (via Yabeda adapter)
 
 ---
 
@@ -51,7 +50,7 @@
 
 ## 🏷️ Tags
 
-`#core` `#metrics` `#pattern-based` `#yabeda` `#auto-metrics`
+`#core` `#metrics`  `#yabeda` `#auto-metrics`
 
 ---
 

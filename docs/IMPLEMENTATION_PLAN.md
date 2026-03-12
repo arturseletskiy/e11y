@@ -416,7 +416,7 @@ PHASE 5: SCALE & OPTIMIZATION (Weeks 21-26)
      spec.email = ["team@example.com"]
      
      spec.summary = "Event-driven observability gem for Rails 8+"
-     spec.description = "Structured business events with request-scoped buffering, pattern-based metrics, and zero-config SLO tracking"
+     spec.description = "Structured business events with request-scoped buffering, event metrics, and zero-config SLO tracking"
      spec.homepage = "https://github.com/yourorg/e11y"
      spec.license = "MIT"
      spec.required_ruby_version = ">= 3.2.0"
@@ -918,7 +918,7 @@ PHASE 5: SCALE & OPTIMIZATION (Weeks 21-26)
 ### L2.6: Metrics & Yabeda Integration 🟠
 
 **ADR:** ADR-002 (Metrics & Yabeda Integration)  
-**UC:** UC-003 (Pattern-Based Metrics), UC-013 (High Cardinality Protection)  
+**UC:** UC-003 (Event Metrics), UC-013 (High Cardinality Protection)  
 **Depends On:** L2.1 (Event::Base), L2.3 (Middleware Pipeline)  
 **Parallelizable:** ⚙️ Stream C (1-2 devs, parallel to Stream A & B)
 
@@ -950,7 +950,7 @@ PHASE 5: SCALE & OPTIMIZATION (Weeks 21-26)
 **Verification (L6):**
 - Unit tests: `spec/e11y/metrics/yabeda_integration_spec.rb`
 - Integration tests: Full metric collection pipeline
-- UC Compliance: UC-003 §3 (Pattern-Based Metrics)
+- UC Compliance: UC-003 §3 (Event Metrics)
 - ADR Compliance: ADR-002 §3 (Yabeda Integration)
 
 #### L3.6.2: Cardinality Protection
@@ -1925,7 +1925,7 @@ end
 |----|-------|-----------|--------------|
 | UC-001 | Phase 1 | L2.2 | Request-scoped buffer tests |
 | UC-002 | Phase 1 | L2.1 | Event tracking tests |
-| UC-003 | Phase 2 | L2.6 | Pattern-based metrics tests |
+| UC-003 | Phase 2 | L2.6 | Event metrics tests |
 | UC-004 | Phase 4 | L2.14 | Zero-config SLO tests |
 | UC-005 | Phase 2 | L2.5 | Sentry adapter tests |
 | UC-006 | Phase 3 | L2.9 | Trace context tests |

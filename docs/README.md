@@ -2,7 +2,7 @@
 
 > **E11y** = **e**asy t**e**lemetry (11 букв между 'e' и 'y', как i18n, l10n)
 
-Production-ready Ruby gem для структурированных бизнес-событий с request-scoped buffering, pattern-based метриками и zero-config SLO tracking.
+Production-ready Ruby gem для структурированных бизнес-событий с request-scoped buffering, event metrics и zero-config SLO tracking.
 
 ---
 
@@ -72,7 +72,7 @@ Production-ready Ruby gem для структурированных бизнес
 - **[Use Cases Index](./use_cases/README.md)** - All use cases by category
 - **[UC-001: Request-Scoped Debug Buffering](./use_cases/UC-001-request-scoped-debug-buffering.md)** ⭐ Killer feature
 - **[UC-002: Business Event Tracking](./use_cases/UC-002-business-event-tracking.md)** ⭐ Core feature
-- **[UC-003: Pattern-Based Metrics](./use_cases/UC-003-pattern-based-metrics.md)**
+- **[UC-003: Event Metrics](./use_cases/UC-003-event-metrics.md)**
 - **[UC-004: Zero-Config SLO Tracking](./use_cases/UC-004-zero-config-slo-tracking.md)** ⭐ Killer feature
 - **[UC-005: PII Filtering](./use_cases/UC-005-pii-filtering.md)**
 - **[UC-006-016: Additional Use Cases](./use_cases/README.md)**
@@ -231,7 +231,7 @@ Production-ready Ruby gem для структурированных бизнес
 
 - **Event DSL:** [Event API](./api/event-api.md), [Design-01](./design/01-event-layer.md)
 - **Request-Scoped Buffering:** [UC-001](./use_cases/UC-001-request-scoped-debug-buffering.md), [Design-03](./design/03-buffer-layer.md)
-- **Pattern-Based Metrics:** [UC-003](./use_cases/UC-003-pattern-based-metrics.md), [Design-04](./design/04-metrics-layer.md)
+- **Event Metrics:** [UC-003](./use_cases/UC-003-event-metrics.md), [Design-04](./design/04-metrics-layer.md)
 - **SLO Tracking:** [UC-004](./use_cases/UC-004-zero-config-slo-tracking.md), [Design-08](./design/08-slo-tracking.md)
 - **PII Filtering:** [UC-005](./use_cases/UC-005-pii-filtering.md), [Design-02](./design/02-processing-layer.md)
 - **OpenTelemetry:** [Guide](./guides/opentelemetry-integration.md), [Design-07](./design/07-opentelemetry-integration.md)

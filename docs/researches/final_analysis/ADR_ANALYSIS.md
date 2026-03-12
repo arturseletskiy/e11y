@@ -69,7 +69,7 @@
 
 | ADR ID | Decision | Contradictions | Key Trade-offs |
 |--------|----------|----------------|----------------|
-| **ADR-002** | Yabeda default + pattern-based auto-metrics + 4-layer cardinality defense | 0 | C03 Yabeda vs. OTel choice (can't use both efficiently), 4-layer defense config complexity |
+| **ADR-002** | Yabeda default + event-level metrics + 4-layer cardinality defense | 0 | C03 Yabeda vs. OTel choice (can't use both efficiently), 4-layer defense config complexity |
 | **ADR-003** | Zero-config HTTP/Job SLO + multi-window burn rate alerts | 0 | Per-endpoint SLO config complexity, multi-window alerts can be noisy |
 | **ADR-014** | Event-based SLO + C11 stratified sampling correction + app-wide health score | 0 | C11 correction calculation overhead, app-wide aggregation complexity |
 

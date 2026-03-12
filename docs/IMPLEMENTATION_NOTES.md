@@ -663,7 +663,7 @@ Original ADR-002 specified 4-layer defense with both denylist AND allowlist. All
 - ✅ **Performance**: Zero overhead when no metrics match
 
 **Code Changes**:
-- `lib/e11y/metrics/registry.rb`: New file, pattern-based metric registry
+- `lib/e11y/metrics/registry.rb`: New file, metric registry
 - `lib/e11y/metrics/cardinality_protection.rb`: New file, 3-layer protection (simplified)
 - `lib/e11y/middleware/metrics.rb`: New file, metrics middleware
 - `lib/e11y/metrics.rb`: New file, module definition

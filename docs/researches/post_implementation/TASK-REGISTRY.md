@@ -217,7 +217,7 @@
 
 #### AUDIT-024: UC-003 Pattern-Based Metrics
 **Task ID:** Level 3 subtask of Phase 5  
-**Document:** `docs/use_cases/UC-003-pattern-based-metrics.md`  
+**Document:** `docs/use_cases/UC-003-event-metrics.md`  
 **Complexity:** 7/10  
 **Subtasks:** 3 (Pattern Matching, Field Extraction, Performance)
 

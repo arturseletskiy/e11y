@@ -12,7 +12,7 @@ rescue LoadError => e
         "Original error: #{e.message}"
 end
 
-# Pattern-based metrics integration tests for UC-003
+# Event metrics integration tests for UC-003
 # Tests pattern matching, label extraction, value extraction, and Yabeda integration
 #
 # Scenarios:

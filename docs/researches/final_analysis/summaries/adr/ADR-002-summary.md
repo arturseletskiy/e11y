@@ -22,7 +22,7 @@
 
 ## 🎯 Decision Statement
 
-**Decision:** E11y uses **Yabeda as default metrics backend** (C03: OTel metrics optional to avoid double overhead), **pattern-based auto-metrics** (counter/histogram/gauge/success_rate from events), **4-layer cardinality defense** (denylist, allowlist, per-metric limits, dynamic actions), **C04 universal protection** (Yabeda, OTel, Loki).
+**Decision:** E11y uses **Yabeda as default metrics backend** (C03: OTel metrics optional to avoid double overhead), **event-level metrics** (counter/histogram/gauge/success_rate from events), **4-layer cardinality defense** (denylist, allowlist, per-metric limits, dynamic actions), **C04 universal protection** (Yabeda, OTel, Loki).
 
 **Context:**
 Manual metric definitions duplicate event tracking. High cardinality (user_id labels) causes metrics explosion ($68k/month). Need auto-metrics with cardinality protection.

@@ -28,7 +28,7 @@ Unstructured Rails.logger logs are hard to parse/query, manual metrics tracking 
 Ruby/Rails Developers
 
 **Expected outcome:**
-Structured events with schema validation, automatic metrics generation (pattern-based), adapter routing (global registry + per-event override), performance SLOs (<1ms p99, <100MB memory, 1000 events/sec).
+Structured events with schema validation, event metrics, adapter routing (global registry + per-event override), performance SLOs (<1ms p99, <100MB memory, 1000 events/sec).
 
 ---
 
@@ -55,10 +55,6 @@ Structured events with schema validation, automatic metrics generation (pattern-
   - Staging: `[:loki]`
   - Development: `[:console]` (colorized output)
   - Test: `[:memory]` (in-memory adapter for testing)
-- [x] **Pattern-Based Auto-Metrics:**
-  - `counter_for(pattern:, name:, tags:)` - Auto-counter from event pattern
-  - `histogram_for(pattern:, value:, tags:, buckets:)` - Auto-histogram
-  - `success_rate_for(pattern:, name:)` - Auto success rate (from :success/:error events)
 - [x] **Custom Middleware Extension Points:**
   - Extend pipeline with custom middleware (tenant isolation, A/B test tracking, custom rate limiting)
   - Order matters (see ADR-015: enrichment → validation → security → business logic → routing)
@@ -113,7 +109,7 @@ Traditional Rails.logger approach:
 
 E11y solves this with:
 - ✅ Structured events (JSON) → queryable
-- ✅ Auto-metrics (pattern-based) → zero duplication
+- ✅ Event metrics → zero duplication
 - ✅ Schema validation (Dry::Schema) → catch typos at boot time
 - ✅ Type safety → fail fast
 
@@ -217,7 +213,7 @@ end"
 - Environment-specific routing adds conditional logic (case Rails.env)
 
 **Estimated Implementation Time:**
-- Junior dev: 5-8 days (event DSL, adapter registry, pattern-based metrics, testing)
+- Junior dev: 5-8 days (event DSL, adapter registry, event metrics, testing)
 - Senior dev: 3-5 days (familiar with Rails, Dry::Schema)
 
 ---
@@ -226,7 +222,7 @@ end"
 
 ### Related Documentation
 - [UC-001: Request-Scoped Debug Buffering](./UC-001-request-scoped-debug-buffering.md)
-- [UC-003: Pattern-Based Metrics](./UC-003-pattern-based-metrics.md)
+- [UC-003: Event Metrics](../../../../use_cases/UC-003-event-metrics.md)
 - [UC-007: PII Filtering](./UC-007-pii-filtering.md)
 - [ADR-001 Section 7: Extension Points](../ADR-001-architecture.md#7-extension-points)
 - [ADR-001 Section 8: Performance Requirements](../ADR-001-architecture.md#8-performance-requirements)
@@ -251,7 +247,7 @@ end"
 
 ## 🏷️ Tags
 
-`#critical` `#core` `#event-dsl` `#schema-validation` `#adapter-routing` `#global-registry` `#pattern-based-metrics` `#performance-slos`
+`#critical` `#core` `#event-dsl` `#schema-validation` `#adapter-routing` `#global-registry`  `#performance-slos`
 
 ---
 

@@ -444,7 +444,7 @@ counter_for pattern: 'order.paid',
 ## 📚 References
 
 ### Related Documentation
-- [UC-003: Pattern-Based Metrics](./UC-003-pattern-based-metrics.md) - Auto-generate metrics with cardinality protection
+- [UC-003: Event Metrics](../../../../use_cases/UC-003-event-metrics.md) - Metrics in event classes
 - [UC-008: OpenTelemetry Integration](./UC-008-opentelemetry-integration.md) - OTLP cardinality protection (C04 resolution)
 - [UC-015: Cost Optimization](./UC-015-cost-optimization.md) - Reduce observability costs
 - [ADR-002 Section 4.1: Four-Layer Defense](../ADR-002-metrics-yabeda.md#41-four-layer-defense) - Architecture

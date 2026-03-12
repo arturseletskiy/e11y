@@ -127,25 +127,7 @@ C4Context
 
 **Configuration:**
 
-```ruby
-# config/initializers/e11y.rb
-E11y.configure do |config|
-  # Option 1: Yabeda only (DEFAULT, recommended for Rails)
-  config.metrics do
-    backend :yabeda  # Prometheus via Yabeda
-  end
-  
-  # Option 2: OpenTelemetry only (for OTLP backends)
-  # config.metrics do
-  #   backend :opentelemetry  # OTLP via OTel SDK
-  # end
-  
-  # Option 3: Both (for migration period ONLY)
-  # config.metrics do
-  #   backend [:yabeda, :opentelemetry]  # ⚠️ DOUBLE OVERHEAD!
-  # end
-end
-```
+Metrics are emitted via Yabeda adapter when events with `metrics do` are tracked. Register Yabeda adapter in `config.adapters`.
 
 **Metrics Adapter Pattern:**
 

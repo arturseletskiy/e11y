@@ -415,7 +415,7 @@ end
 ## 📚 References
 
 - **UC-003 Analysis:** `docs/analysis/UC-003-PATTERN-BASED-METRICS-ANALYSIS.md`
-- **UC-003 Use Case:** `docs/use_cases/UC-003-pattern-based-metrics.md`
+- **UC-003 Use Case:** `docs/use_cases/UC-003-event-metrics.md`
 - **Integration Tests:** `spec/integration/pattern_metrics_integration_spec.rb` ✅ (All 6 scenarios implemented)
 - **Registry Implementation:** `lib/e11y/metrics/registry.rb`
 - **Metrics DSL:** `lib/e11y/event/base.rb`

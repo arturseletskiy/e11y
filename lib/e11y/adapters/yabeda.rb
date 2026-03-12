@@ -43,7 +43,7 @@ module E11y
     #   # Events automatically update metrics via middleware
     #
     # @see ADR-002 Metrics & Yabeda Integration
-    # @see UC-003 Pattern-Based Metrics
+    # @see UC-003 Event Metrics
     # rubocop:disable Metrics/ClassLength
     # Yabeda adapter contains metrics registration and update logic as cohesive unit
     class Yabeda < Base

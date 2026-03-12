@@ -766,7 +766,7 @@ module E11y
           audit_event? && signing_enabled?
         end
 
-        # === Metrics DSL (ADR-002, UC-003) ===
+        # === Metrics DSL (ADR-002, UC-003 Event Metrics) ===
 
         # Define metrics for this event
         #

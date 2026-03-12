@@ -384,19 +384,8 @@ tracer.add_event('e11y.event.tracked', {
 **Make Metrics Backend Configurable:**
 
 ```ruby
-# Config: Choose ONE metrics backend
-E11y.configure do |config|
-config.metrics do
-    # Option 1: Yabeda (Ruby-native, Prometheus)
-    backend :yabeda  # Default for Ruby apps
-    
-    # Option 2: OpenTelemetry (vendor-neutral, OTLP)
-    # backend :opentelemetry
-    
-    # Option 3: Both (for migration period)
-    # backend [:yabeda, :opentelemetry]  # Double overhead!
-  end
-end
+# Metrics: register Yabeda adapter in config.adapters.
+# Define metrics in event classes via metrics do block.
 ```
 
 **Alternative Solution (Metrics Adapter Pattern):**

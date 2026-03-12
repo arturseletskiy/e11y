@@ -539,8 +539,6 @@ Events::OrderPaid.track(order_id: '123', amount: 99, currency: 'USD')
 mount Yabeda::Prometheus::Exporter => '/metrics'
 ```
 
-> 🚧 **Roadmap:** Pattern-based metrics (`counter_for pattern: '*'`, `histogram_for`,
-> `success_rate_for`) — planned for future releases.
 
 ---
 
@@ -807,7 +805,6 @@ The following features are **documented in ADRs** but not yet implemented:
 | `rails g e11y:install` — generator | — |
 | `rails g e11y:grafana_dashboard` | ADR-003 |
 | `rails g e11y:prometheus_alerts` | ADR-003 |
-| `config.metrics do counter_for pattern: '*' end` — pattern-based metrics | ADR-002, UC-003 |
 | `config.pii_filter do ... end` — global PII DSL | ADR-006 |
 | `config.slo do controller ... job ... end` — per-controller SLO config | ADR-003 |
 | Per-event rate limiting (`rate_limit` DSL on event class) | UC-011 |

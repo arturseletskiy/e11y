@@ -23,7 +23,7 @@
 | UC ID | Name | Priority | Contradictions | Key Focus |
 |-------|------|----------|----------------|-----------|
 | **UC-001** | Request-Scoped Debug Buffering | Critical | 3 | Dual-buffer architecture, flush-on-error, PII filtering order |
-| **UC-002** | Business Event Tracking | Critical | 2 | Event-level DSL, global adapter registry, pattern-based metrics |
+| **UC-002** | Business Event Tracking | Critical | 2 | Event-level DSL, global adapter registry, event metrics |
 | **UC-003** | Pattern-Based Metrics | Important | 0 | Auto-metrics from events, Yabeda integration, <0.1ms overhead |
 | **UC-004** | Zero-Config SLO Tracking | Important | 0 | HTTP/Job SLO (99.9%/99.5%), multi-window burn rate alerts |
 
@@ -153,7 +153,7 @@ UC-005, UC-016, UC-018
 - **Critical:** Wrong order = PII leak!
 
 ### UC-002 → UC-003 (Auto-Metrics)
-- UC-002 event tracking triggers UC-003 pattern-based metrics
+- UC-002 event tracking triggers UC-003 event metrics
 - Zero duplication (single Events::Track call)
 
 ### UC-013 → UC-014 (Cardinality + Sampling)

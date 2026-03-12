@@ -32,7 +32,7 @@
 7. ⚠️ Metric inheritance (metrics inherited from base classes) - May not be tested explicitly
 
 **Test Files:**
-- `spec/integration/pattern_metrics_integration_spec.rb` - Yabeda integration via pattern-based metrics (6 scenarios)
+- `spec/integration/pattern_metrics_integration_spec.rb` - Yabeda integration via event metrics (6 scenarios)
 - `spec/integration/high_cardinality_protection_integration_spec.rb` - Cardinality protection (8 scenarios)
 - `spec/e11y/adapters/yabeda_integration_spec.rb` - Unit-level Yabeda adapter tests (if exists)
 
@@ -464,7 +464,7 @@ end
 ## 📚 9. References
 
 - **ADR-002:** `docs/ADR-002-metrics-yabeda.md`
-- **UC-003:** `docs/use_cases/UC-003-pattern-based-metrics.md`
+- **UC-003:** `docs/use_cases/UC-003-event-metrics.md`
 - **Yabeda Adapter:** `lib/e11y/adapters/yabeda.rb`
 - **Metrics Registry:** `lib/e11y/metrics/registry.rb`
 - **AUDIT-020:** `docs/researches/post_implementation/AUDIT-020-ADR-002-YABEDA-INTEGRATION.md`

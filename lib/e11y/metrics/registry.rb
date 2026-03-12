@@ -6,7 +6,7 @@ module E11y
   module Metrics
     # Registry for metric configurations.
     #
-    # Stores metric definitions and provides pattern-based matching.
+    # Stores metric definitions and provides event-name matching.
     # This is a singleton class - use Registry.instance to access it.
     # All metrics (global, event-level, preset) are registered here for validation.
     #

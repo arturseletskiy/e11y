@@ -720,7 +720,7 @@ end
 ## 📚 Related Use Cases
 
 - **[UC-002: Business Event Tracking](./UC-002-business-event-tracking.md)** - Events vs SLO metrics
-- **[UC-003: Pattern-Based Metrics](./UC-003-pattern-based-metrics.md)** - Custom metrics
+- **[UC-003: Event Metrics](./UC-003-event-metrics.md)** - Custom metrics
 
 ---
 
