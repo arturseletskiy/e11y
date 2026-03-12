@@ -444,7 +444,8 @@ begin
 
     desc "Run passing Cucumber scenarios (exclude @wip)"
     Cucumber::Rake::Task.new(:passing) do |t|
-      t.cucumber_opts = ["--tags", "not @wip", "--format", "progress", "features/"]
+      # Quote tag expression so shell keeps "not @wip" as one arg (Cucumber::Rake::Task uses cmd.join(' '))
+      t.cucumber_opts = ["--tags", '"not @wip"', "--format", "progress", "features/"]
     end
   end
 

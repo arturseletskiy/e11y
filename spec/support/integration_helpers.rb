@@ -102,6 +102,22 @@ module IntegrationHelpers
     raise message
   end
 
+  # Skip example if service is not available (graceful skip vs require_service! which raises)
+  #
+  # @param service_name [String] Name of service (for skip message)
+  # @param url [String] Service URL to check
+  # @param env_var [String] Environment variable name (optional)
+  # @param health_path [String] Health check path (optional)
+  # @return [void] Skips the example if service unavailable
+  def skip_unless_service!(service_name, url: nil, env_var: nil, health_path: nil)
+    url ||= ENV.fetch(env_var, nil) if env_var
+    health_path ||= SERVICE_HEALTH_PATHS[service_name.downcase]
+
+    return if url && service_available?(url, health_path: health_path)
+
+    skip "Service '#{service_name}' not available at #{url}. Start with: docker compose up -d #{service_name.downcase}"
+  end
+
   # Check if we're running in CI environment
   #
   # @return [Boolean] true if CI environment detected
