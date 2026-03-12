@@ -67,6 +67,7 @@ module E11y
         return unless config.fetch(:auto_register, true)
 
         register_metrics_from_registry!
+        register_middleware_metrics!
 
         # Apply configuration in non-Rails environments (Rails does this automatically)
         # In tests, Yabeda.configure! should be called explicitly in before blocks
@@ -108,9 +109,10 @@ module E11y
 
       # Check if adapter is healthy
       #
-      # @return [Boolean] true if Yabeda is available and configured
+      # @return [Boolean] true if Yabeda is available, configured, and e11y group exists
       def healthy?
         return false unless defined?(::Yabeda)
+        return false unless ::Yabeda.respond_to?(:e11y)
 
         ::Yabeda.configured?
       rescue StandardError
@@ -151,8 +153,11 @@ module E11y
         # Register metric if not exists
         register_metric_if_needed(name, :counter, safe_labels.keys)
 
-        # Update Yabeda metric
-        ::Yabeda.e11y.send(name).increment(safe_labels, by: value)
+        # Update Yabeda metric (guard against nil when metric wasn't registered, e.g. after configure!)
+        metric = ::Yabeda.e11y.send(name)
+        return unless metric
+
+        metric.increment(safe_labels, by: value)
       rescue StandardError => e
         E11y.logger.warn("Failed to increment Yabeda metric #{name}: #{e.message}")
       end
@@ -173,8 +178,11 @@ module E11y
         # Register metric if not exists
         register_metric_if_needed(name, :histogram, safe_labels.keys, buckets: buckets)
 
-        # Update Yabeda metric
-        ::Yabeda.e11y.send(name).measure(safe_labels, value)
+        # Update Yabeda metric (guard against nil when metric wasn't registered)
+        metric = ::Yabeda.e11y.send(name)
+        return unless metric
+
+        metric.measure(safe_labels, value)
       rescue StandardError => e
         E11y.logger.warn("Failed to observe Yabeda histogram #{name}: #{e.message}")
       end
@@ -194,8 +202,11 @@ module E11y
         # Register metric if not exists
         register_metric_if_needed(name, :gauge, safe_labels.keys)
 
-        # Update Yabeda metric
-        ::Yabeda.e11y.send(name).set(safe_labels, value)
+        # Update Yabeda metric (guard against nil when metric wasn't registered)
+        metric = ::Yabeda.e11y.send(name)
+        return unless metric
+
+        metric.set(safe_labels, value)
       rescue StandardError => e
         E11y.logger.warn("Failed to set Yabeda gauge #{name}: #{e.message}")
       end
@@ -278,6 +289,33 @@ module E11y
         end
       end
 
+      # Pre-register middleware self-monitoring metrics.
+      #
+      # These metrics are used by TraceContext, Validation, and Routing middleware.
+      # Must be registered before Yabeda.configure! is called (e.g. in app initializers).
+      # Called during adapter initialization so they're available when events flow.
+      #
+      # @return [void]
+      def register_middleware_metrics!
+        return unless defined?(::Yabeda)
+
+        middleware_metrics = [
+          { name: :"e11y.middleware.trace_context.processed", tags: [] },
+          { name: :"e11y.middleware.validation.passed", tags: [] },
+          { name: :"e11y.middleware.validation.failed", tags: [] },
+          { name: :"e11y.middleware.validation.skipped", tags: [] },
+          { name: :"e11y.middleware.routing.write_success", tags: [:adapter] },
+          { name: :"e11y.middleware.routing.write_error", tags: [:adapter] },
+          { name: :"e11y.middleware.routing.routed", tags: %i[adapters_count routing_type] }
+        ]
+
+        middleware_metrics.each do |m|
+          register_metric_if_needed(m[:name], :counter, m[:tags])
+        end
+      rescue StandardError => e
+        E11y.logger.debug("Could not register middleware metrics: #{e.message}")
+      end
+
       # Register a single metric in Yabeda
       #
       # @param metric_config [Hash] Metric configuration from Registry
@@ -293,8 +331,10 @@ module E11y
         return if ::Yabeda.metrics.key?("e11y_#{metric_name}")
 
         # Define metric in Yabeda group
-        ::Yabeda.configure do
-          group :e11y do
+        ::Yabeda.configure do |config = nil|
+          next unless config&.respond_to?(:group)
+
+          config.group :e11y do
             case metric_type
             when :counter
               counter metric_name, tags: tags, comment: "E11y metric: #{metric_name}"
@@ -328,8 +368,10 @@ module E11y
         # Check if metric already exists (Yabeda stores metric keys as strings)
         return if ::Yabeda.metrics.key?("e11y_#{name}")
 
-        ::Yabeda.configure do
-          group :e11y do
+        ::Yabeda.configure do |config = nil|
+          next unless config&.respond_to?(:group)
+
+          config.group :e11y do
             case type
             when :counter
               counter name, tags: tags, comment: "E11y self-monitoring: #{name}"
@@ -389,14 +431,19 @@ module E11y
           acc[tag] = safe_labels.key?(tag) ? safe_labels[tag] : "[DROPPED]"
         end
 
-        # Update Yabeda metric with all required labels
+        # Update Yabeda metric (skip if e11y group not registered, e.g. Yabeda not configured)
+        return unless ::Yabeda.respond_to?(:e11y)
+
+        metric = ::Yabeda.e11y.send(metric_name)
+        return unless metric
+
         case metric_config[:type]
         when :counter
-          ::Yabeda.e11y.send(metric_name).increment(final_labels)
+          metric.increment(final_labels)
         when :histogram
-          ::Yabeda.e11y.send(metric_name).measure(final_labels, value)
+          metric.measure(final_labels, value)
         when :gauge
-          ::Yabeda.e11y.send(metric_name).set(final_labels, value)
+          metric.set(final_labels, value)
         end
       rescue StandardError => e
         warn "E11y Yabeda: Error updating metric #{metric_name}: #{e.message}"

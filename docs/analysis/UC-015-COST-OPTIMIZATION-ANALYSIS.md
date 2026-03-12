@@ -86,7 +86,7 @@ E11y.configure do |config|
   config.routing_rules = [
     ->(event) {
       days = (Time.parse(event[:retention_until]) - Time.now) / 86400
-      days > 90 ? :s3_glacier : :loki
+      days > 90 ? :archive : :loki
     }
   ]
 end
@@ -99,7 +99,7 @@ E11y.configure do |config|
       adapter_costs do
         loki 0.50
         sentry 10.00
-        s3 0.02
+        archive 0.02
       end
     end
   end
@@ -471,7 +471,7 @@ end
 **Required Pricing:**
 - Memory adapter: $0.01 per event
 - Loki adapter: $0.50 per event
-- S3 adapter: $0.02 per event
+- Archive adapter: $0.02 per event
 
 ---
 

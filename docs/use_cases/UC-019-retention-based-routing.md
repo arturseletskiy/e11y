@@ -53,23 +53,25 @@ class AuditEvent < E11y::Event::Base
 end
 ```
 
-**Centralized Routing:**
+**Routing at collection** (where to write now):
 ```ruby
 E11y.configure do |config|
   config.routing_rules = [
     ->(event) { :audit_encrypted if event[:audit_event] },
     ->(event) {
       days = (Time.parse(event[:retention_until]) - Time.now) / 86400
-      days > 90 ? :s3_glacier : :loki
+      days <= 7 ? :stdout : :loki  # Short retention → cheap storage at collection
     }
   ]
 end
 ```
 
 **Result:**
-- ✅ **80-97% cost savings** (automatic tiered routing)
-- ✅ **Compliance enforcement** (audit → encrypted storage)
+- ✅ **Cost savings** (short retention → stdout, not Loki)
+- ✅ **Compliance** (audit → encrypted storage)
 - ✅ **Developer experience** (declare intent, routing handles rest)
+
+> **Archival is a separate moment.** E11y collects events in real time and writes to Loki (hot storage). Each event carries `retention_until` (ISO8601) in its payload. **Archival** (hot → warm → cold) is done by a **separate job** (cron, Loki compaction, export script) — not at collection time. The job filters logs by `retention_until`: `WHERE retention_until > ?` — simple, no custom logic, easy cost control.
 
 ---
 
@@ -140,11 +142,8 @@ E11y.configure do |config|
     # Priority 1: Audit events always to encrypted storage
     ->(event) { :audit_encrypted if event[:audit_event] },
     
-    # Priority 2: Long retention to cold storage
-    ->(event) {
-      days = (Time.parse(event[:retention_until]) - Time.now) / 86400
-      :s3_glacier if days > 90 && !event[:audit_event]
-    }
+    # Other events → Loki (archival job handles cold tier later)
+    ->(event) { :loki }
   ]
 end
 
@@ -170,8 +169,8 @@ UserDeletedEvent.track(
 - ✅ **Immutable** → audit trail tamper-proof
 
 **Cost Impact:**
-- **Before:** Loki storage (30 days, then manual S3) = $5000/month
-- **After:** Audit-encrypted + S3 Glacier (automatic) = $50/month
+- **Before:** Loki storage (30 days, manual export) = $5000/month
+- **After:** Audit-encrypted at collection; archival job (separate) exports to cold tier by `retention_until` = $50/month
 - **Savings:** 99% ($4950/month)
 
 ---
@@ -192,37 +191,21 @@ class OrderPlacedEvent < E11y::Event::Base
   end
 end
 
-# Configuration
+# At collection: all events → Loki. retention_until in payload.
+# Archival job (cron, separate): filters Loki by retention_until, exports to warm/cold.
 E11y.configure do |config|
-  config.routing_rules = [
-    ->(event) {
-      days = (Time.parse(event[:retention_until]) - Time.now) / 86400
-      case days
-      when 0..30   then :loki        # Hot storage
-      when 31..90  then :s3_standard # Warm storage
-      else              :s3_glacier   # Cold storage
-      end
-    }
-  ]
+  config.routing_rules = [->(_event) { :loki }]
 end
 
 # Usage
-OrderPlacedEvent.track(
-  order_id: "ORD-123",
-  amount: 10000,
-  currency: "USD"
-)
-# ↓
-# retention_until: "2026-04-21T10:30:00Z" (90 days from now)
-# ↓
-# Routing: days = 90 → :s3_standard adapter (warm storage)
-# ↓
-# Event written to S3 Standard (cost-optimized)
+OrderPlacedEvent.track(order_id: "ORD-123", amount: 10000, currency: "USD")
+# → Written to Loki with retention_until: "2026-04-21T..."
+# → Archival job (runs later): WHERE retention_until > now + 30d → export to cold
 ```
 
 **Cost Impact:**
-- **Before:** Loki only = $200/month
-- **After:** Loki (30d) + S3 Standard (60d) = $120/month
+- **Before:** Loki only, no tiering = $200/month
+- **After:** Loki at collection; archival job exports by `retention_until` to cheaper storage = $120/month
 - **Savings:** 40% ($80/month)
 
 ---
@@ -243,17 +226,11 @@ class PaymentFailedEvent < E11y::Event::Base
   end
 end
 
-# Configuration
+# At collection: errors → Sentry + Loki. retention_until in payload for archival.
 E11y.configure do |config|
   config.routing_rules = [
-    # Rule 1: Errors always to Sentry
-    ->(event) { :sentry if event[:severity] == :error },
-    
-    # Rule 2: Retention-based storage
-    ->(event) {
-      days = (Time.parse(event[:retention_until]) - Time.now) / 86400
-      days > 30 ? :s3_standard : :loki
-    }
+    ->(event) { [:sentry, :loki] if event[:severity] == :error },
+    ->(_event) { :loki }
   ]
 end
 
@@ -268,14 +245,14 @@ PaymentFailedEvent.track(
 # ↓
 # Routing: 
 #   Rule 1: :sentry (error alerting)
-#   Rule 2: :s3_standard (90 days storage)
+#   Rule 2: :loki (archival job handles tiers later)
 # ↓
 # Event written to BOTH adapters
 ```
 
 **Benefits:**
 - ✅ **Alerting:** Sentry catches errors immediately
-- ✅ **Storage:** S3 Standard for 90-day retention
+- ✅ **Storage:** Loki at collection; archival job (separate) exports by `retention_until`
 - ✅ **Cost:** No duplicate Loki storage ($100/month savings)
 
 ---
@@ -345,17 +322,24 @@ CriticalPaymentEvent.track(amount: 100000, user_id: 789)
 │                                 │
 │  Apply routing rules:           │
 │  - Rule 1: audit → encrypted    │
-│  - Rule 2: >90d → cold storage  │
-│  - Rule 3: <30d → hot storage   │
+│  - Rule 2: errors → Sentry + Loki  │
+│  - Rule 3: default → Loki          │
 └─────────────────────────────────┘
                 │
                 ▼
         ┌───────┴───────┐
         │               │
   ┌─────▼─────┐   ┌─────▼─────┐
-  │  Adapter  │   │  Adapter  │
-  │   Loki    │   │   S3      │
+  │   Loki    │   │  Sentry   │  (at collection)
   └───────────┘   └───────────┘
+        │
+        │ retention_until in payload
+        ▼
+  ┌─────────────────────────────┐
+  │ Archival job (separate)     │
+  │ Filters by retention_until │
+  │ → export to cold storage    │
+  └─────────────────────────────┘
 ```
 
 ### Component Responsibilities
@@ -365,7 +349,7 @@ CriticalPaymentEvent.track(amount: 100000, user_id: 789)
 | **Event::Base** | Declare `retention_period`, calculate `retention_until` |
 | **Configuration** | Define `routing_rules` (lambdas), `default_retention_period` |
 | **Routing Middleware** | Apply rules, select adapters, write events |
-| **Adapters** | Write events to storage (Loki, S3, Sentry, etc.) |
+| **Adapters** | Write events to storage (Loki, File, Sentry, etc.) |
 
 ---
 
@@ -400,73 +384,36 @@ end
 
 ```ruby
 # config/initializers/e11y.rb
+# At collection: route to Loki (or stdout for very short retention).
+# retention_until is in every event payload — archival job (separate) uses it later.
 E11y.configure do |config|
-  # Default retention (fallback)
   config.default_retention_period = 30.days
   
-  # Routing rules (evaluated in order)
   config.routing_rules = [
-    # Priority 1: Audit events → encrypted storage
-    ->(event) {
-      :audit_encrypted if event[:audit_event]
-    },
-    
-    # Priority 2: Errors → Sentry + storage
-    ->(event) {
-      [:sentry, :loki] if event[:severity] == :error
-    },
-    
-    # Priority 3: Retention-based tiering
+    ->(event) { :audit_encrypted if event[:audit_event] },
+    ->(event) { [:sentry, :loki] if event[:severity] == :error },
     ->(event) {
       days = (Time.parse(event[:retention_until]) - Time.now) / 86400
-      case days
-      when 0..7    then :stdout       # Very short → console
-      when 8..30   then :loki         # Short → hot storage
-      when 31..90  then :s3_standard  # Medium → warm storage
-      else              :s3_glacier    # Long → cold storage
-      end
+      days <= 7 ? :stdout : :loki  # Short → cheap, long → Loki
     }
   ]
   
-  # Fallback if no rule matches
   config.fallback_adapters = [:stdout]
-  
-  # Register adapters
-  config.add_adapter :loki, E11y::Adapters::Loki.new(...)
-  config.add_adapter :s3_standard, E11y::Adapters::File.new(path: 's3://bucket/warm/')
-  config.add_adapter :s3_glacier, E11y::Adapters::File.new(path: 's3://bucket/cold/')
-  config.add_adapter :audit_encrypted, E11y::Adapters::AuditEncrypted.new(...)
-  config.add_adapter :sentry, E11y::Adapters::Sentry.new(...)
+  config.adapters[:loki] = E11y::Adapters::Loki.new(...)
+  config.adapters[:audit_encrypted] = E11y::Adapters::AuditEncrypted.new(...)
+  config.adapters[:sentry] = E11y::Adapters::Sentry.new(...)
 end
 ```
 
-### Step 3: Test Routing
+### Step 3: Archival Job (Separate Process)
+
+Archival runs **later**, not at collection. Example cron job:
 
 ```ruby
-# spec/e11y/routing_spec.rb
-RSpec.describe "Retention-based routing" do
-  it "routes debug events to stdout" do
-    event = DebugEvent.track(query: "SELECT...")
-    
-    expect(event[:retention_until]).to eq(7.days.from_now.iso8601)
-    expect(E11y.configuration.adapters[:stdout]).to have_received(:write)
-  end
-  
-  it "routes audit events to encrypted storage" do
-    event = UserDeletedEvent.track(user_id: 123, deleted_by: 456)
-    
-    expect(event[:retention_until]).to eq(7.years.from_now.iso8601)
-    expect(event[:audit_event]).to be true
-    expect(E11y.configuration.adapters[:audit_encrypted]).to have_received(:write)
-  end
-  
-  it "routes long retention to cold storage" do
-    event = BusinessEvent.track(data: "...")
-    allow(event).to receive(:[]).with(:retention_until).and_return(365.days.from_now.iso8601)
-    
-    expect(E11y.configuration.adapters[:s3_glacier]).to have_received(:write)
-  end
-end
+# lib/tasks/archival.rake or separate service
+# Runs daily: reads Loki, filters by retention_until, exports to cold storage
+# SELECT * FROM logs WHERE retention_until > ? AND timestamp < ?
+# → export to S3 / object storage
 ```
 
 ---
@@ -506,8 +453,8 @@ end
 
 **Monthly Costs:**
 - Debug logs (7d in stdout): **$0** ✅
-- Business events (30d Loki + 60d S3): **$120** ✅
-- Audit logs (7y S3 Glacier): **$50** ✅
+- Business events (Loki + archival job exports by retention_until): **$120** ✅
+- Audit logs (audit_encrypted + archival job): **$50** ✅
 - **Total: $170/month**
 
 **Savings: 97% ($5,530/month)**
@@ -573,7 +520,7 @@ end
 
 - ✅ **100% of audit events** go to `audit_encrypted` adapter
 - ✅ **Debug logs** (7d retention) → stdout (free)
-- ✅ **Business events** (90d retention) → tiered storage (Loki + S3)
+- ✅ **Business events** (90d retention) → Loki at collection; archival job exports by `retention_until`
 - ✅ **Cost reduction** of 80%+ compared to manual adapter selection
 - ✅ **Zero manual intervention** (routing is automatic)
 

@@ -56,12 +56,7 @@ E11y.configure do |config|
                       drop_empty_strings: true,
                       truncate_strings: 1000  # chars
     
-    # 5. Tiered storage (60% cheaper)
-    retention_tiers do
-      hot 7.days, storage: :loki       # Fast queries
-      warm 30.days, storage: :s3        # Slower, cheaper
-      cold 1.year, storage: :s3_glacier # Archive
-    end
+    # 5. Routing by retention_until — config.routing_rules (see Strategy 4)
     
     # 6. Smart routing (send only what's needed)
     routing do
@@ -79,13 +74,13 @@ end
 # Result:
 # - 100k events/sec → 10k events/sec (adaptive sampling)
 # - 2KB/event → 0.6KB/event (compression + minimization)
-# - 30 days hot storage → 7 days hot + 23 days warm (tiered)
+# - Short retention → stdout, long → Loki (routing by retention_until)
 # - Datadog: Only errors (3k/sec instead of 100k/sec)
 #
 # New monthly cost:
 # - Datadog: $3,000 → $500 (only errors)
 # - Loki: $10,368 → $1,200 (10% volume, 70% smaller, 7 days hot)
-# - S3: $200 (warm storage)
+# - Archival job (separate): exports by retention_until to cold storage
 # - Total: $1,900/month = $22,800/year
 #
 # SAVINGS: $160,416 - $22,800 = $137,616/year (86% reduction!)
@@ -254,57 +249,34 @@ end
 
 ---
 
-### Strategy 4: Tiered Storage
+### Strategy 4: Routing by retention_until
 
-**Hot/warm/cold storage based on age:**
+**Route events to adapters based on retention (at collection):**
 ```ruby
+# Events declare retention_period; retention_until is auto-calculated in payload.
+# Routing rules use it to choose adapter — short retention → cheap storage.
 E11y.configure do |config|
-  config.cost_optimization do
-    tiered_storage do
-      # HOT: Fast queries, expensive ($0.20/GB/month)
-      hot_tier do
-        duration 7.days
-        storage :loki  # OR :elasticsearch
-        query_performance :fast
-      end
-      
-      # WARM: Slower queries, cheaper ($0.05/GB/month)
-      warm_tier do
-        duration 30.days
-        storage :s3
-        query_performance :medium
-        compression :zstd  # Compress when moving to warm
-      end
-      
-      # COLD: Archive, very cheap ($0.004/GB/month)
-      cold_tier do
-        duration 1.year
-        storage :s3_glacier
-        query_performance :slow  # Minutes to hours
-        compression :zstd
-      end
-      
-      # Auto-archival
-      auto_archive enabled: true,
-                   schedule: '0 2 * * *'  # 2 AM daily
-    end
-  end
+  config.routing_rules = [
+    ->(event) { :audit_encrypted if event[:audit_event] },
+    ->(event) {
+      return :loki unless event[:retention_until]
+      days = (Time.parse(event[:retention_until]) - Time.now) / 86400
+      days <= 7 ? :stdout : :loki  # Short → free, long → Loki
+    }
+  ]
+  config.fallback_adapters = [:loki]
 end
 
-# Cost comparison (per 1TB):
-# Hot (Loki): $0.20/GB × 1000 = $200/month
-# Warm (S3): $0.05/GB × 1000 = $50/month
-# Cold (Glacier): $0.004/GB × 1000 = $4/month
-#
-# Strategy:
-# - 7 days hot (for active debugging)
-# - 30 days warm (for recent lookups)
-# - 1 year cold (for compliance)
-#
-# Cost for 30 days of data:
-# Before: 30 days × $200 = $6,000/month
-# After: (7 × $200) + (23 × $50) + (0 × $4) = $1,400 + $1,150 = $2,550/month
-# Savings: $3,450/month (58% reduction!)
+# Event classes declare retention:
+#   class DebugEvent < E11y::Event::Base
+#     retention_period 7.days   # → stdout
+#   end
+#   class AuditEvent < E11y::Event::Base
+#     retention_period 7.years  # → Loki (archival job exports later)
+#   end
+
+# Cost: Short retention events never hit Loki. Archival job (separate) filters by
+# retention_until for cold storage. Savings: ~58% vs all-events-to-Loki.
 ```
 
 ---
@@ -324,11 +296,11 @@ E11y.configure do |config|
       # High-value transactions → All (audit + analytics)
       route event_patterns: ['payment.*', 'order.*'],
             when: ->(e) { e.payload[:amount].to_i > 1000 },
-            to: [:datadog, :loki, :s3_archive]
+            to: [:datadog, :loki]
       
       # Security events → Specific SIEM
       route event_patterns: ['security.*', 'audit.*'],
-            to: [:splunk, :s3_archive]
+            to: [:splunk]
       
       # Debug events → Only Loki (no expensive Datadog)
       route severities: [:debug],
@@ -356,50 +328,25 @@ end
 
 ---
 
-### Strategy 6: Retention-Aware Tagging
+### Strategy 6: retention_period DSL
 
-**Tag events with retention requirements:**
+**Declare retention per event; routing uses retention_until:**
 ```ruby
-E11y.configure do |config|
-  config.cost_optimization do
-    retention_aware_tagging do
-      # Auto-tag events with retention hints
-      tag_with_retention do
-        # Compliance events: Long retention
-        when_pattern 'audit.*', 'gdpr.*', retention: 7.years
-        
-        # Financial: Long retention
-        when_pattern 'payment.*', 'transaction.*', retention: 7.years
-        
-        # Errors: Medium retention
-        when_severity :error, :fatal, retention: 90.days
-        
-        # Debug: Short retention
-        when_severity :debug, retention: 7.days
-        
-        # Default
-        default_retention 30.days
-      end
-      
-      # Backend respects retention tags
-      backends do
-        loki retention_based: true,
-             max_retention: 30.days
-        
-        s3_archive retention_based: true,
-                   max_retention: 7.years
-      end
-    end
-  end
+# Event-level retention (used by routing_rules + archival job)
+class DebugEvent < E11y::Event::Base
+  retention_period 7.days
 end
 
-# Result:
-# - Debug events: 7 days in Loki (cheap)
-# - Errors: 90 days in Loki
-# - Compliance: 7 years in S3 Glacier (very cheap)
-# - Default: 30 days in Loki
-#
-# Cost optimization: Store data only as long as needed!
+class PaymentEvent < E11y::Event::Base
+  retention_period 7.years
+end
+
+class OrderEvent < E11y::Event::Base
+  # Uses config.default_retention_period (30 days)
+end
+
+# retention_until is auto-calculated in payload. Routing (Strategy 4) and
+# archival job both use it. No separate tagging — one field, two consumers.
 ```
 
 ---
@@ -641,7 +588,7 @@ end
 config.cost_optimization do
   intelligent_sampling { ... }  # 90% reduction
   compression { ... }           # 70% smaller payloads
-  tiered_storage { ... }        # 60% cheaper storage
+  routing_rules (by retention_until)  # Short → stdout, long → Loki
   smart_routing { ... }         # 50% fewer expensive destinations
 end
 # Combined: ~95% cost reduction!
@@ -653,7 +600,7 @@ end
 # Dashboard: "Cost Optimization Savings"
 # - Monthly savings: $X
 # - YTD savings: $Y
-# - Optimization breakdown (sampling, compression, tiered storage)
+# - Optimization breakdown (sampling, compression, routing)
 ```
 
 **3. Test in staging first**

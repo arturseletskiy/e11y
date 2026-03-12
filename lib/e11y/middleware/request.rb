@@ -60,8 +60,8 @@ module E11y
         # Call next middleware/app
         status, headers, body = @app.call(env)
 
-        # Flush buffer on 5xx (Rails may catch exception and return 500 instead of raising)
-        E11y::Buffers::RequestScopedBuffer.flush_on_error if status >= 500 && E11y.config.request_buffer&.enabled
+        # Flush buffer if status matches configured flush_on_statuses (default: 5xx only)
+        E11y::Buffers::RequestScopedBuffer.flush_on_error if should_flush_buffer?(status)
 
         # Track SLO metrics (if enabled)
         track_http_request_slo(env, status, start_time)
@@ -90,6 +90,38 @@ module E11y
       # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
 
       private
+
+      # Determine whether the request-scoped buffer should be flushed for this status code.
+      #
+      # Two independent conditions (either is sufficient):
+      # - +flush_on_error+ (default: true) — flushes on any 5xx server error
+      # - +flush_on_statuses+ (default: []) — extra status codes/ranges, e.g. [403]
+      #
+      # @example Default behaviour — flush on 5xx only
+      #   config.request_buffer.flush_on_error   = true  # default
+      #   config.request_buffer.flush_on_statuses = []   # default
+      #
+      # @example Flush on 403 in addition to 5xx
+      #   config.request_buffer.flush_on_statuses = [403]
+      #
+      # @example Flush only on explicit statuses (disable 5xx default)
+      #   config.request_buffer.flush_on_error    = false
+      #   config.request_buffer.flush_on_statuses = [403, 422]
+      #
+      # @param status [Integer] HTTP response status code
+      # @return [Boolean]
+      def should_flush_buffer?(status)
+        return false unless E11y.config.request_buffer&.enabled
+
+        buf = E11y.config.request_buffer
+
+        # Condition 1: server error flush (5xx)
+        return true if buf.flush_on_error && status >= 500
+
+        # Condition 2: explicit extra statuses
+        extra = buf.flush_on_statuses
+        extra&.any? { |s| s === status } || false # rubocop:disable Style/CaseEquality
+      end
 
       # Extract trace_id from request headers (W3C Trace Context or custom headers)
       # @param request [Rack::Request] Rack request

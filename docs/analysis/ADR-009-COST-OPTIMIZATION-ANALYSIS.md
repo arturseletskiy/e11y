@@ -93,7 +93,7 @@ E11y.configure do |config|
   config.routing_rules = [
     ->(event) {
       days = (Time.parse(event[:retention_until]) - Time.now) / 86400
-      days > 90 ? :s3_glacier : :loki
+      days > 90 ? :archive : :loki
     }
   ]
 end
@@ -177,7 +177,7 @@ RSpec.describe "ADR-009 Cost Optimization Integration", :integration do
       config.routing_rules = [
         ->(event) {
           days = (Time.parse(event[:retention_until]) - Time.now) / 86400
-          days > 90 ? :s3_glacier : :loki
+          days > 90 ? :archive : :loki
         }
       ]
       
@@ -496,7 +496,7 @@ end
 **Required Adapters:**
 - Loki adapter: Low-cost adapter ($0.50 per 1M events)
 - Sentry adapter: High-cost adapter ($1.00 per 1M events)
-- S3 Glacier adapter: Cold storage adapter (for routing tests)
+- Archive adapter: Cold storage adapter (for routing tests)
 
 ### 7.3. Test Budgets
 

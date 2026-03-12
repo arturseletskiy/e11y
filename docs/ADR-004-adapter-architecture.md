@@ -1714,20 +1714,20 @@ E11y.configure do |config|
   # Register adapters (infrastructure)
   config.register_adapter :loki, Loki.new(url: ENV['LOKI_URL'])
   config.register_adapter :sentry, Sentry.new(dsn: ENV['SENTRY_DSN'])
-  config.register_adapter :s3, S3Adapter.new(bucket: 'events-archive')
+  # Archival: external jobs filter by retention_until
   config.register_adapter :audit_encrypted, AuditAdapter.new(...)
   
   # ❌ PROBLEM: Routing for EVERY event in global config
   config.events do
     # Payment events → multiple adapters
     event 'Events::PaymentSucceeded' do
-      adapters [:loki, :sentry, :s3]
+      adapters [:loki, :sentry]
     end
     event 'Events::PaymentFailed' do
-      adapters [:loki, :sentry, :s3]
+      adapters [:loki, :sentry]
     end
     event 'Events::PaymentRefunded' do
-      adapters [:loki, :sentry, :s3]
+      adapters [:loki, :sentry]
     end
     
     # Audit events → encrypted adapter
@@ -1764,7 +1764,7 @@ E11y.configure do |config|
   # ONLY infrastructure (adapter registration)
   config.register_adapter :loki, Loki.new(url: ENV['LOKI_URL'])
   config.register_adapter :sentry, Sentry.new(dsn: ENV['SENTRY_DSN'])
-  config.register_adapter :s3, S3Adapter.new(bucket: 'events-archive')
+  # Archival: external jobs filter by retention_until
   config.register_adapter :audit_encrypted, AuditAdapter.new(...)
   
   # Optional: default adapters (convention)
@@ -1777,7 +1777,7 @@ module Events
     schema do; required(:transaction_id).filled(:string); end
     
     # ✅ Adapters right next to schema!
-    adapters [:loki, :sentry, :s3]
+    adapters [:loki, :sentry]
   end
 end
 
@@ -1817,7 +1817,7 @@ end
 module Events
   class BasePaymentEvent < E11y::Event::Base
     # Common adapters for ALL payment events
-    adapters [:loki, :sentry, :s3]
+    adapters [:loki, :sentry]
     
     # Common config
     severity :success
@@ -1829,18 +1829,18 @@ end
 # Inherit from base (1-2 lines per event!)
 class Events::PaymentSucceeded < Events::BasePaymentEvent
   schema do; required(:transaction_id).filled(:string); end
-  # ← Inherits: adapters [:loki, :sentry, :s3]
+  # ← Inherits: adapters [:loki, :sentry]
 end
 
 class Events::PaymentFailed < Events::BasePaymentEvent
   severity :error  # ← Override severity
   schema do; required(:error_code).filled(:string); end
-  # ← Inherits: adapters [:loki, :sentry, :s3]
+  # ← Inherits: adapters [:loki, :sentry]
 end
 
 class Events::PaymentRefunded < Events::BasePaymentEvent
   schema do; required(:refund_id).filled(:string); end
-  # ← Inherits: adapters [:loki, :sentry, :s3]
+  # ← Inherits: adapters [:loki, :sentry]
 end
 ```
 
@@ -1882,7 +1882,7 @@ module E11y
     module HighValueEvent
       extend ActiveSupport::Concern
       included do
-        adapters [:loki, :sentry, :s3_archive]
+        adapters [:loki, :sentry]
         sample_rate 1.0
         retention 7.years
       end
@@ -1936,7 +1936,7 @@ end
 # Override convention:
 class Events::OrderCreated < E11y::Event::Base
   severity :success
-  adapters [:loki, :elasticsearch, :s3]  # ← Override
+  adapters [:loki, :elasticsearch]  # ← Override
   schema do; required(:order_id).filled(:string); end
 end
 ```
@@ -1946,13 +1946,13 @@ end
 ```ruby
 # Replace strategy (default): Override parent/convention
 class Events::PaymentSucceeded < Events::BasePaymentEvent
-  adapters [:loki, :sentry]  # ← Replaces base [:loki, :sentry, :s3]
+  adapters [:loki, :sentry]  # ← Replaces base
 end
 
 # Append strategy: Add to parent/convention
 class Events::PaymentSucceeded < Events::BasePaymentEvent
   adapters_strategy :append
-  adapters [:slack_business]  # ← Adds to base (result: [:loki, :sentry, :s3, :slack_business])
+  adapters [:slack_business]  # ← Adds to base (result: [:loki, :sentry, :slack_business])
 end
 ```
 
@@ -1976,7 +1976,7 @@ class Events::BasePaymentEvent < E11y::Event::Base
 end
 
 class Events::PaymentSucceeded < Events::BasePaymentEvent
-  include E11y::Presets::HighValueEvent  # 2. Preset (adds :s3)
+  include E11y::Presets::HighValueEvent  # 2. Preset
   adapters [:loki, :sentry, :pagerduty]  # 1. Event-level (WINS!)
 end
 
@@ -2009,7 +2009,7 @@ end
 ```ruby
 # Migrate high-value events first:
 class Events::PaymentSucceeded < E11y::Event::Base
-  adapters [:loki, :sentry, :s3]  # ← Migrated
+  adapters [:loki, :sentry]  # ← Migrated
 end
 
 # Keep others in global config (temporary):
@@ -2124,7 +2124,7 @@ class Events::PaymentFailed < E11y::Event::Base
   
   # Multi-environment routing
   adapters case Rails.env
-           when 'production' then [:loki, :sentry, :s3_archive]
+           when 'production' then [:loki, :sentry]
            when 'staging' then [:loki, :sentry]
            else [:file]
            end
@@ -2164,7 +2164,7 @@ end
 module E11y::Presets::HighValueEvent
   extend ActiveSupport::Concern
   included do
-    adapters [:loki, :sentry, :s3_archive]  # Add S3
+    adapters [:loki, :sentry]
   end
 end
 
@@ -2172,9 +2172,9 @@ end
 class Events::CriticalPayment < Events::BasePaymentEvent
   include E11y::Presets::HighValueEvent
   
-  adapters [:loki, :sentry, :s3_archive, :datadog]  # Add Datadog
+  adapters [:loki, :sentry, :datadog]
   
-  # Final: [:loki, :sentry, :s3_archive, :datadog] (event-level wins)
+  # Final: [:loki, :sentry, :datadog] (event-level wins)
 end
 ```
 
@@ -2416,7 +2416,7 @@ E11y.configure do |config|
     ->(event) { :audit_encrypted if event[:audit_event] },
     ->(event) {
       days = (Time.parse(event[:retention_until]) - Time.now) / 86400
-      days > 90 ? :s3_glacier : :loki
+      days > 90 ? :archive : :loki
     }
   ]
 end
@@ -2508,13 +2508,13 @@ E11y.configure do |config|
     # Rule 2: Long retention → cold storage
     ->(event) {
       days = (Time.parse(event[:retention_until]) - Time.now) / 86400
-      :s3_glacier if days > 90
+      :archive if days > 90
     },
     
     # Rule 3: Medium retention → warm storage
     ->(event) {
       days = (Time.parse(event[:retention_until]) - Time.now) / 86400
-      :s3_standard if days.between?(30, 90)
+      :warm if days.between?(30, 90)
     },
     
     # Rule 4: Short retention → hot storage
@@ -2566,7 +2566,7 @@ end
 **After:** Automatic routing
 - Debug logs (7 days) → stdout: $0/month
 - Business (30 days) → Loki: $100/month
-- Audit (7 years) → S3 Glacier: $5/month
+- Audit (7 years) → cold tier: $5/month
 - **Total: $105/month (80% savings!)**
 
 ### 14.8. Advantages vs TieredStorage
@@ -2619,7 +2619,7 @@ RSpec.describe E11y::Middleware::Routing do
   it 'respects explicit adapters' do
     event = { adapters: [:sentry], retention_until: 1.year.from_now.iso8601 }
     expect(adapters[:sentry]).to receive(:write)
-    expect(adapters[:s3_glacier]).not_to receive(:write)
+    expect(adapters[:archive]).not_to receive(:write)
     routing.call(event)
   end
 end

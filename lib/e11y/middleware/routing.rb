@@ -40,13 +40,8 @@ module E11y
     #   # Rule: ->(e) { :audit_encrypted if e[:audit_event] }
     #   # Routes to: [:audit_encrypted]
     #
-    # @example Retention-based routing
-    #   event_data = {
-    #     event_name: 'order.placed',
-    #     retention_until: '2026-04-21T...'  # 90 days
-    #   }
-    #   # Rule: ->(e) { days > 30 ? :s3_standard : :loki }
-    #   # Routes to: [:s3_standard]
+    # Note: retention_until is for archival jobs (run separately), not for routing.
+    # Archival happens later — cron/Loki compaction filters by retention_until.
     class Routing < Base
       middleware_zone :adapters
 
@@ -140,12 +135,12 @@ module E11y
       #     ->(event) { :audit_encrypted if event[:audit_event] },
       #     ->(event) {
       #       days = (Time.parse(event[:retention_until]) - Time.now) / 86400
-      #       days > 90 ? :s3_glacier : :loki
+      #       days > 90 ? :archive : :loki
       #     }
       #   ]
       #
       #   apply_routing_rules(event_data)
-      #   # => [:audit_encrypted] or [:loki] or [:s3_glacier]
+      #   # => [:audit_encrypted] or [:loki] or [:archive]
       # rubocop:disable Metrics/AbcSize
       def apply_routing_rules(event_data)
         matched_adapters = []

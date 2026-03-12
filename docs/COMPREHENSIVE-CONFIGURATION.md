@@ -103,13 +103,7 @@ E11y.configure do |config|
       max_size: 100.megabytes
     )
     
-    # === Archive: S3 (cold storage) ===
-    register :s3, E11y::Adapters::S3Adapter.new(
-      bucket: ENV['S3_BUCKET'],
-      region: ENV['AWS_REGION'],
-      prefix: "e11y-events/#{Rails.env}",
-      compression: :gzip
-    )
+    # === Archive: external job filters Loki by retention_until (ISO8601) ===
     
     # === Security: Audit Log (compliance) ===
     register :audit_encrypted, E11y::Adapters::FileAdapter.new(
@@ -318,7 +312,7 @@ E11y.configure do |config|
   # ============================================================================
   # Default retention for audit events. Can be overridden:
   # 1. Per event: `retention 10.years` in event class
-  # 2. Per adapter: tiered storage (hot tier in Loki 30d, cold tier in S3 7y)
+  # 2. Per adapter: tiered storage (hot tier in Loki 30d, cold tier 7y; archival filters by retention_until)
   # 
   # Use Cases:
   # - UC-012: Audit Trail (compliance requirements)
@@ -665,9 +659,8 @@ module Events
     # (Automatically tracked if amount in payload)
     
     # === UC-002: Per-Event Adapter Override ===
-    # Send to all default adapters + S3 archive
     adapters_strategy :append
-    adapters [:s3]  # In addition to [:loki, :elasticsearch, :otlp]
+    adapters [:loki, :elasticsearch, :otlp]
     
     # === UC-007: PII Filtering ===
     # card_last4, billing_country will be filtered if in PII config
@@ -934,7 +927,7 @@ module Events
     rate_limit 1000
     sample_rate 1.0  # Never sample payments (high-value)
     retention 7.years  # Financial records
-    adapters [:loki, :sentry, :s3_archive]
+    adapters [:loki, :sentry]
     
     # Common PII filtering
     pii_filtering do
@@ -1072,7 +1065,7 @@ module E11y
         rate_limit 10_000
         sample_rate 1.0  # Never sample (100%)
         retention 7.years
-        adapters [:loki, :sentry, :s3_archive]
+        adapters [:loki, :sentry]
       end
     end
     
@@ -1150,7 +1143,7 @@ module Events
         rate_limit 5000
         sample_rate 1.0  # Never sample
         retention 7.years
-        adapters [:loki, :elasticsearch, :s3_archive]
+        adapters [:loki, :elasticsearch]
         
         # Send Slack notification
         adapters_strategy :append
@@ -1857,25 +1850,21 @@ end
 class Events::OrderCreated < E11y::Event::Base
   severity :success
   retention 30.days  # ← Business event: 30 days
-  adapters [:loki, :s3]
+  adapters [:loki]
 end
 
 class Events::AuditLog < E11y::Event::Base
   audit_event true
   retention 7.years  # ← Audit: 7 years
-  adapters [:loki, :s3_glacier]  # ← Tiered adapters
+  adapters [:loki]  # ← Loki = hot; archival job filters by retention_until
 end
 
-# Global config: Adapter-level tiering (Section 1)
+# Global config: Loki for hot storage
 config.adapters do
   register :loki, E11y::Adapters::LokiAdapter.new(retention: 30.days)
-  register :s3_glacier, E11y::Adapters::S3Adapter.new(
-    storage_class: 'GLACIER',
-    retention: 7.years
-  )
 end
 
-# Downstream (ES/S3): Use retention_until field (auto-added by E11y)
+# Archival: External jobs filter Loki by retention_until (ISO8601) for tier migration
 ```
 
 **Lines saved:** 80+ (v1.0 global tiering) → ~20 (v1.1 adapter-level + event-level)
@@ -1923,7 +1912,7 @@ end
 
 config.dead_letter_queue do
   enabled true
-  adapter :file  # or :s3, :redis
+  adapter :file  # or :redis
   max_retries 3
 end
 
@@ -2348,11 +2337,11 @@ end
 class Events::CriticalPayment < Events::BasePaymentEvent
   include E11y::Presets::HighValueEvent
   
-  adapters [:loki, :sentry, :s3_archive]  # Override all
+  adapters [:loki, :sentry]  # Override all
   
   # Final config:
   # - severity: :success (base)
-  # - adapters: [:loki, :sentry, :s3_archive] (event override)
+  # - adapters: [:loki, :sentry] (event override)
   # - sample_rate: 1.0 (base)
   # - rate_limit: 50_000 (preset override)
   # - retention: 7.years (preset)

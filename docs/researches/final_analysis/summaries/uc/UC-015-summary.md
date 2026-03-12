@@ -28,7 +28,7 @@ Observability costs $160,416/year (unoptimized: 100k events/sec × 2KB × 100% t
 Engineering Managers, CTOs, FinOps Teams, SRE
 
 **Expected outcome:**
-86% cost reduction ($160,416 → $22,800/year) via 7 optimization strategies: intelligent sampling (90%), payload minimization (90% size), compression (70%), tiered storage (58% cheaper), smart routing (83% reduction), retention-aware tagging, batch & bundle (80% bandwidth).
+86% cost reduction ($160,416 → $22,800/year) via optimization strategies: intelligent sampling (90%), payload minimization (90% size), compression (70%), routing by retention_until, smart routing (83% reduction), retention_period DSL, batch & bundle (80% bandwidth).
 
 ---
 
@@ -38,9 +38,9 @@ Engineering Managers, CTOs, FinOps Teams, SRE
 - [x] **Intelligent Sampling by Value:** Always sample high-value events (amount >$1000, VIP users, errors), aggressively sample low-value (debug: 1%, success: 5%, low-value <$10: 10%), default 10%
 - [x] **Payload Minimization (90% size reduction):** Drop null/empty fields, truncate long strings (max 1000 chars), drop default values (status: 'pending', currency: 'USD'), exclude internal fields
 - [x] **Compression (70% reduction):** Zstd algorithm (best for JSON), level 3 (balance speed/ratio), batch compression (500 events together), min batch size 10KB (avoid compressing tiny batches)
-- [x] **Tiered Storage (58% cost reduction):** Hot (7 days, Loki, fast queries, $0.20/GB), Warm (30 days, S3, medium queries, $0.05/GB), Cold (1 year, S3 Glacier, slow queries, $0.004/GB), auto-archival (daily at 2 AM)
-- [x] **Smart Routing (83% reduction):** Errors → Datadog + Loki + Sentry (multiple destinations), high-value → Datadog + Loki + S3, security → Splunk + S3, debug → Loki only (no expensive Datadog)
-- [x] **Retention-Aware Tagging:** Auto-tag events with retention hints (audit/payment: 7 years, errors: 90 days, debug: 7 days, default: 30 days)
+- [x] **Routing by retention_until:** Short retention → stdout/file (free), long → Loki. Archival job (separate) filters by retention_until for cold storage.
+- [x] **Smart Routing (83% reduction):** Errors → Datadog + Loki + Sentry, high-value → Datadog + Loki, security → Splunk, debug → Loki only
+- [x] **retention_period DSL:** Event-level retention (audit/payment: 7 years, errors: 90 days, debug: 7 days). retention_until auto-calculated for routing + archival.
 - [x] **Batch & Bundle (80% bandwidth reduction):** Max batch size 500 events, max batch bytes 1 MB, max wait time 5s, compress batches, bundle similar events (similarity threshold 80%, max bundle 100)
 - [x] **Cost Calculator:** Estimate savings (events/sec, avg size, num services, Datadog hosts, Loki ingestion rate)
 - [x] **Self-Monitoring Metrics:** Bytes saved (compression, sampling), events reduced, monthly savings USD, compression ratio
@@ -72,9 +72,8 @@ Engineering Managers, CTOs, FinOps Teams, SRE
 - zstd level 3: ~70% reduction (2KB → 600 bytes, best!)
 
 ### Storage Costs (per 1TB/month)
-- Hot (Loki): $200/month ($0.20/GB)
-- Warm (S3): $50/month ($0.05/GB)
-- Cold (Glacier): $4/month ($0.004/GB)
+- Loki (hot): $200/month ($0.20/GB)
+- Cold tier (archival job exports by retention_until): $4–50/month
 
 ---
 
@@ -96,7 +95,7 @@ E11y solves with 7 optimization strategies (combined effect: 86% reduction).
 
 **Trade-offs:**
 - ✅ **Pros:** 86% cost savings, maintains high-value event visibility, preserves error alerting, compliant retention (7 years for payment/audit)
-- ❌ **Cons:** Configuration complexity (7 strategies to configure), sampling may miss low-value edge cases, compression adds 5ms latency per batch, tiered storage adds archival complexity
+- ❌ **Cons:** Configuration complexity, sampling may miss low-value edge cases, compression adds 5ms latency per batch
 
 ---
 
@@ -140,47 +139,8 @@ But UC-002 schema validation (line 68-74) shows `required(:field).filled(:type)`
 1. Not required by schema, OR
 2. Required but explicitly configured as "drop if default" (e.g., `currency: 'USD'` is default, can be dropped)
 
-### Contradiction 3: Tiered Storage (7 Days Hot + 23 Days Warm) vs. Retention-Aware Tagging (Per-Event Retention)
-**Conflict:** Tiered storage uses fixed durations (7 days hot, 30 days warm, 1 year cold) BUT retention-aware tagging allows per-event retention (audit: 7 years, debug: 7 days, errors: 90 days)
-**Impact:** Low (configuration consistency)
-**Related to:** Strategy 4 (Tiered Storage), Strategy 6 (Retention-Aware Tagging)
-**Notes:** Lines 258-308 describe tiered storage with fixed durations (7 days hot, 30 days warm, 1 year cold). Lines 361-403 describe retention-aware tagging with per-event retention (audit: 7 years, debug: 7 days).
-
-**Real Evidence:**
-```
-Lines 264-285: "hot_tier do
-  duration 7.days
-  storage :loki
-end
-
-warm_tier do
-  duration 30.days
-  storage :s3
-end
-
-cold_tier do
-  duration 1.year
-  storage :s3_glacier
-end"
-
-Lines 367-382: "tag_with_retention do
-  when_pattern 'audit.*', 'gdpr.*', retention: 7.years
-  when_pattern 'payment.*', 'transaction.*', retention: 7.years
-  when_severity :error, :fatal, retention: 90.days
-  when_severity :debug, retention: 7.days
-  default_retention 30.days
-end"
-```
-
-**Question:** How do these two strategies interact?
-- If audit event has `retention: 7.years` tag, but tiered storage moves to cold (Glacier) after 1 year, does it stay in Glacier for 6 more years? Or deleted after 1 year (violating retention tag)?
-- If debug event has `retention: 7.days` tag, but tiered storage keeps in hot (Loki) for 7 days, then moves to warm (S3) for 30 days total, is this correct?
-
-**Hypothesis:** Tiered storage is about WHERE data is stored (hot Loki vs. warm S3), retention-aware tagging is about HOW LONG data is stored. They should work together:
-- Audit (7 years): 7 days hot (Loki) + 23 days warm (S3) + 6.9 years cold (Glacier)
-- Debug (7 days): 7 days hot (Loki), then deleted
-
-But configuration doesn't show this integration clearly.
+### Contradiction 3: ~~Tiered Storage vs Retention-Aware Tagging~~ (Resolved)
+**Resolution:** Tiered storage removed. Use `retention_period` DSL + `routing_rules` by `retention_until`. Archival is a separate job that filters by retention_until.
 
 ---
 
@@ -190,7 +150,7 @@ But configuration doesn't show this integration clearly.
 1. Intelligent sampling: High-value event (amount: 5000), verify always sampled (100%)
 2. Payload minimization: Event with null fields, verify dropped
 3. Compression: 500 events batch, verify zstd compression ratio >60%
-4. Tiered storage: Mock archival, verify events moved to S3 after 7 days
+4. Archival: Verify job filters by retention_until
 5. Smart routing: Error event, verify sent to Datadog + Loki + Sentry; success event, verify sent to Loki only
 6. Retention tagging: Audit event, verify retention tag = 7 years
 7. Cost calculator: Calculate savings for 100k events/sec, verify 86% reduction
@@ -206,7 +166,7 @@ But configuration doesn't show this integration clearly.
 - Intelligent sampling requires understanding of value-based sampling (amount thresholds, user segments, severities)
 - Payload minimization requires understanding of defaults, truncation, exclusion rules
 - Compression requires algorithm selection (zstd vs. lz4 vs. gzip), level tuning
-- Tiered storage requires understanding of hot/warm/cold storage costs, archival schedules
+- Archival job (separate) filters by retention_until
 - Smart routing requires understanding of destination costs (Datadog expensive, Loki cheap)
 - Retention-aware tagging requires legal compliance knowledge (7 years for payment/audit, 90 days for errors)
 - Cost calculator requires understanding of pricing models (Datadog $15/host, Loki $0.20/GB)
@@ -249,7 +209,7 @@ But configuration doesn't show this integration clearly.
 
 ## 🏷️ Tags
 
-`#critical` `#cost-optimization` `#86-percent-reduction` `#intelligent-sampling` `#compression` `#tiered-storage` `#smart-routing` `#deduplication-rejected`
+`#critical` `#cost-optimization` `#86-percent-reduction` `#intelligent-sampling` `#compression` `#routing-by-retention` `#smart-routing` `#deduplication-rejected`
 
 ---
 

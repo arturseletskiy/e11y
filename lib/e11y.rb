@@ -249,10 +249,12 @@ module E11y
 
   # Request Buffer configuration
   class RequestBufferConfig
-    attr_accessor :enabled
+    attr_accessor :enabled, :flush_on_error, :flush_on_statuses
 
     def initialize
-      @enabled = false # Disabled by default
+      @enabled           = false  # Disabled by default
+      @flush_on_error    = true   # Flush buffer on 5xx server errors (default: true)
+      @flush_on_statuses = []     # Additional HTTP statuses that trigger a flush (e.g. [403])
     end
   end
 

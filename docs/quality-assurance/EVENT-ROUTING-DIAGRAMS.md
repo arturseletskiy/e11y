@@ -268,7 +268,7 @@ flowchart TD
     C -->|NO| E[Evaluate Rule 2]
     
     E --> F{retention > 90 days?}
-    F -->|YES| G[Return :s3_glacier]
+    F -->|YES| G[Return :archive]
     F -->|NO| H[Evaluate Rule 3]
     
     H --> I{severity = error?}
@@ -301,7 +301,7 @@ E11y.configure do |config|
     # Priority 2: Long retention
     ->(e) {
       days = (Time.parse(e[:retention_until]) - Time.now) / 86400
-      :s3_glacier if days > 90
+      :archive if days > 90
     },
     
     # Priority 3: Errors
@@ -586,9 +586,9 @@ end
 
 # Config: routing_rules = [->(e) { 
 #   days = (Time.parse(e[:retention_until]) - Time.now) / 86400
-#   :s3_glacier if days > 365
+#   :archive if days > 365
 # }]
-# Flow: [] → retention rule matches → :s3_glacier
+# Flow: [] → retention rule matches → :archive
 ```
 
 ---

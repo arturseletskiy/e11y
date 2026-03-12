@@ -505,7 +505,7 @@ module Events
     rate_limit 1000
     sample_rate 1.0  # Never sample payments (high-value)
     retention 7.years  # Financial records
-    adapters [:loki, :sentry, :s3_archive]
+    adapters [:loki, :sentry]
     
     # Common PII filtering
     contains_pii true
@@ -605,7 +605,7 @@ module E11y
         rate_limit 10_000
         sample_rate 1.0  # Never sample
         retention 7.years
-        adapters [:loki, :sentry, :s3_archive]
+        adapters [:loki, :sentry]
       end
     end
     
@@ -669,7 +669,7 @@ module Events
         rate_limit 5000
         sample_rate 1.0
         retention 7.years
-        adapters [:loki, :elasticsearch, :s3_archive, :slack_business]
+        adapters [:loki, :elasticsearch, :slack_business]
         
         metric :counter,
                name: 'critical_business_events.total',
@@ -1051,9 +1051,7 @@ E11y.configure do |config|
     config.register_adapter :loki, E11y::Adapters::LokiAdapter.new(
       url: ENV['LOKI_URL']
     )
-    config.register_adapter :s3_archive, E11y::Adapters::S3Adapter.new(
-      bucket: 'payment-archive'
-    )
+    # Archival: external jobs filter Loki by retention_until (ISO8601) for tier migration
     config.default_adapters = [:loki]
     
   when 'staging'
@@ -1082,9 +1080,9 @@ module Events
       required(:amount).filled(:decimal)
     end
     
-    # Production: also archive to S3
+    # Production: retention_period 7.years → retention_until in payload; archival jobs filter by it
     if Rails.env.production?
-      adapters [:loki, :s3_archive]
+      adapters [:loki]
     end
     # Other envs: use default_adapters
   end
@@ -1918,11 +1916,11 @@ end
 class Events::CriticalPayment < Events::BasePaymentEvent
   include E11y::Presets::HighValueEvent
   
-  adapters [:loki, :sentry, :s3_archive]  # Override base (add S3)
+  adapters [:loki, :sentry]
   
   # Final config:
   # - severity: :success (from base)
-  # - adapters: [:loki, :sentry, :s3_archive] (event-level override)
+  # - adapters: [:loki, :sentry] (event-level override)
   # - sample_rate: 1.0 (from base)
   # - rate_limit: 10_000 (from preset)
   # - retention: 7.years (from preset)

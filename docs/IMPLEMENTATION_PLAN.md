@@ -1415,20 +1415,19 @@ PHASE 5: SCALE & OPTIMIZATION (Weeks 21-26)
 **Depends On:** L2.5 (Adapters)  
 **Parallelizable:** ⚙️ Stream B (1 dev, parallel to Stream A)
 
-#### L3.16.1: Tiered Storage Adapter
+#### L3.16.1: Retention-Based Routing (Implemented)
 
 **Tasks:**
-1. **TieredStorageAdapter**
-   - File: `lib/e11y/adapters/tiered_storage.rb`
-   - Hot tier (7 days, fast SSD)
-   - Warm tier (30 days, slow HDD)
-   - Cold tier (90+ days, S3 Glacier)
-   - Auto-migration based on retention tags
-   - ✅ DoD: Events auto-migrate between tiers
+1. **Routing by retention_until** (✅ implemented)
+   - `config.routing_rules` — route to adapters based on retention_until
+   - Short retention → stdout (free), long → Loki
+   - `retention_period` DSL in event classes
+2. **Archival** (external job)
+   - Separate process filters Loki by retention_until
+   - No TieredStorage adapter — archival is external
 
 **Verification (L6):**
-- Integration tests: Tiered storage simulation
-- UC Compliance: UC-015 §3 (Tiered Storage)
+- UC Compliance: UC-015 §4 (Routing by retention_until)
 
 ---
 

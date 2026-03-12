@@ -79,9 +79,21 @@ E11y.configure do |config|
 end
 
 # Debug events buffered in memory during request
-# Flushed to storage ONLY on errors
+# Flushed to storage ONLY on 5xx server errors
 # Cost: -90%, Noise: -99%, Value: 100%
 ```
+
+> **Note:** By default the buffer flushes only on **5xx server errors** (`flush_on_error = true`).
+> On 4xx responses the buffer is discarded. Two independent knobs control this:
+>
+> ```ruby
+> # flush_on_error (default: true) — controls 5xx behaviour
+> config.request_buffer.flush_on_error = false  # disable 5xx flush
+>
+> # flush_on_statuses (default: []) — extra statuses, independent of flush_on_error
+> config.request_buffer.flush_on_statuses = [403]       # also flush on 403 Forbidden
+> config.request_buffer.flush_on_statuses = [401, 403]  # multiple codes
+> ```
 
 **Real-world impact:**
 - **Storage costs:** $500/month → $50/month (Loki/CloudWatch)
@@ -90,7 +102,13 @@ end
 
 ---
 
-### 2. Schema-Validated Business Events
+### 2. retention_until — Simple Archival
+
+Events carry `retention_until` (ISO8601) in their payload. **Archival happens later** — a separate job (cron, Loki compaction) filters logs by this field. No custom logic: `WHERE retention_until > ?`. Cost savings (export to cheap cold storage) and simplicity (one field to filter).
+
+---
+
+### 3. Schema-Validated Business Events
 
 Stop debugging nil values in production:
 
@@ -126,7 +144,7 @@ OrderPaidEvent.track(order_id: "123", amount: 99.99, currency: "USD")
 
 ---
 
-### 3. Zero-Config SLO Tracking
+### 4. Zero-Config SLO Tracking
 
 Automatic Service Level Objectives for your endpoints and jobs:
 
@@ -153,7 +171,7 @@ end
 
 ---
 
-### 4. Rails-First Design
+### 5. Rails-First Design
 
 Built for Rails developers, not platform engineers:
 
@@ -213,8 +231,9 @@ config.rails_instrumentation.enabled = true
 | **Schema Validation** | ✅ Implemented | dry-schema validation before sending events |
 | **Metrics DSL** | ✅ Implemented | Define Prometheus metrics alongside events |
 | **Adapters** | ✅ 7 adapters | Loki, Sentry, OpenTelemetry, Yabeda, File, Stdout, InMemory |
-| **PII Filtering** | ✅ Implemented | Configurable field masking/hashing/redaction |
+| **PII Filtering** | ✅ Implemented | Configurable field masking/hashing/redaction (event-level DSL) |
 | **Adaptive Sampling** | ✅ Implemented | Error-based, load-based, value-based strategies |
+| **Rate Limiting** | ✅ Implemented | Opt-in — requires `config.pipeline.use E11y::Middleware::RateLimiting` |
 | **Rails Integration** | ✅ Implemented | Auto-instrument HTTP, ActiveRecord, ActiveJob, Cache |
 | **Production Testing** | 🚧 In Progress | Validating with real workloads |
 
@@ -237,7 +256,9 @@ bundle install
 # config/initializers/e11y.rb
 E11y.configure do |config|
   # Enable request-scoped debug buffering (THE killer feature)
-  config.request_buffer.enabled = true
+  config.request_buffer.enabled        = true
+  # config.request_buffer.flush_on_error    = true   # default: flush on 5xx
+  # config.request_buffer.flush_on_statuses = [403]  # also flush on 403
   
   # Configure where events go
   config.adapters[:logs] = E11y::Adapters::Loki.new(
@@ -695,8 +716,16 @@ end
 
 1. Define metrics in event class
 2. Metrics registered in `E11y::Metrics::Registry` at boot time
-3. When `track()` is called, metrics are automatically updated
+3. When `track()` is called, metrics are automatically updated **if the Yabeda adapter is configured and routed to**
 4. Metrics exported via Yabeda adapter (Prometheus format)
+
+> **Note:** The `metrics do` DSL only registers metric definitions. Metrics are actually updated
+> when an event is written to the `E11y::Adapters::Yabeda` adapter. If you omit the Yabeda adapter
+> from your configuration, `track()` will send events to Loki/Sentry but metric counters will not
+> be incremented. Make sure to add:
+> ```ruby
+> config.adapters[:metrics] = E11y::Adapters::Yabeda.new
+> ```
 
 ---
 
@@ -819,6 +848,13 @@ Sampling strategies:
 1. **Error-based** - Increase sampling during error spikes
 2. **Load-based** - Reduce sampling under high throughput
 3. **Value-based** - Always sample high-value events
+
+> **Note:** Rate limiting (`E11y::Middleware::RateLimiting`) is **not included in the default
+> pipeline**. To enable it, add it manually:
+> ```ruby
+> config.pipeline.use E11y::Middleware::RateLimiting
+> ```
+> Enabling `config.rate_limiting.enabled = true` alone has no effect without this step.
 
 ### Configuration
 
@@ -969,11 +1005,12 @@ Use the InMemory adapter for testing.
 RSpec.configure do |config|
   config.before(:each) do
     # Configure InMemory adapter for tests
+    # Note: adapters is a Hash keyed by adapter name symbol
     E11y.configure do |e11y_config|
       e11y_config.adapters[:test] = E11y::Adapters::InMemory.new
     end
   end
-  
+
   config.after(:each) do
     # Clear events after each test
     E11y.configuration.adapters[:test]&.clear!
