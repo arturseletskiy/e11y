@@ -130,8 +130,7 @@ module E11y
             newest_entry: newest_entry,
             file_path: @file_path
           }
-        rescue StandardError => e
-          increment_metric("e11y.dlq.stats_error", error: e.class.name)
+        rescue StandardError
           default_stats
         end
         # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
@@ -252,8 +251,6 @@ module E11y
             rotated_path = @file_path.sub(/\.jsonl$/, ".#{timestamp}.jsonl")
 
             FileUtils.mv(@file_path, rotated_path)
-
-            increment_metric("e11y.dlq.rotated", new_file: rotated_path)
           end
         end
 
@@ -270,10 +267,7 @@ module E11y
 
             file_age_days = (Time.now - File.mtime(file)) / 86_400
 
-            if file_age_days > @retention_days
-              File.delete(file)
-              increment_metric("e11y.dlq.cleaned_up", file: file)
-            end
+            File.delete(file) if file_age_days > @retention_days
           end
         end
 
@@ -303,9 +297,16 @@ module E11y
         end
 
         # Increment DLQ metric.
+        #
+        # Normalizes metric_name like "e11y.dlq.saved" to :e11y_dlq_saved_total.
         def increment_metric(metric_name, tags = {})
-          # TODO: Integrate with Yabeda metrics
-          # E11y::Metrics.increment(metric_name, tags)
+          return unless defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:increment)
+
+          base = metric_name.to_s.split(".").last
+          name = :"e11y_dlq_#{base}_total"
+          E11y::Metrics.increment(name, tags)
+        rescue StandardError => e
+          E11y.logger&.warn("E11y DLQ metric error: #{e.message}")
         end
       end
       # rubocop:enable Metrics/ClassLength

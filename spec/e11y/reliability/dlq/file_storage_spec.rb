@@ -289,6 +289,55 @@ RSpec.describe E11y::Reliability::DLQ::FileStorage do
     end
   end
 
+  describe "metrics" do
+    before do
+      allow(E11y::Metrics).to receive(:increment)
+    end
+
+    it "increments e11y_dlq_saved_total on save" do
+      dlq.save(event_data, metadata: metadata)
+
+      expect(E11y::Metrics).to have_received(:increment).with(
+        :e11y_dlq_saved_total,
+        hash_including(event_name: "payment.failed")
+      )
+    end
+
+    it "increments e11y_dlq_parse_error_total when list encounters JSON parse error" do
+      File.write(file_path, "invalid json line\n")
+
+      dlq.list
+
+      expect(E11y::Metrics).to have_received(:increment).with(
+        :e11y_dlq_parse_error_total,
+        hash_including(error: "JSON::ParserError")
+      )
+    end
+
+    it "increments e11y_dlq_replayed_total on successful replay" do
+      event_id = dlq.save(event_data, metadata: metadata)
+
+      dlq.replay(event_id)
+
+      expect(E11y::Metrics).to have_received(:increment).with(
+        :e11y_dlq_replayed_total,
+        hash_including(event_name: "payment.failed")
+      )
+    end
+
+    it "increments e11y_dlq_replay_failed_total when replay raises" do
+      event_id = dlq.save(event_data, metadata: metadata)
+      allow(E11y.config).to receive(:built_pipeline).and_raise(StandardError.new("pipeline error"))
+
+      dlq.replay(event_id)
+
+      expect(E11y::Metrics).to have_received(:increment).with(
+        :e11y_dlq_replay_failed_total,
+        hash_including(error: "StandardError")
+      )
+    end
+  end
+
   describe "real-world scenario: adapter failure recovery" do
     it "stores failed events during outage" do
       # Simulate 10 failed events during Loki outage
