@@ -249,26 +249,29 @@ RSpec.describe "Audit Trail Integration", :integration do
   describe "Scenario 7: Compliance" do
     it "verifies audit trail meets compliance requirements (SOC2, HIPAA, GDPR)" do
       # Track compliance-critical events
+      # Use 7-digit IDs to avoid false positives from ISO8601 timestamp microsecond fields
+      # (timestamps store up to 6-digit microseconds, so 7-digit values can't appear in them)
+      #
       # User deletion (GDPR)
       Events::UserDeleted.track(
-        user_id: 123,
-        deleted_by: 456,
+        user_id: 1_234_567,
+        deleted_by: 4_567_890,
         ip_address: "192.168.1.1"
       )
 
       # Data access (HIPAA)
       Events::DataAccessed.track(
-        patient_id: 789,
-        accessed_by: 456,
+        patient_id: 7_654_321,
+        accessed_by: 4_567_890,
         access_type: "view"
       )
 
       # Permission change (SOC2)
       Events::PermissionChanged.track(
-        user_id: 123,
+        user_id: 1_234_567,
         permission: "admin",
         action: "granted",
-        granted_by: 456
+        granted_by: 4_567_890
       )
 
       # Verify immutability: Events cannot be modified after creation (signature prevents tampering)
@@ -304,9 +307,10 @@ RSpec.describe "Audit Trail Integration", :integration do
       # Verify encryption: Sensitive data encrypted (confidentiality)
       encrypted_files.each do |filepath|
         encrypted_content = File.read(filepath)
-        # Plaintext should NOT be visible
-        expect(encrypted_content).not_to include("123")
-        expect(encrypted_content).not_to include("789")
+        # Plaintext should NOT be visible — IDs are 7-digit values that cannot coincide
+        # with 6-digit microsecond timestamp fields stored in plaintext metadata
+        expect(encrypted_content).not_to include("1234567")
+        expect(encrypted_content).not_to include("7654321")
         expect(encrypted_content).not_to include("192.168.1.1")
       end
     end

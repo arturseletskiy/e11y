@@ -163,12 +163,12 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
       end
 
       # Get histogram last observed value from Yabeda
-      # Note: Yabeda histogram.get() returns the last observed value as a Float, not a hash
+      # Note: Yabeda histograms store the last observed value in .values hash (not via .get())
       # Histogram buckets are exposed through Prometheus exporter, not via .get()
-      histogram_value = Yabeda.e11y.slo_http_request_duration_seconds.get(
+      histogram_value = Yabeda.e11y.slo_http_request_duration_seconds.values[{
         controller: "OrdersController",
         action: "create"
-      )
+      }]
 
       expect(histogram_value).to be_a(Numeric),
                                  "Expected histogram value to be numeric, got #{histogram_value.class}"
@@ -221,11 +221,11 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
       end
 
       # Get histogram last observed value from Yabeda
-      # Note: Yabeda histogram.get() returns the last observed value as a Float, not a hash
-      histogram_value = Yabeda.e11y.slo_http_request_duration_seconds.get(
+      # Note: Yabeda histograms store the last observed value in .values hash (not via .get())
+      histogram_value = Yabeda.e11y.slo_http_request_duration_seconds.values[{
         controller: "OrdersController",
         action: "create"
-      )
+      }]
 
       expect(histogram_value).to be_a(Numeric),
                                  "Expected histogram value to be numeric"
