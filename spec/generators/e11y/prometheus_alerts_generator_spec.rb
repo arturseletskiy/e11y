@@ -77,38 +77,17 @@ RSpec.describe E11y::Generators::PrometheusAlertsGenerator, type: :generator do
       end
     end
 
-    it "alerts file contains E11yHighErrorRate alert" do
+    it "alerts file contains E11yHighAdapterErrorRate alert" do
       run_generator
       assert_file "config/prometheus/e11y_alerts.yml" do |content|
-        expect(content.force_encoding("UTF-8")).to match(/E11yHighErrorRate/)
+        expect(content.force_encoding("UTF-8")).to match(/E11yHighAdapterErrorRate/)
       end
     end
 
-    it "alerts file contains E11yRateLimitDrops alert" do
+    it "alerts file contains E11yHighValidationFailureRate alert" do
       run_generator
       assert_file "config/prometheus/e11y_alerts.yml" do |content|
-        expect(content.force_encoding("UTF-8")).to match(/E11yRateLimitDrops/)
-      end
-    end
-
-    it "alerts file contains E11yCircuitBreakerOpen alert" do
-      run_generator
-      assert_file "config/prometheus/e11y_alerts.yml" do |content|
-        expect(content.force_encoding("UTF-8")).to match(/E11yCircuitBreakerOpen/)
-      end
-    end
-
-    it "alerts file contains E11yDLQGrowing alert" do
-      run_generator
-      assert_file "config/prometheus/e11y_alerts.yml" do |content|
-        expect(content.force_encoding("UTF-8")).to match(/E11yDLQGrowing/)
-      end
-    end
-
-    it "alerts file contains E11yAdapterUnhealthy alert" do
-      run_generator
-      assert_file "config/prometheus/e11y_alerts.yml" do |content|
-        expect(content.force_encoding("UTF-8")).to match(/E11yAdapterUnhealthy/)
+        expect(content.force_encoding("UTF-8")).to match(/E11yHighValidationFailureRate/)
       end
     end
 
@@ -140,7 +119,7 @@ RSpec.describe E11y::Generators::PrometheusAlertsGenerator, type: :generator do
       assert_file "config/prometheus/e11y_alerts.yml" do |content|
         c = content.force_encoding("UTF-8")
         expect(c).to match(
-          /e11y_events_total|e11y_rate_limit_dropped_total|e11y_circuit_breaker_open_total|e11y_dlq_size/
+          /e11y_adapter_writes_total|e11y_middleware_validation_(passed|failed)/
         )
       end
     end

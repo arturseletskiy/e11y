@@ -1,54 +1,28 @@
 groups:
   - name: e11y
     rules:
-      # ── High error rate ──────────────────────────────────────────────────────
-      - alert: E11yHighErrorRate
+      # ── High adapter error rate ─────────────────────────────────────────
+      - alert: E11yHighAdapterErrorRate
         expr: |
-          rate(e11y_events_total{severity="error"}[5m])
-          / rate(e11y_events_total[5m]) > 0.05
+          sum(rate(e11y_adapter_writes_total{status="failure"}[5m]))
+          / sum(rate(e11y_adapter_writes_total[5m])) > 0.05
         for: 2m
         labels:
           severity: warning
         annotations:
-          summary: "E11y error rate above 5%"
-          description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+          summary: "E11y adapter write error rate above 5%"
+          description: "Adapter error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
 
-      # ── Event flood / rate-limit drops ───────────────────────────────────────
-      - alert: E11yRateLimitDrops
-        expr: rate(e11y_rate_limit_dropped_total[1m]) > 100
-        for: 1m
+      # ── High validation failure rate ────────────────────────────────────
+      - alert: E11yHighValidationFailureRate
+        expr: |
+          rate(e11y_middleware_validation_failed[5m])
+          / (rate(e11y_middleware_validation_passed[5m]) + rate(e11y_middleware_validation_failed[5m])) > 0.1
+        for: 2m
         labels:
           severity: warning
         annotations:
-          summary: "E11y is dropping events due to rate limiting"
-          description: "{{ $value }} events/sec are being dropped."
+          summary: "E11y validation failure rate above 10%"
 
-      # ── Circuit breaker open ─────────────────────────────────────────────────
-      - alert: E11yCircuitBreakerOpen
-        expr: e11y_circuit_breaker_open_total > 0
-        for: 0m
-        labels:
-          severity: critical
-        annotations:
-          summary: "E11y circuit breaker tripped for adapter {{ $labels.adapter }}"
-          description: "Adapter {{ $labels.adapter }} is unavailable. Events may be routed to DLQ."
-
-      # ── DLQ growing ──────────────────────────────────────────────────────────
-      - alert: E11yDLQGrowing
-        expr: e11y_dlq_size > 1000
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "E11y DLQ has {{ $value }} unprocessed events"
-          description: "Dead Letter Queue depth is above 1000. Check adapter connectivity."
-
-      # ── Adapter unhealthy ────────────────────────────────────────────────────
-      - alert: E11yAdapterUnhealthy
-        expr: e11y_adapter_healthy == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "E11y adapter {{ $labels.adapter }} is unhealthy"
-          description: "Adapter {{ $labels.adapter }} health check is failing."
+      # Note: E11yRateLimitDrops, E11yCircuitBreakerOpen, E11yDLQGrowing, E11yAdapterUnhealthy
+      # require metrics not yet implemented. Add when rate_limiting, circuit_breaker, DLQ metrics are wired.
