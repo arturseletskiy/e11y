@@ -252,15 +252,17 @@ module E11y
         end
       end
 
-      # Increment metric (placeholder for Phase 3: Metrics)
+      # Increment overflow metric via E11y::Metrics
       #
-      # TODO Phase 3: Replace with actual Yabeda metrics
-      #
-      # @param metric_name [String] Metric to increment
+      # @param metric_name [String] Metric to increment (e.g. "e11y.buffer.overflow.drop_newest")
       # @return [void]
       def increment_metric(metric_name)
-        # Placeholder - will be implemented in Phase 3
-        # Yabeda.e11y.buffer_overflow.increment(strategy: @overflow_strategy)
+        return unless defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:increment)
+
+        name = metric_name.to_s.tr(".", "_").to_sym
+        E11y::Metrics.increment(name, {})
+      rescue StandardError => e
+        E11y.logger&.debug("E11y RingBuffer metric error: #{e.message}")
       end
     end
   end
