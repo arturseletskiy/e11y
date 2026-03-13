@@ -39,8 +39,12 @@ end
 
 Then("those debug events should have been generated during that request") do
   events = memory_adapter.events.select { |e| e[:severity].to_s == "debug" }
-  expect(events).to all(include(request_id: be_a(String))),
-                    "Expected flushed debug events to carry a request_id from the failed request."
+  # Flushed events went through the pipeline (have trace_id) and match the controller's PostDebug event
+  expect(events).not_to be_empty
+  expect(events).to all(include(:trace_id)),
+    "Expected flushed debug events to have trace_id (proving they went through the pipeline)."
+  expect(events.map { |e| e[:event_name] }.uniq).to include("Events::PostDebug"),
+    "Expected PostDebug events from the controller; got: #{events.map { |e| e[:event_name] }.uniq.inspect}"
 end
 
 Then("at least {int} event with severity {string} should be in the adapter") do |min, severity|

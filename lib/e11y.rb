@@ -553,6 +553,10 @@ module E11y
       @global_window
     end
 
+    def window=(value)
+      @global_window = (defined?(ActiveSupport::Duration) && value.is_a?(ActiveSupport::Duration)) ? value.to_f : value.to_f
+    end
+
     # Set global rate limit.
     # @param limit [Integer] Max events per window globally
     # @param window [Numeric, ActiveSupport::Duration] Window size
