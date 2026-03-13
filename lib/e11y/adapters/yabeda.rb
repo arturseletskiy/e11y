@@ -304,8 +304,6 @@ module E11y
           { name: :"e11y.middleware.validation.passed", tags: [] },
           { name: :"e11y.middleware.validation.failed", tags: [] },
           { name: :"e11y.middleware.validation.skipped", tags: [] },
-          { name: :"e11y.middleware.routing.write_success", tags: [:adapter] },
-          { name: :"e11y.middleware.routing.write_error", tags: [:adapter] },
           { name: :"e11y.middleware.routing.routed", tags: %i[adapters_count routing_type] }
         ]
 
