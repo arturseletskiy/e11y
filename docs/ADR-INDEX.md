@@ -22,15 +22,19 @@ This document provides an index of all architectural decisions made for the E11y
 | [ADR-014](ADR-014-event-driven-slo.md) | Event-Driven SLO Tracking | ✅ Accepted | 3 |
 | [ADR-015](ADR-015-middleware-order.md) | Middleware Execution Order | ✅ Accepted | 2 |
 | [ADR-016](ADR-016-self-monitoring-slo.md) | Self-Monitoring SLO | ✅ Accepted | 4 |
+| [ADR-017](ADR-017-multi-rails-compatibility.md) | Multi-Rails Compatibility | ✅ Accepted | 2 |
+| [ADR-018](ADR-018-memory-optimization.md) | Memory Optimization (Zero-Allocation) | ✅ Accepted | 0 |
 
 ## 🎯 Key Decisions by Topic
 
 ### Architecture & Design
-- **ADR-001**: Core architecture principles, zero-allocation pattern, convention over configuration
+- **ADR-001**: Core architecture principles, convention over configuration
 - **ADR-012**: Event schema evolution strategy with versioning
+- **ADR-018**: Memory optimization (zero-allocation pattern, hash-based events)
 
 ### Performance & Scale
 - **ADR-001 §5**: Performance requirements (1K/10K/100K events/sec)
+- **ADR-018**: Memory optimization (zero-allocation, hash-based events)
 - **ADR-009**: Cost optimization strategies (adaptive sampling, compression, tiered storage)
 
 ### Reliability & Operations
@@ -87,9 +91,10 @@ Review:
 
 ### For Performance Tuning
 See:
-1. [ADR-001 §5](ADR-001-architecture.md) - Performance requirements
-2. [ADR-009](ADR-009-cost-optimization.md) - Optimization strategies
-3. [docs/guides/performance-tuning.md](guides/performance-tuning.md) - Tuning guide
+1. [ADR-018](ADR-018-memory-optimization.md) - Zero-allocation pattern, memory efficiency
+2. [ADR-001 §5](ADR-001-architecture.md) - Performance requirements
+3. [ADR-009](ADR-009-cost-optimization.md) - Optimization strategies
+4. [docs/guides/performance-tuning.md](guides/performance-tuning.md) - Tuning guide
 
 ## 🔗 Related Documentation
 

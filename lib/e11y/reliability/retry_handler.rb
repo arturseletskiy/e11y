@@ -165,17 +165,17 @@ module E11y
 
       # Handle successful execution.
       def on_success(adapter, _event, attempt)
-        increment_metric("e11y.retry.success", adapter: adapter.class.name, attempts: attempt)
+        E11y::Metrics.increment("e11y.retry.success", adapter: adapter.class.name, attempts: attempt)
 
         # Log if retry was needed
         return unless attempt > 1
 
-        increment_metric("e11y.retry.recovered", adapter: adapter.class.name, attempts: attempt)
+        E11y::Metrics.increment("e11y.retry.recovered", adapter: adapter.class.name, attempts: attempt)
       end
 
       # Handle permanent failure (non-retriable error).
       def on_permanent_failure(adapter, _event, error, attempt)
-        increment_metric(
+        E11y::Metrics.increment(
           "e11y.retry.permanent_failure",
           adapter: adapter.class.name,
           error: error.class.name,
@@ -185,7 +185,7 @@ module E11y
 
       # Handle max retries exhausted (all attempts failed).
       def on_max_retries_exhausted(adapter, _event, error, attempt)
-        increment_metric(
+        E11y::Metrics.increment(
           "e11y.retry.exhausted",
           adapter: adapter.class.name,
           error: error.class.name,
@@ -195,42 +195,14 @@ module E11y
 
       # Handle retry attempt.
       def on_retry_attempt(adapter, _event, error, attempt, delay_ms)
-        increment_metric(
+        E11y::Metrics.increment(
           "e11y.retry.attempt",
           adapter: adapter.class.name,
           error: error.class.name,
           attempt: attempt
         )
 
-        # Track backoff delay histogram
-        track_histogram("e11y.retry.backoff_delay_ms", delay_ms, adapter: adapter.class.name)
-      end
-
-      # Increment retry metric.
-      #
-      # @param metric_name [String] Metric name (e.g., "e11y.retry.success")
-      # @param tags [Hash] Additional tags
-      def increment_metric(metric_name, tags = {})
-        return unless defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:increment)
-
-        name = "e11y_retry_#{metric_name.to_s.split('.').last}".to_sym
-        E11y::Metrics.increment(name, tags)
-      rescue StandardError => e
-        E11y.logger&.warn("E11y RetryHandler metric error: #{e.message}")
-      end
-
-      # Track histogram metric.
-      #
-      # @param metric_name [String] Metric name (e.g., "e11y.retry.backoff_delay_ms")
-      # @param value [Numeric] Value to track
-      # @param tags [Hash] Additional tags
-      def track_histogram(metric_name, value, tags = {})
-        return unless defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:histogram)
-
-        name = "e11y_retry_#{metric_name.to_s.split('.').last}".to_sym
-        E11y::Metrics.histogram(name, value, tags)
-      rescue StandardError => e
-        E11y.logger&.warn("E11y RetryHandler histogram error: #{e.message}")
+        E11y::Metrics.histogram("e11y.retry.backoff_delay_ms", delay_ms, adapter: adapter.class.name)
       end
     end
   end

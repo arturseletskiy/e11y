@@ -217,14 +217,14 @@ module E11y
           push(event) # Retry push (recursive, but will succeed)
         when :drop_newest
           # Drop new event, keep buffer unchanged
-          increment_metric("e11y.buffer.overflow.drop_newest")
+          E11y::Metrics.increment("e11y.buffer.overflow.drop_newest")
           false
         when :block
           # Wait for space, with timeout
           wait_for_space
           if full?
             # Timeout reached, drop event
-            increment_metric("e11y.buffer.overflow.block_timeout")
+            E11y::Metrics.increment("e11y.buffer.overflow.block_timeout")
             false
           else
             push(event) # Retry after space freed
@@ -252,18 +252,6 @@ module E11y
         end
       end
 
-      # Increment overflow metric via E11y::Metrics
-      #
-      # @param metric_name [String] Metric to increment (e.g. "e11y.buffer.overflow.drop_newest")
-      # @return [void]
-      def increment_metric(metric_name)
-        return unless defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:increment)
-
-        name = metric_name.to_s.tr(".", "_").to_sym
-        E11y::Metrics.increment(name, {})
-      rescue StandardError => e
-        E11y.logger&.debug("E11y RingBuffer metric error: #{e.message}")
-      end
     end
   end
 end

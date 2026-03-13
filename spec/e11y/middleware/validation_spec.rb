@@ -70,11 +70,11 @@ RSpec.describe E11y::Middleware::Validation do
           payload: { order_id: 123, amount: 99.99 }
         }
 
-        allow(middleware).to receive(:increment_metric)
+        allow(E11y::Metrics).to receive(:increment)
 
         middleware.call(event_data)
 
-        expect(middleware).to have_received(:increment_metric)
+        expect(E11y::Metrics).to have_received(:increment)
           .with("e11y.middleware.validation.passed")
       end
 
@@ -155,11 +155,11 @@ RSpec.describe E11y::Middleware::Validation do
           payload: { order_id: "invalid", amount: 99.99 }
         }
 
-        allow(middleware).to receive(:increment_metric)
+        allow(E11y::Metrics).to receive(:increment)
 
         expect { middleware.call(event_data) }.to raise_error(E11y::ValidationError)
 
-        expect(middleware).to have_received(:increment_metric)
+        expect(E11y::Metrics).to have_received(:increment)
           .with("e11y.middleware.validation.failed")
       end
     end
@@ -182,11 +182,11 @@ RSpec.describe E11y::Middleware::Validation do
           payload: { anything: "goes" }
         }
 
-        allow(middleware).to receive(:increment_metric)
+        allow(E11y::Metrics).to receive(:increment)
 
         middleware.call(event_data)
 
-        expect(middleware).to have_received(:increment_metric)
+        expect(E11y::Metrics).to have_received(:increment)
           .with("e11y.middleware.validation.skipped")
       end
     end

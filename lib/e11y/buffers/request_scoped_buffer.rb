@@ -102,7 +102,7 @@ module E11y
           end
 
           current_buffer.clear
-          increment_metric("e11y.request_buffer.flushed_on_error", tags: { events: flushed_count })
+          E11y::Metrics.increment("e11y.request_buffer.flushed_on_error", { events: flushed_count })
           flushed_count
         end
 
@@ -121,7 +121,7 @@ module E11y
 
           discarded_count = current_buffer.size
           current_buffer.clear
-          increment_metric("e11y.request_buffer.discarded", tags: { events: discarded_count })
+          E11y::Metrics.increment("e11y.request_buffer.discarded", { events: discarded_count })
           discarded_count
         end
 
@@ -185,12 +185,12 @@ module E11y
 
           event_to_store = event_data.merge(request_id: request_id)
           current_buffer << event_to_store
-          increment_metric("e11y.request_buffer.events_buffered")
+          E11y::Metrics.increment("e11y.request_buffer.events_buffered")
           true
         end
 
         def record_buffer_overflow # rubocop:disable Naming/PredicateMethod
-          increment_metric("e11y.request_buffer.overflow")
+          E11y::Metrics.increment("e11y.request_buffer.overflow")
           false
         end
 
@@ -228,23 +228,7 @@ module E11y
           # Mark as from flush so Routing does not re-buffer
           event_to_send = event_data.merge(from_request_buffer_flush: true)
           E11y.config.built_pipeline.call(event_to_send)
-          increment_metric("e11y.request_buffer.event_flushed")
-        end
-
-        # Increment metric for effectiveness tracking
-        #
-        # @param metric_name [String] Metric name (e.g., "e11y.request_buffer.flushed_on_error")
-        # @param tags [Hash] Optional tags (e.g., { events: count } for batch increments)
-        # @return [void]
-        def increment_metric(metric_name, tags: {})
-          return unless defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:increment)
-
-          # Normalize: e11y.request_buffer.X -> e11y_request_buffer_X
-          name = metric_name.to_s.tr(".", "_").to_sym
-          value = tags.key?(:events) ? tags.delete(:events) : 1
-          E11y::Metrics.increment(name, tags, value: value)
-        rescue StandardError => e
-          E11y.logger&.debug("E11y RequestScopedBuffer metric error: #{e.message}")
+          E11y::Metrics.increment("e11y.request_buffer.event_flushed")
         end
       end
     end

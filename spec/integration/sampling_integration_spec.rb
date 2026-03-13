@@ -574,21 +574,10 @@ RSpec.describe "Sampling Middleware Integration", :integration do
   end
 
   describe "Scenario 7: Value-based sampling (FEAT-4849)" do
-    # The Sampling middleware's value-based check (FEAT-4849) inspects fields
-    # at the TOP LEVEL of the event_data hash passed through the middleware chain.
-    # (See lib/e11y/middleware/sampling.rb: determine_sample_rate passes event_data
-    # directly to ValueSamplingConfig#matches?, which calls ValueExtractor#extract
-    # on event_data itself — not event_data[:payload].)
-    #
-    # When events are sent via Event::Base.track(), the application payload is
-    # nested as event_data[:payload]. Therefore, value-based rules do NOT fire
-    # when using .track() — the extractor finds nil for any payload field and
-    # defaults to 0.0.
-    #
-    # These integration tests verify the middleware via E11y.config.built_pipeline
-    # with event_data constructed so that payload fields are at the top level,
-    # exactly as the unit tests for the middleware do.
-    # This is the documented contract for how the Sampling middleware processes events.
+    # BUG-004 fix (2026-03-13): sampling middleware now passes event_data[:payload]
+    # to ValueSamplingConfig#matches?, so sample_by_value rules work correctly
+    # via the normal Event::Base.track() API.
+    # See: lib/e11y/middleware/sampling.rb — payload = event_data[:payload] || event_data
 
     before do
       # Reconfigure Sampling middleware with value-based sampling support enabled.
@@ -785,6 +774,43 @@ RSpec.describe "Sampling Middleware Integration", :integration do
       events = memory_adapter.find_events("Events::TestValueNoMatch")
       expect(events.count).to eq(0),
                               "Expected 0 events (no rule matches, base rate 0.0), got #{events.count}"
+    end
+
+    it "works via Event::Base.track() — BUG-004 regression" do
+      # Before BUG-004 fix: sample_by_value never fired via track() because
+      # middleware checked top-level event_data[:amount] (always 0.0) instead of
+      # event_data[:payload][:amount] where track() puts the user fields.
+      track_api_event_class = Class.new(E11y::Event::Base) do
+        severity :info
+        sample_rate 0.0       # never sampled without value rule
+        contains_pii false
+        sample_by_value :amount, greater_than: 1000
+
+        schema do
+          required(:amount).filled(:float)
+        end
+      end
+      stub_const("Events::TestValueTrack", track_api_event_class)
+
+      memory_adapter.clear!
+      E11y::Current.reset
+
+      # High-value event via track() → value rule fires → 100% override
+      # Event name is derived from stub_const: "Events::TestValueTrack"
+      10.times { Events::TestValueTrack.track(amount: 2000.0) }
+      high_events = memory_adapter.find_events("Events::TestValueTrack")
+      expect(high_events.count).to eq(10),
+                                   "BUG-004 regression: track(amount: 2000.0) should trigger " \
+                                   "value rule (>1000) and sample 100%, got #{high_events.count}"
+
+      memory_adapter.clear!
+
+      # Low-value event via track() → rule doesn't fire → base rate 0.0 → dropped
+      10.times { Events::TestValueTrack.track(amount: 50.0) }
+      low_events = memory_adapter.find_events("Events::TestValueTrack")
+      expect(low_events.count).to eq(0),
+                                  "Low-value track(amount: 50.0) should be dropped (base rate 0.0), " \
+                                  "got #{low_events.count}"
     end
 
     it "extracts nested fields via dot notation for value-based sampling" do

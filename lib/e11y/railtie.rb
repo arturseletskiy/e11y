@@ -70,6 +70,13 @@ module E11y
       E11y::Railtie.setup_active_job if defined?(::ActiveJob) && E11y.config.active_job&.enabled
     end
 
+    # Outgoing HTTP trace propagation (UC-009)
+    initializer "e11y.http_tracing", after: :load_config_initializers do
+      next unless E11y.configuration.enable_http_tracing
+
+      E11y::Tracing.patch_net_http!
+    end
+
     # Middleware insertion
     initializer "e11y.middleware" do |app|
       next unless E11y.config.enabled

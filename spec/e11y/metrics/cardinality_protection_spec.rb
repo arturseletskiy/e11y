@@ -286,6 +286,7 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
       stub_const("E11y::Metrics", double)
       allow(E11y::Metrics).to receive(:increment)
       allow(E11y::Metrics).to receive(:gauge)
+      allow(E11y::Metrics).to receive(:reset_backend!)
 
       protection = described_class.new(cardinality_limit: 1, overflow_strategy: :drop)
 
@@ -308,6 +309,7 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
     it "handles metrics tracking errors gracefully" do
       stub_const("E11y::Metrics", double)
       allow(E11y::Metrics).to receive(:increment).and_raise(StandardError, "metrics error")
+      allow(E11y::Metrics).to receive(:reset_backend!)
 
       protection = described_class.new(cardinality_limit: 1, overflow_strategy: :drop)
 

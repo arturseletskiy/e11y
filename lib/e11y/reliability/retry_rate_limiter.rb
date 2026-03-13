@@ -92,29 +92,20 @@ module E11y
 
       # Handle limit exceeded based on configured strategy.
       def on_limit_exceeded(adapter_name, _event_data)
-        increment_metric("e11y.retry_rate_limiter.exceeded", adapter: adapter_name)
+        E11y::Metrics.increment("e11y.retry_rate_limiter.exceeded", adapter: adapter_name)
 
         case @on_limit_exceeded
         when :delay
           # Calculate delay with jitter
           delay_sec = @window + rand((-@jitter_range * @window)..(@jitter_range * @window))
-          increment_metric("e11y.retry_rate_limiter.delayed", adapter: adapter_name, delay_sec: delay_sec)
+          E11y::Metrics.increment("e11y.retry_rate_limiter.delayed", adapter: adapter_name, delay_sec: delay_sec)
           # Caller should sleep(delay_sec) before retry
         when :dlq
           # Caller should save to DLQ instead of retrying
-          increment_metric("e11y.retry_rate_limiter.dlq", adapter: adapter_name)
+          E11y::Metrics.increment("e11y.retry_rate_limiter.dlq", adapter: adapter_name)
         end
       end
 
-      # Increment retry rate limiter metric.
-      def increment_metric(metric_name, tags = {})
-        return unless defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:increment)
-
-        name = "e11y_retry_rate_limiter_#{metric_name.to_s.split('.').last}".to_sym
-        E11y::Metrics.increment(name, tags)
-      rescue StandardError => e
-        E11y.logger&.warn("E11y RetryRateLimiter metric error: #{e.message}")
-      end
     end
   end
 end

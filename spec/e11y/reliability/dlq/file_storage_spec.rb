@@ -298,7 +298,7 @@ RSpec.describe E11y::Reliability::DLQ::FileStorage do
       dlq.save(event_data, metadata: metadata)
 
       expect(E11y::Metrics).to have_received(:increment).with(
-        :e11y_dlq_saved_total,
+        "e11y.dlq.saved",
         hash_including(event_name: "payment.failed")
       )
     end
@@ -309,7 +309,7 @@ RSpec.describe E11y::Reliability::DLQ::FileStorage do
       dlq.list
 
       expect(E11y::Metrics).to have_received(:increment).with(
-        :e11y_dlq_parse_error_total,
+        "e11y.dlq.parse_error",
         hash_including(error: "JSON::ParserError")
       )
     end
@@ -320,7 +320,7 @@ RSpec.describe E11y::Reliability::DLQ::FileStorage do
       dlq.replay(event_id)
 
       expect(E11y::Metrics).to have_received(:increment).with(
-        :e11y_dlq_replayed_total,
+        "e11y.dlq.replayed",
         hash_including(event_name: "payment.failed")
       )
     end
@@ -332,7 +332,7 @@ RSpec.describe E11y::Reliability::DLQ::FileStorage do
       dlq.replay(event_id)
 
       expect(E11y::Metrics).to have_received(:increment).with(
-        :e11y_dlq_replay_failed_total,
+        "e11y.dlq.replay_failed",
         hash_including(error: "StandardError")
       )
     end

@@ -11,12 +11,16 @@ loader.inflector.inflect(
   "pii_filter" => "PIIFilter",
   "otel_logs" => "OTelLogs",
   "slo" => "SLO",
-  "dlq" => "DLQ"
+  "dlq" => "DLQ",
+  "net_http_patch" => "NetHTTPPatch"
 )
 # Don't autoload railtie - it will be required manually when Rails is available
 loader.do_not_eager_load("#{__dir__}/e11y/railtie.rb")
 # Generators live under lib/generators/ — not part of the autoloaded tree
 loader.ignore("#{__dir__}/generators")
+# Optional HTTP tracing files require external gems (faraday, net/http) — loaded on demand only
+loader.ignore("#{__dir__}/e11y/tracing/faraday_middleware.rb")
+loader.ignore("#{__dir__}/e11y/tracing/net_http_patch.rb")
 loader.setup
 
 # E11y - Event-Driven Observability for Ruby on Rails
@@ -131,6 +135,20 @@ module E11y
       end
     end
 
+    # Access the global Event Registry singleton.
+    #
+    # The registry auto-populates as event classes are defined (via the `event_name` DSL setter).
+    # Useful for introspection, documentation generation, and admin dashboards.
+    #
+    # @return [E11y::Registry]
+    #
+    # @example
+    #   E11y.registry.all_events
+    #   E11y.registry.find("order.created")
+    def registry
+      Registry.instance
+    end
+
     # Reset configuration (primarily for testing)
     #
     # @return [void]
@@ -138,6 +156,7 @@ module E11y
     def reset!
       @configuration = nil
       @logger = nil
+      E11y::Metrics.reset_backend!
     end
   end
 
@@ -165,7 +184,7 @@ module E11y
   #   end
   class Configuration
     attr_accessor :adapters, :log_level, :enabled, :environment, :service_name, :default_retention_period,
-                  :routing_rules, :fallback_adapters
+                  :routing_rules, :fallback_adapters, :enable_http_tracing
     attr_reader :adapter_mapping, :pipeline, :rails_instrumentation, :logger_bridge, :request_buffer, :active_job,
                 :sidekiq, :error_handling, :dlq_storage, :dlq_filter, :cardinality_protection
 
@@ -185,6 +204,7 @@ module E11y
       @enabled = true
       @environment = nil
       @service_name = nil
+      @enable_http_tracing = false # Opt-in: disabled by default
     end
 
     def initialize_routing_config

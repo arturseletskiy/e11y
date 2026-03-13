@@ -69,7 +69,7 @@ module E11y
 
         # Skip validation if mode is :never
         if validation_mode == :never
-          increment_metric("e11y.middleware.validation.skipped")
+          E11y::Metrics.increment("e11y.middleware.validation.skipped")
           return @app.call(event_data)
         end
 
@@ -77,7 +77,7 @@ module E11y
         if validation_mode == :sampled
           sample_rate = event_class.respond_to?(:validation_sample_rate) ? event_class.validation_sample_rate : 0.01
           if rand >= sample_rate
-            increment_metric("e11y.middleware.validation.skipped")
+            E11y::Metrics.increment("e11y.middleware.validation.skipped")
             return @app.call(event_data)
           end
         end
@@ -87,7 +87,7 @@ module E11y
 
         # Skip validation if no schema defined (schema-less events)
         unless schema
-          increment_metric("e11y.middleware.validation.skipped")
+          E11y::Metrics.increment("e11y.middleware.validation.skipped")
           return @app.call(event_data)
         end
 
@@ -96,11 +96,11 @@ module E11y
 
         if result.success?
           # Validation passed
-          increment_metric("e11y.middleware.validation.passed")
+          E11y::Metrics.increment("e11y.middleware.validation.passed")
           @app.call(event_data)
         else
           # Validation failed - raise error with details
-          increment_metric("e11y.middleware.validation.failed")
+          E11y::Metrics.increment("e11y.middleware.validation.failed")
 
           error_message = format_validation_errors(event_class, result.errors)
           raise E11y::ValidationError, error_message
@@ -123,13 +123,6 @@ module E11y
         "Validation failed for #{event_class.name}: #{error_details}"
       end
 
-      # Placeholder for metrics instrumentation.
-      #
-      # @param metric_name [String] Metric name
-      # @return [void]
-      def increment_metric(metric_name, **tags)
-        E11y::Metrics.increment(metric_name.to_sym, tags)
-      end
     end
   end
 end

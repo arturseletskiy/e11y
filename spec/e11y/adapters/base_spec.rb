@@ -815,4 +815,107 @@ RSpec.describe E11y::Adapters::Base do
       expect(rate_limiter).to be(custom_limiter)
     end
   end
+
+  describe "#retriable_error?" do
+    let(:adapter) { test_adapter_class.new }
+
+    # Helper: call the private method
+    def retriable?(adapter, error)
+      adapter.send(:retriable_error?, error)
+    end
+
+    context "network timeout errors" do
+      it "returns true for Timeout::Error" do
+        expect(retriable?(adapter, Timeout::Error.new("timed out"))).to be(true)
+      end
+
+      it "returns true for Net::ReadTimeout" do
+        expect(retriable?(adapter, Net::ReadTimeout.new("read timed out"))).to be(true)
+      end
+
+      it "returns true for Net::OpenTimeout" do
+        expect(retriable?(adapter, Net::OpenTimeout.new("open timed out"))).to be(true)
+      end
+    end
+
+    context "connection errors" do
+      it "returns true for Errno::ECONNREFUSED" do
+        expect(retriable?(adapter, Errno::ECONNREFUSED.new)).to be(true)
+      end
+
+      it "returns true for Errno::ECONNRESET" do
+        expect(retriable?(adapter, Errno::ECONNRESET.new)).to be(true)
+      end
+
+      it "returns true for Errno::ETIMEDOUT" do
+        expect(retriable?(adapter, Errno::ETIMEDOUT.new)).to be(true)
+      end
+
+      it "returns true for Errno::EHOSTUNREACH" do
+        expect(retriable?(adapter, Errno::EHOSTUNREACH.new)).to be(true)
+      end
+    end
+
+    context "HTTP 5xx server errors" do
+      it "returns true when error has a response with status 500" do
+        error = StandardError.new("internal server error")
+        allow(error).to receive(:respond_to?).and_call_original
+        allow(error).to receive(:respond_to?).with(:response).and_return(true)
+        allow(error).to receive(:response).and_return({ status: 500 })
+        expect(retriable?(adapter, error)).to be(true)
+      end
+
+      it "returns true when error has a response with status 503" do
+        error = StandardError.new("service unavailable")
+        allow(error).to receive(:respond_to?).and_call_original
+        allow(error).to receive(:respond_to?).with(:response).and_return(true)
+        allow(error).to receive(:response).and_return({ status: 503 })
+        expect(retriable?(adapter, error)).to be(true)
+      end
+
+      it "returns false when error has a 4xx response (client error)" do
+        error = StandardError.new("not found")
+        allow(error).to receive(:respond_to?).and_call_original
+        allow(error).to receive(:respond_to?).with(:response).and_return(true)
+        allow(error).to receive(:response).and_return({ status: 404 })
+        expect(retriable?(adapter, error)).to be(false)
+      end
+    end
+
+    context "permanent / non-retriable errors" do
+      it "returns false for ArgumentError" do
+        expect(retriable?(adapter, ArgumentError.new("bad argument"))).to be(false)
+      end
+
+      it "returns false for NoMethodError" do
+        expect(retriable?(adapter, NoMethodError.new("undefined method"))).to be(false)
+      end
+
+      it "returns false for generic RuntimeError" do
+        expect(retriable?(adapter, RuntimeError.new("something went wrong"))).to be(false)
+      end
+
+      it "returns false for StandardError with no network context" do
+        expect(retriable?(adapter, StandardError.new("generic error"))).to be(false)
+      end
+    end
+
+    context "custom override via super" do
+      it "allows subclass to extend retriable errors via super" do
+        custom_class = Class.new(test_adapter_class) do
+          def retriable_error?(error)
+            super || error.is_a?(RuntimeError)
+          end
+        end
+
+        custom_adapter = custom_class.new
+        # RuntimeError is non-retriable in base but retriable in subclass
+        expect(custom_adapter.send(:retriable_error?, RuntimeError.new("transient"))).to be(true)
+        # Base retriable errors still work
+        expect(custom_adapter.send(:retriable_error?, Timeout::Error.new)).to be(true)
+        # Non-retriable in both
+        expect(custom_adapter.send(:retriable_error?, ArgumentError.new)).to be(false)
+      end
+    end
+  end
 end

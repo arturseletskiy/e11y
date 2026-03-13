@@ -61,7 +61,7 @@ module E11y
           rotate_if_needed
           cleanup_old_files
 
-          increment_metric("e11y.dlq.saved", event_name: event_data[:event_name])
+          E11y::Metrics.increment("e11y.dlq.saved", event_name: event_data[:event_name])
 
           event_id
         end
@@ -97,7 +97,7 @@ module E11y
           entries
         rescue JSON::ParserError => e
           # Log parsing error but don't crash
-          increment_metric("e11y.dlq.parse_error", error: e.class.name)
+          E11y::Metrics.increment("e11y.dlq.parse_error", error: e.class.name)
           entries
         end
         # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
@@ -149,10 +149,10 @@ module E11y
           return false unless event_data
 
           E11y.config.built_pipeline.call(event_data)
-          increment_metric("e11y.dlq.replayed", event_name: entry[:event_name])
+          E11y::Metrics.increment("e11y.dlq.replayed", event_name: entry[:event_name])
           true
         rescue StandardError => e
-          increment_metric("e11y.dlq.replay_failed", error: e.class.name)
+          E11y::Metrics.increment("e11y.dlq.replay_failed", error: e.class.name)
           false
         end
 
@@ -299,15 +299,6 @@ module E11y
         # Increment DLQ metric.
         #
         # Normalizes metric_name like "e11y.dlq.saved" to :e11y_dlq_saved_total.
-        def increment_metric(metric_name, tags = {})
-          return unless defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:increment)
-
-          base = metric_name.to_s.split(".").last
-          name = :"e11y_dlq_#{base}_total"
-          E11y::Metrics.increment(name, tags)
-        rescue StandardError => e
-          E11y.logger&.warn("E11y DLQ metric error: #{e.message}")
-        end
       end
       # rubocop:enable Metrics/ClassLength
     end

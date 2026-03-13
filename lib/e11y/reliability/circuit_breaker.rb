@@ -115,7 +115,7 @@ module E11y
 
       # Handle OPEN state (fast fail).
       def handle_open_circuit
-        increment_metric("e11y.circuit_breaker.rejected")
+        E11y::Metrics.increment("e11y.circuit_breaker.rejected", adapter: @adapter_name)
 
         raise CircuitOpenError, "Circuit breaker open for #{@adapter_name} " \
                                 "(opened at #{@opened_at}, timeout: #{@timeout_seconds}s)"
@@ -175,7 +175,7 @@ module E11y
         @failure_count = 0 # Reset for next cycle
         @success_count = 0
 
-        increment_metric("e11y.circuit_breaker.opened")
+        E11y::Metrics.increment("e11y.circuit_breaker.opened", adapter: @adapter_name)
         track_circuit_state_gauge
       end
 
@@ -184,7 +184,7 @@ module E11y
         @state = STATE_HALF_OPEN
         @success_count = 0 # Reset success counter for testing
 
-        increment_metric("e11y.circuit_breaker.half_opened")
+        E11y::Metrics.increment("e11y.circuit_breaker.half_opened", adapter: @adapter_name)
         track_circuit_state_gauge
       end
 
@@ -196,21 +196,8 @@ module E11y
         @opened_at = nil
         @last_failure_time = nil
 
-        increment_metric("e11y.circuit_breaker.closed")
+        E11y::Metrics.increment("e11y.circuit_breaker.closed", adapter: @adapter_name)
         track_circuit_state_gauge
-      end
-
-      # Increment circuit breaker metric.
-      #
-      # @param metric_name [String] Metric name
-      # @param tags [Hash] Additional tags
-      def increment_metric(metric_name, tags = {})
-        return unless defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:increment)
-
-        name = "e11y_circuit_breaker_#{metric_name.to_s.split('.').last}".to_sym
-        E11y::Metrics.increment(name, tags.merge(adapter: @adapter_name))
-      rescue StandardError => e
-        E11y.logger&.warn("E11y CircuitBreaker metric error: #{e.message}")
       end
 
       # Track circuit breaker state gauge via ReliabilityMonitor.

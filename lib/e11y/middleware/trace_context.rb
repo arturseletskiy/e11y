@@ -56,7 +56,7 @@ module E11y
       def call(event_data)
         enrich_trace_context(event_data)
         enrich_service_context(event_data)
-        increment_metric("e11y.middleware.trace_context.processed")
+        E11y::Metrics.increment("e11y.middleware.trace_context.processed")
         @app.call(event_data)
       end
 
@@ -151,9 +151,6 @@ module E11y
       #
       # @param metric_name [String] Metric name
       # @return [void]
-      def increment_metric(metric_name, **tags)
-        E11y::Metrics.increment(metric_name.to_sym, tags)
-      end
     end
   end
 end

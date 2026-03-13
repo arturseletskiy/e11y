@@ -357,13 +357,37 @@ module E11y
           resolved_adapters
         end
 
-        # Get event name (normalized)
+        # Get or set event name (normalized)
         #
-        # @return [String] Event name without version suffix
+        # When called with a value, stores it and auto-registers the class in `E11y::Registry`.
+        # When called without a value, derives the name from the class name (stripping version suffix).
         #
-        # @example
+        # @param value [String, Symbol, nil] Explicit event name to set, or nil to read
+        # @return [String] Event name
+        #
+        # @example Explicit name
+        #   class OrderPaidEvent < E11y::Event::Base
+        #     event_name "order.paid"
+        #   end
+        #
+        # @example Auto-derived name
         #   OrderPaidEventV2.event_name # => "OrderPaidEvent"
-        def event_name
+        def event_name(value = nil)
+          if value
+            @event_name = value.to_s
+            @event_name_explicit = true
+            # Auto-register in E11y::Registry when an explicit name is set.
+            # Guard with defined? so that loading order does not matter.
+            # NOTE: call register AFTER setting @event_name_explicit so that any
+            # re-entrant call to event_name (from Registry#register) returns the
+            # correct value instead of falling through to the auto-derive path.
+            E11y::Registry.register(self) if defined?(E11y::Registry)
+            return @event_name
+          end
+
+          # Return explicitly-set name unconditionally (works for anonymous classes too)
+          return @event_name if @event_name_explicit
+
           # Don't cache for anonymous classes (name returns nil)
           return @event_name if @event_name && name
 

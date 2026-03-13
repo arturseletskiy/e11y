@@ -31,12 +31,12 @@ This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.
 ### Setup
 
 ```bash
-# Clone the repository
-git clone https://github.com/arturseletskiy/e11y.git
+# Clone the repository (fork first on GitHub)
+git clone https://github.com/YOUR_USERNAME/e11y.git
 cd e11y
 
-# Install dependencies
-bundle install
+# Run setup script (configures bundle, installs dependencies)
+bin/setup
 
 # Run tests
 bundle exec rake spec:unit
@@ -45,6 +45,21 @@ bundle exec rake spec:railtie
 
 # Check code style
 bundle exec rubocop
+```
+
+### Integration Dependencies (Optional)
+
+For integration tests, Rails adapter, or OpenTelemetry:
+
+```bash
+bundle install --with integration
+```
+
+For Loki/OTel integration tests, start services first:
+
+```bash
+docker compose up -d loki otel-collector
+INTEGRATION=true bundle exec rspec spec/integration/
 ```
 
 ---
@@ -502,6 +517,13 @@ Our RuboCop config (`.rubocop.yml`) enforces:
 
 ## Documentation
 
+### Project Documentation
+
+- [Architecture Decisions (ADRs)](docs/ADR-INDEX.md)
+- [Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
+- [Quick Start](docs/QUICK-START.md)
+- [Comprehensive Configuration](docs/COMPREHENSIVE-CONFIGURATION.md)
+
 ### Code Documentation
 
 Use YARD for documentation:
@@ -540,11 +562,11 @@ buffer = RingBuffer.new
 
 ## Architecture Decision Records (ADRs)
 
-For significant architectural decisions, create an ADR:
+For significant architectural decisions, create an ADR in `docs/`:
 
 ```bash
-# Create new ADR
-cp docs/adr/template.md docs/adr/018-your-decision.md
+# Create new ADR (see docs/ADR-INDEX.md for numbering)
+# Follow format of existing ADRs (ADR-001-architecture.md, etc.)
 ```
 
 **When to create ADR:**
@@ -575,11 +597,39 @@ What other options did we consider?
 
 ---
 
+## Security
+
+```bash
+# Check for vulnerable dependencies
+bundle exec bundler-audit check --update
+
+# Static security analysis (if Brakeman installed)
+bundle exec brakeman
+```
+
+## Reporting Bugs
+
+**Before reporting:** Search existing issues, verify bug exists in main.
+
+**Bug report template:**
+- Describe the bug
+- Steps to reproduce
+- Expected vs actual behavior
+- Environment (Ruby, E11y, Rails, OS versions)
+
+## Suggesting Features
+
+**Feature request template:**
+- Problem being solved
+- Proposed solution
+- Alternatives considered
+- Additional context
+
 ## Getting Help
 
-- **Questions:** Open a [GitHub Discussion](https://github.com/arturseletskiy/e11y/discussions)
-- **Bugs:** Open an [Issue](https://github.com/arturseletskiy/e11y/issues)
-- **Security:** Email artur.2304@mail.ru
+- **Questions:** Open a GitHub Discussion
+- **Bugs:** Open a GitHub Issue
+- **Security:** Private disclosure via GitHub Security Advisories
 
 ---
 

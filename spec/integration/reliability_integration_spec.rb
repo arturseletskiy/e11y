@@ -849,4 +849,303 @@ RSpec.describe "Reliability Features Integration", :integration do
       expect(result[:success_count] + result[:failure_count]).to eq(3)
     end
   end
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # C18 E2E: full delivery failure → DLQ path (BUG-003 regression)
+  #
+  # Verifies the complete path:
+  #   write_with_reliability → retry exhausted → handle_reliability_error
+  #     → save_to_dlq_if_needed → dlq_storage.save called with Exception object
+  #
+  # BUG-003 regression: save_to_dlq_if_needed previously passed
+  #   metadata[:error] = error.message  (String)
+  # which caused FileStorage#save to call `String#message` → NoMethodError.
+  # The fix passes the Exception object directly: metadata[:error] = error.
+  # ─────────────────────────────────────────────────────────────────────────────
+  describe "C18 E2E: full delivery failure → DLQ path (BUG-003 regression)", :integration do
+    let(:temp_dlq_dir) { Dir.mktmpdir("c18_dlq_test") }
+
+    # Adapter subclass whose write always raises a transient (retriable) error
+    let(:always_failing_adapter_class) do
+      Class.new(E11y::Adapters::Base) do
+        def write(_event_data)
+          raise Errno::ECONNREFUSED, "adapter down"
+        end
+      end
+    end
+
+    # Adapter with reliability enabled and a short retry budget so the tests run fast.
+    # fail_on_error: true in the RetryHandler raises RetryExhaustedError after max_attempts,
+    # which is caught by write_with_reliability → handle_reliability_error.
+    # The global E11y.config.error_handling.fail_on_error is stubbed to false (see before block)
+    # so handle_reliability_error saves to DLQ and returns false instead of re-raising.
+    let(:adapter) do
+      always_failing_adapter_class.new(
+        reliability: {
+          enabled: true,
+          retry: {
+            max_attempts: 2,
+            base_delay_ms: 1,
+            max_delay_ms: 5,
+            fail_on_error: true
+          }
+        }
+      )
+    end
+
+    let(:event_data) do
+      {
+        event_name: "payment.failed",
+        severity: :error,
+        timestamp: Time.now.utc.iso8601,
+        payload: { order_id: "c18-test-001" }
+      }
+    end
+
+    before do
+      # Wire a permissive filter so save_to_dlq_if_needed will call storage.save
+      filter = E11y::Reliability::DLQ::Filter.new(
+        save_severities: %i[error fatal],
+        default_behavior: :save
+      )
+      adapter.instance_variable_set(:@dlq_filter, filter)
+
+      # Stub global fail_on_error → false so handle_reliability_error saves to DLQ
+      # and returns false rather than re-raising (which would prevent our assertions).
+      allow(E11y.config.error_handling).to receive(:fail_on_error).and_return(false)
+    end
+
+    after do
+      FileUtils.rm_rf(temp_dlq_dir) if Dir.exist?(temp_dlq_dir)
+    end
+
+    it "DLQ storage.save receives an Exception object, not a String (BUG-003 regression)" do
+      # Capture the metadata hash passed to dlq_storage.save
+      captured_metadata = nil
+      stub_storage = double("DLQStorage")
+      allow(stub_storage).to receive(:save) do |_ev, metadata: {}|
+        captured_metadata = metadata
+        "fake-uuid"
+      end
+      adapter.instance_variable_set(:@dlq_storage, stub_storage)
+
+      adapter.write_with_reliability(event_data)
+
+      expect(stub_storage).to have_received(:save).once
+      expect(captured_metadata[:error]).to be_a(Exception),
+        "Expected metadata[:error] to be an Exception object, got #{captured_metadata[:error].class}"
+      # Specifically must NOT be a String (that was the BUG-003 regression)
+      expect(captured_metadata[:error]).not_to be_a(String)
+      # And the Exception must carry the original message
+      expect(captured_metadata[:error].message).to include("adapter down")
+    end
+
+    it "event is saved to DLQ after retry exhaustion (fail_on_error: false, real FileStorage)" do
+      real_dlq = E11y::Reliability::DLQ::FileStorage.new(
+        file_path: File.join(temp_dlq_dir, "dlq.jsonl")
+      )
+      adapter.instance_variable_set(:@dlq_storage, real_dlq)
+
+      adapter.write_with_reliability(event_data)
+
+      entries = real_dlq.list(limit: 10)
+      expect(entries.count).to eq(1),
+        "Expected exactly 1 DLQ entry after retry exhaustion, got #{entries.count}"
+      expect(entries.first[:event_name]).to eq("payment.failed")
+      # Verify error metadata was serialised correctly via Exception#message (not NoMethodError).
+      # The error passed into save_to_dlq_if_needed is RetryExhaustedError (which wraps the
+      # original Errno::ECONNREFUSED), so error_message includes the exhaustion text.
+      saved_meta = entries.first[:metadata]
+      expect(saved_meta[:error_message]).to include("adapter down"),
+        "Expected error_message to contain 'adapter down', got: #{saved_meta[:error_message].inspect}"
+      expect(saved_meta[:error_class]).to eq("E11y::Reliability::RetryHandler::RetryExhaustedError")
+    end
+
+    it "write_with_reliability returns false (does not raise) when fail_on_error: false" do
+      stub_storage = double("DLQStorage")
+      allow(stub_storage).to receive(:save).and_return("fake-uuid")
+      adapter.instance_variable_set(:@dlq_storage, stub_storage)
+
+      result = nil
+      expect do
+        result = adapter.write_with_reliability(event_data)
+      end.not_to raise_error
+
+      expect(result).to be(false),
+        "Expected write_with_reliability to return false on retry exhaustion, got #{result.inspect}"
+    end
+
+    it "write_with_reliability raises when global fail_on_error: true" do
+      # Override the stub from the before block: set fail_on_error to true
+      allow(E11y.config.error_handling).to receive(:fail_on_error).and_return(true)
+
+      # No DLQ storage needed — we expect a raise before storage is consulted
+      # (handle_reliability_error calls save_to_dlq_if_needed BEFORE the raise check)
+      stub_storage = double("DLQStorage")
+      allow(stub_storage).to receive(:save).and_return("fake-uuid")
+      adapter.instance_variable_set(:@dlq_storage, stub_storage)
+
+      expect do
+        adapter.write_with_reliability(event_data)
+      end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError)
+    end
+  end
+
+  # -------------------------------------------------------------------------
+  # Retriable Errors Integration
+  # Tests that RetryHandler's own retriable_error? correctly gates retries
+  # for different error classes.  The RetryHandler uses its private
+  # retriable_error? (backed by TRANSIENT_ERRORS constant) — NOT the adapter's
+  # private retriable_error?.  We therefore use a plain double adapter so the
+  # tests focus purely on RetryHandler routing behaviour.
+  # -------------------------------------------------------------------------
+  describe "Retriable Errors Integration", :integration do
+    let(:retry_handler) do
+      E11y::Reliability::RetryHandler.new(
+        config: {
+          max_attempts: 3,
+          base_delay_ms: 5,   # Fast for tests
+          max_delay_ms: 20,
+          jitter_factor: 0.0  # Deterministic
+        }
+      )
+    end
+
+    let(:event_data) { { event_name: "retriable.test", severity: :error } }
+
+    # A plain double whose class.name can be queried (needed by RetryHandler callbacks)
+    let(:adapter) do
+      dbl = double("TestAdapter")
+      allow(dbl).to receive(:class).and_return(double(name: "TestAdapter"))
+      dbl
+    end
+
+    it "retries Timeout::Error (transient network error) and eventually succeeds" do
+      call_count = 0
+      allow(adapter).to receive(:write) do
+        call_count += 1
+        raise Timeout::Error, "execution expired" if call_count < 3
+
+        true
+      end
+
+      result = retry_handler.with_retry(adapter: adapter, event: event_data) do
+        adapter.write(event_data)
+      end
+
+      expect(result).to be(true)
+      expect(call_count).to eq(3), "Expected 3 total calls (2 failures + 1 success)"
+    end
+
+    it "retries Errno::ECONNREFUSED (connection refused) and eventually succeeds" do
+      call_count = 0
+      allow(adapter).to receive(:write) do
+        call_count += 1
+        raise Errno::ECONNREFUSED, "connection refused" if call_count < 3
+
+        true
+      end
+
+      result = retry_handler.with_retry(adapter: adapter, event: event_data) do
+        adapter.write(event_data)
+      end
+
+      expect(result).to be(true)
+      expect(call_count).to eq(3)
+    end
+
+    it "eventually succeeds after N transient failures (fewer than max_attempts)" do
+      call_count = 0
+      failures = 2  # Less than max_attempts(3) so should succeed on 3rd call
+
+      allow(adapter).to receive(:write) do
+        call_count += 1
+        raise Errno::ECONNRESET, "connection reset" if call_count <= failures
+
+        :ok
+      end
+
+      result = retry_handler.with_retry(adapter: adapter, event: event_data) do
+        adapter.write(event_data)
+      end
+
+      expect(result).to eq(:ok)
+      expect(call_count).to eq(failures + 1)
+    end
+
+    it "does NOT retry ArgumentError (permanent error) — called exactly once" do
+      call_count = 0
+      allow(adapter).to receive(:write) do
+        call_count += 1
+        raise ArgumentError, "invalid argument"
+      end
+
+      expect do
+        retry_handler.with_retry(adapter: adapter, event: event_data) do
+          adapter.write(event_data)
+        end
+      end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError) do |err|
+        expect(err.original_error).to be_a(ArgumentError)
+        expect(err.retry_count).to eq(1)
+      end
+
+      expect(call_count).to eq(1), "ArgumentError is permanent — no retries expected"
+    end
+
+    it "does NOT retry NoMethodError (permanent error) — called exactly once" do
+      call_count = 0
+      allow(adapter).to receive(:write) do
+        call_count += 1
+        raise NoMethodError, "undefined method"
+      end
+
+      expect do
+        retry_handler.with_retry(adapter: adapter, event: event_data) do
+          adapter.write(event_data)
+        end
+      end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError) do |err|
+        expect(err.original_error).to be_a(NoMethodError)
+      end
+
+      expect(call_count).to eq(1), "NoMethodError is permanent — no retries expected"
+    end
+
+    it "exhausts all retries for a persistent Timeout::Error and raises RetryExhaustedError" do
+      call_count = 0
+      allow(adapter).to receive(:write) do
+        call_count += 1
+        raise Timeout::Error, "execution expired"
+      end
+
+      expect do
+        retry_handler.with_retry(adapter: adapter, event: event_data) do
+          adapter.write(event_data)
+        end
+      end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError) do |err|
+        expect(err.original_error).to be_a(Timeout::Error)
+        expect(err.retry_count).to eq(3)
+      end
+
+      expect(call_count).to eq(3), "Should attempt max_attempts(3) times before giving up"
+    end
+
+    it "exhausts all retries for persistent Errno::EHOSTUNREACH" do
+      call_count = 0
+      allow(adapter).to receive(:write) do
+        call_count += 1
+        raise Errno::EHOSTUNREACH, "no route to host"
+      end
+
+      expect do
+        retry_handler.with_retry(adapter: adapter, event: event_data) do
+          adapter.write(event_data)
+        end
+      end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError) do |err|
+        expect(err.original_error).to be_a(Errno::EHOSTUNREACH)
+        expect(err.retry_count).to eq(3)
+      end
+
+      expect(call_count).to eq(3)
+    end
+  end
 end

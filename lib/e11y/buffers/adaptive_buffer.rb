@@ -288,7 +288,7 @@ module E11y
             # Check timeout
             if Time.now - wait_start > @max_block_time
               # Timeout exceeded - drop event
-              increment_metric("e11y.buffer.memory_exhaustion.dropped")
+              E11y::Metrics.increment("e11y.buffer.memory_exhaustion.dropped")
               return false
             end
 
@@ -297,12 +297,12 @@ module E11y
           end
 
           # Space available - retry add
-          increment_metric("e11y.buffer.memory_exhaustion.blocked")
+          E11y::Metrics.increment("e11y.buffer.memory_exhaustion.blocked")
           add_event(event_data)
 
         when :drop
           # Drop new event
-          increment_metric("e11y.buffer.memory_exhaustion.dropped")
+          E11y::Metrics.increment("e11y.buffer.memory_exhaustion.dropped")
           false
         end
       end
@@ -323,18 +323,6 @@ module E11y
         warn "E11y: Early flush callback failed: #{e.message}"
       end
 
-      # Increment memory exhaustion metric
-      #
-      # @param metric_name [String] Metric to increment (e.g. "e11y.buffer.memory_exhaustion.dropped")
-      # @return [void]
-      def increment_metric(metric_name)
-        return unless defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:increment)
-
-        name = metric_name.to_s.tr(".", "_").to_sym  # e11y.buffer.memory_exhaustion.dropped -> e11y_buffer_memory_exhaustion_dropped
-        E11y::Metrics.increment(name, {})
-      rescue StandardError => e
-        E11y.logger&.debug("E11y AdaptiveBuffer metric error: #{e.message}")
-      end
       # rubocop:enable Metrics/ClassLength
     end
   end

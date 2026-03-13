@@ -103,9 +103,9 @@ module E11y
         }
 
         # 4. Increment metrics
-        increment_metric("e11y.middleware.routing.routed",
-                         adapters_count: target_adapters.size,
-                         routing_type: event_data[:routing][:routing_type])
+        E11y::Metrics.increment("e11y.middleware.routing.routed",
+                                adapters_count: target_adapters.size,
+                                routing_type: event_data[:routing][:routing_type])
 
         # 5. Log routing decision (for debugging)
         log_routing_decision(event_data, target_adapters) if debug_enabled?
@@ -188,10 +188,6 @@ module E11y
       # @param metric_name [String] Metric name
       # @param tags [Hash] Metric tags
       # @return [void]
-      def increment_metric(metric_name, **tags)
-        E11y::Metrics.increment(metric_name.to_sym, tags)
-      end
-
       # Validate audit events have proper routing configuration.
       #
       # Audit events MUST be routed via explicit adapters OR routing rules.

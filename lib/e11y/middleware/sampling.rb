@@ -213,7 +213,8 @@ module E11y
           unless configs.empty?
             require "e11y/sampling/value_extractor"
             extractor = E11y::Sampling::ValueExtractor.new
-            if configs.any? { |config| config.matches?(event_data, extractor) }
+            payload = event_data[:payload] || event_data
+            if configs.any? { |config| config.matches?(payload, extractor) }
               return 1.0 # 100% sampling for high-value events
             end
           end
