@@ -46,7 +46,6 @@ module E11y
             false
           else
             @retry_counts[adapter_name] << Time.now
-            increment_metric("e11y.retry_rate_limiter.allowed", adapter: adapter_name)
             true
           end
         end
@@ -109,8 +108,12 @@ module E11y
 
       # Increment retry rate limiter metric.
       def increment_metric(metric_name, tags = {})
-        # TODO: Integrate with Yabeda metrics
-        # E11y::Metrics.increment(metric_name, tags)
+        return unless defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:increment)
+
+        name = "e11y_retry_rate_limiter_#{metric_name.to_s.split('.').last}".to_sym
+        E11y::Metrics.increment(name, tags)
+      rescue StandardError => e
+        E11y.logger&.warn("E11y RetryRateLimiter metric error: #{e.message}")
       end
     end
   end
