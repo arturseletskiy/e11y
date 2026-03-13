@@ -15,6 +15,28 @@ require "rails/test_unit/railtie"
 # This ensures Railtie is registered before Rails collects railties
 require "e11y"
 
+# Load event classes BEFORE E11y config so Registry has metrics for Yabeda registration
+# (Yabeda.configure! freezes config; metrics must be registered before that)
+Dir[File.join(DUMMY_APP_ROOT, "app", "events", "**", "*.rb")].sort.each { |f| require f }
+
+# Register metrics for yabeda_integration_spec (unified approach: no Yabeda.reset!)
+# Use _yabeda_spec suffix to avoid conflicts with event class metrics (e.g. OrderCreated.orders_total)
+unless $yabeda_integration_metrics_registered
+  reg = E11y::Metrics::Registry.instance
+  [
+    { type: :counter, pattern: "order.*", name: :orders_total_yabeda_spec, tags: %i[currency status] },
+    { type: :histogram, pattern: "order.paid", name: :order_amount_yabeda_spec, value: :amount, tags: [:currency], buckets: [10, 50, 100, 500, 1000] },
+    { type: :gauge, pattern: "queue.*", name: :queue_depth_yabeda_spec, value: :size, tags: [:queue_name] },
+    { type: :counter, pattern: "api.*", name: :api_requests_yabeda_spec, tags: [:method] },
+    { type: :histogram, pattern: "request.*", name: :request_duration_yabeda_spec, value: :duration, tags: [:endpoint], buckets: [0.001, 0.01, 0.1, 1.0] },
+    { type: :gauge, pattern: "connections.*", name: :active_connections_yabeda_spec, value: :count, tags: [:server] },
+    { type: :counter, pattern: "test.*", name: :protected_metric_yabeda_spec, tags: [:label1] },
+    { type: :counter, pattern: "export.*", name: :exported_metric_yabeda_spec, tags: [] },
+    { type: :counter, pattern: "auto.*", name: :auto_counter_yabeda_spec, tags: [:tag1] }
+  ].each { |m| reg.register(m) }
+  $yabeda_integration_metrics_registered = true
+end
+
 # Configure E11y ONCE (guard against multiple loads during test suite)
 # rubocop:disable Style/GlobalVars
 unless $e11y_dummy_configured

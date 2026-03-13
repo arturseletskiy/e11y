@@ -46,7 +46,9 @@ module E11y
       def initialize(app, global_limit: nil, per_event_limit: nil, window: nil)
         super(app)
         rl_config = E11y.config.rate_limiting
-        @enabled = rl_config.enabled
+        # When explicit limits are passed (e.g. from pipeline options), enable for this instance
+        explicit_opts = global_limit || per_event_limit || window
+        @enabled = explicit_opts ? true : rl_config.enabled
         @global_limit = global_limit || rl_config.global_limit
         @per_event_limit = per_event_limit || rl_config.per_event_limit
         @window = window || rl_config.window
@@ -101,8 +103,8 @@ module E11y
       def handle_rate_limited(event_data, limit_type)
         event_name = event_data[:event_name]
 
-        # Log rate limiting
-        warn "[E11y] Rate limit exceeded (#{limit_type}) for event: #{event_name}"
+        # Log rate limiting (via E11y.logger so it respects Rails.logger in test env)
+        E11y.logger&.warn("[E11y] Rate limit exceeded (#{limit_type}) for event: #{event_name}")
 
         # C02 Resolution: Check if event should be saved to DLQ
         if should_save_to_dlq?(event_data)
@@ -162,11 +164,11 @@ module E11y
                            timestamp: Time.now.utc.iso8601
                          })
 
-        warn "[E11y] Rate-limited critical event saved to DLQ: #{event_data[:event_name]}"
+        E11y.logger&.warn("[E11y] Rate-limited critical event saved to DLQ: #{event_data[:event_name]}")
         # TODO: Track metric e11y.rate_limiter.dlq_saved
       rescue StandardError => e
         # Don't fail if DLQ save fails (C18 Resolution)
-        warn "[E11y] Failed to save rate-limited event to DLQ: #{e.message}"
+        E11y.logger&.warn("[E11y] Failed to save rate-limited event to DLQ: #{e.message}")
       end
 
       # Token Bucket implementation for rate limiting

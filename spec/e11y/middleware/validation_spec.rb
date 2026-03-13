@@ -75,7 +75,7 @@ RSpec.describe E11y::Middleware::Validation do
         middleware.call(event_data)
 
         expect(E11y::Metrics).to have_received(:increment)
-          .with("e11y.middleware.validation.passed")
+          .with(:e11y_middleware_validation_total, hash_including(result: "passed"))
       end
 
       it "allows optional fields to be omitted" do
@@ -160,7 +160,7 @@ RSpec.describe E11y::Middleware::Validation do
         expect { middleware.call(event_data) }.to raise_error(E11y::ValidationError)
 
         expect(E11y::Metrics).to have_received(:increment)
-          .with("e11y.middleware.validation.failed")
+          .with(:e11y_middleware_validation_total, hash_including(result: "failed"))
       end
     end
 
@@ -187,7 +187,7 @@ RSpec.describe E11y::Middleware::Validation do
         middleware.call(event_data)
 
         expect(E11y::Metrics).to have_received(:increment)
-          .with("e11y.middleware.validation.skipped")
+          .with(:e11y_middleware_validation_total, hash_including(result: "skipped"))
       end
     end
 

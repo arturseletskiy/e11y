@@ -202,8 +202,6 @@ module E11y
           error: error.class.name,
           attempt: attempt
         )
-
-        E11y::Metrics.histogram("e11y.retry.backoff_delay_ms", delay_ms, adapter: adapter.class.name)
       end
     end
   end

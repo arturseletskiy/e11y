@@ -11,6 +11,8 @@ RSpec.describe E11y, "module API" do
   # ---------------------------------------------------------------------------
   describe ".start!" do
     context "when E11y is enabled (default)" do
+      before { described_class.configure { |c| c.enabled = true } }
+
       it "returns without error when no adapters are configured" do
         expect { described_class.start! }.not_to raise_error
       end
@@ -127,6 +129,8 @@ RSpec.describe E11y, "module API" do
     end
 
     context "when E11y is enabled" do
+      before { described_class.configure { |c| c.enabled = true } }
+
       it "returns false when no adapters are registered" do
         expect(described_class.enabled_for?(:info)).to be(false)
       end

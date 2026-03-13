@@ -59,6 +59,14 @@ module E11y
         def resolve_sample_rate
           1.0 # 100% - compliance requirement
         end
+
+        # Audit events use routing rules (UC-012), not severity-based adapters.
+        # Return [] when no explicit adapters; respect explicit adapters when set.
+        def adapters(*list)
+          @adapters = list.flatten if list.any?
+          return @adapters if @adapters
+          []
+        end
       end
     end
   end

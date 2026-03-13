@@ -68,6 +68,7 @@ module E11y
 
         register_metrics_from_registry!
         register_middleware_metrics!
+        register_self_monitoring_metrics!
 
         # Apply configuration in non-Rails environments (Rails does this automatically)
         # In tests, Yabeda.configure! should be called explicitly in before blocks
@@ -292,24 +293,79 @@ module E11y
       # These metrics are used by TraceContext, Validation, and Routing middleware.
       # Must be registered before Yabeda.configure! is called (e.g. in app initializers).
       # Called during adapter initialization so they're available when events flow.
+      # Names use underscores (Prometheus requires /[a-zA-Z_:][a-zA-Z0-9_:]*/, no dots).
       #
       # @return [void]
       def register_middleware_metrics!
         return unless defined?(::Yabeda)
 
         middleware_metrics = [
-          { name: :"e11y.middleware.trace_context.processed", tags: [] },
-          { name: :"e11y.middleware.validation.passed", tags: [] },
-          { name: :"e11y.middleware.validation.failed", tags: [] },
-          { name: :"e11y.middleware.validation.skipped", tags: [] },
-          { name: :"e11y.middleware.routing.routed", tags: %i[adapters_count routing_type] }
+          { name: :e11y_middleware_trace_context_processed, tags: [] },
+          { name: :e11y_middleware_validation_total, tags: [:result] },
+          { name: :e11y_middleware_routing_routed, tags: %i[adapters_count routing_type] }
         ]
 
-        middleware_metrics.each do |m|
-          register_metric_if_needed(m[:name], :counter, m[:tags])
+        cardinality_metrics = [
+          { name: :e11y_cardinality_overflow_total, tags: %i[metric action strategy] },
+          { name: :e11y_cardinality_current, type: :gauge, tags: [:metric] }
+        ]
+
+        (middleware_metrics + cardinality_metrics).each do |m|
+          type = m[:type] || :counter
+          register_metric_if_needed(m[:name], type, m[:tags])
         end
       rescue StandardError => e
         E11y.logger.debug("Could not register middleware metrics: #{e.message}")
+      end
+
+      # Pre-register self-monitoring metrics (request buffer, retry, circuit breaker, DLQ, etc.).
+      # Must be registered before Yabeda.configure! so they exist when reliability layer runs.
+      #
+      # @return [void]
+      def register_self_monitoring_metrics!
+        return unless defined?(::Yabeda)
+
+        metrics = [
+          # Request buffer (consolidated)
+          { name: :e11y_request_buffer_total, tags: [:event] },
+          # Retry handler
+          { name: :e11y_retry_success, tags: %i[adapter attempts] },
+          { name: :e11y_retry_recovered, tags: %i[adapter attempts] },
+          { name: :e11y_retry_permanent_failure, tags: %i[adapter error attempt] },
+          { name: :e11y_retry_exhausted, tags: %i[adapter error attempts] },
+          { name: :e11y_retry_attempt, tags: %i[adapter error attempt] },
+          # Circuit breaker (consolidated: transitions counter + state gauge)
+          { name: :e11y_circuit_breaker_transitions_total, tags: %i[adapter event] },
+          { name: :e11y_circuit_breaker_state, type: :gauge, tags: [:adapter] },
+          # Adapter performance & reliability
+          { name: :e11y_adapter_send_duration_seconds, type: :histogram, tags: [:adapter], buckets: [0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0] },
+          { name: :e11y_adapter_writes_total, tags: %i[adapter status error_class] },
+          # DLQ
+          { name: :e11y_dlq_filter_decisions_total, tags: %i[action reason] },
+          { name: :e11y_dlq_saved_total, tags: [:event_name] },
+          { name: :e11y_dlq_parse_error_total, tags: [:error] },
+          { name: :e11y_dlq_replayed_total, tags: [:event_name] },
+          { name: :e11y_dlq_replay_failed_total, tags: [:error] },
+          # Retry rate limiter (consolidated)
+          { name: :e11y_retry_rate_limiter_total, tags: %i[adapter event delay_sec] },
+          # Buffer (ring, adaptive) — consolidated
+          { name: :e11y_buffer_overflow_total, tags: [:event] },
+          # Rate limiting / sampling
+          { name: :e11y_events_dropped_total, tags: %i[reason event_type] },
+          # SLO tracking (Request middleware triggers on every HTTP request when enabled)
+          { name: :slo_http_requests_total, tags: %i[controller action status] },
+          { name: :slo_http_request_duration_seconds, type: :histogram, tags: %i[controller action], buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0] },
+          { name: :slo_background_jobs_total, tags: %i[job_class status queue] },
+          { name: :slo_background_job_duration_seconds, type: :histogram, tags: %i[job_class queue], buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0] }
+        ]
+
+        metrics.each do |m|
+          type = m[:type] || :counter
+          buckets = m[:buckets]
+          register_metric_if_needed(m[:name], type, m[:tags], buckets: buckets)
+        end
+      rescue StandardError => e
+        E11y.logger.debug("Could not register self-monitoring metrics: #{e.message}")
       end
 
       # Register a single metric in Yabeda

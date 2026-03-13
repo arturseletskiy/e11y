@@ -92,17 +92,16 @@ module E11y
 
       # Handle limit exceeded based on configured strategy.
       def on_limit_exceeded(adapter_name, _event_data)
-        E11y::Metrics.increment("e11y.retry_rate_limiter.exceeded", adapter: adapter_name)
+        E11y::Metrics.increment(:e11y_retry_rate_limiter_total, adapter: adapter_name, event: "exceeded", delay_sec: "")
 
         case @on_limit_exceeded
         when :delay
           # Calculate delay with jitter
           delay_sec = @window + rand((-@jitter_range * @window)..(@jitter_range * @window))
-          E11y::Metrics.increment("e11y.retry_rate_limiter.delayed", adapter: adapter_name, delay_sec: delay_sec)
+          E11y::Metrics.increment(:e11y_retry_rate_limiter_total, adapter: adapter_name, event: "delayed", delay_sec: delay_sec.round(1).to_s)
           # Caller should sleep(delay_sec) before retry
         when :dlq
-          # Caller should save to DLQ instead of retrying
-          E11y::Metrics.increment("e11y.retry_rate_limiter.dlq", adapter: adapter_name)
+          E11y::Metrics.increment(:e11y_retry_rate_limiter_total, adapter: adapter_name, event: "dlq", delay_sec: "")
         end
       end
 

@@ -115,7 +115,7 @@ module E11y
 
       # Handle OPEN state (fast fail).
       def handle_open_circuit
-        E11y::Metrics.increment("e11y.circuit_breaker.rejected", adapter: @adapter_name)
+        E11y::Metrics.increment(:e11y_circuit_breaker_transitions_total, adapter: @adapter_name, event: "rejected")
 
         raise CircuitOpenError, "Circuit breaker open for #{@adapter_name} " \
                                 "(opened at #{@opened_at}, timeout: #{@timeout_seconds}s)"
@@ -175,7 +175,7 @@ module E11y
         @failure_count = 0 # Reset for next cycle
         @success_count = 0
 
-        E11y::Metrics.increment("e11y.circuit_breaker.opened", adapter: @adapter_name)
+        E11y::Metrics.increment(:e11y_circuit_breaker_transitions_total, adapter: @adapter_name, event: "opened")
         track_circuit_state_gauge
       end
 
@@ -184,7 +184,7 @@ module E11y
         @state = STATE_HALF_OPEN
         @success_count = 0 # Reset success counter for testing
 
-        E11y::Metrics.increment("e11y.circuit_breaker.half_opened", adapter: @adapter_name)
+        E11y::Metrics.increment(:e11y_circuit_breaker_transitions_total, adapter: @adapter_name, event: "half_opened")
         track_circuit_state_gauge
       end
 
@@ -196,7 +196,7 @@ module E11y
         @opened_at = nil
         @last_failure_time = nil
 
-        E11y::Metrics.increment("e11y.circuit_breaker.closed", adapter: @adapter_name)
+        E11y::Metrics.increment(:e11y_circuit_breaker_transitions_total, adapter: @adapter_name, event: "closed")
         track_circuit_state_gauge
       end
 

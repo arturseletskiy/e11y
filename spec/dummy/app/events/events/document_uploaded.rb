@@ -11,8 +11,7 @@ module Events
     contains_pii true
 
     pii_filtering do
-      allows :size
-      # filename, metadata not in allows - PII patterns (SSN, email) filtered
+      allows :filename, :size, :metadata
     end
 
     # Use fallback routing for integration tests

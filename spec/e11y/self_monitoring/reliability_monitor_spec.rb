@@ -11,7 +11,7 @@ RSpec.describe E11y::SelfMonitoring::ReliabilityMonitor do
     it "increments adapter success counter" do
       expect(E11y::Metrics).to receive(:increment).with(
         :e11y_adapter_writes_total,
-        { adapter: "E11y::Adapters::Loki", status: "success" }
+        { adapter: "E11y::Adapters::Loki", status: "success", error_class: "" }
       )
 
       described_class.track_adapter_success(adapter_name: "E11y::Adapters::Loki")

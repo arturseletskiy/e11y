@@ -79,12 +79,22 @@ module E11y
       event_class.track(**payload)
     end
 
-    # Get logger instance
+    # Get logger instance.
+    # Priority: config.logger > Rails.logger (when in Rails) > $stdout.
+    # Set config.logger = Logger.new(nil) in tests to suppress output.
     #
     # @return [Logger] logger instance
     def logger
+      return configuration.logger if configuration&.logger
+
+      return @logger if defined?(@logger) && !@logger.nil?
+
       require "logger"
-      @logger ||= ::Logger.new($stdout)
+      @logger = if defined?(Rails) && Rails.respond_to?(:application) && Rails.application
+                  Rails.logger
+                else
+                  ::Logger.new($stdout)
+                end
     end
 
     # Initialize E11y and all configured adapters.
@@ -202,7 +212,7 @@ module E11y
   #     config.pipeline.use E11y::Middleware::Sampling, default_sample_rate: 0.1
   #   end
   class Configuration
-    attr_accessor :adapters, :log_level, :enabled, :environment, :service_name, :default_retention_period,
+    attr_accessor :adapters, :log_level, :logger, :enabled, :environment, :service_name, :default_retention_period,
                   :routing_rules, :fallback_adapters, :enable_http_tracing
     attr_reader :adapter_mapping, :pipeline, :rails_instrumentation, :logger_bridge, :request_buffer, :active_job,
                 :sidekiq, :error_handling, :dlq_storage, :dlq_filter, :cardinality_protection
@@ -386,9 +396,9 @@ module E11y
       @pipeline.use E11y::Middleware::PIIFilter
       @pipeline.use E11y::Middleware::AuditSigning
 
-      # Zone: :routing
-      @pipeline.use E11y::Middleware::RateLimiting
+      # Zone: :routing (ADR-015: Sampling before RateLimiting)
       @pipeline.use E11y::Middleware::Sampling
+      @pipeline.use E11y::Middleware::RateLimiting
 
       # Zone: :adapters
       @pipeline.use E11y::Middleware::Routing
@@ -527,14 +537,20 @@ module E11y
   #     per_event "payment.*", limit: 500, window: 1.minute
   #   end
   class RateLimitingConfig
-    attr_accessor :enabled, :global_limit, :global_window
+    attr_accessor :enabled, :global_limit, :global_window, :per_event_limit
     attr_reader :per_event_limits
 
     def initialize
       @enabled = false      # Opt-in (enable explicitly)
       @global_limit = 10_000 # Max 10K events/sec globally
       @global_window = 1.0   # 1 second window
+      @per_event_limit = 1_000 # Default per-event limit (used when no per_event_limits rules match)
       @per_event_limits = []
+    end
+
+    # Alias for middleware compatibility (uses global_window)
+    def window
+      @global_window
     end
 
     # Set global rate limit.

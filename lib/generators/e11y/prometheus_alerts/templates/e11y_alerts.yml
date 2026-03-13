@@ -16,8 +16,8 @@ groups:
       # ── High validation failure rate ────────────────────────────────────
       - alert: E11yHighValidationFailureRate
         expr: |
-          rate(e11y_middleware_validation_failed[5m])
-          / (rate(e11y_middleware_validation_passed[5m]) + rate(e11y_middleware_validation_failed[5m])) > 0.1
+          rate(e11y_middleware_validation_total{result="failed"}[5m])
+          / (rate(e11y_middleware_validation_total{result="passed"}[5m]) + rate(e11y_middleware_validation_total{result="failed"}[5m])) > 0.1
         for: 2m
         labels:
           severity: warning

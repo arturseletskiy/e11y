@@ -28,57 +28,21 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
   let(:yabeda_adapter) { E11y.config.adapters[:yabeda] }
   let(:registry) { E11y::Metrics::Registry.instance }
 
-  # Helper to reset Yabeda metric values (not definitions)
-  # This ensures test isolation without destroying metric definitions
-  def reset_yabeda_values!
-    return unless defined?(Yabeda) && Yabeda.configured?
-
-    # Get all metrics in :e11y group and clear their values
-    # Yabeda.metrics returns a hash: "group_name" => metric_object
-    Yabeda.metrics.each do |metric_name, metric|
-      # Filter only :e11y group metrics
-      next unless metric_name.to_s.start_with?("e11y_")
-
-      # Access internal storage and clear values
-      # This works for Counter, Gauge, and Histogram
-      values = metric.instance_variable_get(:@values)
-      values&.clear if values.respond_to?(:clear)
-    end
-  rescue StandardError => e
-    # Log but don't fail - this is just cleanup
-    warn "Could not reset Yabeda values: #{e.message}"
-  end
-
   before do
     memory_adapter.clear!
 
-    # Ensure Yabeda.e11y group exists (recreate if destroyed by Yabeda.reset! in other specs)
-    if defined?(Yabeda) && !Yabeda.respond_to?(:e11y) && !Yabeda.configured?
-      Yabeda.configure do
-        group :e11y do
-          # Empty - metrics registered by adapter
-        end
-      end
+    # Create adapter FIRST so it registers metrics via Yabeda.configure (before configure!)
+    # Yabeda.configure! freezes config — metrics must be registered before that
+    yabeda_adapter_instance = E11y::Adapters::Yabeda.new(auto_register: true)
+    E11y.config.adapters[:yabeda] = yabeda_adapter_instance
+
+    # Apply Yabeda config if not yet applied (e.g. after Yabeda.reset! from yabeda_integration_spec)
+    if defined?(Yabeda) && !Yabeda.configured?
       Yabeda.configure!
     end
 
     # Reset Yabeda metric values (not definitions) for test isolation
     reset_yabeda_values!
-
-    # CRITICAL: Don't clear Registry - event classes were loaded in rails_helper
-    # and registered their metrics. Clearing would require reloading classes.
-    # The Registry is a singleton that persists across tests.
-
-    # Configure Yabeda adapter
-    yabeda_adapter_instance = E11y::Adapters::Yabeda.new(
-      auto_register: true
-    )
-    E11y.config.adapters[:yabeda] = yabeda_adapter_instance
-
-    # CRITICAL: In Rails environment, Yabeda.configure! was already called by Railtie
-    # We MUST NOT call Yabeda.configure! again - it will raise AlreadyConfiguredError
-    # Metrics are registered immediately when using Yabeda.configure (without bang)
-    # The :e11y group is already configured by Railtie or previous tests
 
     # Configure fallback adapters (used when event has adapters [])
     # Events::OrderPaid uses `adapters []` to force fallback routing

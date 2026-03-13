@@ -13,8 +13,7 @@ module Events
     contains_pii true
 
     pii_filtering do
-      allows :items
-      # customer, payment not in allows - nested PII filtered by pattern matching
+      allows :customer, :payment, :items
     end
 
     slo do

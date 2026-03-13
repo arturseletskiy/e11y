@@ -85,8 +85,8 @@ RSpec.describe E11y::Events do
         end
 
         expect(fatal_audit.severity).to eq(:fatal)
-        # Audit events without explicit adapters use severity-based mapping
-        expect(fatal_audit.adapters).to eq(%i[logs errors_tracker])
+        # Audit events without explicit adapters use routing rules (UC-012), not severity-based
+        expect(fatal_audit.adapters).to eq([])
         expect(fatal_audit.resolve_sample_rate).to eq(1.0) # Still 100%
         expect(fatal_audit.resolve_rate_limit).to be_nil # Still unlimited
       end

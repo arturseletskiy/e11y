@@ -216,14 +216,14 @@ module E11y
           push(event) # Retry push (recursive, but will succeed)
         when :drop_newest
           # Drop new event, keep buffer unchanged
-          E11y::Metrics.increment("e11y.buffer.overflow.drop_newest")
+          E11y::Metrics.increment(:e11y_buffer_overflow_total, event: "drop_newest")
           false
         when :block
           # Wait for space, with timeout
           wait_for_space
           if full?
             # Timeout reached, drop event
-            E11y::Metrics.increment("e11y.buffer.overflow.block_timeout")
+            E11y::Metrics.increment(:e11y_buffer_overflow_total, event: "block_timeout")
             false
           else
             push(event) # Retry after space freed

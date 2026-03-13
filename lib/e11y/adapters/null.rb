@@ -28,27 +28,31 @@ module E11y
     class Null < Base
       attr_reader :events
 
+      # @param config [Hash] Options
+      # @option config [Boolean] :store_events (true) When false, truly discards (no retention).
+      #   Use store_events: false for memory profiling to measure pipeline-only allocations.
       def initialize(config = {})
         super
+        @store_events = config.fetch(:store_events, true)
         @events = []
         @mutex = Mutex.new
       end
 
-      # Accept event and store for later inspection. Never raises.
+      # Accept event. When store_events: true, stores for inspection. When false, truly discards.
       #
       # @param event_data [Hash] Event payload
       # @return [Boolean] always true
       def write(event_data)
-        @mutex.synchronize { @events << event_data.dup }
+        @mutex.synchronize { @events << event_data.dup } if @store_events
         true
       end
 
-      # Accept batch and store for later inspection. Never raises.
+      # Accept batch. When store_events: true, stores for inspection. When false, truly discards.
       #
       # @param events [Array<Hash>] Event payloads
       # @return [Boolean] always true
       def write_batch(events)
-        @mutex.synchronize { @events.concat(events.map(&:dup)) }
+        @mutex.synchronize { @events.concat(events.map(&:dup)) } if @store_events
         true
       end
 

@@ -30,26 +30,6 @@ RSpec.describe "High Cardinality Protection Integration", :integration do
   let(:yabeda_adapter) { E11y.config.adapters[:yabeda] }
   let(:cardinality_protection) { yabeda_adapter&.instance_variable_get(:@cardinality_protection) }
 
-  # Helper to register Yabeda metrics only if they don't already exist
-  # This prevents "AlreadyRegisteredError" from Prometheus
-  def register_metric_if_needed(type, name, **options)
-    metric_key = "e11y_#{name}"
-    return if Yabeda.metrics.key?(metric_key)
-
-    Yabeda.configure do
-      group :e11y do
-        case type
-        when :counter
-          counter name, **options
-        when :histogram
-          histogram name, **options
-        when :gauge
-          gauge name, **options
-        end
-      end
-    end
-  end
-
   before do
     memory_adapter.clear!
 
@@ -65,13 +45,11 @@ RSpec.describe "High Cardinality Protection Integration", :integration do
     )
     E11y.config.adapters[:yabeda] = yabeda_adapter_instance
 
-    # Configure Yabeda metrics (without calling configure! - it was already called by Railtie)
-    # Metrics are registered immediately when using Yabeda.configure (without bang)
-    # CRITICAL: Only register metrics if they don't already exist (Prometheus doesn't allow re-registration)
-    register_metric_if_needed(:counter, :orders_total, tags: [:status], comment: "Total orders")
-    register_metric_if_needed(:counter, :api_requests_total, tags: %i[endpoint status], comment: "API requests")
-    register_metric_if_needed(:counter, :payments_total, tags: [:status], comment: "Total payments")
-    register_metric_if_needed(:counter, :user_actions_total, tags: [:action], comment: "User actions")
+    # Unified approach: use YabedaHelpers (see spec/support/yabeda_helpers.rb)
+    register_yabeda_metric_if_needed(:counter, :orders_total, tags: [:status], comment: "Total orders")
+    register_yabeda_metric_if_needed(:counter, :api_requests_total, tags: %i[endpoint status], comment: "API requests")
+    register_yabeda_metric_if_needed(:counter, :payments_total, tags: [:status], comment: "Total payments")
+    register_yabeda_metric_if_needed(:counter, :user_actions_total, tags: [:action], comment: "User actions")
 
     # Configure routing to send events to both memory and yabeda adapters
     # This ensures metrics are processed via Yabeda adapter
@@ -141,7 +119,7 @@ RSpec.describe "High Cardinality Protection Integration", :integration do
       # CRITICAL: Don't reset Yabeda in Rails - it breaks metric registration
       # Don't call Yabeda.configure! - it was already called by Railtie
       # Metrics are registered immediately when using Yabeda.configure (without bang)
-      register_metric_if_needed(:counter, :api_requests_total, tags: %i[endpoint status], comment: "API requests")
+      register_yabeda_metric_if_needed(:counter, :api_requests_total, tags: %i[endpoint status], comment: "API requests")
 
       new_adapter = E11y::Adapters::Yabeda.new(
         cardinality_limit: 100,
@@ -189,9 +167,9 @@ RSpec.describe "High Cardinality Protection Integration", :integration do
 
       # Configure limit: 100 per metric
       # Metrics are registered immediately when using Yabeda.configure (without bang)
-      register_metric_if_needed(:counter, :orders_total, tags: [:status], comment: "Total orders")
-      register_metric_if_needed(:counter, :payments_total, tags: [:status], comment: "Total payments")
-      register_metric_if_needed(:counter, :user_actions_total, tags: [:action], comment: "User actions")
+      register_yabeda_metric_if_needed(:counter, :orders_total, tags: [:status], comment: "Total orders")
+      register_yabeda_metric_if_needed(:counter, :payments_total, tags: [:status], comment: "Total payments")
+      register_yabeda_metric_if_needed(:counter, :user_actions_total, tags: [:action], comment: "User actions")
 
       new_adapter = E11y::Adapters::Yabeda.new(
         cardinality_limit: 100,
@@ -242,7 +220,7 @@ RSpec.describe "High Cardinality Protection Integration", :integration do
 
       # Configure low limit with drop strategy
       # Metrics are registered immediately when using Yabeda.configure (without bang)
-      register_metric_if_needed(:counter, :orders_total, tags: [:status], comment: "Total orders")
+      register_yabeda_metric_if_needed(:counter, :orders_total, tags: [:status], comment: "Total orders")
 
       new_adapter = E11y::Adapters::Yabeda.new(
         cardinality_limit: 10,
@@ -281,7 +259,7 @@ RSpec.describe "High Cardinality Protection Integration", :integration do
       # CRITICAL: Don't reset Yabeda in Rails - it breaks metric registration
       # Configure low limit with relabel strategy
       # Metrics are registered immediately when using Yabeda.configure (without bang)
-      register_metric_if_needed(:counter, :orders_total, tags: [:status], comment: "Total orders")
+      register_yabeda_metric_if_needed(:counter, :orders_total, tags: [:status], comment: "Total orders")
 
       new_adapter = E11y::Adapters::Yabeda.new(
         cardinality_limit: 10,
@@ -427,7 +405,7 @@ RSpec.describe "High Cardinality Protection Integration", :integration do
       # CRITICAL: Don't reset Yabeda in Rails - it breaks metric registration
       # Configure limit: 100
       # Metrics are registered immediately when using Yabeda.configure (without bang)
-      register_metric_if_needed(:counter, :orders_total, tags: [:status], comment: "Total orders")
+      register_yabeda_metric_if_needed(:counter, :orders_total, tags: [:status], comment: "Total orders")
 
       new_adapter = E11y::Adapters::Yabeda.new(
         cardinality_limit: 100,
@@ -476,7 +454,7 @@ RSpec.describe "High Cardinality Protection Integration", :integration do
       # CRITICAL: Don't reset Yabeda in Rails - it breaks metric registration
       # Configure limit: 100
       # Metrics are registered immediately when using Yabeda.configure (without bang)
-      register_metric_if_needed(:counter, :api_requests_total, tags: %i[endpoint status], comment: "API requests")
+      register_yabeda_metric_if_needed(:counter, :api_requests_total, tags: %i[endpoint status], comment: "API requests")
 
       new_adapter = E11y::Adapters::Yabeda.new(
         cardinality_limit: 100,

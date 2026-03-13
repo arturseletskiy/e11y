@@ -287,7 +287,7 @@ module E11y
           raise unless retriable_error?(e) && attempt < max_attempts
 
           delay = calculate_backoff_delay(attempt, base_delay, max_delay, jitter)
-          warn "[E11y] #{self.class.name} retry #{attempt}/#{max_attempts} after #{delay.round(2)}s: #{e.message}"
+          E11y.logger&.warn("[E11y] #{self.class.name} retry #{attempt}/#{max_attempts} after #{delay.round(2)}s: #{e.message}")
           sleep(delay)
           retry
         end
@@ -426,7 +426,7 @@ module E11y
             @circuit_success_count += 1
             if @circuit_success_count >= 2 # 2 successes → close
               @circuit_state = :closed
-              warn "[E11y] #{self.class.name} circuit breaker closed (recovered)"
+              E11y.logger&.warn("[E11y] #{self.class.name} circuit breaker closed (recovered)")
             end
           end
         end
@@ -444,7 +444,7 @@ module E11y
 
           if @circuit_failure_count >= threshold && @circuit_state == :closed
             @circuit_state = :open
-            warn "[E11y] #{self.class.name} circuit breaker opened (#{@circuit_failure_count} failures)"
+            E11y.logger&.warn("[E11y] #{self.class.name} circuit breaker opened (#{@circuit_failure_count} failures)")
           end
         end
       end
@@ -505,7 +505,7 @@ module E11y
         save_to_dlq_if_needed(event_data, error, reason)
 
         # Log warning
-        warn "[E11y] #{self.class.name} #{reason} for event #{event_data[:event_name]}: #{error.message}"
+        E11y.logger&.warn("[E11y] #{self.class.name} #{reason} for event #{event_data[:event_name]}: #{error.message}")
 
         # Check fail_on_error setting (C18 Resolution)
         raise error if E11y.config.error_handling.fail_on_error
@@ -533,7 +533,7 @@ module E11y
                            })
       rescue StandardError => e
         # C18: Don't fail if DLQ save fails
-        warn "[E11y] Failed to save event to DLQ: #{e.message}"
+        E11y.logger&.warn("[E11y] Failed to save event to DLQ: #{e.message}")
       end
 
       # Track successful adapter write (self-monitoring).
@@ -558,7 +558,7 @@ module E11y
         )
       rescue StandardError => e
         # Don't fail if monitoring fails
-        warn "[E11y] Self-monitoring error: #{e.message}"
+        E11y.logger&.warn("[E11y] Self-monitoring error: #{e.message}")
       end
 
       # Track failed adapter write (self-monitoring).

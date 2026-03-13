@@ -285,7 +285,7 @@ module E11y
             # Check timeout
             if Time.now - wait_start > @max_block_time
               # Timeout exceeded - drop event
-              E11y::Metrics.increment("e11y.buffer.memory_exhaustion.dropped")
+              E11y::Metrics.increment(:e11y_buffer_overflow_total, event: "memory_exhaustion_dropped")
               return false
             end
 
@@ -294,12 +294,12 @@ module E11y
           end
 
           # Space available - retry add
-          E11y::Metrics.increment("e11y.buffer.memory_exhaustion.blocked")
+          E11y::Metrics.increment(:e11y_buffer_overflow_total, event: "memory_exhaustion_blocked")
           add_event(event_data)
 
         when :drop
           # Drop new event
-          E11y::Metrics.increment("e11y.buffer.memory_exhaustion.dropped")
+              E11y::Metrics.increment(:e11y_buffer_overflow_total, event: "memory_exhaustion_dropped")
           false
         end
       end

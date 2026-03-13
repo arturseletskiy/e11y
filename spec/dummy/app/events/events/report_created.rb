@@ -12,8 +12,7 @@ module Events
     contains_pii true
 
     pii_filtering do
-      allows :title, :employee_ids
-      # description, author not in allows - PII patterns (email, phone) filtered in free text
+      allows :title, :description, :employee_ids, :author
     end
 
     # Use fallback routing for integration tests

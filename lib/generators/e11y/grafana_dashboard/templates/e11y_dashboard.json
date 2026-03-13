@@ -59,7 +59,7 @@
       "title": "Circuit breaker trips",
       "targets": [
         {
-          "expr": "e11y_circuit_breaker_open_total",
+          "expr": "e11y_circuit_breaker_transitions_total{event=\"opened\"}",
           "legendFormat": "{{adapter}}"
         }
       ],

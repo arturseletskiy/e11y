@@ -64,7 +64,7 @@ RSpec.describe E11y::Middleware::RateLimiting do
       it "logs warning when global limit exceeded" do
         10.times { middleware.call(event_data) }
 
-        expect(middleware).to receive(:warn).with(/Rate limit exceeded \(global\)/)
+        expect(E11y.logger).to receive(:warn).with(/Rate limit exceeded \(global\)/)
         middleware.call(event_data)
       end
 
@@ -94,7 +94,7 @@ RSpec.describe E11y::Middleware::RateLimiting do
       it "logs warning when per-event limit exceeded" do
         5.times { middleware.call(event_data) }
 
-        expect(middleware).to receive(:warn).with(/Rate limit exceeded \(per_event\)/)
+        expect(E11y.logger).to receive(:warn).with(/Rate limit exceeded \(per_event\)/)
         middleware.call(event_data)
       end
 
@@ -179,8 +179,8 @@ RSpec.describe E11y::Middleware::RateLimiting do
 
         allow(dlq_storage).to receive(:save)
         # First warn: rate limit exceeded, Second warn: DLQ saved
-        expect(middleware).to receive(:warn).with(/Rate limit exceeded/).ordered
-        expect(middleware).to receive(:warn).with(/Rate-limited critical event saved to DLQ/).ordered
+        expect(E11y.logger).to receive(:warn).with(/Rate limit exceeded/).ordered
+        expect(E11y.logger).to receive(:warn).with(/Rate-limited critical event saved to DLQ/).ordered
 
         middleware.call(payment_event)
       end
@@ -232,7 +232,7 @@ RSpec.describe E11y::Middleware::RateLimiting do
 
         allow(dlq_storage).to receive(:save).and_raise(StandardError, "DLQ full")
         # First warn: rate limit exceeded, Second warn: DLQ save failed
-        allow(middleware).to receive(:warn) # Allow all warns (don't fail on unexpected)
+        allow(E11y.logger).to receive(:warn) # Allow all warns (don't fail on unexpected)
 
         # Should not raise exception (C18 Resolution)
         expect { middleware.call(payment_event) }.not_to raise_error

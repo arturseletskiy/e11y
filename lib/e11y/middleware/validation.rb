@@ -69,7 +69,7 @@ module E11y
 
         # Skip validation if mode is :never
         if validation_mode == :never
-          E11y::Metrics.increment("e11y.middleware.validation.skipped")
+          E11y::Metrics.increment(:e11y_middleware_validation_total, result: "skipped")
           return @app.call(event_data)
         end
 
@@ -77,7 +77,7 @@ module E11y
         if validation_mode == :sampled
           sample_rate = event_class.respond_to?(:validation_sample_rate) ? event_class.validation_sample_rate : 0.01
           if rand >= sample_rate
-            E11y::Metrics.increment("e11y.middleware.validation.skipped")
+            E11y::Metrics.increment(:e11y_middleware_validation_total, result: "skipped")
             return @app.call(event_data)
           end
         end
@@ -87,7 +87,7 @@ module E11y
 
         # Skip validation if no schema defined (schema-less events)
         unless schema
-          E11y::Metrics.increment("e11y.middleware.validation.skipped")
+          E11y::Metrics.increment(:e11y_middleware_validation_total, result: "skipped")
           return @app.call(event_data)
         end
 
@@ -96,11 +96,11 @@ module E11y
 
         if result.success?
           # Validation passed
-          E11y::Metrics.increment("e11y.middleware.validation.passed")
+          E11y::Metrics.increment(:e11y_middleware_validation_total, result: "passed")
           @app.call(event_data)
         else
           # Validation failed - raise error with details
-          E11y::Metrics.increment("e11y.middleware.validation.failed")
+          E11y::Metrics.increment(:e11y_middleware_validation_total, result: "failed")
 
           error_message = format_validation_errors(event_class, result.errors)
           raise E11y::ValidationError, error_message

@@ -21,7 +21,8 @@ module E11y
           :e11y_adapter_writes_total,
           {
             adapter: adapter_name,
-            status: "success"
+            status: "success",
+            error_class: "" # Prometheus requires consistent label signature with track_adapter_failure
           }
         )
       end

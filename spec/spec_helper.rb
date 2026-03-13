@@ -160,12 +160,15 @@ RSpec.configure do |config|
     config.filter_run_excluding integration: true
   end
 
-  # Unit tests: ensure audit events have routing (avoid CRITICAL validation error)
+  # Unit tests: ensure E11y is enabled and audit events have routing
   config.before do |example|
     next if example.metadata[:integration]
 
     cfg = E11y.configuration
+    cfg.enabled = true if cfg.enabled.nil? # Default: enabled for unit tests (Railtie sets false in Rails test env)
     cfg.routing_rules = [->(e) { :stdout if e[:audit_event] }] if cfg.routing_rules.empty?
+    # Quiet E11y logs in unit tests (unless VERBOSE)
+    cfg.logger = Logger.new(nil) unless ENV["VERBOSE"]
   end
 
   # Clean up after each test

@@ -94,15 +94,18 @@ module E11y
 
           flushed_count = current_buffer.size
 
+          # Resolve flush targets once per flush (avoids N config lookups when flushing N events)
+          flush_targets = resolve_flush_targets
+
           # Flush events to main buffer/adapters
           current_buffer.each do |event_data|
             # TODO: Send to E11y::Collector.collect(event_data) when available
             # For now, placeholder
-            flush_event(event_data, target: target)
+            flush_event(event_data, target: target, flush_targets: flush_targets)
           end
 
           current_buffer.clear
-          E11y::Metrics.increment("e11y.request_buffer.flushed_on_error", { events: flushed_count })
+          E11y::Metrics.increment(:e11y_request_buffer_total, event: "flushed_on_error", value: flushed_count)
           flushed_count
         end
 
@@ -121,7 +124,7 @@ module E11y
 
           discarded_count = current_buffer.size
           current_buffer.clear
-          E11y::Metrics.increment("e11y.request_buffer.discarded", { events: discarded_count })
+          E11y::Metrics.increment(:e11y_request_buffer_total, event: "discarded", value: discarded_count)
           discarded_count
         end
 
@@ -185,12 +188,12 @@ module E11y
 
           event_to_store = event_data.merge(request_id: request_id)
           current_buffer << event_to_store
-          E11y::Metrics.increment("e11y.request_buffer.events_buffered")
+          E11y::Metrics.increment(:e11y_request_buffer_total, event: "events_buffered")
           true
         end
 
         def record_buffer_overflow # rubocop:disable Naming/PredicateMethod
-          E11y::Metrics.increment("e11y.request_buffer.overflow")
+          E11y::Metrics.increment(:e11y_request_buffer_total, event: "overflow")
           false
         end
 
@@ -217,18 +220,39 @@ module E11y
           SecureRandom.uuid
         end
 
-        # Flush single event to adapters via pipeline
+        # Resolve flush targets: adapter instances (when debug_adapters set) or nil (use pipeline).
+        # Cached per flush to avoid repeated config lookups when flushing N events.
+        #
+        # @return [Array<Object>, nil] Adapter instances to write to, or nil to use pipeline
+        def resolve_flush_targets
+          da = E11y.config.request_buffer&.debug_adapters
+          return nil unless da&.any?
+
+          da.map { |name| E11y.configuration.adapters[name] }.compact
+        end
+
+        # Flush single event to adapters via pipeline or debug_adapters
+        #
+        # When config.request_buffer.debug_adapters is set, sends directly to those
+        # adapters. Otherwise uses the full pipeline (fallback_adapters).
         #
         # @param event_data [Hash] Event to flush
         # @param target [Symbol, nil] Optional target adapter (not yet implemented)
+        # @param flush_targets [Array<Object>, nil] Pre-resolved adapter instances (from flush_on_error)
         # @return [void]
-        def flush_event(event_data, target: nil) # rubocop:disable Lint/UnusedMethodArgument
+        def flush_event(event_data, target: nil, flush_targets: nil) # rubocop:disable Lint/UnusedMethodArgument
           return unless event_data
 
-          # Mark as from flush so Routing does not re-buffer
           event_to_send = event_data.merge(from_request_buffer_flush: true)
-          E11y.config.built_pipeline.call(event_to_send)
-          E11y::Metrics.increment("e11y.request_buffer.event_flushed")
+          targets = flush_targets || resolve_flush_targets
+
+          if targets
+            targets.each { |adapter| adapter&.write(event_to_send) }
+          else
+            E11y.config.built_pipeline.call(event_to_send)
+          end
+
+          E11y::Metrics.increment(:e11y_request_buffer_total, event: "event_flushed")
         end
       end
     end

@@ -119,7 +119,7 @@ RSpec.describe E11y::Generators::PrometheusAlertsGenerator, type: :generator do
       assert_file "config/prometheus/e11y_alerts.yml" do |content|
         c = content.force_encoding("UTF-8")
         expect(c).to match(
-          /e11y_adapter_writes_total|e11y_middleware_validation_(passed|failed)/
+          /e11y_adapter_writes_total|e11y_middleware_validation_total/
         )
       end
     end

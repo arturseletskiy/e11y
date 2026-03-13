@@ -54,8 +54,8 @@ module E11y
       E11y.configure do |config|
         config.environment ||= Rails.env.to_s
         config.service_name ||= E11y::Railtie.derive_service_name
-        # Disable E11y in test by default; user can override in config/initializers/e11y.rb
-        config.enabled = false if Rails.env.test?
+        # Enable in dev/prod; disable in test by default (user can override in config/initializers/e11y.rb)
+        config.enabled = !Rails.env.test?
       end
     end
 
@@ -83,10 +83,13 @@ module E11y
 
       # Insert E11y request middleware before Rails logger
       # This ensures trace context is set up before any Rails logging
-      app.middleware.insert_before(
-        Rails::Rack::Logger,
-        E11y::Middleware::Request
-      )
+      # API-only mode may omit Rails::Rack::Logger — fall back to unshift
+      begin
+        app.middleware.insert_before(Rails::Rack::Logger, E11y::Middleware::Request)
+      rescue RuntimeError
+        # Rails::Rack::Logger not in stack (e.g. api_only)
+        app.middleware.unshift(E11y::Middleware::Request)
+      end
     end
 
     # Console helpers
