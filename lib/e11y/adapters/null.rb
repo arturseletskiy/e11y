@@ -59,14 +59,12 @@ module E11y
         @mutex.synchronize { @events.clear }
       end
 
-      # @return [Boolean] always true — null adapter is always healthy
       def healthy?
         true
       end
 
-      # @return [Hash] Adapter capabilities
       def capabilities
-        { batching: true, compression: false, async: false, streaming: false }
+        { batching: true, compression: false, async: false, streaming: false, null: true }
       end
     end
 

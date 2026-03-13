@@ -43,7 +43,6 @@ module E11y
       # **C17 Hybrid Tracing**: Creates NEW trace_id for job, but preserves parent link.
       # **C18 Non-Failing**: E11y errors don't fail jobs (observability is secondary to business logic).
       class ServerMiddleware
-        # rubocop:disable Metrics/AbcSize
         def call(_worker, job, queue)
           # C18: Disable fail_on_error for jobs (observability should not block business logic)
           original_fail_on_error = E11y.config.error_handling.fail_on_error
@@ -73,7 +72,6 @@ module E11y
           # Restore original setting
           E11y.config.error_handling.fail_on_error = original_fail_on_error
         end
-        # rubocop:enable Metrics/AbcSize
 
         private
 

@@ -247,7 +247,6 @@ module E11y
       #
       # @param obj [Object] Payload object
       # @return [Integer] Size in bytes
-      # rubocop:disable Metrics/CyclomaticComplexity, Metrics/MethodLength
       def calculate_payload_size(obj)
         case obj
         when String
@@ -266,14 +265,12 @@ module E11y
       rescue StandardError
         500 # Fallback for errors
       end
-      # rubocop:enable Metrics/CyclomaticComplexity, Metrics/MethodLength
 
       # Handle memory exhaustion according to strategy
       #
       # @param event_data [Hash] Event that caused exhaustion
       # @param event_size [Integer] Size of event
       # @return [Boolean] true if event was eventually added, false if dropped
-      # rubocop:disable Metrics/MethodLength
       def handle_memory_exhaustion(event_data, event_size)
         case @backpressure_strategy
         when :block
@@ -306,7 +303,6 @@ module E11y
           false
         end
       end
-      # rubocop:enable Metrics/MethodLength
 
       # Trigger early flush (80% threshold reached)
       #

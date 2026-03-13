@@ -106,6 +106,8 @@ module E11y
 
       # Write event to OTel Logs API
       #
+      # Uses Logger#on_emit (OTel SDK 0.4+) with keyword arguments.
+      #
       # @param event_data [Hash] Event payload
       # @return [Boolean] true on success
       def write(event_data)

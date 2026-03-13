@@ -79,7 +79,6 @@ RSpec.describe "Stratified Sampling for SLO Accuracy (C11 Resolution)" do
   end
 
   describe "UC-014 production example" do
-    # rubocop:disable RSpec/ExampleLength
     # Integration test requires load simulation and statistical calculations
     it "corrects SLO metrics under load-based adaptive sampling" do
       # During high load: success events sampled at 10% (deterministic: every 10th)
@@ -115,7 +114,6 @@ RSpec.describe "Stratified Sampling for SLO Accuracy (C11 Resolution)" do
       # corrected_success_rate = 100/110 ≈ 0.909
       expect(corrected_success_rate).to be_between(0.88, 0.94)
     end
-    # rubocop:enable RSpec/ExampleLength
   end
 
   describe "C11 Resolution verification" do

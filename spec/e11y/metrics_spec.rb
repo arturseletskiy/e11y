@@ -92,9 +92,9 @@ RSpec.describe E11y::Metrics do
 
   describe ".backend" do
     context "when no adapters are configured" do
-      it "returns nil" do
+      it "returns NullBackend (noop fallback)" do
         allow(E11y.config.adapters).to receive(:values).and_return([])
-        expect(described_class.backend).to be_nil
+        expect(described_class.backend).to be_a(E11y::Metrics::NullBackend)
       end
     end
 
@@ -134,9 +134,9 @@ RSpec.describe E11y::Metrics do
       # Reset
       described_class.reset_backend!
 
-      # Next call should re-detect backend
+      # Next call should re-detect backend; no Yabeda → falls back to NullBackend
       allow(E11y.config.adapters).to receive(:values).and_return([])
-      expect(described_class.backend).to be_nil
+      expect(described_class.backend).to be_a(E11y::Metrics::NullBackend)
     end
   end
 end

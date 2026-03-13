@@ -6,11 +6,6 @@ Feature: Automatic metric registration
   # Definitions are stored in E11y::Metrics::Registry and should be forwarded
   # to a backend (Yabeda/Prometheus) whenever events are tracked.
   #
-  # BUG 1: E11y::Metrics.backend is nil in the default setup — all metric calls
-  #         are silently discarded. No Yabeda adapter is auto-configured.
-  # BUG 2: increment_metric inside middleware (TraceContext, Routing, etc.)
-  #         is an empty stub — internal telemetry calls never actually track anything.
-
   Background:
     Given the application is running
 
@@ -34,13 +29,8 @@ Feature: Automatic metric registration
     Then a TypeConflictError should have been raised
 
   Scenario: E11y has a configured metrics backend after initialization
-    # BUG: E11y::Metrics.backend is nil because no Yabeda adapter is auto-configured.
-    # Every E11y::Metrics.increment/histogram/gauge call is silently discarded.
-    # Users must manually add: config.adapters[:metrics] = E11y::Adapters::Yabeda.new
     Then E11y::Metrics should have a configured backend
 
   Scenario: Middleware internal metrics use a real tracking call
-    # BUG: increment_metric in TraceContext/Routing middleware is an empty stub.
-    # The method is called but the body contains only a TODO comment — no actual tracking.
     When E11y processes an event through the pipeline
     Then at least 1 internal middleware metric should have been tracked

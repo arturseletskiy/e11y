@@ -1,14 +1,15 @@
 # frozen_string_literal: true
 
-# rubocop:disable RSpec/FilePath, RSpec/SpecFilePathFormat
 require "spec_helper"
 
-RSpec.describe E11y::Event::Base, ".track performance", :benchmark do
+RSpec.describe E11y::Event::Base, ".track performance", :benchmark do # rubocop:disable RSpec/MultipleDescribes
   let(:event_class) do
     Class.new(described_class) do
       def self.name
         "BenchmarkEvent"
       end
+
+      contains_pii false # force tier1 — no Rails filter in unit context
 
       schema do
         required(:user_id).filled(:integer)
@@ -20,7 +21,6 @@ RSpec.describe E11y::Event::Base, ".track performance", :benchmark do
   let(:payload) { { user_id: 123, action: "signup" } }
 
   describe "performance requirements" do
-    # rubocop:disable RSpec/ExampleLength
     it "tracks events in <70μs (p99) with validation_mode :always" do
       # Warm-up
       10.times { event_class.track(**payload) }
@@ -53,6 +53,7 @@ RSpec.describe E11y::Event::Base, ".track performance", :benchmark do
     it "tracks events in <10μs (p99) with validation_mode :sampled" do
       # Create event class with sampled validation (1%)
       sampled_class = Class.new(E11y::Event::Base) do
+        contains_pii false
         validation_mode :sampled, sample_rate: 0.01 # 1% validation
         severity :info
         schema do
@@ -94,6 +95,7 @@ RSpec.describe E11y::Event::Base, ".track performance", :benchmark do
     it "tracks events in <50μs (p99) with validation_mode :never" do
       # Create event class with validation disabled
       never_validate_class = Class.new(E11y::Event::Base) do
+        contains_pii false
         validation_mode :never
         severity :info
       end
@@ -127,10 +129,14 @@ RSpec.describe E11y::Event::Base, ".track performance", :benchmark do
       # DoD: <50μs p99 achievable WITHOUT validation (allow GC outliers up to 200μs)
       expect(p99).to be < 200, "P99 latency (#{p99.round(2)}μs) exceeds 200μs threshold (never)"
     end
-    # rubocop:enable RSpec/ExampleLength
   end
 
   describe "zero-allocation verification" do
+    # Fix trace_id so Sampling middleware reuses one cached decision per test
+    # instead of allocating a new String key per event (see memory_spec.rb for context).
+    before { Thread.current[:e11y_trace_id] = "benchmark-test-fixed-trace-id" }
+    after  { Thread.current[:e11y_trace_id] = nil }
+
     it "does not create Event objects" do
       # This test verifies that track() returns Hash, not Event instance
       result = event_class.track(**payload)
@@ -153,4 +159,51 @@ RSpec.describe E11y::Event::Base, ".track performance", :benchmark do
     end
   end
 end
-# rubocop:enable RSpec/FilePath, RSpec/SpecFilePathFormat
+
+# Memory tests for BenchmarkEvent — tagged :memory only (not :benchmark).
+# Placed outside the :benchmark describe so the default :benchmark exclude
+# in spec_helper does not prevent them from running under spec:memory.
+RSpec.describe E11y::Event::Base, ".track memory profile", :memory do
+  let(:event_class) do
+    Class.new(described_class) do
+      def self.name = "BenchmarkEvent"
+      contains_pii false
+      schema do
+        required(:user_id).filled(:integer)
+        required(:action).filled(:string)
+      end
+    end
+  end
+
+  let(:payload) { { user_id: 123, action: "signup" } }
+
+  # Fix trace_id so Sampling middleware reuses one cached decision per test.
+  before { Thread.current[:e11y_trace_id] = "benchmark-test-fixed-trace-id" }
+  after  { Thread.current[:e11y_trace_id] = nil }
+
+  it "allocates <=72 objects per event (MemoryProfiler)" do
+    # Threshold = ceil(47 * 1.5) = 72: measured baseline ~47/event on Ruby 3.3
+    # with validation_mode :always (default). See benchmarks/allocation_profiling.rb.
+    report = measure_allocations(count: 100) { event_class.track(**payload) }
+    per_event = report.total_allocated.to_f / 100
+
+    puts "\n  [Memory] BenchmarkEvent allocations: #{per_event.round(2)}/event (100 iterations)"
+
+    aggregate_failures do
+      expect(report.total_retained).to eq(0),
+                                       "Memory leak: #{report.total_retained} objects retained"
+
+      expect(per_event).to be <= 72,
+                           "#{per_event.round(2)} allocations/event exceeds <=72 target " \
+                           "(validation_mode :always default). See docs/ADR-001-architecture.md §5."
+    end
+  end
+
+  it "retains 0 objects after 100 events (MemoryProfiler)" do
+    report = measure_allocations(count: 100) { event_class.track(**payload) }
+
+    expect(report.total_retained).to eq(0),
+                                     "#{report.total_retained} objects retained — potential memory leak. " \
+                                     "Run benchmarks/allocation_profiling.rb for detailed retained-object analysis."
+  end
+end

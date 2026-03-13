@@ -44,9 +44,7 @@ module E11y
       def self.signing_key
         @signing_key ||= ENV.fetch("E11Y_AUDIT_SIGNING_KEY") do
           # Development fallback (NOT for production!)
-          if defined?(::Rails) && ::Rails.env.production?
-            raise E11y::Error, "E11Y_AUDIT_SIGNING_KEY must be set in production"
-          end
+          raise E11y::Error, "E11Y_AUDIT_SIGNING_KEY must be set in production" if defined?(::Rails) && ::Rails.env.production?
 
           "development_key_#{SecureRandom.hex(32)}"
         end
@@ -73,8 +71,9 @@ module E11y
 
       # Verify signature (for testing/validation)
       #
-      # Recomputes canonical representation from current event data and verifies signature.
-      # This ensures tampering is detected even if audit_canonical field is present.
+      # Uses the stored audit_canonical to recompute the expected HMAC and compares
+      # against audit_signature. Detects tampering with the canonical representation
+      # (e.g., if someone modifies the stored canonical in the audit log).
       #
       # @param event_data [Hash] Event data with signature
       # @return [Boolean] true if signature is valid
@@ -83,9 +82,12 @@ module E11y
         expected_signature = event_data[:audit_signature]
         return false unless expected_signature
 
-        # Recompute canonical from current event data (detects tampering)
-        canonical = canonical_representation(event_data)
-        actual_signature = OpenSSL::HMAC.hexdigest("SHA256", signing_key, canonical)
+        # Recompute canonical from CURRENT payload (detects payload tampering)
+        recomputed = canonical_representation(event_data)
+        # Verify stored canonical matches recomputed (detects canonical tampering)
+        return false if event_data[:audit_canonical] && event_data[:audit_canonical] != recomputed
+
+        actual_signature = OpenSSL::HMAC.hexdigest("SHA256", signing_key, recomputed)
         actual_signature == expected_signature
       end
       # rubocop:enable Naming/PredicateMethod

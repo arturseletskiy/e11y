@@ -65,7 +65,7 @@ module E11y
       #
       # @param event_data [Hash] Event payload
       # @return [Hash] Unchanged event_data (passthrough)
-      def call(event_data)
+      def call(event_data) # rubocop:todo Metrics/AbcSize
         # Skip if SLO not enabled for this event
         # Support explicit event_class (for testing) or resolve from event_name
         event_class = event_data[:event_class] || resolve_event_class(event_data)

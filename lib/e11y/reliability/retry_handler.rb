@@ -51,13 +51,14 @@ module E11y
       # @option config [Float] :jitter_factor Jitter factor (0.0-1.0, default: 0.1)
       # @option config [Boolean] :fail_on_error Raise error after max retries (default: true)
       # @param rate_limiter [RetryRateLimiter, nil] Optional rate limiter for thundering herd prevention (C06)
-      def initialize(config: {}, rate_limiter: nil)
+      # @param retry_rate_limiter [RetryRateLimiter, nil] Alias for rate_limiter (backward compatibility)
+      def initialize(config: {}, rate_limiter: nil, retry_rate_limiter: nil)
         @max_attempts = config[:max_attempts] || 3
         @base_delay_ms = config[:base_delay_ms] || 100.0
         @max_delay_ms = config[:max_delay_ms] || 5000.0
         @jitter_factor = config[:jitter_factor] || 0.1
         @fail_on_error = config.fetch(:fail_on_error, true)
-        @rate_limiter = rate_limiter
+        @rate_limiter = rate_limiter || retry_rate_limiter
       end
 
       # Execute block with retry logic.
@@ -102,18 +103,18 @@ module E11y
 
             # C06: Thundering herd prevention — check rate limiter before sleeping
             if @rate_limiter && !@rate_limiter.allow?(adapter.class.name, event)
-              # Rate limit exceeded: use the configured action
-              case @rate_limiter.instance_variable_get(:@on_limit_exceeded)
-              when :dlq
-                # Abort retry, let caller save to DLQ
-                raise RetryExhaustedError.new(e, retry_count: attempt) if @fail_on_error
-
-                return nil
-              else
-                # :delay — sleep for the full window + jitter before retrying
+              # Rate limit exceeded: stop retrying to prevent thundering herd
+              # With :delay strategy, sleep first to spread out retry load
+              on_limit = @rate_limiter.instance_variable_get(:@on_limit_exceeded)
+              if on_limit == :delay
+                window_sec = @rate_limiter.instance_variable_get(:@window)
                 jitter = rand(0..(delay_ms * 0.2))
-                sleep((@rate_limiter.instance_variable_get(:@window) * 1000 + jitter) / 1000.0)
+                sleep((window_sec * 1000 + jitter) / 1000.0)
               end
+
+              raise RetryExhaustedError.new(e, retry_count: attempt) if @fail_on_error
+
+              return nil
             end
 
             # Sleep with backoff

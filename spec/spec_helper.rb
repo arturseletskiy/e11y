@@ -160,6 +160,14 @@ RSpec.configure do |config|
     config.filter_run_excluding integration: true
   end
 
+  # Unit tests: ensure audit events have routing (avoid CRITICAL validation error)
+  config.before do |example|
+    next if example.metadata[:integration]
+
+    cfg = E11y.configuration
+    cfg.routing_rules = [->(e) { :stdout if e[:audit_event] }] if cfg.routing_rules.empty?
+  end
+
   # Clean up after each test
   config.after do |example|
     if example.metadata[:integration]

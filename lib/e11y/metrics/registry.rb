@@ -144,7 +144,6 @@ module E11y
       # Validate metric configuration
       # @param config [Hash] Metric configuration
       # @raise [ArgumentError] if configuration is invalid
-      # rubocop:disable Metrics/AbcSize
       def validate_config!(config)
         raise ArgumentError, "Metric type is required" unless config[:type]
         raise ArgumentError, "Invalid metric type: #{config[:type]}" unless %i[counter histogram
@@ -156,14 +155,13 @@ module E11y
 
         raise ArgumentError, "Value extractor is required for #{config[:type]} metrics"
       end
-      # rubocop:enable Metrics/AbcSize
 
       # Validate that new metric doesn't conflict with existing one
       # @param existing [Hash] Existing metric configuration
       # @param new_config [Hash] New metric configuration
       # @raise [TypeConflictError] if types don't match
       # @raise [LabelConflictError] if labels don't match
-      # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
       # Conflict validation requires checking type and labels with detailed error messages
       def validate_no_conflicts!(existing, new_config)
         # Check 1: Type must match
@@ -215,7 +213,7 @@ module E11y
           Using existing buckets.
         WARNING
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
       # Compile glob pattern to regex
       # @param pattern [String] Glob pattern (e.g., "order.*", "user.*.created")

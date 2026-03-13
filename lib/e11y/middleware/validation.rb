@@ -56,7 +56,7 @@ module E11y
       # @option event_data [Hash] :payload The event payload (required)
       # @return [Hash, nil] Validated event data, or nil if dropped
       # @raise [E11y::ValidationError] if validation fails
-      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
       def call(event_data)
         # Skip validation if no event_class or payload
         return @app.call(event_data) unless event_data[:event_class] && event_data[:payload]
@@ -106,7 +106,7 @@ module E11y
           raise E11y::ValidationError, error_message
         end
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
       private
 

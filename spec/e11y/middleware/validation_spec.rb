@@ -215,7 +215,6 @@ RSpec.describe E11y::Middleware::Validation do
       expect(described_class.middleware_zone).to eq(:pre_processing)
     end
 
-    # rubocop:disable RSpec/ExampleLength
     it "uses original class name for validation (V2 ≠ V1)" do
       # Simulate versioned event classes
       v1_class = Class.new(E11y::Event::Base) do
@@ -257,7 +256,6 @@ RSpec.describe E11y::Middleware::Validation do
       expect { middleware.call(v2_event) }
         .to raise_error(E11y::ValidationError, /currency/)
     end
-    # rubocop:enable RSpec/ExampleLength
 
     it "validates BEFORE PII filtering (ADR-015 §3.1 line 96)" do
       # Validation should happen on original data (including PII)

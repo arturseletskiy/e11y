@@ -155,7 +155,7 @@ module E11y
       # Send error to Sentry
       #
       # @param event_data [Hash] Event data
-      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+      # rubocop:disable Metrics/AbcSize
       # Sentry scope configuration requires multiple context enrichment steps
       def send_error_to_sentry(event_data)
         ::Sentry.with_scope do |scope|
@@ -187,7 +187,7 @@ module E11y
           end
         end
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
+      # rubocop:enable Metrics/AbcSize
 
       # Send breadcrumb to Sentry
       #

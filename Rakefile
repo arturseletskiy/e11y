@@ -48,12 +48,17 @@ namespace :spec do
     sh "bundle exec rspec spec/e11y/railtie_integration_spec.rb --tag railtie_integration"
   end
 
-  desc "Run all tests (unit + integration + railtie + cucumber, ~1729 examples)"
+  desc "Run all tests (unit + memory + integration + railtie + cucumber)"
   task :all do
     puts "\n#{'=' * 80}"
     puts "Running UNIT tests (spec/e11y + top-level specs)..."
     puts "#{'=' * 80}\n"
     Rake::Task["spec:unit"].invoke
+
+    puts "\n#{'=' * 80}"
+    puts "Running MEMORY tests (allocations, leaks, consumption)..."
+    puts "#{'=' * 80}\n"
+    Rake::Task["spec:memory"].invoke
 
     puts "\n#{'=' * 80}"
     puts "Running INTEGRATION tests (spec/integration)..."
@@ -94,6 +99,14 @@ namespace :spec do
     sh "bundle exec rspec spec/e11y --tag benchmark"
   end
 
+  desc "Run memory profiling specs (allocations, leaks, consumption)"
+  task :memory do
+    sh "bundle exec rspec " \
+       "spec/e11y/memory_spec.rb " \
+       "spec/e11y/event/base_benchmark_spec.rb " \
+       "--tag memory --format documentation"
+  end
+
   desc "Run ALL tests including benchmarks and cucumber (very slow)"
   task :everything do
     puts "\n#{'=' * 80}"
@@ -106,6 +119,7 @@ namespace :spec do
       Rake::Task["cucumber:passing"].invoke
     end
     Rake::Task["spec:benchmark"].invoke
+    Rake::Task["spec:memory"].invoke
 
     puts "\n#{'=' * 80}"
     puts "✅ All test suites including benchmarks completed!"
@@ -212,6 +226,7 @@ namespace :release do
       # No [Unreleased] section, just add version entry
 
       # Find where to insert (after the header, before first version)
+
       if /(## \[\d+\.\d+\.\d+\])/.match?(changelog_content)
         new_section = "## [Unreleased]\n\n### Added\n\n### Changed\n\n### Fixed\n\n"
         new_section += "### Deprecated\n\n### Removed\n\n### Security\n\n"

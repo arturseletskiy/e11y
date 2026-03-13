@@ -298,11 +298,11 @@ RSpec.describe E11y::Configuration do
       expect(middleware_classes).to include(E11y::Middleware::Routing)
     end
 
-    it "registers exactly 8 middlewares" do
-      expect(middleware_classes.size).to eq(8)
+    it "registers exactly 9 middlewares" do
+      expect(middleware_classes.size).to eq(9)
     end
 
-    it "orders middlewares per ADR-015: TraceContext → Versioning → Validation → PIIFilter → AuditSigning → Sampling → RateLimiting → Routing" do
+    it "orders middlewares per ADR-015: TraceContext → Versioning → Validation → PIIFilter → AuditSigning → Sampling → RateLimiting → Routing → EventSlo" do
       expected_order = [
         E11y::Middleware::TraceContext,
         E11y::Middleware::Versioning,
@@ -311,7 +311,8 @@ RSpec.describe E11y::Configuration do
         E11y::Middleware::AuditSigning,
         E11y::Middleware::Sampling,
         E11y::Middleware::RateLimiting,
-        E11y::Middleware::Routing
+        E11y::Middleware::Routing,
+        E11y::Middleware::EventSlo
       ]
       expect(middleware_classes).to eq(expected_order)
     end

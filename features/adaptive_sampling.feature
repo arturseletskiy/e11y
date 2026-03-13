@@ -70,7 +70,6 @@ Feature: Adaptive Sampling
   # Bug: cleanup_trace_decisions randomly evicts 50% of cache keys,
   # potentially evicting an active trace and breaking consistency.
   # -----------------------------------------------------------------------
-  @wip
   Scenario: Events from the same trace_id receive consistent sampling decisions
     Given the Sampling middleware is reconfigured with trace_aware true and default_sample_rate 0.5
     And an event class "Events::TracedOrder" with sample_rate 0.5

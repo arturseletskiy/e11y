@@ -487,7 +487,6 @@ RSpec.describe E11y::Middleware::Routing do
   end
 
   describe "complex routing scenarios" do
-    # rubocop:disable RSpec/ExampleLength
     # Integration test requires multiple tier scenarios with routing logic
     it "handles tiered storage routing (hot/warm/cold)" do
       E11y.configuration.routing_rules = [
@@ -529,7 +528,6 @@ RSpec.describe E11y::Middleware::Routing do
       middleware.call(cold_event)
       expect(archive_adapter).to have_received(:write).with(cold_event)
     end
-    # rubocop:enable RSpec/ExampleLength
 
     it "combines audit routing + error routing" do
       E11y.configuration.routing_rules = [

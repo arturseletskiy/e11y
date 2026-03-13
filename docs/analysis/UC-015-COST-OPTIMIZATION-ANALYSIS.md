@@ -501,5 +501,49 @@ end
 
 ---
 
-**Analysis Complete:** 2026-01-26  
+**Analysis Complete:** 2026-01-26
 **Next Step:** UC-015 Phase 2: Planning Complete
+
+---
+
+## 🔍 Production Readiness Audit — 2026-03-10
+
+**Audit Date:** 2026-03-10
+**Status:** ❌ NOT PRODUCTION-READY — Cost Tracking перенесён в v1.1
+
+### Решение о версионировании
+
+**UC-015 полностью переносится в v1.1.** Причина: основная ценность — снижение затрат через Adaptive Sampling (UC-014) — уже реализована и даёт 90% volume reduction. Явный Cost Tracking (измерение, бюджеты, алерты) не является блокером для v1.0.
+
+### v1.1 Backlog Items для UC-015
+
+Когда UC-015 будет реализован в v1.1:
+
+1. **Cost Tracking Middleware** (`E11y::Middleware::CostTracking`):
+   - Volume tracking per adapter (events_count, bytes_per_adapter)
+   - Cost calculation (configurable pricing per adapter)
+   - Budget comparison logic
+
+2. **Budget Enforcement:**
+   - `config.cost_tracking.budget = { loki: 100.0, elasticsearch: 50.0 }` ($/month)
+   - Dynamic sampling rate reduction when budget exceeded
+   - Cutoff behavior for non-critical events
+
+3. **Cost Alerts:**
+   - `config.cost_tracking.alert_threshold = 0.8` (80% of budget)
+   - Integration with E11y self-monitoring events
+
+4. **Integration Tests для v1.1:**
+   - Volume tracking per adapter
+   - Budget enforcement (sampling adjusts when budget exceeded)
+   - Cost alerts trigger at threshold
+   - Cutoff behavior verified
+
+### Текущее состояние (v1.0)
+
+UC-015 в части снижения затрат через sampling — **работает через UC-014** (Adaptive Sampling):
+- ✅ Error-spike sampling — до 90% volume reduction
+- ✅ Load-based tiered sampling
+- ✅ Trace-aware caching
+- ✅ Stratified sampling (SLO-accurate)
+- Нет visibility в реальные затраты — по дизайну для v1.0

@@ -534,7 +534,54 @@ end
 
 ---
 
-**Analysis Complete:** 2026-01-26  
+**Analysis Complete:** 2026-01-26
 **Note:** Cost tracking, budget enforcement, and cost alerts may not be fully implemented. Integration tests should verify current state or note limitations.
 
 **Next Step:** ADR-009 Phase 2: Planning Complete
+
+---
+
+## 🔍 Production Readiness Audit — 2026-03-10
+
+**Audit Date:** 2026-03-10
+**Status:** ⚠️ PARTIALLY PRODUCTION-READY — Sampling работает; Cost Tracking перенесён в v1.1
+
+### Решение о версионировании
+
+**Cost Tracking, Budget Enforcement, Cost Alerts, Compression, Payload Minimization → перенесены в v1.1**
+
+Обоснование: Adaptive Sampling (90% volume reduction) достаточен для v1.0. Реализация cost tracking потребует ~2-3 дня и не блокирует базовое использование.
+
+### Обновлённый статус компонентов
+
+| Компонент | Статус | Версия |
+|-----------|--------|--------|
+| Adaptive Sampling (все 4 стратегии) | ✅ PRODUCTION-READY | v1.0 |
+| Trace-Aware Sampling (C05) | ✅ PRODUCTION-READY | v1.0 |
+| Stratified Sampling (C11) | ✅ Implemented, missing integration test | v1.0 |
+| LoadMonitor off-by-one bug | ✅ Fixed (commit 8ab4bd8) | v1.0 |
+| **Cost Tracking** | ❌ → **v1.1 Backlog** | v1.1 |
+| **Budget Enforcement** | ❌ → **v1.1 Backlog** | v1.1 |
+| **Cost Alerts** | ❌ → **v1.1 Backlog** | v1.1 |
+| **Compression** | ❌ → **v1.1 Backlog** | v1.1 |
+| **Payload Minimization** | ❌ → **v1.1 Backlog** | v1.1 |
+
+### ⚠️ Missing Integration Tests (v1.0 scope)
+
+Sampling integration tests были созданы (11 tests, все проходят), но отсутствуют 3 сценария:
+
+| Сценарий | Статус |
+|----------|--------|
+| Value-based sampling E2E | ❌ Missing — DSL + ValueExtractor работают unit, integration test нет |
+| Stratified sampling E2E | ❌ Missing — StratifiedTracker работает unit, integration test нет |
+| Pattern-based sampling | ❌ Missing — закомментировано в spec как "will be added" |
+
+### v1.1 Backlog Items
+
+Когда будет реализован Cost Tracking (v1.1):
+1. `E11y::Middleware::CostTracking` — подсчёт volume per adapter
+2. `config.cost_tracking.budget` — лимиты по бюджету
+3. `config.cost_tracking.alert_threshold` — алертинг при превышении
+4. Integration tests: volume tracking, budget enforcement, cost alerts
+5. Compression middleware (zstd/gzip)
+6. Payload minimization (drop null fields)

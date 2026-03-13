@@ -40,14 +40,16 @@ module E11y
       # Initialize rate limiting middleware
       #
       # @param app [Object] Next middleware in pipeline
-      # @param global_limit [Integer] Max events/sec globally (default: 10_000)
-      # @param per_event_limit [Integer] Max events/sec per event type (default: 1_000)
-      # @param window [Float] Time window in seconds (default: 1.0)
-      def initialize(app, global_limit: 10_000, per_event_limit: 1_000, window: 1.0)
+      # @param global_limit [Integer] Max events/sec globally (default: from E11y.config.rate_limiting)
+      # @param per_event_limit [Integer] Max events/sec per event type (default: from E11y.config.rate_limiting)
+      # @param window [Float] Time window in seconds (default: from E11y.config.rate_limiting)
+      def initialize(app, global_limit: nil, per_event_limit: nil, window: nil)
         super(app)
-        @global_limit = global_limit
-        @per_event_limit = per_event_limit
-        @window = window
+        rl_config = E11y.config.rate_limiting
+        @enabled = rl_config.enabled
+        @global_limit = global_limit || rl_config.global_limit
+        @per_event_limit = per_event_limit || rl_config.per_event_limit
+        @window = window || rl_config.window
 
         # Token buckets for rate limiting
         @global_bucket = TokenBucket.new(capacity: @global_limit, refill_rate: @global_limit, window: @window)
@@ -67,6 +69,8 @@ module E11y
       # @param event_data [Hash] Event payload
       # @return [Hash, nil] Event data if allowed, nil if rate limited
       def call(event_data)
+        return @app.call(event_data) unless @enabled
+
         event_name = event_data[:event_name]
 
         # Check global rate limit

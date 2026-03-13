@@ -60,6 +60,25 @@ module E11y
     end
     alias config configuration
 
+    # Track an event
+    #
+    # Accepts either an event instance or an event class with an optional payload.
+    # Delegates to the event class's `.track` method.
+    #
+    # @param event_or_class [E11y::Event::Base, Class] event instance or event class
+    # @param payload [Hash] keyword arguments forwarded to EventClass.track (used with class form)
+    # @return [void]
+    #
+    # @example Pass an event instance
+    #   E11y.track(Events::UserSignup.new)
+    #
+    # @example Pass an event class with payload
+    #   E11y.track(Events::UserSignup, user_id: 123)
+    def track(event_or_class, **payload)
+      event_class = event_or_class.is_a?(Class) ? event_or_class : event_or_class.class
+      event_class.track(**payload)
+    end
+
     # Get logger instance
     #
     # @return [Logger] logger instance
@@ -201,7 +220,7 @@ module E11y
       @adapters = {} # Hash of adapter_name => adapter_instance
       @log_level = :info
       @pipeline = E11y::Pipeline::Builder.new
-      @enabled = true
+      @enabled = nil
       @environment = nil
       @service_name = nil
       @enable_http_tracing = false # Opt-in: disabled by default
@@ -221,7 +240,7 @@ module E11y
       @active_job = ActiveJobConfig.new
       @sidekiq = SidekiqConfig.new
       @error_handling = ErrorHandlingConfig.new # ✅ C18 Resolution
-      @dlq_storage = nil # Set by user (e.g., DLQ::FileStorage instance)
+      @dlq_storage = nil # Set by user (e.g., DLQ::FileAdapter instance)
       @dlq_filter = nil # Set by user (e.g., DLQ::Filter instance)
       @rate_limiting = RateLimitingConfig.new
       @slo_tracking = SLOTrackingConfig.new # ✅ L3.14.1
@@ -350,9 +369,10 @@ module E11y
     # 3. Validation    - Schema validation (zone: :pre_processing)
     # 4. PIIFilter     - PII filtering (zone: :security)
     # 5. AuditSigning  - Audit event signing (zone: :security)
-    # 6. Sampling      - Adaptive sampling (zone: :routing)
-    # 7. RateLimiting  - DoS protection, token bucket (zone: :routing)
+    # 6. RateLimiting  - Token-bucket rate limiting (zone: :routing)
+    # 7. Sampling      - Adaptive sampling (zone: :routing)
     # 8. Routing       - Buffer routing (zone: :adapters)
+    # 9. EventSlo      - Event-driven SLO tracking (after adapters, observes dispatch)
     #
     # @return [void]
     # @see ADR-015 Middleware Execution Order
@@ -367,11 +387,14 @@ module E11y
       @pipeline.use E11y::Middleware::AuditSigning
 
       # Zone: :routing
+      @pipeline.use E11y::Middleware::RateLimiting
       @pipeline.use E11y::Middleware::Sampling
-      @pipeline.use E11y::Middleware::RateLimiting  # DoS protection before routing
 
       # Zone: :adapters
       @pipeline.use E11y::Middleware::Routing
+
+      # After adapters: observes dispatch outcome for SLO tracking
+      @pipeline.use E11y::Middleware::EventSlo
     end
   end
 
@@ -425,10 +448,20 @@ module E11y
   class RequestBufferConfig
     attr_accessor :enabled, :flush_on_error, :flush_on_statuses
 
+    # Explicit list of adapter names that receive flushed debug events on request failure.
+    #
+    # If nil (default), falls back to config.fallback_adapters.
+    # Set this to limit debug flushes to adapters that can handle the extra load.
+    #
+    # @example Only flush debug events to Loki (not Sentry)
+    #   config.request_buffer.debug_adapters = [:loki_logger]
+    attr_accessor :debug_adapters
+
     def initialize
       @enabled           = false  # Disabled by default
       @flush_on_error    = true   # Flush buffer on 5xx server errors (default: true)
       @flush_on_statuses = []     # Additional HTTP statuses that trigger a flush (e.g. [403])
+      @debug_adapters    = nil    # nil → use fallback_adapters
     end
   end
 

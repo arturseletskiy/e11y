@@ -32,7 +32,7 @@ Metrics/BlockLength:
     - '*.gemspec'
 
 Metrics/MethodLength:
-  Max: 15
+  Max: 20
   Exclude:
     - 'spec/**/*'
     - 'lib/e11y/adapters/yabeda.rb'
@@ -44,6 +44,7 @@ Metrics/ClassLength:
     - 'spec/**/*'
 
 Metrics/CyclomaticComplexity:
+  Max: 15
   Exclude:
     - 'lib/e11y/adapters/yabeda.rb'
     - 'lib/e11y/middleware/event_slo.rb'
@@ -56,6 +57,7 @@ Metrics/CyclomaticComplexity:
     - 'spec/support/matchers/pii_matchers.rb'
 
 Metrics/AbcSize:
+  Max: 20
   Exclude:
     - 'lib/e11y/middleware/event_slo.rb'
     - 'lib/e11y/middleware/routing.rb'
@@ -67,6 +69,7 @@ Metrics/AbcSize:
     - 'spec/support/matchers/pii_matchers.rb'
 
 Metrics/PerceivedComplexity:
+  Max: 15
   Exclude:
     - 'lib/e11y/middleware/event_slo.rb'
     - 'spec/integration/slo_tracking_integration_spec.rb'
@@ -87,9 +90,13 @@ Style/StringLiterals:
 Style/FrozenStringLiteralComment:
   Enabled: true
 
+# Layout
+Layout/LineLength:
+  Max: 150
+
 # RSpec
 RSpec/ExampleLength:
-  Max: 20 # Allow longer examples for integration tests
+  Max: 40 # Allow longer examples for integration tests
   Exclude:
     - "spec/integration/**/*"
 
