@@ -30,6 +30,7 @@ Metrics/BlockLength:
     - 'spec/**/*'
     - 'Rakefile'
     - '*.gemspec'
+    - 'lib/e11y/reliability/retry_handler.rb'
 
 Metrics/MethodLength:
   Max: 20
@@ -37,11 +38,15 @@ Metrics/MethodLength:
     - 'spec/**/*'
     - 'lib/e11y/adapters/yabeda.rb'
     - 'lib/e11y/middleware/routing.rb'
+    - 'lib/e11y/event/base.rb'
 
 Metrics/ClassLength:
   Max: 100
   Exclude:
     - 'spec/**/*'
+    - 'lib/e11y/buffers/request_scoped_buffer.rb'
+    - 'lib/e11y/registry.rb'
+    - 'lib/e11y/adapters/otel_logs.rb'
 
 Metrics/CyclomaticComplexity:
   Max: 15
@@ -62,6 +67,9 @@ Metrics/AbcSize:
     - 'lib/e11y/middleware/event_slo.rb'
     - 'lib/e11y/middleware/routing.rb'
     - 'lib/e11y/adapters/yabeda.rb'
+    - 'lib/e11y/event/base.rb'
+    - 'lib/e11y/middleware/versioning.rb'
+    - 'lib/e11y/reliability/retry_handler.rb'
     - 'spec/integration/slo_tracking_integration_spec.rb'
     - 'spec/support/integration_helpers.rb'
     - 'spec/support/integration/pii_helpers.rb'
@@ -118,6 +126,28 @@ RSpec/DescribeClass:
   Exclude:
     - "spec/zeitwerk_spec.rb"
     - "spec/integration/**/*"
+    - "spec/e11y/module_api_spec.rb"
+
+# File path conventions (generators use spec/generators/e11y/ structure)
+RSpec/FilePath:
+  Exclude:
+    - "spec/e11y/event/dsl_additions_spec.rb"
+    - "spec/e11y/module_api_spec.rb"
+    - "spec/generators/e11y/*_spec.rb"
+
+RSpec/SpecFilePathFormat:
+  Exclude:
+    - "spec/e11y/event/dsl_additions_spec.rb"
+    - "spec/e11y/module_api_spec.rb"
+    - "spec/generators/e11y/*_spec.rb"
+
+RSpec/DescribeMethod:
+  Exclude:
+    - "spec/e11y/module_api_spec.rb"
+
+RSpec/MultipleDescribes:
+  Exclude:
+    - "spec/e11y/adapters/null_adapter_spec.rb"
 
 # Allow simple doubles for now (will improve in Phase 1)
 RSpec/VerifiedDoubles:

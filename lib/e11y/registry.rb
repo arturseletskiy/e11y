@@ -204,12 +204,14 @@ module E11y
     #
     # @param event_name [String]
     # @return [Boolean]
+    # rubocop:disable Naming/PredicateMethod -- "validate" is the established API name
     def validate(event_name)
       klass = find(event_name)
       return false unless klass
 
       klass.respond_to?(:compiled_schema) && !klass.compiled_schema.nil?
     end
+    # rubocop:enable Naming/PredicateMethod
 
     # Remove all entries from the registry.
     #

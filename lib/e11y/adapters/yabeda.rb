@@ -322,6 +322,7 @@ module E11y
       # Must be registered before Yabeda.configure! so they exist when reliability layer runs.
       #
       # @return [void]
+      # rubocop:disable Metrics/MethodLength -- metric list is inherently long
       def register_self_monitoring_metrics!
         return unless defined?(::Yabeda)
 
@@ -369,6 +370,7 @@ module E11y
       rescue StandardError => e
         E11y.logger.debug("Could not register self-monitoring metrics: #{e.message}")
       end
+      # rubocop:enable Metrics/MethodLength
 
       # Register a single metric in Yabeda
       #

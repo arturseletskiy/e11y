@@ -567,7 +567,7 @@ RSpec.describe "Reliability Features Integration", :integration do
       )
       stub_storage = instance_double(E11y::Reliability::DLQ::FileStorage)
       saved_entries = []
-      allow(stub_storage).to receive(:save) { |ev, metadata: {}|
+      allow(stub_storage).to receive(:save) { |ev, metadata: {}| # rubocop:disable Lint/UnusedBlockArgument
         saved_entries << ev
         "fake-id"
       }
@@ -598,7 +598,7 @@ RSpec.describe "Reliability Features Integration", :integration do
       )
       stub_storage = instance_double(E11y::Reliability::DLQ::FileStorage)
       saved_entries = []
-      allow(stub_storage).to receive(:save) { |ev, metadata: {}|
+      allow(stub_storage).to receive(:save) { |ev, metadata: {}| # rubocop:disable Lint/UnusedBlockArgument
         saved_entries << ev
         "fake-id"
       }
@@ -628,7 +628,7 @@ RSpec.describe "Reliability Features Integration", :integration do
       )
       stub_storage = instance_double(E11y::Reliability::DLQ::FileStorage)
       saved_entries = []
-      allow(stub_storage).to receive(:save) { |ev, metadata: {}|
+      allow(stub_storage).to receive(:save) { |ev, metadata: {}| # rubocop:disable Lint/UnusedBlockArgument
         saved_entries << ev
         "fake-id"
       }
@@ -1089,6 +1089,7 @@ RSpec.describe "Reliability Features Integration", :integration do
         raise ArgumentError, "invalid argument"
       end
 
+      # rubocop:disable Style/MultilineBlockChain -- RSpec expect/raise_error block form
       expect do
         retry_handler.with_retry(adapter: adapter, event: event_data) do
           adapter.write(event_data)
@@ -1097,6 +1098,7 @@ RSpec.describe "Reliability Features Integration", :integration do
         expect(err.original_error).to be_a(ArgumentError)
         expect(err.retry_count).to eq(1)
       end
+      # rubocop:enable Style/MultilineBlockChain
 
       expect(call_count).to eq(1), "ArgumentError is permanent — no retries expected"
     end
@@ -1108,6 +1110,7 @@ RSpec.describe "Reliability Features Integration", :integration do
         raise NoMethodError, "undefined method"
       end
 
+      # rubocop:disable Style/MultilineBlockChain -- RSpec expect/raise_error block form
       expect do
         retry_handler.with_retry(adapter: adapter, event: event_data) do
           adapter.write(event_data)
@@ -1115,6 +1118,7 @@ RSpec.describe "Reliability Features Integration", :integration do
       end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError) do |err|
         expect(err.original_error).to be_a(NoMethodError)
       end
+      # rubocop:enable Style/MultilineBlockChain
 
       expect(call_count).to eq(1), "NoMethodError is permanent — no retries expected"
     end
@@ -1126,6 +1130,7 @@ RSpec.describe "Reliability Features Integration", :integration do
         raise Timeout::Error, "execution expired"
       end
 
+      # rubocop:disable Style/MultilineBlockChain -- RSpec expect/raise_error block form
       expect do
         retry_handler.with_retry(adapter: adapter, event: event_data) do
           adapter.write(event_data)
@@ -1134,6 +1139,7 @@ RSpec.describe "Reliability Features Integration", :integration do
         expect(err.original_error).to be_a(Timeout::Error)
         expect(err.retry_count).to eq(3)
       end
+      # rubocop:enable Style/MultilineBlockChain
 
       expect(call_count).to eq(3), "Should attempt max_attempts(3) times before giving up"
     end
@@ -1145,6 +1151,7 @@ RSpec.describe "Reliability Features Integration", :integration do
         raise Errno::EHOSTUNREACH, "no route to host"
       end
 
+      # rubocop:disable Style/MultilineBlockChain -- RSpec expect/raise_error block form
       expect do
         retry_handler.with_retry(adapter: adapter, event: event_data) do
           adapter.write(event_data)
@@ -1153,6 +1160,7 @@ RSpec.describe "Reliability Features Integration", :integration do
         expect(err.original_error).to be_a(Errno::EHOSTUNREACH)
         expect(err.retry_count).to eq(3)
       end
+      # rubocop:enable Style/MultilineBlockChain
 
       expect(call_count).to eq(3)
     end

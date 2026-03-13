@@ -215,7 +215,7 @@ module E11y
     attr_accessor :adapters, :log_level, :logger, :enabled, :environment, :service_name, :default_retention_period,
                   :routing_rules, :fallback_adapters, :enable_http_tracing
     attr_reader :adapter_mapping, :pipeline, :rails_instrumentation, :logger_bridge, :request_buffer, :active_job,
-                :sidekiq, :error_handling, :dlq_storage, :dlq_filter, :cardinality_protection
+                :sidekiq, :error_handling, :dlq_storage, :dlq_filter
 
     def initialize
       initialize_basic_config
@@ -554,7 +554,7 @@ module E11y
     end
 
     def window=(value)
-      @global_window = defined?(ActiveSupport::Duration) && value.is_a?(ActiveSupport::Duration) ? value.to_f : value.to_f
+      @global_window = value.to_f
     end
 
     # Set global rate limit.
@@ -562,7 +562,7 @@ module E11y
     # @param window [Numeric, ActiveSupport::Duration] Window size
     def global(limit:, window: 1.0)
       @global_limit = limit
-      @global_window = window.is_a?(ActiveSupport::Duration) ? window.to_f : window.to_f
+      @global_window = window.to_f
     end
 
     # Set per-event (or per-pattern) rate limit.
@@ -573,7 +573,7 @@ module E11y
       @per_event_limits << {
         pattern: pattern.to_s,
         limit: limit,
-        window: window.is_a?(ActiveSupport::Duration) ? window.to_f : window.to_f
+        window: window.to_f
       }
     end
 
@@ -616,7 +616,7 @@ module E11y
   #   end
   class SLOTrackingConfig
     attr_accessor :enabled
-    attr_reader :http_ignore_statuses, :latency_percentiles, :controller_configs, :job_configs
+    attr_reader :controller_configs, :job_configs
 
     def initialize
       @enabled = true # Zero-config: enabled by default
@@ -626,13 +626,17 @@ module E11y
       @job_configs = {}
     end
 
-    # @param statuses [Array<Integer>] HTTP status codes to exclude from SLO calculations
-    def http_ignore_statuses(statuses)
+    # @param statuses [Array<Integer>, nil] HTTP status codes to exclude from SLO calculations (nil = getter)
+    def http_ignore_statuses(statuses = nil)
+      return @http_ignore_statuses if statuses.nil?
+
       @http_ignore_statuses = Array(statuses)
     end
 
-    # @param percentiles [Array<Integer>] Latency percentiles to track (e.g. [50, 95, 99])
-    def latency_percentiles(percentiles)
+    # @param percentiles [Array<Integer>, nil] Latency percentiles to track (nil = getter)
+    def latency_percentiles(percentiles = nil)
+      return @latency_percentiles if percentiles.nil?
+
       @latency_percentiles = Array(percentiles)
     end
 
@@ -656,8 +660,6 @@ module E11y
 
     # Per-controller SLO target config.
     class ControllerSLOConfig
-      attr_reader :slo_target, :latency_target
-
       def slo_target(value = nil)
         value ? @slo_target = value : @slo_target
       end
@@ -669,8 +671,6 @@ module E11y
 
     # Per-job SLO config.
     class JobSLOConfig
-      attr_reader :ignore
-
       def ignore(value = nil)
         value.nil? ? @ignore : @ignore = value
       end
@@ -689,7 +689,7 @@ module E11y
   #     overflow_strategy :relabel
   #   end
   class CardinalityProtectionConfig
-    attr_reader :max_cardinality_limit, :denylist, :overflow_strategy
+    attr_reader :max_cardinality_limit
 
     def initialize
       @max_cardinality_limit = 1000
@@ -702,13 +702,17 @@ module E11y
       @max_cardinality_limit = value
     end
 
-    # @param keys [Array<Symbol>]
-    def denylist(keys)
+    # @param keys [Array<Symbol>, nil] Denylist keys (nil = getter)
+    def denylist(keys = nil)
+      return @denylist if keys.nil?
+
       @denylist = Array(keys).map(&:to_sym)
     end
 
-    # @param strategy [Symbol] :relabel or :drop
-    def overflow_strategy(strategy)
+    # @param strategy [Symbol, nil] :relabel or :drop (nil = getter)
+    def overflow_strategy(strategy = nil)
+      return @overflow_strategy if strategy.nil?
+
       @overflow_strategy = strategy
     end
   end

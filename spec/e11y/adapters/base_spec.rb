@@ -824,7 +824,7 @@ RSpec.describe E11y::Adapters::Base do
       adapter.send(:retriable_error?, error)
     end
 
-    context "network timeout errors" do
+    context "when network timeout errors occur" do
       it "returns true for Timeout::Error" do
         expect(retriable?(adapter, Timeout::Error.new("timed out"))).to be(true)
       end
@@ -838,7 +838,7 @@ RSpec.describe E11y::Adapters::Base do
       end
     end
 
-    context "connection errors" do
+    context "when connection errors occur" do
       it "returns true for Errno::ECONNREFUSED" do
         expect(retriable?(adapter, Errno::ECONNREFUSED.new)).to be(true)
       end
@@ -856,7 +856,7 @@ RSpec.describe E11y::Adapters::Base do
       end
     end
 
-    context "HTTP 5xx server errors" do
+    context "when HTTP 5xx server errors occur" do
       it "returns true when error has a response with status 500" do
         error = StandardError.new("internal server error")
         allow(error).to receive(:respond_to?).and_call_original
@@ -882,7 +882,7 @@ RSpec.describe E11y::Adapters::Base do
       end
     end
 
-    context "permanent / non-retriable errors" do
+    context "when permanent / non-retriable errors occur" do
       it "returns false for ArgumentError" do
         expect(retriable?(adapter, ArgumentError.new("bad argument"))).to be(false)
       end
@@ -900,7 +900,7 @@ RSpec.describe E11y::Adapters::Base do
       end
     end
 
-    context "custom override via super" do
+    context "when custom override via super" do
       it "allows subclass to extend retriable errors via super" do
         custom_class = Class.new(test_adapter_class) do
           def retriable_error?(error)

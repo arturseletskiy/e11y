@@ -138,12 +138,9 @@ RSpec.describe "Event Registry Integration", :integration do
 
     it "includes :name, :class, :version, :severity for each entry" do
       docs = registry.to_documentation
-      docs.each do |doc|
-        expect(doc).to have_key(:name)
-        expect(doc).to have_key(:class)
-        expect(doc).to have_key(:version)
-        expect(doc).to have_key(:severity)
-      end
+      expect(docs).to all(
+        have_key(:name).and(have_key(:class)).and(have_key(:version)).and(have_key(:severity))
+      )
     end
 
     it "includes :schema_keys for events that have schemas" do

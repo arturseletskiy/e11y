@@ -42,19 +42,23 @@ module E11y
       #
       # @param event_data [Hash] Event payload
       # @return [Boolean] always true
+      # rubocop:disable Naming/PredicateMethod -- implements Base adapter interface
       def write(event_data)
         @mutex.synchronize { @events << event_data.dup } if @store_events
         true
       end
+      # rubocop:enable Naming/PredicateMethod
 
       # Accept batch. When store_events: true, stores for inspection. When false, truly discards.
       #
       # @param events [Array<Hash>] Event payloads
       # @return [Boolean] always true
+      # rubocop:disable Naming/PredicateMethod -- implements Base adapter interface
       def write_batch(events)
         @mutex.synchronize { @events.concat(events.map(&:dup)) } if @store_events
         true
       end
+      # rubocop:enable Naming/PredicateMethod
 
       # Clear all stored events (useful between test examples).
       #

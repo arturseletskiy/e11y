@@ -401,9 +401,7 @@ RSpec.describe E11y::Registry do
         Thread.new { registry.all_events }
       end.map(&:value)
 
-      results.each do |r|
-        expect(r).to include(klass)
-      end
+      expect(results).to all(include(klass))
     end
   end
 
@@ -443,7 +441,8 @@ RSpec.describe E11y::Registry do
   # -------------------------------------------------------------------------
   describe "singleton" do
     it "E11y::Registry.instance returns the same object on repeated calls" do
-      expect(described_class.instance).to be(described_class.instance)
+      instance = described_class.instance
+      expect(described_class.instance).to be(instance)
     end
 
     it "E11y.registry returns the Registry instance" do

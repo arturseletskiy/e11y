@@ -98,10 +98,8 @@ module E11y
           :overload
         elsif rate >= @thresholds[:very_high]
           :very_high
-        elsif rate >= @thresholds[:high]
-          :high
-        elsif rate > @thresholds[:normal]
-          :high # Between normal and high threshold
+        elsif rate >= @thresholds[:high] || rate > @thresholds[:normal]
+          :high # rate > normal (includes rate >= high)
         else
           :normal # rate <= normal (inclusive of exact threshold)
         end

@@ -533,7 +533,7 @@ module E11y
         #   end
         def rate_limit(count, window: 1.0)
           @rate_limit_count = count
-          @rate_limit_window = window.is_a?(ActiveSupport::Duration) ? window.to_f : window.to_f
+          @rate_limit_window = window.to_f
         end
 
         # Per-event rate limit configuration.

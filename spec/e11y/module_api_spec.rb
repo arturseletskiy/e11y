@@ -3,8 +3,11 @@
 require "spec_helper"
 
 RSpec.describe E11y, "module API" do
-  before { described_class.reset! }
-  after  { described_class.reset! }
+  before do
+    described_class.reset!
+    described_class.configure { |c| c.logger = Logger.new(nil) }
+  end
+  after { described_class.reset! }
 
   # ---------------------------------------------------------------------------
   # .start!

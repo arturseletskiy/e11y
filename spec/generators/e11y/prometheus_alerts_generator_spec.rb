@@ -96,9 +96,7 @@ RSpec.describe E11y::Generators::PrometheusAlertsGenerator, type: :generator do
       assert_file "config/prometheus/e11y_alerts.yml" do |content|
         parsed = YAML.safe_load(content.force_encoding("UTF-8"))
         e11y_group = parsed["groups"].find { |g| g["name"] == "e11y" }
-        e11y_group["rules"].each do |rule|
-          expect(rule).to have_key("expr"), "Rule #{rule['alert'].inspect} is missing expr"
-        end
+        expect(e11y_group["rules"]).to all(have_key("expr"))
       end
     end
 

@@ -161,43 +161,43 @@ RSpec.describe E11y::Adapters::NullAdapter do
     adapter = described_class.new
     expect(adapter).to be_a(E11y::Adapters::Null)
   end
-end
 
-RSpec.describe "NullAdapter integration with E11y.configure" do
-  let(:null_adapter) { E11y::Adapters::NullAdapter.new }
+  describe "integration with E11y.configure" do
+    let(:null_adapter) { described_class.new }
 
-  # Register the null adapter under the :logs key so the default routing
-  # (severity :info → :logs) delivers events to it.
-  before do
-    E11y.configure do |c|
-      c.adapters[:logs] = null_adapter
-    end
-  end
-
-  it "receives events tracked through E11y pipeline" do
-    # Build a simple event class for this integration test.
-    # sample_rate 1.0 ensures the sampling middleware always passes the event through.
-    event_class = Class.new(E11y::Event::Base) do
-      contains_pii false
-      sample_rate 1.0
-
-      schema do
-        required(:order_id).filled(:string)
+    # Register the null adapter under the :logs key so the default routing
+    # (severity :info → :logs) delivers events to it.
+    before do
+      E11y.configure do |c|
+        c.adapters[:logs] = null_adapter
       end
     end
 
-    stub_const("Events::NullAdapterIntegrationTest", event_class)
+    it "receives events tracked through E11y pipeline" do
+      # Build a simple event class for this integration test.
+      # sample_rate 1.0 ensures the sampling middleware always passes the event through.
+      event_class = Class.new(E11y::Event::Base) do
+        contains_pii false
+        sample_rate 1.0
 
-    event_class.track(order_id: "ord-123")
+        schema do
+          required(:order_id).filled(:string)
+        end
+      end
 
-    expect(null_adapter.events.size).to eq(1)
-    # Event data stored by the routing middleware includes :payload with the fields
-    expect(null_adapter.events.last[:payload][:order_id]).to eq("ord-123")
-  end
+      stub_const("Events::NullAdapterIntegrationTest", event_class)
 
-  it "can be cleared between test examples" do
-    null_adapter.write(event_name: "leftover.event", severity: :info)
-    null_adapter.clear!
-    expect(null_adapter.events).to be_empty
+      event_class.track(order_id: "ord-123")
+
+      expect(null_adapter.events.size).to eq(1)
+      # Event data stored by the routing middleware includes :payload with the fields
+      expect(null_adapter.events.last[:payload][:order_id]).to eq("ord-123")
+    end
+
+    it "can be cleared between test examples" do
+      null_adapter.write(event_name: "leftover.event", severity: :info)
+      null_adapter.clear!
+      expect(null_adapter.events).to be_empty
+    end
   end
 end

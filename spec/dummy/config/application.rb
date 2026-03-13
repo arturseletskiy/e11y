@@ -21,6 +21,7 @@ Dir[File.join(DUMMY_APP_ROOT, "app", "events", "**", "*.rb")].each { |f| require
 
 # Register metrics for yabeda_integration_spec (unified approach: no Yabeda.reset!)
 # Use _yabeda_spec suffix to avoid conflicts with event class metrics (e.g. OrderCreated.orders_total)
+# rubocop:disable Style/GlobalVars -- dummy app needs cross-load state for test suite
 unless $yabeda_integration_metrics_registered
   reg = E11y::Metrics::Registry.instance
   [
@@ -40,7 +41,6 @@ unless $yabeda_integration_metrics_registered
 end
 
 # Configure E11y ONCE (guard against multiple loads during test suite)
-# rubocop:disable Style/GlobalVars
 unless $e11y_dummy_configured
   E11y.configure do |config|
     config.enabled = true

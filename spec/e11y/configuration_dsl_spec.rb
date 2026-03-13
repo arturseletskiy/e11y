@@ -302,7 +302,7 @@ RSpec.describe E11y::Configuration do
       expect(middleware_classes.size).to eq(9)
     end
 
-    it "orders middlewares per ADR-015: TraceContext → Versioning → Validation → PIIFilter → AuditSigning → Sampling → RateLimiting → Routing → EventSlo" do
+    it "orders middlewares per ADR-015: TraceContext → Versioning → Validation → PIIFilter → AuditSigning → Sampling → RateLimiting → Routing → EventSlo" do # rubocop:disable Layout/LineLength
       expected_order = [
         E11y::Middleware::TraceContext,
         E11y::Middleware::Versioning,

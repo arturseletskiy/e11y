@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "ostruct"
-
 # Check if OpenTelemetry SDK is available
 begin
   require "opentelemetry/sdk"
@@ -62,6 +60,13 @@ module E11y
     # @see ADR-007 for OpenTelemetry integration architecture
     # @see UC-008 for use cases
     class OTelLogs < Base
+      # Struct for test assertions (replaces OpenStruct per Style/OpenStructUse)
+      LogRecordStruct = Struct.new(
+        :timestamp, :observed_timestamp, :severity_number, :severity_text,
+        :body, :attributes, :trace_id, :span_id, :trace_flags,
+        keyword_init: true
+      )
+
       # E11y severity → OTel severity_number mapping
       # See: https://opentelemetry.io/docs/specs/otel/logs/data-model/#field-severitynumber
       # Severity numbers: TRACE=1, DEBUG=5, INFO=9, WARN=13, ERROR=17, FATAL=21
@@ -183,10 +188,10 @@ module E11y
       # Build log record struct for testing (same data as build_log_record_params)
       #
       # @param event_data [Hash] E11y event payload
-      # @return [OpenStruct] Struct with attributes for test assertions
+      # @return [LogRecordStruct] Struct with attributes for test assertions
       def build_log_record(event_data)
         params = build_log_record_params(event_data)
-        OpenStruct.new(params)
+        LogRecordStruct.new(**params)
       end
 
       # Map E11y severity to OTel severity
