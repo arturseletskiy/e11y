@@ -57,28 +57,28 @@ module E11y
 
           # Priority 1: Always discard (highest priority)
           if matches_patterns?(event_name, @always_discard_patterns)
-            increment_metric("e11y.dlq.filter.discarded", reason: "always_discard_pattern")
+            increment_filter_metric("discarded", "always_discard_pattern")
             return false
           end
 
           # Priority 2: Always save
           if matches_patterns?(event_name, @always_save_patterns)
-            increment_metric("e11y.dlq.filter.saved", reason: "always_save_pattern")
+            increment_filter_metric("saved", "always_save_pattern")
             return true
           end
 
           # Priority 3: Severity-based
           if @save_severities.include?(severity)
-            increment_metric("e11y.dlq.filter.saved", reason: "severity")
+            increment_filter_metric("saved", "severity")
             return true
           end
 
           # Priority 4: Default behavior
           if @default_behavior == :save
-            increment_metric("e11y.dlq.filter.saved", reason: "default")
+            increment_filter_metric("saved", "default")
             true
           else
-            increment_metric("e11y.dlq.filter.discarded", reason: "default")
+            increment_filter_metric("discarded", "default")
             false
           end
         end
@@ -107,13 +107,14 @@ module E11y
           patterns.any? { |pattern| pattern.match?(event_name) }
         end
 
-        # Increment DLQ filter metric.
+        # Increment consolidated DLQ filter decision metric.
         #
-        # @param metric_name [String] Metric name
-        # @param tags [Hash] Additional tags
-        def increment_metric(metric_name, tags = {})
-          # TODO: Integrate with Yabeda metrics
-          # E11y::Metrics.increment(metric_name, tags)
+        # @param action [String] "saved" or "discarded"
+        # @param reason [String] always_discard_pattern, always_save_pattern, severity, default
+        def increment_filter_metric(action, reason)
+          return unless defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:increment)
+
+          E11y::Metrics.increment(:e11y_dlq_filter_decisions_total, { action: action, reason: reason })
         end
       end
     end
