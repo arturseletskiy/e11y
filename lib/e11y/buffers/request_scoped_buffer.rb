@@ -231,14 +231,20 @@ module E11y
           increment_metric("e11y.request_buffer.event_flushed")
         end
 
-        # Increment metric (placeholder)
+        # Increment metric for effectiveness tracking
         #
-        # @param metric_name [String] Metric name
-        # @param tags [Hash] Optional tags
+        # @param metric_name [String] Metric name (e.g., "e11y.request_buffer.flushed_on_error")
+        # @param tags [Hash] Optional tags (e.g., { events: count } for batch increments)
         # @return [void]
         def increment_metric(metric_name, tags: {})
-          # Placeholder for Yabeda integration
-          # Will be implemented in Phase 1 L2.4 (Metrics)
+          return unless defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:increment)
+
+          # Normalize: e11y.request_buffer.X -> e11y_request_buffer_X
+          name = metric_name.to_s.tr(".", "_").to_sym
+          value = tags.key?(:events) ? tags.delete(:events) : 1
+          E11y::Metrics.increment(name, tags, value: value)
+        rescue StandardError => e
+          E11y.logger&.debug("E11y RequestScopedBuffer metric error: #{e.message}")
         end
       end
     end
