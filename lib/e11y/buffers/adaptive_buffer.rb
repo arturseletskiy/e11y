@@ -323,15 +323,17 @@ module E11y
         warn "E11y: Early flush callback failed: #{e.message}"
       end
 
-      # Increment metric (placeholder for Phase 3: Metrics)
+      # Increment memory exhaustion metric
       #
-      # TODO Phase 3: Replace with actual Yabeda metrics
-      #
-      # @param metric_name [String] Metric to increment
+      # @param metric_name [String] Metric to increment (e.g. "e11y.buffer.memory_exhaustion.dropped")
       # @return [void]
       def increment_metric(metric_name)
-        # Placeholder - will be implemented in Phase 3
-        # Yabeda.e11y.buffer_memory_exhaustion.increment(strategy: @backpressure_strategy)
+        return unless defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:increment)
+
+        name = metric_name.to_s.tr(".", "_").to_sym  # e11y.buffer.memory_exhaustion.dropped -> e11y_buffer_memory_exhaustion_dropped
+        E11y::Metrics.increment(name, {})
+      rescue StandardError => e
+        E11y.logger&.debug("E11y AdaptiveBuffer metric error: #{e.message}")
       end
       # rubocop:enable Metrics/ClassLength
     end
