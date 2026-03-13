@@ -63,8 +63,7 @@ module E11y
       # Struct for test assertions (replaces OpenStruct per Style/OpenStructUse)
       LogRecordStruct = Struct.new(
         :timestamp, :observed_timestamp, :severity_number, :severity_text,
-        :body, :attributes, :trace_id, :span_id, :trace_flags,
-        keyword_init: true
+        :body, :attributes, :trace_id, :span_id, :trace_flags
       )
 
       # E11y severity → OTel severity_number mapping

@@ -321,8 +321,7 @@ module E11y
       # Pre-register self-monitoring metrics (request buffer, retry, circuit breaker, DLQ, etc.).
       # Must be registered before Yabeda.configure! so they exist when reliability layer runs.
       #
-      # @return [void]
-      # rubocop:disable Metrics/MethodLength -- metric list is inherently long
+      # @return [void] # -- metric list is inherently long
       def register_self_monitoring_metrics!
         return unless defined?(::Yabeda)
 
@@ -370,13 +369,11 @@ module E11y
       rescue StandardError => e
         E11y.logger.debug("Could not register self-monitoring metrics: #{e.message}")
       end
-      # rubocop:enable Metrics/MethodLength
 
       # Register a single metric in Yabeda
       #
       # @param metric_config [Hash] Metric configuration from Registry
       # @return [void]
-      # rubocop:disable Metrics/MethodLength
       # Metric registration requires case/when for different metric types
       def register_yabeda_metric(metric_config)
         metric_name = metric_config[:name]
@@ -408,7 +405,6 @@ module E11y
         # Metric might already be registered - that's OK
         warn "E11y Yabeda: Could not register metric #{metric_name}: #{e.message}"
       end
-      # rubocop:enable Metrics/MethodLength
 
       # Register a metric if it doesn't exist yet (for direct metric calls).
       #
@@ -453,9 +449,8 @@ module E11y
       # @param metric_config [Hash] Metric configuration
       # @param event_data [Hash] Event data
       # @return [void]
-      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
       # Metric update requires multiple steps for label extraction and value handling
-      def update_metric(metric_config, event_data) # rubocop:todo Metrics/MethodLength
+      def update_metric(metric_config, event_data)
         metric_name = metric_config[:name]
         labels = extract_labels(metric_config, event_data)
 
@@ -481,8 +476,8 @@ module E11y
         # Ensure all required tags are present in safe_labels
         # If cardinality protection dropped a tag, add placeholder value
         # Prometheus requires all tags declared at registration to be present in every update
-        final_labels = original_tags.each_with_object({}) do |tag, acc|
-          acc[tag] = safe_labels.key?(tag) ? safe_labels[tag] : "[DROPPED]"
+        final_labels = original_tags.to_h do |tag|
+          [tag, safe_labels.key?(tag) ? safe_labels[tag] : "[DROPPED]"]
         end
 
         # Update Yabeda metric (skip if e11y group not registered, e.g. Yabeda not configured)
@@ -502,7 +497,6 @@ module E11y
       rescue StandardError => e
         warn "E11y Yabeda: Error updating metric #{metric_name}: #{e.message}"
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
       # Extract labels from event data
       #

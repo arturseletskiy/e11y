@@ -179,17 +179,19 @@ RSpec.describe E11y::Adapters::Yabeda do
   describe "#histogram" do
     it "observes histogram value" do
       expect { adapter.histogram(:request_duration, 0.5) }.not_to raise_error
-      expect(Yabeda.e11y.request_duration.get({})).to eq(0.5)
+      # Use .values[] directly: Metric#get calls .value (works for Counter's Concurrent::Atom,
+      # breaks for Histogram's raw Float stored by Histogram#measure).
+      expect(Yabeda.e11y.request_duration.values[{}]).to eq(0.5)
     end
 
     it "observes with labels" do
       expect { adapter.histogram(:request_duration, 1.2, { method: "GET" }) }.not_to raise_error
-      expect(Yabeda.e11y.request_duration.get(method: "GET")).to eq(1.2)
+      expect(Yabeda.e11y.request_duration.values[{ method: "GET" }]).to eq(1.2)
     end
 
     it "accepts custom buckets" do
       expect { adapter.histogram(:request_duration, 0.5, {}, buckets: [0.1, 1.0, 10.0]) }.not_to raise_error
-      expect(Yabeda.e11y.request_duration.get({})).to eq(0.5)
+      expect(Yabeda.e11y.request_duration.values[{}]).to eq(0.5)
     end
   end
 

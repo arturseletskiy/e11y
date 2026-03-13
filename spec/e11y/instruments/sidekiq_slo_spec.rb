@@ -3,7 +3,7 @@
 require "spec_helper"
 require "e11y/slo/tracker"
 
-# rubocop:disable RSpec/FilePath, RSpec/SpecFilePathFormat, RSpec/DescribeMethod
+# rubocop:disable RSpec/SpecFilePathFormat, RSpec/DescribeMethod
 # Integration test for SLO tracking, grouped by functionality not class structure.
 RSpec.describe E11y::Instruments::Sidekiq::ServerMiddleware, "SLO Integration" do
   let(:middleware) { described_class.new }
@@ -142,4 +142,4 @@ RSpec.describe E11y::Instruments::Sidekiq::ServerMiddleware, "SLO Integration" d
     end
   end
 end
-# rubocop:enable RSpec/FilePath, RSpec/SpecFilePathFormat, RSpec/DescribeMethod
+# rubocop:enable RSpec/SpecFilePathFormat, RSpec/DescribeMethod

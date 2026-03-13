@@ -4,7 +4,7 @@ require "spec_helper"
 require "rack/mock"
 require "e11y/slo/tracker"
 
-# rubocop:disable RSpec/FilePath, RSpec/SpecFilePathFormat, RSpec/DescribeMethod
+# rubocop:disable RSpec/SpecFilePathFormat, RSpec/DescribeMethod
 # Integration test for SLO tracking, grouped by functionality not class structure.
 RSpec.describe E11y::Middleware::Request, "SLO Integration" do
   let(:app) { ->(_env) { [200, { "Content-Type" => "text/plain" }, ["OK"]] } }
@@ -137,4 +137,4 @@ RSpec.describe E11y::Middleware::Request, "SLO Integration" do
     end
   end
 end
-# rubocop:enable RSpec/FilePath, RSpec/SpecFilePathFormat, RSpec/DescribeMethod
+# rubocop:enable RSpec/SpecFilePathFormat, RSpec/DescribeMethod

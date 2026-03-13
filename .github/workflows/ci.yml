@@ -228,9 +228,9 @@ jobs:
           bundle list | grep -E "(faraday|opentelemetry|yabeda|rails)" || (echo "⚠️ Some dependencies may be missing"; exit 1)
           echo ""
           echo "🚀 Running integration tests with REAL services (WebMock disabled)..."
-          echo "   Command: bundle exec rspec --tag integration --format documentation --profile 10"
+          echo "   Command: bundle exec rspec spec/integration/ --format documentation --profile 10"
           echo ""
-          timeout 5m bundle exec rspec --tag integration --format documentation --profile 10 || (echo "⚠️ Integration tests timeout or failed at $(date)"; exit 1)
+          timeout 5m bundle exec rspec spec/integration/ --format documentation --profile 10 || (echo "⚠️ Integration tests timeout or failed at $(date)"; exit 1)
           echo ""
           echo "✅ Integration tests completed at $(date)"
       

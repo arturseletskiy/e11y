@@ -53,7 +53,7 @@ module E11y
       # @option event_data [Boolean] :audit_event Audit event flag (optional, for routing rules)
       # @option event_data [Symbol] :severity Event severity (optional, for routing rules)
       # @return [Hash, nil] Event data (passed to next middleware), or nil if dropped
-      # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # rubocop:disable Metrics/PerceivedComplexity
       # Routing logic requires adapter selection, iteration with error handling,
       # metadata enrichment, and metrics tracking
       def call(event_data)
@@ -113,7 +113,7 @@ module E11y
         # 6. Pass to next app (if any)
         @app&.call(event_data)
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # rubocop:enable Metrics/PerceivedComplexity
 
       private
 

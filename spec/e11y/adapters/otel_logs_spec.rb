@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-# rubocop:disable RSpec/FilePath, RSpec/SpecFilePathFormat
+# rubocop:disable RSpec/SpecFilePathFormat
 # File path matches common abbreviation "OTel" rather than "OTelLogs" class name.
 # Integration test: requires OpenTelemetry SDK
 # Run with: INTEGRATION=true bundle exec rspec --tag integration
@@ -283,4 +283,4 @@ RSpec.describe E11y::Adapters::OTelLogs, :integration do
     end
   end
 end
-# rubocop:enable RSpec/FilePath, RSpec/SpecFilePathFormat
+# rubocop:enable RSpec/SpecFilePathFormat

@@ -83,7 +83,7 @@ end
 group :development, :test do
   gem "bundler-audit", "~> 0.9" # Check for vulnerable dependencies
   gem "rubocop-performance", "~> 1.21" # Performance cops
-  gem "rubocop-rspec_rails", "~> 2.29.1" # 2.30+ required for rubocop >= 1.85 compatibility
+  gem "rubocop-rspec_rails", "~> 2.30" # 2.30+ required for rubocop >= 1.85 compatibility (inject_defaults! API change)
   gem "simplecov", require: false
   gem "simplecov-cobertura", require: false
 end

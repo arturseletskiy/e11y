@@ -7,6 +7,7 @@ RSpec.describe E11y, "module API" do
     described_class.reset!
     described_class.configure { |c| c.logger = Logger.new(nil) }
   end
+
   after { described_class.reset! }
 
   # ---------------------------------------------------------------------------

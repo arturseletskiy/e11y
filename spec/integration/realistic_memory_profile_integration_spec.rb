@@ -86,7 +86,7 @@ RSpec.describe "Realistic Memory Profile", :integration do
 
     let(:label) { "UserAction (no PII, metrics)" }
 
-    include_examples "clean pipeline"
+    it_behaves_like "clean pipeline"
   end
 
   # -------------------------------------------------------------------------
@@ -108,7 +108,7 @@ RSpec.describe "Realistic Memory Profile", :integration do
 
     let(:label) { "OrderCreated (PII filter + SLO)" }
 
-    include_examples "clean pipeline"
+    it_behaves_like "clean pipeline"
   end
 
   # -------------------------------------------------------------------------
@@ -131,7 +131,7 @@ RSpec.describe "Realistic Memory Profile", :integration do
 
     let(:label) { "PaymentSubmitted (PII masking)" }
 
-    include_examples "clean pipeline"
+    it_behaves_like "clean pipeline"
   end
 
   # -------------------------------------------------------------------------

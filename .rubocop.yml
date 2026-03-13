@@ -3,14 +3,10 @@
 # See https://rubystyle.guide/ for Ruby style guide
 # See https://docs.rubocop.org/rubocop/ for all available cops
 
-require:
+plugins:
+  - rubocop-performance
   - rubocop-rspec
   - rubocop-rspec_rails
-
-plugins:
-  - rubocop-capybara
-  - rubocop-factory_bot
-  - rubocop-performance
 
 AllCops:
   TargetRubyVersion: 3.2
@@ -121,6 +117,11 @@ RSpec/NestedGroups:
 Gemspec/DevelopmentDependencies:
   Enabled: false
 
+Style/OneClassPerFile:
+  Exclude:
+    - "spec/dummy/config/application.rb"
+    - "spec/support/pipeline_debug.rb"
+
 # Allow integration tests without specific class
 RSpec/DescribeClass:
   Exclude:
@@ -129,12 +130,6 @@ RSpec/DescribeClass:
     - "spec/e11y/module_api_spec.rb"
 
 # File path conventions (generators use spec/generators/e11y/ structure)
-RSpec/FilePath:
-  Exclude:
-    - "spec/e11y/event/dsl_additions_spec.rb"
-    - "spec/e11y/module_api_spec.rb"
-    - "spec/generators/e11y/*_spec.rb"
-
 RSpec/SpecFilePathFormat:
   Exclude:
     - "spec/e11y/event/dsl_additions_spec.rb"
@@ -159,5 +154,8 @@ RSpec/VerifiedDoubles:
 RSpec/MessageSpies:
   Enabled: false
 
-Capybara/RSpec/PredicateMatcher:
+# RSpec/Output: New cop in rubocop-rspec 3.x flagging puts in specs.
+# We use puts for diagnostic output in integration tests and support files.
+RSpec/Output:
   Enabled: false
+

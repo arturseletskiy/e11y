@@ -33,7 +33,7 @@ module E11y
     # @see ADR-015 §3.4 Middleware Zones & Modification Rules
     class Builder
       # Middleware entry: [middleware_class, args, options]
-      MiddlewareEntry = Struct.new(:middleware_class, :args, :options, keyword_init: true)
+      MiddlewareEntry = Struct.new(:middleware_class, :args, :options)
 
       # @return [Array<MiddlewareEntry>] Registered middlewares
       attr_reader :middlewares
