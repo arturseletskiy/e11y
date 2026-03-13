@@ -13,6 +13,44 @@ def pipeline_middleware_names
   end
 end
 
+def clear_built_pipeline_cache!
+  E11y.configuration.instance_variable_set(:@built_pipeline, nil)
+end
+
+def add_rate_limiting_to_pipeline!
+  config = E11y.configuration
+  entries = config.pipeline.middlewares
+  return if entries.any? { |e| e.middleware_class == E11y::Middleware::RateLimiting }
+
+  sampling_idx = entries.find_index { |e| e.middleware_class == E11y::Middleware::Sampling }
+  entry = E11y::Pipeline::Builder::MiddlewareEntry.new(
+    middleware_class: E11y::Middleware::RateLimiting,
+    args: [],
+    options: {
+      global_limit: config.rate_limiting.global_limit,
+      per_event_limit: config.rate_limiting.per_event_limit,
+      window: config.rate_limiting.window
+    }
+  )
+  entries.insert(sampling_idx || entries.size, entry)
+  clear_built_pipeline_cache!
+end
+
+def add_event_slo_to_pipeline!
+  config = E11y.configuration
+  entries = config.pipeline.middlewares
+  return if entries.any? { |e| e.middleware_class == E11y::Middleware::EventSlo }
+
+  routing_idx = entries.find_index { |e| e.middleware_class == E11y::Middleware::Routing }
+  entry = E11y::Pipeline::Builder::MiddlewareEntry.new(
+    middleware_class: E11y::Middleware::EventSlo,
+    args: [],
+    options: {}
+  )
+  entries.insert(routing_idx || entries.size, entry)
+  clear_built_pipeline_cache!
+end
+
 # ---------------------------------------------------------------------------
 # Step definitions
 # ---------------------------------------------------------------------------
@@ -54,6 +92,17 @@ end
 Given("rate limiting is configured with global_limit {int}") do |limit|
   E11y.configuration.rate_limiting.enabled = true
   E11y.configuration.rate_limiting.global_limit = limit
+  add_rate_limiting_to_pipeline!
+end
+
+Given("rate limiting is enabled") do
+  E11y.configuration.rate_limiting.enabled = true
+  add_rate_limiting_to_pipeline!
+end
+
+Given("EventSlo middleware is enabled") do
+  E11y.configuration.slo_tracking.enabled = true
+  add_event_slo_to_pipeline!
 end
 
 When("I send {int} rapid order events") do |count|

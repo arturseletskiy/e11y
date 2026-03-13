@@ -215,8 +215,8 @@ RSpec.describe E11y::SLO::Tracker do
       expect(described_class.enabled?).to be false
     end
 
-    it "returns true when slo_tracking is not explicitly configured (default is enabled)" do
-      # Default SLOTrackingConfig has @enabled = true (Zero-Config SLO Tracking)
+    it "returns true when slo_tracking is not configured (default enabled)" do
+      # Don't configure slo_tracking at all — default is enabled
       expect(described_class.enabled?).to be true
     end
   end

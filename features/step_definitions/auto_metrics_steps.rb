@@ -113,24 +113,23 @@ Then("E11y::Metrics should have a configured backend") do
                          "Users must manually add the Yabeda adapter to the pipeline."
 end
 
-# @wip: BUG 2 — increment_metric in middleware is an empty stub
+# Verify that middleware internal metrics use real E11y::Metrics.increment calls.
+# Uses Ruby method wrapping (no RSpec) since Cucumber World doesn't include RSpec.
 When("E11y processes an event through the pipeline") do
   @middleware_metric_calls = []
-
-  # Temporarily instrument increment_metric in TraceContext to detect calls
-  # (the actual stub returns nil and does nothing)
   spy_calls = @middleware_metric_calls
-  E11y::Middleware::TraceContext.class_eval do
-    alias_method :__original_increment_metric, :increment_metric
 
-    define_method(:increment_metric) do |metric_name, **tags|
-      spy_calls << metric_name
-      __original_increment_metric(metric_name, **tags)
+  # Wrap E11y::Metrics.increment to spy on calls (Cucumber has no RSpec allow)
+  mod = E11y::Metrics
+  mod.singleton_class.class_eval do
+    alias_method :__cucumber_original_increment, :increment
+    define_method(:increment) do |name, *args, **kwargs|
+      spy_calls << name
+      __cucumber_original_increment(name, *args, **kwargs)
     end
   end
 
   begin
-    # Track a simple event through the pipeline
     test_class = Class.new(E11y::Event::Base) do
       schema { required(:id).filled(:string) }
       adapters []
@@ -138,28 +137,23 @@ When("E11y processes an event through the pipeline") do
     end
     test_class.track(id: "metrics-spy-test")
   ensure
-    # Restore original method
-    E11y::Middleware::TraceContext.class_eval do
-      alias_method :increment_metric, :__original_increment_metric
-      remove_method :__original_increment_metric
+    mod.singleton_class.class_eval do
+      alias_method :increment, :__cucumber_original_increment
+      remove_method :__cucumber_original_increment
     end
   end
 end
 
 Then("at least 1 internal middleware metric should have been tracked") do
   calls = @middleware_metric_calls || []
-  # increment_metric is called but is a stub — it never reaches a real metrics backend.
-  # We first verify the stub IS called, then check the stub doesn't produce actual tracking.
-  expect(calls.size).to be >= 1,
-                        "Expected at least 1 call to increment_metric in TraceContext middleware, " \
-                        "but 0 calls were detected. Check that the spy is wired correctly."
+  trace_context_metrics = ["e11y.middleware.trace_context.processed", :e11y_middleware_trace_context_processed]
+  found = calls.any? { |c| trace_context_metrics.include?(c) }
+  expect(found).to be(true),
+                   "Expected TraceContext middleware to call E11y::Metrics.increment, " \
+                   "but calls were: #{calls.inspect}"
 
-  # Now verify the stub's no-op nature: E11y::Metrics.increment was NOT called.
-  E11y::Metrics.reset_backend!
   backend = E11y::Metrics.backend
   expect(backend).not_to be_nil,
-                         "increment_metric was called #{calls.size} time(s) with: #{calls.inspect}, " \
-                         "but E11y::Metrics.backend is nil — metric calls go nowhere. " \
-                         "BUG: increment_metric in middleware is an empty stub " \
-                         "(body contains only a TODO comment, no real metric recording)."
+                         "Middleware called increment #{calls.size} time(s) with: #{calls.inspect}, " \
+                         "but E11y::Metrics.backend is nil."
 end

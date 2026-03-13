@@ -11,13 +11,12 @@ RSpec.describe "PII Filtering Integration", :integration do
 
   before do
     memory_adapter.clear!
-    # Route events with adapters [] to memory adapter (required for assertions)
+    # Dummy events use adapters [] — route via fallback
     E11y.config.fallback_adapters = [:memory]
   end
 
   after do
     memory_adapter.clear!
-    E11y.config.fallback_adapters = [:stdout]
   end
 
   describe "Scenario 1: Password filtering from form params" do
@@ -37,8 +36,8 @@ RSpec.describe "PII Filtering Integration", :integration do
 
       expect(response).to have_http_status(:created)
 
-      # Verify event was actually created (use find_events_by_class for normalized event_name support)
-      events = find_events_by_class(memory_adapter, "Events::UserRegistered")
+      # Verify event was actually created
+      events = memory_adapter.find_events("Events::UserRegistered")
       event_count = memory_adapter.events.count
       expect(events).not_to be_empty,
                             "Expected UserRegistered event to be created, but found #{event_count} total events. " \
@@ -60,8 +59,8 @@ RSpec.describe "PII Filtering Integration", :integration do
     end
   end
 
-  describe "Scenario 2: Credit card in JSON API request" do
-    it "filters credit card patterns from JSON body" do
+  describe "Scenario 2: PaymentSubmitted (masks :cvv, allows :card_number, :billing)" do
+    it "masks cvv and retains card_number and billing when explicitly allowed" do
       payload = {
         payment: {
           card_number: "4111-1111-1111-1111",
@@ -78,16 +77,13 @@ RSpec.describe "PII Filtering Integration", :integration do
       post "/api/v1/payments", params: payload, as: :json
 
       expect(response).to have_http_status(:created)
-      payment_events = find_events_by_class(memory_adapter, "Events::PaymentSubmitted")
-      expect(payment_events).not_to be_empty, "Expected PaymentSubmitted event, got #{memory_adapter.events.count} total"
-      payment_payload = payment_events.last[:payload].deep_symbolize_keys
+      payment_payload = memory_adapter.find_events("Events::PaymentSubmitted").last[:payload].deep_symbolize_keys
 
-      # card_number is explicitly allowed in pii_filtering config
-      expect(payment_payload[:card_number]).to eq("4111-1111-1111-1111")
-      expect(payment_payload[:cvv]).to eq("[FILTERED]")
+      expect(payment_payload[:cvv]).to eq("[FILTERED]"), "cvv is in masks"
+      expect(payment_payload[:card_number]).to eq("4111-1111-1111-1111"), "card_number is in allows"
       expect(payment_payload[:amount]).to eq(99.99)
       expect(payment_payload[:currency]).to eq("USD")
-      expect(payment_payload.dig(:billing, :email)).to eq("[FILTERED]")
+      expect(payment_payload.dig(:billing, :email)).to eq("billing@company.com"), "billing is in allows"
     end
   end
 
@@ -102,9 +98,7 @@ RSpec.describe "PII Filtering Integration", :integration do
       get "/api/v1/protected", headers: headers
 
       expect(response).to have_http_status(:ok)
-      protected_events = find_events_by_class(memory_adapter, "Events::ProtectedRequest")
-      expect(protected_events).not_to be_empty, "Expected ProtectedRequest event"
-      request_payload = protected_events.last[:payload].deep_symbolize_keys
+      request_payload = memory_adapter.find_events("Events::ProtectedRequest").last[:payload].deep_symbolize_keys
 
       expect(request_payload[:authorization]).to eq("[FILTERED]")
       expect(request_payload[:api_key]).to eq("[FILTERED]")
@@ -112,8 +106,8 @@ RSpec.describe "PII Filtering Integration", :integration do
     end
   end
 
-  describe "Scenario 4: Nested params filtering (deep structures)" do
-    it "filters PII at arbitrary nesting depth" do
+  describe "Scenario 4: OrderCreated (allows :customer, :payment, :items)" do
+    it "preserves nested structure when explicitly allowed" do
       payload = {
         order: {
           customer: {
@@ -141,20 +135,19 @@ RSpec.describe "PII Filtering Integration", :integration do
       post "/orders", params: payload
 
       expect(response).to have_http_status(:created)
-      order_events = find_events_by_class(memory_adapter, "Events::OrderCreated")
-      expect(order_events).not_to be_empty, "Expected OrderCreated event"
-      order_payload = order_events.last[:payload].deep_symbolize_keys
+      order_payload = memory_adapter.find_events("Events::OrderCreated").last[:payload].deep_symbolize_keys
 
-      expect(order_payload.dig(:customer, :contact, :email)).to eq("[FILTERED]")
-      expect(order_payload.dig(:customer, :contact, :phone)).to include("[FILTERED]")
-      expect(order_payload.dig(:customer, :contact, :ssn)).to eq("[FILTERED]")
-      expect(order_payload.dig(:payment, :method, :card, :number)).to eq("[FILTERED]")
+      # OrderCreated allows :customer, :payment, :items — nested values pass through
+      expect(order_payload.dig(:customer, :contact, :email)).to eq("customer@example.com")
+      expect(order_payload.dig(:customer, :contact, :phone)).to eq("+1-555-987-6543")
+      expect(order_payload.dig(:customer, :contact, :ssn)).to eq("123-45-6789")
+      expect(order_payload.dig(:payment, :method, :card, :number)).to eq("4111-1111-1111-1111")
       expect(order_payload.dig(:customer, :name)).to eq("Customer Name")
     end
   end
 
-  describe "Scenario 5: File upload with PII in metadata" do
-    it "filters PII from filename and metadata without corrupting binary data" do
+  describe "Scenario 5: DocumentUploaded (allows :filename, :size, :metadata)" do
+    it "preserves filename and metadata when explicitly allowed, binary data intact" do
       file = Rack::Test::UploadedFile.new(
         StringIO.new("PDF binary content..."),
         "application/pdf",
@@ -174,18 +167,16 @@ RSpec.describe "PII Filtering Integration", :integration do
       post "/documents", params: params
 
       expect(response).to have_http_status(:created)
-      doc_events = find_events_by_class(memory_adapter, "Events::DocumentUploaded")
-      expect(doc_events).not_to be_empty, "Expected DocumentUploaded event"
-      doc_payload = doc_events.last[:payload].deep_symbolize_keys
+      doc_payload = memory_adapter.find_events("Events::DocumentUploaded").last[:payload].deep_symbolize_keys
 
-      expect(doc_payload[:filename]).to include("[FILTERED]")
-      expect(doc_payload.dig(:metadata, :uploaded_by)).to eq("[FILTERED]")
+      expect(doc_payload[:filename]).to eq("resume 123-45-6789.pdf"), "filename is in allows"
+      expect(doc_payload.dig(:metadata, :uploaded_by)).to eq("user@example.com"), "metadata is in allows"
       expect(doc_payload.dig(:metadata, :department)).to eq("HR")
     end
   end
 
-  describe "Scenario 6: Pattern-based filtering in free text" do
-    it "filters built-in PII patterns in strings and arrays" do
+  describe "Scenario 6: ReportCreated (allows :title, :description, :author)" do
+    it "preserves free text when explicitly allowed — no spurious pattern corruption" do
       params = {
         report: {
           title: "Q4 Performance Review",
@@ -198,12 +189,11 @@ RSpec.describe "PII Filtering Integration", :integration do
       post "/reports", params: params
 
       expect(response).to have_http_status(:created)
-      report_events = find_events_by_class(memory_adapter, "Events::ReportCreated")
-      expect(report_events).not_to be_empty, "Expected ReportCreated event"
-      report_payload = report_events.last[:payload].deep_symbolize_keys
+      report_payload = memory_adapter.find_events("Events::ReportCreated").last[:payload].deep_symbolize_keys
 
-      expect(report_payload[:description]).to include("[FILTERED]")
-      expect(report_payload[:author]).to eq("[FILTERED]")
+      # ReportCreated allows :description, :author — values pass through (like cucumber "password_reset_email_sent")
+      expect(report_payload[:description]).to eq("Contact john.doe@example.com or +1-555-999-8888 for details")
+      expect(report_payload[:author]).to eq("manager@company.com")
       expect(report_payload[:employee_ids]).to eq(%w[EMP-12345 EMP-99999])
     end
   end

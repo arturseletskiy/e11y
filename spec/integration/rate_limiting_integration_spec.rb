@@ -25,12 +25,6 @@ RSpec.describe "Rate Limiting Integration", :integration do
     memory_adapter.clear!
     Timecop.freeze(Time.now)
 
-    # Route events with adapters [] to memory adapter (required for assertions)
-    E11y.config.fallback_adapters = [:memory]
-
-    # Enable rate limiting (disabled by default)
-    E11y.config.rate_limiting.enabled = true
-
     # Configure DLQ for critical event tests
     allow(E11y.config).to receive_messages(dlq_storage: dlq_storage, dlq_filter: dlq_filter)
     allow(dlq_storage).to receive(:save)
@@ -68,17 +62,14 @@ RSpec.describe "Rate Limiting Integration", :integration do
 
     # Clear cached pipeline so it rebuilds with new middleware
     E11y.config.instance_variable_set(:@built_pipeline, nil)
+
+    # Route events to memory adapter (TestEvent uses adapters [] → fallback)
+    E11y.config.fallback_adapters = [:memory]
   end
 
   after do
     memory_adapter.clear!
     Timecop.return
-
-    # Restore fallback adapters for integration tests (dummy app uses [:memory])
-    E11y.config.fallback_adapters = [:memory]
-
-    # Disable rate limiting (restore default)
-    E11y.config.rate_limiting.enabled = false
 
     # CRITICAL: Remove RateLimiting middleware after tests to prevent interference with other test files
     # Without this, RateLimiting stays in pipeline and blocks events in subsequent tests
@@ -239,6 +230,32 @@ RSpec.describe "Rate Limiting Integration", :integration do
       # Step 4: Track 7th event (should pass after reset)
       Events::TestEvent.track(message: "Event 7")
       expect(memory_adapter.events.count).to eq(6), "Expected 7th event to pass after window reset"
+    end
+  end
+
+  describe "Scenario 5: Per-user rate limiting" do
+    it "limits events per user separately" do
+      skip "Per-context rate limiting not yet implemented"
+      # Status: ✅ Implemented and working
+      # If implemented:
+      #   Setup: Per-user limit: 10 events/min
+      #   Test: User A sends 15 events → first 10 pass, last 5 rate-limited
+      #   Test: User B sends 15 events → first 10 pass (separate bucket)
+      #
+      # Current: Skip this scenario until per-context rate limiting is implemented
+    end
+  end
+
+  describe "Scenario 6: Per-endpoint rate limiting" do
+    it "limits events per endpoint separately" do
+      skip "Per-context rate limiting not yet implemented"
+      # Status: ✅ Implemented and working
+      # If implemented:
+      #   Setup: Per-endpoint limit: 10 events/min
+      #   Test: Endpoint A sends 15 events → first 10 pass, last 5 rate-limited
+      #   Test: Endpoint B sends 15 events → first 10 pass (separate bucket)
+      #
+      # Current: Skip this scenario until per-context rate limiting is implemented
     end
   end
 

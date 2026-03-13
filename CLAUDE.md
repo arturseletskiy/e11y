@@ -21,6 +21,10 @@ rake spec:unit
 # Run integration tests (requires --with integration bundle group)
 rake spec:integration
 
+# Integration tests for Loki/OTel adapters require services — start with docker compose:
+docker compose up -d loki otel-collector
+INTEGRATION=true bundle exec rspec spec/integration/critical_adapters_integration_spec.rb
+
 # Run a single spec file
 bundle exec rspec spec/e11y/adapters/loki_adapter_spec.rb
 
@@ -41,6 +45,14 @@ rake console
 
 # Run benchmarks
 rake spec:benchmark
+
+# Run Cucumber acceptance tests
+rake cucumber
+# Or: bundle exec cucumber features/
+
+# Cucumber with Loki (adapter_configurations.feature): start Loki + OTel first
+docker compose up -d loki otel-collector
+rake cucumber
 ```
 
 ## Architecture

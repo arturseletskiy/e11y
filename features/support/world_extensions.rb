@@ -10,8 +10,9 @@
 #   - last_tracked_event(type) — most recent event hash for a given class name
 #   - tracked_events(type)     — all events for a given class name
 #   - find_event_payload(type) — payload hash of the most recent event
-
-module E11yWorldHelpers # rubocop:todo Style/Documentation
+#
+# World module mixed into Cucumber scenarios for E11y integration tests.
+module E11yWorldHelpers
   include Rack::Test::Methods
 
   # Required by Rack::Test — returns the Rack application under test.

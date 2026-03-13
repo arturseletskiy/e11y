@@ -571,7 +571,7 @@ end
 # e11y_rails_logger_intercepted_total{severity} - Rails.logger calls intercepted
 # e11y_rails_logger_converted_total{pattern} - Auto-converted to events
 # e11y_rails_logger_fallback_total - Calls using fallback (not matched)
-# e11y_direct_events_total{event_name} - Direct E11y.track calls
+# e11y_direct_events_total{event_name} - Direct EventClass.track calls
 
 # Grafana Dashboard:
 # Panel 1: Migration Progress

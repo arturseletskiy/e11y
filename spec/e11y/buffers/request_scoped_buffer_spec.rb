@@ -62,7 +62,8 @@ RSpec.describe E11y::Buffers::RequestScopedBuffer do
 
         expect(result).to be true
         expect(described_class.size).to eq(1)
-        expect(described_class.buffer).to include(event)
+        expect(described_class.buffer.first).to include(event)
+        expect(described_class.buffer.first[:request_id]).to be_a(String)
       end
 
       it "does not buffer info events" do
@@ -416,7 +417,7 @@ RSpec.describe E11y::Buffers::RequestScopedBuffer do
       described_class.add_event(event)
       described_class.flush_on_error
 
-      expect(adapter_b.events).to include(event)
+      expect(adapter_b.events).to include(a_hash_including(event))
       expect(adapter_a.events).to be_empty
     end
   end
@@ -440,7 +441,7 @@ RSpec.describe E11y::Buffers::RequestScopedBuffer do
       described_class.add_event(event)
       described_class.flush_on_error
 
-      expect(fallback_adapter.events).to include(event)
+      expect(fallback_adapter.events).to include(a_hash_including(event))
     end
   end
 end

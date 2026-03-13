@@ -56,7 +56,7 @@ module E11y
       def call(event_data)
         enrich_trace_context(event_data)
         enrich_service_context(event_data)
-        increment_metric("e11y.middleware.trace_context.processed")
+        E11y::Metrics.increment("e11y.middleware.trace_context.processed")
         @app.call(event_data)
       end
 
@@ -151,10 +151,6 @@ module E11y
       #
       # @param metric_name [String] Metric name
       # @return [void]
-      def increment_metric(_metric_name)
-        # TODO: Integrate with Yabeda/Prometheus in Phase 2
-        # Yabeda.e11y.middleware_trace_context_processed.increment
-      end
     end
   end
 end

@@ -2,7 +2,7 @@
 
 **Status:** Implemented  
 **Date:** January 12, 2026 (Updated: January 20, 2026)  
-**Covers:** UC-003 (Pattern-Based Metrics), UC-013 (High Cardinality Protection)  
+**Covers:** UC-003 (Event Metrics), UC-013 (High Cardinality Protection)  
 **Depends On:** ADR-001 (Core Architecture)
 
 **Implementation Notes:** Refactored to "Rails Way" architecture (January 20, 2026) - see [IMPLEMENTATION_NOTES.md](./IMPLEMENTATION_NOTES.md#2026-01-20-metrics-architecture-refactoring---rails-way-)
@@ -13,7 +13,7 @@
 
 1. [Context & Problem](#1-context--problem)
 2. [Architecture Overview](#2-architecture-overview)
-3. [Pattern-Based Metrics](#3-pattern-based-metrics)
+3. [Event Metrics](#3-event-metrics)
 4. [Cardinality Protection](#4-cardinality-protection)
    - 4.1. [Four-Layer Defense](#41-four-layer-defense)
    - 4.2. [Layer 1: Universal Denylist](#42-layer-1-universal-denylist)
@@ -236,7 +236,7 @@ end
 > **⚠️ NOTE (C03 Resolution):** Yabeda is the **default metrics backend** for E11y. OpenTelemetry metrics are **optional** (see ADR-007). Choose ONE backend to avoid double overhead. See [CONFLICT-ANALYSIS.md C03](../researches/CONFLICT-ANALYSIS.md#c03-dual-metrics-collection-overhead) for details.
 
 **Primary Goals:**
-- ✅ Auto-create metrics from events (pattern-based)
+- ✅ Auto-create metrics from events (event-level DSL)
 - ✅ Prevent cardinality explosions (4-layer defense)
 - ✅ Zero manual metric definitions
 - ✅ Prometheus-friendly
@@ -370,7 +370,7 @@ sequenceDiagram
 
 ---
 
-## 3. Pattern-Based Metrics
+## 3. Event Metrics
 
 ### 3.1. Pattern Matching
 
@@ -449,30 +449,13 @@ graph TB
 
 **Configuration:**
 
+
 ```ruby
-E11y.configure do |config|
-  config.metrics do
-    # Counter: count events
-    counter pattern: 'order.*',
-            name: 'orders_total',
-            comment: 'Total orders by status',
-            tags: [:status],  # ← Extract from payload
-            unit: :count
-    
-    # Histogram: measure values
-    histogram pattern: 'order.paid',
-              name: 'order_amount',
-              comment: 'Order payment amounts',
-              tags: [:payment_method],
-              unit: :dollars,
-              buckets: [10, 50, 100, 500, 1000, 5000]
-    
-    # Gauge: current value
-    gauge pattern: 'buffer.*',
-          name: 'buffer_size',
-          comment: 'Current buffer size',
-          tags: [:buffer_type],
-          unit: :events
+# Event-level metrics (implemented)
+class Events::OrderPaid < E11y::Event::Base
+  metrics do
+    counter :orders_total, tags: [:status]
+    histogram :order_amount, value: :amount, tags: [:payment_method], buckets: [10, 50, 100, 500]
   end
 end
 ```
@@ -937,21 +920,16 @@ end
 
 ### 5.2. Metric Registration
 
+
 ```ruby
-# Auto-create Yabeda metrics from config
-E11y.configure do |config|
-  config.metrics do
-    counter pattern: 'order.*',
-            name: :orders_total,
-            comment: 'Total orders',
-            tags: [:status]
+# Event-level metrics (implemented)
+class Events::OrderCreated < E11y::Event::Base
+  metrics do
+    counter :orders_total, tags: [:status]
   end
 end
 
-# Internally creates:
-Yabeda.e11y.counter :orders_total,
-                    tags: [:status],
-                    comment: 'Total orders'
+# Yabeda adapter auto-registers from Registry when events are loaded
 ```
 
 ### 5.3. Metric Updates
@@ -1052,97 +1030,17 @@ end
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.metrics do
-    # Enable metrics
-    enabled true
-    
-    # Yabeda integration
-    yabeda_integration true
-    
-    # ===== Pattern-Based Metrics =====
-    
-    # Counter: count all orders
-    counter pattern: 'order.*',
-            name: :orders_total,
-            comment: 'Total orders by status and payment method',
-            tags: [:status, :payment_method],
-            unit: :count
-    
-    # Histogram: order amounts
-    histogram pattern: 'order.paid',
-              name: :order_amount,
-              comment: 'Order payment amounts',
-              tags: [:payment_method, :currency],
-              value_field: :amount,  # Extract from payload
-              unit: :dollars,
-              buckets: [10, 50, 100, 500, 1000, 5000, 10000]
-    
-    # Histogram: API response times
-    histogram pattern: 'api.*',
-              name: :api_duration_seconds,
-              comment: 'API call durations',
-              tags: [:endpoint, :http_status_class],
-              value_field: :duration,
-              unit: :seconds,
-              buckets: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5]
-    
-    # ===== Cardinality Protection =====
-    
-    cardinality_protection do
-      # Default limit per label
-      default_cardinality_limit 100
-      
-      # Per-metric limits
-      per_metric do
-        metric :orders_total, label: :status, limit: 10
-        metric :orders_total, label: :payment_method, limit: 20
-        metric :api_duration_seconds, label: :endpoint, limit: 500
-      end
-      
-      # Action on excess
-      action_on_excess :drop  # :drop or :alert
-      
-      # Denylist (in addition to universal)
-      forbidden_labels [
-        :customer_id,
-        :internal_ref
-      ]
-      
-      # Allowlist (in addition to safe list)
-      allowed_labels [
-        :subscription_tier,
-        :user_role
-      ]
-      
-      # Relabeling rules
-      relabel :http_status do |value|
-        "#{value.to_i / 100}xx"
-      end
-      
-      relabel :path do |value|
-        value.gsub(/\/\d+/, '/:id')
-      end
-      
-      # Monitoring
-      monitoring do
-        alert_on_new_label true
-        alert_threshold 80  # Alert at 80% of limit
-        
-        on_alert do |metric_name, label_name, cardinality, limit|
-          Rails.logger.warn "Cardinality alert: #{metric_name}.#{label_name} = #{cardinality}/#{limit}"
-        end
-      end
-    end
-    
-    # ===== Advanced Features =====
-    
-    # Exemplars (sample trace IDs for metric values)
-    exemplars do
-      enabled true
-      max_per_bucket 1  # 1 trace_id per histogram bucket
-    end
-  end
+  config.adapters[:metrics] = E11y::Adapters::Yabeda.new
 end
+
+# Define metrics in event classes:
+# class Events::OrderPaid < E11y::Event::Base
+#   metrics do
+#     counter :orders_total, tags: [:status, :payment_method]
+#     histogram :order_amount, value: :amount, tags: [:payment_method, :currency],
+#               buckets: [10, 50, 100, 500, 1000, 5000]
+#   end
+# end
 ```
 
 ---

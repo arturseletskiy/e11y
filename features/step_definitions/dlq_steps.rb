@@ -71,6 +71,8 @@ end
 Given("a secondary working adapter is configured") do
   @secondary_adapter = E11y::Adapters::InMemory.new
   E11y.configuration.adapters[:secondary] = @secondary_adapter
+  E11y.configuration.fallback_adapters = [:secondary]
+  E11y.configuration.instance_variable_set(:@built_pipeline, nil)
 end
 
 When("I replay the DLQ entry") do

@@ -4,6 +4,8 @@ require "e11y/metrics"
 
 module E11y
   module SelfMonitoring
+    # NOTE: Not wired to buffer components. Methods are API for future use.
+    #
     # Buffer monitoring for E11y internal operations.
     #
     # Tracks buffer metrics:

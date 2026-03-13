@@ -103,7 +103,7 @@ end
 #                                                   ├─→ Jaeger (traces)
 #                                                   ├─→ Loki (logs)
 #                                                   ├─→ Prometheus (metrics)
-#                                                   └─→ S3 (archive)
+#                                                   └─→ Object storage (archive, via OTel exporter)
 ```
 
 ---
@@ -531,18 +531,14 @@ exporters:
   prometheus:
     endpoint: 0.0.0.0:8889
   
-  # Archive → S3
-  s3:
-    region: us-east-1
-    bucket: telemetry-archive
-    prefix: logs/
+  # Archive: OTel Collector can export to object storage (add exporter config as needed)
 
 service:
   pipelines:
     logs:
       receivers: [otlp]
       processors: [batch, resource, filter]
-      exporters: [loki, s3]
+      exporters: [loki]
     
     traces:
       receivers: [otlp]
@@ -757,7 +753,7 @@ end
 # OTel Collector routes to:
 # - Loki (logs, last 30 days)
 # - Jaeger (traces, last 7 days)
-# - S3 (archive, long-term storage)
+# - Object storage (archive, long-term; OTel exporter)
 # - Prometheus (metrics via remote write)
 
 # Benefits:
@@ -931,7 +927,7 @@ end
 ┌─────────────┐ │                          ├─→ Loki (logs)
 │  Sidekiq    │─┘                          ├─→ Jaeger (traces)
 └─────────────┘                            ├─→ Prometheus (metrics)
-                                           ├─→ S3 (archive)
+                                           ├─→ Object storage (archive)
                                            └─→ Datadog (optional)
 ```
 
@@ -1094,7 +1090,7 @@ end
 config.adapters = [
   E11y::Adapters::JaegerAdapter.new(...),
   E11y::Adapters::LokiAdapter.new(...),
-  E11y::Adapters::S3Adapter.new(...)
+  E11y::Adapters::FileAdapter.new(...)  # Direct to file (bypasses OTel routing)
 ]
 
 # ✅ GOOD: Through OTel Collector

@@ -94,7 +94,19 @@ module E11y
 
         # Determine if event should be sampled
         # Drop event if not sampled
-        return nil unless should_sample?(event_data, event_class)
+        unless should_sample?(event_data, event_class)
+          begin
+            if defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:increment)
+              E11y::Metrics.increment(:e11y_events_dropped_total, {
+                                        reason: "sampled_out",
+                                        event_type: event_data[:event_name].to_s
+                                      })
+            end
+          rescue StandardError
+            # non-fatal
+          end
+          return nil
+        end
 
         # Mark as sampled for downstream middleware
         event_data[:sampled] = true
@@ -211,7 +223,8 @@ module E11y
           unless configs.empty?
             require "e11y/sampling/value_extractor"
             extractor = E11y::Sampling::ValueExtractor.new
-            if configs.any? { |config| config.matches?(event_data, extractor) }
+            payload = event_data[:payload] || event_data
+            if configs.any? { |config| config.matches?(payload, extractor) }
               return 1.0 # 100% sampling for high-value events
             end
           end

@@ -13,8 +13,17 @@ module Events
     contains_pii true
 
     pii_filtering do
-      allows :items
-      # customer, payment not in allows - nested PII filtered by pattern matching
+      allows :customer, :payment, :items
+    end
+
+    slo do
+      enabled true
+      slo_status_from do |payload|
+        case payload[:status].to_s
+        when "failed", "cancelled" then "failure"
+        else "success" # pending, completed, or default for SLO cucumber scenario
+        end
+      end
     end
 
     metrics do

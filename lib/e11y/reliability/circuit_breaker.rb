@@ -115,7 +115,7 @@ module E11y
 
       # Handle OPEN state (fast fail).
       def handle_open_circuit
-        increment_metric("e11y.circuit_breaker.rejected")
+        E11y::Metrics.increment(:e11y_circuit_breaker_transitions_total, adapter: @adapter_name, event: "rejected")
 
         raise CircuitOpenError, "Circuit breaker open for #{@adapter_name} " \
                                 "(opened at #{@opened_at}, timeout: #{@timeout_seconds}s)"
@@ -137,12 +137,10 @@ module E11y
           @failure_count = 0
           @success_count += 1
         end
-
-        increment_metric("e11y.circuit_breaker.success")
       end
 
       # Handle failed execution in CLOSED state.
-      def on_failure(error)
+      def on_failure(_error)
         @mutex.synchronize do
           @failure_count += 1
           @last_failure_time = Time.now
@@ -150,8 +148,6 @@ module E11y
           # Transition CLOSED → OPEN if threshold exceeded
           transition_to_open if @failure_count >= @failure_threshold
         end
-
-        increment_metric("e11y.circuit_breaker.failure", error: error.class.name)
       end
 
       # Handle successful execution in HALF_OPEN state.
@@ -162,18 +158,14 @@ module E11y
           # Transition HALF_OPEN → CLOSED after enough successes
           transition_to_closed if @success_count >= @half_open_attempts
         end
-
-        increment_metric("e11y.circuit_breaker.half_open_success")
       end
 
       # Handle failed execution in HALF_OPEN state.
-      def on_half_open_failure(error)
+      def on_half_open_failure(_error)
         @mutex.synchronize do
           # Single failure in HALF_OPEN → back to OPEN
           transition_to_open
         end
-
-        increment_metric("e11y.circuit_breaker.half_open_failure", error: error.class.name)
       end
 
       # Transition to OPEN state.
@@ -183,7 +175,8 @@ module E11y
         @failure_count = 0 # Reset for next cycle
         @success_count = 0
 
-        increment_metric("e11y.circuit_breaker.opened")
+        E11y::Metrics.increment(:e11y_circuit_breaker_transitions_total, adapter: @adapter_name, event: "opened")
+        track_circuit_state_gauge
       end
 
       # Transition to HALF_OPEN state.
@@ -191,7 +184,8 @@ module E11y
         @state = STATE_HALF_OPEN
         @success_count = 0 # Reset success counter for testing
 
-        increment_metric("e11y.circuit_breaker.half_opened")
+        E11y::Metrics.increment(:e11y_circuit_breaker_transitions_total, adapter: @adapter_name, event: "half_opened")
+        track_circuit_state_gauge
       end
 
       # Transition to CLOSED state.
@@ -202,16 +196,20 @@ module E11y
         @opened_at = nil
         @last_failure_time = nil
 
-        increment_metric("e11y.circuit_breaker.closed")
+        E11y::Metrics.increment(:e11y_circuit_breaker_transitions_total, adapter: @adapter_name, event: "closed")
+        track_circuit_state_gauge
       end
 
-      # Increment circuit breaker metric.
-      #
-      # @param metric_name [String] Metric name
-      # @param tags [Hash] Additional tags
-      def increment_metric(metric_name, tags = {})
-        # TODO: Integrate with Yabeda metrics
-        # E11y::Metrics.increment(metric_name, tags.merge(adapter: @adapter_name, state: @state))
+      # Track circuit breaker state gauge via ReliabilityMonitor.
+      def track_circuit_state_gauge
+        return unless defined?(E11y::SelfMonitoring::ReliabilityMonitor)
+
+        E11y::SelfMonitoring::ReliabilityMonitor.track_circuit_state(
+          adapter_name: @adapter_name,
+          state: @state.to_s
+        )
+      rescue StandardError => e
+        E11y.logger&.warn("E11y CircuitBreaker gauge error: #{e.message}")
       end
     end
     # rubocop:enable Metrics/ClassLength

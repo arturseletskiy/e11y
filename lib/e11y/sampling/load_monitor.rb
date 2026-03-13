@@ -92,21 +92,17 @@ module E11y
       def load_level
         rate = current_rate
 
-        # Check thresholds in descending order
-        # rubocop:disable Lint/DuplicateBranch
-        # Values between normal and high thresholds intentionally mapped to :high
+        # Check thresholds in descending order.
+        # rate <= normal → :normal; rate > normal and < high → :high; etc.
         if rate >= @thresholds[:overload]
           :overload
         elsif rate >= @thresholds[:very_high]
           :very_high
-        elsif rate >= @thresholds[:high]
-          :high
-        elsif rate > @thresholds[:normal]
-          :high # Between normal and high threshold
+        elsif rate >= @thresholds[:high] || rate > @thresholds[:normal]
+          :high # rate > normal (includes rate >= high)
         else
-          :normal
+          :normal # rate <= normal (inclusive of exact threshold)
         end
-        # rubocop:enable Lint/DuplicateBranch
       end
 
       # Get recommended sample rate for current load

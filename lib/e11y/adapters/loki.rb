@@ -157,18 +157,21 @@ module E11y
         end
       end
 
-      # Check if adapter is healthy by probing the Loki /ready endpoint.
+      # Loki health check endpoint
+      READY_PATH = "/ready"
+
+      # Check if adapter is healthy (Loki server reachable)
       #
-      # @return [Boolean] True if Loki responds with a 2xx status
+      # Performs actual HTTP GET to /ready. Returns false on connection failure,
+      # timeout, or non-2xx response.
+      #
+      # @return [Boolean] True if Loki responds with 2xx
       def healthy?
         return false unless @connection
 
-        @connection.get("/ready") do |req|
-          req.options.timeout = @health_check_timeout
-          req.options.open_timeout = @health_check_timeout
-        end
-        true
-      rescue StandardError
+        response = @connection.get(READY_PATH)
+        (200..299).cover?(response.status)
+      rescue Faraday::Error, Errno::ECONNREFUSED, Errno::ETIMEDOUT
         false
       end
 
@@ -288,7 +291,8 @@ module E11y
 
       # Extract labels from event
       #
-      # Uses normalized event_name for consistent querying (matches Versioning middleware format).
+      # Uses normalized event_name (e.g., "Events::TestLoki" -> "test.loki") for consistent
+      # querying via LogQL. Matches Versioning middleware convention.
       #
       # @param event_data [Hash] Event data
       # @return [Hash] Labels for Loki stream
@@ -341,18 +345,19 @@ module E11y
         io.string
       end
 
-      # Normalize event name for Loki labels (matches Versioning middleware / query format)
+      # Normalize event name for Loki labels (matches Versioning middleware convention)
       #
-      # @param event_name [String] Raw event name (e.g., "Events::TestLoki")
+      # @param name [String] Event name (e.g., "Events::TestLoki")
       # @return [String] Normalized name (e.g., "test.loki")
-      def normalize_event_name_for_labels(event_name)
-        return event_name unless event_name
+      def normalize_event_name_for_labels(name)
+        return name if name.nil? || name.empty?
 
-        name = event_name.sub(/^Events::/, "").sub(/V\d+$/, "").gsub("::", ".")
-        name.gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
-            .gsub(/([a-z\d])([A-Z])/, '\1_\2')
-            .downcase
-            .tr("_", ".")
+        n = name.sub(/^Events::/, "").sub(/V\d+$/, "")
+        n.gsub("::", ".")
+         .gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
+         .gsub(/([a-z\d])([A-Z])/, '\1_\2')
+         .downcase
+         .tr("_", ".")
       end
 
       # Build HTTP headers

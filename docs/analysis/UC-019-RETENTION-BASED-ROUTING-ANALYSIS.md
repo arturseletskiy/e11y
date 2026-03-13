@@ -98,7 +98,7 @@ E11y.configure do |config|
     ->(event) {
       return nil unless event[:retention_until]
       days = (Time.parse(event[:retention_until]) - Time.now) / 86400
-      days > 90 ? :s3_glacier : :loki
+      days > 90 ? :archive : :loki
     },
     
     # Rule 3: Errors → multiple adapters

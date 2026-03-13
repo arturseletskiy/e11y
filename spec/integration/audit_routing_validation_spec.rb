@@ -8,6 +8,7 @@ RSpec.describe "Audit Event Routing Validation", :integration do
   let(:audit_event_class) do
     Class.new(E11y::Event::Base) do
       audit_event true
+      adapters [] # Force routing-rules path (no severity-based adapters)
 
       schema do
         required(:user_id).filled(:integer)
@@ -49,13 +50,11 @@ RSpec.describe "Audit Event Routing Validation", :integration do
   end
 
   it "includes helpful error message with fix options" do
-    expect do
-      audit_event_class.track(user_id: 123, action: "test")
-    end.to raise_error do |error| # rubocop:todo Style/MultilineBlockChain
-      expect(error.message).to include("Add explicit adapters")
-      expect(error.message).to include("Configure routing rule")
-      expect(error.message).to include("audit_encrypted")
-    end
+    error = nil
+    expect { audit_event_class.track(user_id: 123, action: "test") }.to raise_error(E11y::Error) { |e| error = e }
+    expect(error.message).to include("Add explicit adapters")
+    expect(error.message).to include("Configure routing rule")
+    expect(error.message).to include("audit_encrypted")
   end
 
   context "with proper routing configured" do

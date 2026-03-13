@@ -4,6 +4,7 @@
 begin
   require "opentelemetry/sdk"
   require "opentelemetry/logs"
+  require "opentelemetry-logs-sdk" # Provides OpenTelemetry::SDK::Logs::LoggerProvider
 rescue LoadError
   raise LoadError, <<~ERROR
     OpenTelemetry SDK not available!
@@ -11,7 +12,8 @@ rescue LoadError
     To use E11y::Adapters::OTelLogs, add to your Gemfile:
 
       gem 'opentelemetry-sdk'
-      gem 'opentelemetry-logs'
+      gem 'opentelemetry-logs-api'
+      gem 'opentelemetry-logs-sdk'
 
     Then run: bundle install
   ERROR
@@ -58,6 +60,13 @@ module E11y
     # @see ADR-007 for OpenTelemetry integration architecture
     # @see UC-008 for use cases
     class OTelLogs < Base
+      # Struct for test assertions (replaces OpenStruct per Style/OpenStructUse)
+      LogRecordStruct = Struct.new(
+        :timestamp, :observed_timestamp, :severity_number, :severity_text,
+        :body, :attributes, :trace_id, :span_id, :trace_flags,
+        keyword_init: true
+      )
+
       # E11y severity → OTel severity_number mapping
       # See: https://opentelemetry.io/docs/specs/otel/logs/data-model/#field-severitynumber
       # Severity numbers: TRACE=1, DEBUG=5, INFO=9, WARN=13, ERROR=17, FATAL=21
@@ -70,7 +79,8 @@ module E11y
         fatal: 21  # FATAL
       }.freeze
 
-      # Default baggage allowlist (safe keys that don't contain PII)
+      # Default baggage allowlist kept for reference / backward compat.
+      # @deprecated Pass baggage_allowlist: :all (the new default) or an explicit Array.
       DEFAULT_BAGGAGE_ALLOWLIST = %i[
         trace_id
         span_id
@@ -82,13 +92,19 @@ module E11y
       # Initialize OTel Logs adapter
       #
       # @param service_name [String] Service name for OTel (default: from config)
-      # @param baggage_allowlist [Array<Symbol>] Allowlist of safe baggage keys
+      # @param baggage_allowlist [Array<Symbol>, :all] Keys to include in OTel attributes.
+      #   `:all` (default) passes every payload key — PII is already stripped upstream by
+      #   Middleware::PIIFilter before the adapter is called.
+      #   Pass an explicit Array for stricter filtering (backward compat).
       # @param max_attributes [Integer] Max attributes per log (cardinality protection)
-      def initialize(service_name: nil, baggage_allowlist: DEFAULT_BAGGAGE_ALLOWLIST, max_attributes: 50, **)
+      # @param endpoint [String, nil] OTLP endpoint (e.g. http://localhost:4318/v1/logs).
+      #   When set, logs are exported to OTel Collector. Default: in-process only.
+      def initialize(service_name: nil, baggage_allowlist: :all, max_attributes: 50, endpoint: nil, **)
         super(**)
         @service_name = service_name
         @baggage_allowlist = baggage_allowlist
         @max_attributes = max_attributes
+        @endpoint = endpoint
 
         setup_logger_provider
       end
@@ -100,8 +116,8 @@ module E11y
       # @param event_data [Hash] Event payload
       # @return [Boolean] true on success
       def write(event_data)
-        emit_params = build_emit_params(event_data)
-        @logger.on_emit(**emit_params)
+        params = build_log_record_params(event_data)
+        @logger.on_emit(**params)
         true
       rescue StandardError => e
         warn "[E11y::OTelLogs] Failed to write event: #{e.message}"
@@ -132,17 +148,30 @@ module E11y
       # Setup OTel Logger Provider
       def setup_logger_provider
         @logger_provider = OpenTelemetry::SDK::Logs::LoggerProvider.new
+
+        # Add OTLP exporter when endpoint configured (sends to OTel Collector)
+        if @endpoint
+          require "opentelemetry-exporter-otlp-logs"
+          exporter = OpenTelemetry::Exporter::OTLP::Logs::LogsExporter.new(endpoint: @endpoint)
+          processor = OpenTelemetry::SDK::Logs::Export::BatchLogRecordProcessor.new(exporter)
+          @logger_provider.add_log_record_processor(processor)
+        end
+
         @logger = @logger_provider.logger(
           name: "e11y",
           version: E11y::VERSION
         )
+      rescue LoadError => e
+        warn "[E11y::OTelLogs] OTLP export requested but opentelemetry-exporter-otlp-logs not available: #{e.message}"
+        @logger_provider ||= OpenTelemetry::SDK::Logs::LoggerProvider.new
+        @logger = @logger_provider.logger(name: "e11y", version: E11y::VERSION)
       end
 
-      # Build params hash for Logger#on_emit
+      # Build params for Logger#on_emit from E11y event
       #
       # @param event_data [Hash] E11y event payload
       # @return [Hash] Keyword args for on_emit
-      def build_emit_params(event_data)
+      def build_log_record_params(event_data)
         {
           timestamp: event_data[:timestamp] || Time.now.utc,
           observed_timestamp: Time.now.utc,
@@ -156,13 +185,13 @@ module E11y
         }
       end
 
-      # Build OTel log record from E11y event (for testing/validation)
+      # Build log record struct for testing (same data as build_log_record_params)
       #
       # @param event_data [Hash] E11y event payload
-      # @return [OpenTelemetry::SDK::Logs::LogRecord] OTel log record
+      # @return [LogRecordStruct] Struct with attributes for test assertions
       def build_log_record(event_data)
-        params = build_emit_params(event_data)
-        OpenTelemetry::SDK::Logs::LogRecord.new(**params)
+        params = build_log_record_params(event_data)
+        LogRecordStruct.new(**params)
       end
 
       # Map E11y severity to OTel severity
@@ -177,7 +206,11 @@ module E11y
       #
       # Applies:
       # - Cardinality protection (C04 Resolution)
-      # - Baggage PII filtering (C08 Resolution)
+      # - Optional baggage allowlist filter (C08 Resolution — pass an Array to enable)
+      #
+      # By default (`baggage_allowlist: :all`) all payload keys are included.
+      # PII fields are stripped upstream by Middleware::PIIFilter before any adapter
+      # is called, so no additional filtering is needed at this layer.
       #
       # @param event_data [Hash] E11y event payload
       # @return [Hash] OTel attributes
@@ -195,7 +228,7 @@ module E11y
           # C04: Cardinality protection - limit attributes
           break if attributes.size >= @max_attributes
 
-          # C08: Baggage PII protection - only allowlisted keys
+          # C08: Optional allowlist — skip unless allowed
           next unless baggage_allowed?(key)
 
           attributes["event.#{key}"] = value
@@ -204,11 +237,16 @@ module E11y
         attributes
       end
 
-      # Check if key is allowed in baggage (C08 Resolution)
+      # Check if key is allowed in baggage.
+      #
+      # Returns true when allowlist is :all (default).
+      # Returns true only for listed keys when an explicit Array was configured.
       #
       # @param key [Symbol, String] Attribute key
-      # @return [Boolean] true if key is in allowlist
+      # @return [Boolean]
       def baggage_allowed?(key)
+        return true if @baggage_allowlist == :all
+
         @baggage_allowlist.include?(key.to_sym)
       end
     end

@@ -6,9 +6,9 @@
 # Exercises the RequestBufferConfig and the (stub) flush_event mechanism.
 
 Then("request buffering should be disabled in the configuration") do
-  expect(E11y.configuration.request_buffer.enabled).to be(false),
-                                                       "Expected request buffering to be disabled by default, but it was enabled. " \
-                                                       "README says 'automatically captures' but config defaults to enabled: false."
+  msg = "Expected request buffering to be disabled by default, but it was enabled. " \
+        "README says 'automatically captures' but config defaults to enabled: false."
+  expect(E11y.configuration.request_buffer.enabled).to be(false), msg
 end
 
 Given("request buffering is enabled in the configuration") do
@@ -39,8 +39,14 @@ end
 
 Then("those debug events should have been generated during that request") do
   events = memory_adapter.events.select { |e| e[:severity].to_s == "debug" }
-  expect(events).to all(include(request_id: be_a(String))),
-                    "Expected flushed debug events to carry a request_id from the failed request."
+  # Flushed events went through the pipeline (have trace_id) and match the controller's PostDebug event
+  expect(events).not_to be_empty
+  expect(events).to all(include(:trace_id)),
+                    "Expected flushed debug events to have trace_id (proving they went through the pipeline)."
+  expect(events.map { |e| e[:event_name] }.uniq).to include("Events::PostDebug"),
+                                                    "Expected PostDebug events from the controller; got: #{events.map do |e|
+                                                      e[:event_name]
+                                                    end.uniq.inspect}"
 end
 
 Then("at least {int} event with severity {string} should be in the adapter") do |min, severity|
@@ -55,6 +61,6 @@ end
 
 Then("the request buffer should be empty between requests") do
   buffer = Thread.current[:e11y_request_buffer]
-  expect(buffer.nil? || buffer.empty?).to be(true),
-                                          "Expected request buffer to be cleared after successful request, but it still has events."
+  msg = "Expected request buffer to be cleared after successful request, but it still has events."
+  expect(buffer.nil? || buffer.empty?).to be(true), msg
 end

@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "e11y/buffers/request_scoped_buffer"
-
 module E11y
   module Middleware
     # Routing middleware routes events to appropriate adapters based on retention policies.
@@ -42,13 +40,8 @@ module E11y
     #   # Rule: ->(e) { :audit_encrypted if e[:audit_event] }
     #   # Routes to: [:audit_encrypted]
     #
-    # @example Retention-based routing
-    #   event_data = {
-    #     event_name: 'order.placed',
-    #     retention_until: '2026-04-21T...'  # 90 days
-    #   }
-    #   # Rule: ->(e) { days > 30 ? :s3_standard : :loki }
-    #   # Routes to: [:s3_standard]
+    # Note: retention_until is for archival jobs (run separately), not for routing.
+    # Archival happens later — cron/Loki compaction filters by retention_until.
     class Routing < Base
       middleware_zone :adapters
 
@@ -67,28 +60,18 @@ module E11y
         # Handle nil from upstream middleware (e.g., rate limiting, sampling)
         return nil unless event_data
 
-        # 0. Buffer debug events when request-scoped buffering is active.
-        #    Only :debug severity is buffered — see ADR-001 §7 ("Request Buffer: :debug only").
-        #    On request success → buffer discarded. On request failure → flushed to adapters.
-        #    Non-debug events bypass the buffer and are written immediately.
-        if E11y.config.request_buffer&.enabled &&
-           E11y::Buffers::RequestScopedBuffer.active? &&
-           event_data[:severity] == :debug
-          event_data[:request_id] ||= E11y::Buffers::RequestScopedBuffer.request_id
-          E11y::Buffers::RequestScopedBuffer.add_event(event_data)
-          return nil
+        # 0. Request-scoped buffer: buffer debug events instead of writing when enabled
+        # Skip when event is from a flush (avoid re-buffering)
+        if !event_data[:from_request_buffer_flush] &&
+           event_data[:severity] == :debug &&
+           E11y.config.request_buffer&.enabled &&
+           E11y::Buffers::RequestScopedBuffer.active? && E11y::Buffers::RequestScopedBuffer.add_event(event_data)
+          # Buffered — skip adapter writes, pass through
+          return @app&.call(event_data)
         end
 
         # 1. Determine target adapters (explicit or via routing rules)
-        #
-        # Routing priority:
-        # - Non-audit events with adapters → use those directly (bypass routing rules)
-        # - Audit events with EXPLICIT adapters (adapters :foo DSL) → use those (bypass routing rules)
-        # - Audit events WITHOUT explicit adapters → always apply routing rules (UC-012, UC-019)
-        #   This allows audit events to be routed dynamically by routing_rules config
-        use_explicit = event_data[:adapters]&.any? &&
-                       (!event_data[:audit_event] || event_data[:explicit_adapters])
-        target_adapters = if use_explicit
+        target_adapters = if event_data[:adapters]&.any?
                             # Explicit adapters bypass routing rules
                             event_data[:adapters]
                           else
@@ -106,11 +89,9 @@ module E11y
 
           begin
             adapter.write(event_data)
-            increment_metric("e11y.middleware.routing.write_success", adapter: adapter_name)
           rescue StandardError => e
             # Log routing error but don't fail pipeline
             warn "E11y routing error for adapter #{adapter_name}: #{e.message}"
-            increment_metric("e11y.middleware.routing.write_error", adapter: adapter_name)
           end
         end
 
@@ -118,13 +99,13 @@ module E11y
         event_data[:routing] = {
           adapters: target_adapters,
           routed_at: Time.now.utc,
-          routing_type: use_explicit ? :explicit : :rules
+          routing_type: event_data[:adapters]&.any? ? :explicit : :rules
         }
 
         # 4. Increment metrics
-        increment_metric("e11y.middleware.routing.routed",
-                         adapters_count: target_adapters.size,
-                         routing_type: event_data[:routing][:routing_type])
+        E11y::Metrics.increment("e11y.middleware.routing.routed",
+                                adapters_count: target_adapters.size,
+                                routing_type: event_data[:routing][:routing_type])
 
         # 5. Log routing decision (for debugging)
         log_routing_decision(event_data, target_adapters) if debug_enabled?
@@ -152,12 +133,12 @@ module E11y
       #     ->(event) { :audit_encrypted if event[:audit_event] },
       #     ->(event) {
       #       days = (Time.parse(event[:retention_until]) - Time.now) / 86400
-      #       days > 90 ? :s3_glacier : :loki
+      #       days > 90 ? :archive : :loki
       #     }
       #   ]
       #
       #   apply_routing_rules(event_data)
-      #   # => [:audit_encrypted] or [:loki] or [:s3_glacier]
+      #   # => [:audit_encrypted] or [:loki] or [:archive]
       def apply_routing_rules(event_data)
         matched_adapters = []
 
@@ -205,11 +186,6 @@ module E11y
       # @param metric_name [String] Metric name
       # @param tags [Hash] Metric tags
       # @return [void]
-      def increment_metric(_metric_name, **_tags)
-        # TODO: Integrate with Yabeda/Prometheus
-        # Yabeda.e11y.middleware_routing_routed.increment(tags)
-      end
-
       # Validate audit events have proper routing configuration.
       #
       # Audit events MUST be routed via explicit adapters OR routing rules.

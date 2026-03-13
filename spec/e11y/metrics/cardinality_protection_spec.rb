@@ -256,9 +256,8 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
 
       small_limit_protection.filter({ status: "paid" }, "orders.total")
 
-      expect do
-        small_limit_protection.filter({ status: "pending" }, "orders.total")
-      end.to output(/Cardinality limit exceeded/).to_stderr
+      expect(E11y.logger).to receive(:warn).with(/Cardinality limit exceeded/)
+      small_limit_protection.filter({ status: "pending" }, "orders.total")
     end
   end
 
@@ -286,6 +285,7 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
       stub_const("E11y::Metrics", double)
       allow(E11y::Metrics).to receive(:increment)
       allow(E11y::Metrics).to receive(:gauge)
+      allow(E11y::Metrics).to receive(:reset_backend!)
 
       protection = described_class.new(cardinality_limit: 1, overflow_strategy: :drop)
 
@@ -308,14 +308,14 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
     it "handles metrics tracking errors gracefully" do
       stub_const("E11y::Metrics", double)
       allow(E11y::Metrics).to receive(:increment).and_raise(StandardError, "metrics error")
+      allow(E11y::Metrics).to receive(:reset_backend!)
 
       protection = described_class.new(cardinality_limit: 1, overflow_strategy: :drop)
 
       protection.filter({ status: "paid" }, "orders.total")
 
-      expect do
-        protection.filter({ status: "pending" }, "orders.total")
-      end.to output(/Failed to track cardinality metric/).to_stderr
+      expect(E11y.logger).to receive(:warn).with(/Failed to track cardinality metric/)
+      protection.filter({ status: "pending" }, "orders.total")
     end
   end
 
@@ -419,15 +419,14 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
         )
       end
 
-      it "warns to stderr when limit exceeded" do
+      it "warns when limit exceeded" do
         allow(alert_callback).to receive(:call)
 
         protection_alert.filter({ status: "paid" }, "orders.total")
         protection_alert.filter({ status: "pending" }, "orders.total")
 
-        expect do
-          protection_alert.filter({ status: "failed" }, "orders.total")
-        end.to output(/Cardinality limit exceeded/).to_stderr
+        expect(E11y.logger).to receive(:warn).with(/Cardinality limit exceeded/)
+        protection_alert.filter({ status: "failed" }, "orders.total")
       end
 
       it "drops label after alerting" do

@@ -1,0 +1,81 @@
+{
+  "title": "E11y Observability",
+  "uid": "e11y-overview",
+  "version": 1,
+  "schemaVersion": 36,
+  "tags": ["e11y", "ruby", "observability"],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Events / sec",
+      "targets": [
+        {
+          "expr": "rate(e11y_events_total[1m])",
+          "legendFormat": "{{event_name}}"
+        }
+      ],
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Error rate",
+      "targets": [
+        {
+          "expr": "rate(e11y_events_total{severity=\"error\"}[1m]) / rate(e11y_events_total[1m])",
+          "legendFormat": "error rate"
+        }
+      ],
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Events by severity",
+      "targets": [
+        {
+          "expr": "rate(e11y_events_total[1m])",
+          "legendFormat": "{{severity}}"
+        }
+      ],
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Rate limit drops",
+      "targets": [
+        {
+          "expr": "rate(e11y_rate_limit_dropped_total[1m])",
+          "legendFormat": "dropped"
+        }
+      ],
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Circuit breaker trips",
+      "targets": [
+        {
+          "expr": "e11y_circuit_breaker_transitions_total{event=\"opened\"}",
+          "legendFormat": "{{adapter}}"
+        }
+      ],
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "DLQ queue depth",
+      "targets": [
+        {
+          "expr": "e11y_dlq_size",
+          "legendFormat": "DLQ"
+        }
+      ],
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 }
+    }
+  ]
+}

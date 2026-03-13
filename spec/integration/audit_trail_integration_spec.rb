@@ -247,7 +247,7 @@ RSpec.describe "Audit Trail Integration", :integration do
   end
 
   describe "Scenario 7: Compliance" do
-    it "verifies audit trail meets compliance requirements (SOC2, HIPAA, GDPR)" do # rubocop:todo RSpec/ExampleLength
+    it "verifies audit trail meets compliance requirements (SOC2, HIPAA, GDPR)" do
       # Track compliance-critical events
       # User deletion (GDPR)
       Events::UserDeleted.track(

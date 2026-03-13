@@ -2,36 +2,69 @@
 
 module E11y
   module Adapters
-    # Null Adapter — discards all events immediately.
+    # Null Adapter — silently discards all events.
     #
-    # Useful for:
-    #   - Memory and allocation profiling: no event storage means MemoryProfiler
-    #     reports only pipeline costs, not adapter-side retention.
-    #   - Benchmarking the pipeline in isolation.
-    #   - Disabling telemetry in specific environments without removing event calls.
+    # Designed for use in tests and development environments where you want
+    # to suppress all output while still being able to assert that events
+    # were tracked (via the `events` reader).
     #
-    # Zero-retention guarantee: write() is a no-op returning true.
-    # Reliability layer disabled by default to avoid Time.now and retry
-    # allocations that would pollute allocation measurements.
-    #
-    # @example Configure for memory profiling
-    #   E11y.configure do |config|
-    #     config.adapters[:null] = E11y::Adapters::Null.new
-    #     config.fallback_adapters = [:null]
+    # @example In tests
+    #   RSpec.configure do |config|
+    #     config.before do
+    #       E11y.configure do |c|
+    #         c.adapters[:null] = E11y::Adapters::NullAdapter.new
+    #       end
+    #     end
     #   end
+    #
+    # @example Asserting events
+    #   null_adapter = E11y::Adapters::NullAdapter.new
+    #   E11y.configure { |c| c.adapters[:null] = null_adapter }
+    #
+    #   Events::OrderPaid.track(order_id: "123", amount: 99.99)
+    #
+    #   expect(null_adapter.events.size).to eq(1)
+    #   expect(null_adapter.events.last[:event_name]).to eq("order.paid")
     class Null < Base
+      attr_reader :events
+
+      # @param config [Hash] Options
+      # @option config [Boolean] :store_events (true) When false, truly discards (no retention).
+      #   Use store_events: false for memory profiling to measure pipeline-only allocations.
       def initialize(config = {})
-        # Disable the reliability layer (retry + circuit breaker) so that
-        # write_with_reliability bypasses Time.now and handler allocations.
-        super(config.merge(reliability: { enabled: false }))
+        super
+        @store_events = config.fetch(:store_events, true)
+        @events = []
+        @mutex = Mutex.new
       end
 
-      def write(_event_data) # rubocop:disable Naming/PredicateMethod
+      # Accept event. When store_events: true, stores for inspection. When false, truly discards.
+      #
+      # @param event_data [Hash] Event payload
+      # @return [Boolean] always true
+      # rubocop:disable Naming/PredicateMethod -- implements Base adapter interface
+      def write(event_data)
+        @mutex.synchronize { @events << event_data.dup } if @store_events
         true
       end
+      # rubocop:enable Naming/PredicateMethod
 
-      def write_batch(_events) # rubocop:disable Naming/PredicateMethod
+      # Accept batch. When store_events: true, stores for inspection. When false, truly discards.
+      #
+      # @param events [Array<Hash>] Event payloads
+      # @return [Boolean] always true
+      # rubocop:disable Naming/PredicateMethod -- implements Base adapter interface
+      def write_batch(events)
+        @mutex.synchronize { @events.concat(events.map(&:dup)) } if @store_events
         true
+      end
+      # rubocop:enable Naming/PredicateMethod
+
+      # Clear all stored events (useful between test examples).
+      #
+      # @return [void]
+      def clear!
+        @mutex.synchronize { @events.clear }
       end
 
       def healthy?
@@ -42,5 +75,8 @@ module E11y
         { batching: true, compression: false, async: false, streaming: false, null: true }
       end
     end
+
+    # Convenience alias matching Quick Start documentation.
+    NullAdapter = Null
   end
 end

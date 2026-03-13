@@ -32,27 +32,6 @@ RSpec.describe E11y do
     end
   end
 
-  describe ".track" do
-    let(:event_class) do
-      Class.new(E11y::Event::Base) do
-        def self.name
-          "TestTrackEvent"
-        end
-      end
-    end
-
-    it "delegates to EventClass.track when passed an instance" do
-      event_instance = event_class.new
-      expect(event_class).to receive(:track).with(no_args)
-      described_class.track(event_instance)
-    end
-
-    it "delegates to EventClass.track when passed a class with payload" do
-      expect(event_class).to receive(:track).with(foo: "bar")
-      described_class.track(event_class, foo: "bar")
-    end
-  end
-
   describe ".logger" do
     it "returns logger instance" do
       expect(described_class.logger).to respond_to(:info)

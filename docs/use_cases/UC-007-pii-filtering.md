@@ -5,31 +5,20 @@
 **Setup Time:** 20-30 minutes  
 **Target Users:** All developers, Security teams, Compliance teams
 
+> **Approach:** Event-level `pii_filtering do` in event classes. Use inheritance for shared rules (e.g. `BaseUserEvent`). No global `config.pii_filter`.
+
 ---
 
 ## 📋 Overview
 
 ### Problem Statement
 
-**Current Approach (Configuration Duplication):**
+**Current Approach (Manual per-event):**
 ```ruby
-# config/application.rb
-# Rails already has PII filtering
-config.filter_parameters += [:password, :email, :ssn, :credit_card]
-
-# config/initializers/e11y.rb
-# Do we need to duplicate for E11y?
-E11y.configure do |config|
-  config.pii_filter do
-    mask_fields :password, :email, :ssn, :credit_card  # ← Duplication! 😞
-  end
-end
-
+# Each event class needs its own PII rules — duplication across similar events
 # Problems:
-# - Configuration duplication
-# - Easy to forget updating both places
-# - Inconsistency risk
-# - More maintenance burden
+# - Duplication across UserRegistered, UserLogin, PaymentCreated, etc.
+# - Easy to forget or be inconsistent
 ```
 
 ### E11y Solution
@@ -92,31 +81,25 @@ Events::UserCreated.track(
 
 ---
 
-### 2. Extended Configuration (Optional)
+### 2. Event-Level DSL + Inheritance
 
-**Add more filters beyond Rails:**
+**Define per-event; use inheritance for shared rules:**
 ```ruby
-# config/initializers/e11y.rb
-E11y.configure do |config|
-  config.pii_filter do
-    # 1. USE RAILS FILTERS (default: true)
-    use_rails_filter_parameters true
-    
-    # 2. ADD MORE FIELDS (Rails-compatible syntax)
-    filter_parameters :api_key, :token, :auth_token, :secret_key
-    
-    # 3. REGEX FILTERS (like Rails)
-    filter_parameters /token/i       # Matches: auth_token, api_token, etc.
-    filter_parameters /secret/i      # Matches: client_secret, api_secret, etc.
-    
-    # 4. WHITELIST (don't filter these, even if in Rails.filter_parameters)
-    allow_parameters :user_id, :order_id, :transaction_id
-    
-    # 5. CUSTOM REPLACEMENT (default: '[FILTERED]')
-    replacement '[REDACTED]'
-    
-    # 6. KEEP PARTIAL DATA (for debugging)
-    keep_partial_data true  # 'em***@ex***' instead of '[FILTERED]'
+# Base class — common rules for all user events
+class BaseUserEvent < E11y::Event::Base
+  contains_pii true
+  pii_filtering do
+    masks   :password, :api_key, :token
+    hashes  :email
+    partials :phone
+    allows  :user_id, :order_id
+  end
+end
+
+# Child — inherits + adds payment-specific fields
+class Events::PaymentCreated < BaseUserEvent
+  pii_filtering do
+    masks :card_number, :cvv
   end
 end
 ```
@@ -125,42 +108,7 @@ end
 
 ### 3. Pattern-Based Filtering (Beyond Rails)
 
-**Advanced regex patterns for content scanning:**
-```ruby
-E11y.configure do |config|
-  config.pii_filter do
-    # EMAIL ADDRESSES (scan content, not just keys)
-    filter_pattern /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i,
-                   replacement: '[EMAIL]'
-    
-    # CREDIT CARDS
-    filter_pattern /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/,
-                   replacement: '[CARD]'
-    
-    # SOCIAL SECURITY NUMBERS
-    filter_pattern /\b\d{3}-\d{2}-\d{4}\b/,
-                   replacement: '[SSN]'
-    
-    # PHONE NUMBERS (US/International)
-    filter_pattern /\b(\+\d{1,2}\s?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/,
-                   replacement: '[PHONE]'
-    
-    # IP ADDRESSES
-    filter_pattern /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/,
-                   replacement: '[IP]'
-    
-    # API KEYS (common formats)
-    filter_pattern /[A-Za-z0-9_]{32,}/,  # Long alphanumeric strings
-                   replacement: '[API_KEY]'
-  end
-end
-
-# Usage:
-Events::EmailSent.track(
-  subject: 'Hello user@example.com!',  # → 'Hello [EMAIL]!'
-  body: 'Your card 4111-1111-1111-1111 was charged'  # → 'Your card [CARD] was charged'
-)
-```
+**Tier 3 events** (`contains_pii true`) apply `E11y::PII::Patterns::VALUE_PATTERNS` to string values (email, SSN, credit card regexes). Field-level strategies (masks, hashes, partials) are defined in `pii_filtering do`.
 
 ---
 

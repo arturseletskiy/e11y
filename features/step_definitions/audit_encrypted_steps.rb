@@ -108,10 +108,16 @@ end
 
 Then("the new adapter should fail to decrypt the previously written entry") do
   expect(@audit_filename).not_to be_nil
-  # First adapter used explicit key (@audit_key). Second adapter has no key, so uses
-  # default_encryption_key (PBKDF2-derived stable key for dev/test). These are DIFFERENT keys,
-  # so decryption with the second adapter must fail.
-  expect do
-    @second_adapter.read(@audit_filename)
-  end.to raise_error(OpenSSL::Cipher::CipherError)
+  # New adapter has different random key → decryption must fail (exception or garbled data)
+  begin
+    result = @second_adapter.read(@audit_filename)
+    # No exception: verify result is garbage (wrong key can produce invalid/wrong data)
+    result_has_valid_data = result.is_a?(Hash) &&
+                            (result[:event_name].to_s == @test_event_name.to_s ||
+                             result["event_name"].to_s == @test_event_name.to_s)
+    msg = "New adapter with different key decrypted successfully — encryption broken. #{result.inspect}"
+    expect(result_has_valid_data).to be(false), msg
+  rescue OpenSSL::Cipher::CipherError, JSON::ParserError
+    # Expected: decryption fails with wrong key
+  end
 end

@@ -54,6 +54,7 @@ end
 Rails.application.routes_reloader.reload! if Rails.application.routes.empty?
 
 # Configure E11y for Cucumber tests:
+#   - Railtie disables E11y in test by default; features that need tracking enable via Before hook
 #   - Disable rate limiting (interferes with assertions)
 #   - Set fallback adapters to :memory so events with adapters: [] are captured
 E11y.configure do |config|

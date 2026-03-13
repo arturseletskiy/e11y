@@ -307,9 +307,11 @@ module E11y
           severity: :error
         )
 
-        # Also log warning
-        warn "E11y Metrics: Cardinality limit exceeded for #{metric_name}:#{key} " \
-             "(limit: #{@cardinality_limit}, current: #{current_cardinality})"
+        # Also log warning (via E11y.logger so it respects Rails.logger in test env)
+        E11y.logger&.warn(
+          "E11y Metrics: Cardinality limit exceeded for #{metric_name}:#{key} " \
+          "(limit: #{@cardinality_limit}, current: #{current_cardinality})"
+        )
       end
 
       # Handle relabel strategy - relabel to [OTHER]
@@ -403,7 +405,7 @@ module E11y
         )
       rescue StandardError => e
         # Don't fail on metrics tracking errors
-        warn "E11y: Failed to track cardinality metric: #{e.message}"
+        E11y.logger&.warn("E11y: Failed to track cardinality metric: #{e.message}")
       end
     end
     # rubocop:enable Metrics/ClassLength

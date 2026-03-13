@@ -81,26 +81,25 @@ module E11y
       #   # Result: { controller: "Users", action: "index" } - password filtered by schema
       def self.subscribe_to_event(asn_pattern, e11y_event_class_name)
         ActiveSupport::Notifications.subscribe(asn_pattern) do |name, start, finish, _id, payload|
-          # Convert ASN event → E11y event
-          duration = (finish - start) * 1000 # Convert to milliseconds
-
-          # Resolve event class (string → constant)
-          e11y_event_class = resolve_event_class(e11y_event_class_name)
-          next unless e11y_event_class
-
-          # Extract job info from job object if present (ActiveJob events)
-          extracted_payload = extract_job_info_from_object(payload)
-
-          # Track E11y event - schema will filter relevant fields
-          e11y_event_class.track(
-            event_name: name,
-            duration: duration,
-            **extracted_payload # Pass all payload, schema filters
-          )
+          track_rails_event(name, start, finish, payload, e11y_event_class_name)
         rescue StandardError => e
-          # Don't crash the app if event tracking fails
           warn "[E11y] Failed to track Rails event #{name}: #{e.message}"
         end
+      end
+
+      def self.track_rails_event(name, start, finish, payload, e11y_event_class_name)
+        duration = (finish - start) * 1000
+        e11y_event_class = resolve_event_class(e11y_event_class_name)
+        return unless e11y_event_class
+
+        extracted_payload = extract_job_info_from_object(payload)
+        extracted_payload = extracted_payload.merge(severity: :error) if process_action_error?(name, payload)
+
+        e11y_event_class.track(event_name: name, duration: duration, **extracted_payload)
+      end
+
+      def self.process_action_error?(name, payload)
+        name == "process_action.action_controller" && (payload[:exception] || payload["exception"])
       end
 
       # Get final event mapping (after config overrides)

@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-# rubocop:disable Layout/LineLength, Lint/MissingCopEnableDirective
-
 # features/step_definitions/sampling_steps.rb
 # Step definitions for adaptive_sampling.feature.
 
@@ -124,7 +122,9 @@ Given("a LoadMonitor with normal threshold {int}, high threshold {int} events pe
   )
 end
 
+# rubocop:disable Layout/LineLength
 Given("a LoadMonitor with normal threshold {int}, high threshold {int}, very_high threshold {int}, overload threshold {int} events per second and window {int} second") do |normal, high, very_high, overload, window|
+  # rubocop:enable Layout/LineLength
   @load_monitor = E11y::Sampling::LoadMonitor.new(
     window: window,
     thresholds: { normal: normal, high: high, very_high: very_high, overload: overload }
@@ -222,7 +222,8 @@ end
 # Helpers (accessible via World module)
 # ---------------------------------------------------------------------------
 
-module SamplingStepHelpers # rubocop:todo Style/Documentation
+# Helpers for sampling-related Cucumber steps (LoadMonitor, reconfigure, etc.)
+module SamplingStepHelpers
   def reconfigure_sampling_middleware(options)
     cfg = E11y.config
     cfg.pipeline.middlewares.reject! { |m| m.middleware_class == E11y::Middleware::Sampling }

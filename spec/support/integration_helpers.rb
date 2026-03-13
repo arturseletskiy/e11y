@@ -18,7 +18,7 @@ module IntegrationHelpers
   # @param timeout [Integer] Timeout in seconds (default: 5)
   # @param health_path [String] Health check path (default: "/")
   # @return [Boolean] true if service responds
-  def service_available?(url, timeout: 5, health_path: nil) # rubocop:todo Metrics/AbcSize
+  def service_available?(url, timeout: 5, health_path: nil)
     require "net/http"
     require "uri"
 
@@ -73,6 +73,12 @@ module IntegrationHelpers
     raise message
   end
 
+  SERVICE_HEALTH_PATHS = {
+    "loki" => "/ready",
+    "prometheus" => "/-/healthy",
+    "elasticsearch" => "/_cluster/health"
+  }.freeze
+
   # Require a service to be available or raise a helpful error
   #
   # @param service_name [String] Name of service (for error message)
@@ -84,11 +90,7 @@ module IntegrationHelpers
     url ||= ENV.fetch(env_var, nil) if env_var
 
     # Use service-specific health check paths
-    health_path ||= {
-      "loki" => "/ready",
-      "prometheus" => "/-/healthy",
-      "elasticsearch" => "/_cluster/health"
-    }[service_name.downcase]
+    health_path ||= SERVICE_HEALTH_PATHS[service_name.downcase]
 
     return if url && service_available?(url, health_path: health_path)
 
@@ -98,6 +100,22 @@ module IntegrationHelpers
     message += "\n\nIn local development, start services with: docker-compose up -d"
     message += "\nIn CI, ensure services are configured in GitHub Actions."
     raise message
+  end
+
+  # Skip example if service is not available (graceful skip vs require_service! which raises)
+  #
+  # @param service_name [String] Name of service (for skip message)
+  # @param url [String] Service URL to check
+  # @param env_var [String] Environment variable name (optional)
+  # @param health_path [String] Health check path (optional)
+  # @return [void] Skips the example if service unavailable
+  def skip_unless_service!(service_name, url: nil, env_var: nil, health_path: nil)
+    url ||= ENV.fetch(env_var, nil) if env_var
+    health_path ||= SERVICE_HEALTH_PATHS[service_name.downcase]
+
+    return if url && service_available?(url, health_path: health_path)
+
+    skip "Service '#{service_name}' not available at #{url}. Start with: docker compose up -d #{service_name.downcase}"
   end
 
   # Check if we're running in CI environment
@@ -129,7 +147,7 @@ module IntegrationHelpers
   # @example
   #   events = find_events_by_class(memory_adapter, Events::TestEvent)
   #   events = find_events_by_class(memory_adapter, "Events::TestEvent", normalized_name: "test.event")
-  def find_events_by_class(memory_adapter, event_class, normalized_name: nil) # rubocop:todo Metrics/AbcSize
+  def find_events_by_class(memory_adapter, event_class, normalized_name: nil)
     all_events = memory_adapter.events
 
     # Get class name for matching

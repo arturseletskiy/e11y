@@ -60,11 +60,8 @@ module E11y
         # Call next middleware/app
         status, headers, body = @app.call(env)
 
-        # Flush buffer on 5xx responses.
-        # Rails' ShowExceptions middleware catches controller exceptions and
-        # returns a 500 response rather than letting them propagate, so we
-        # must inspect the status code here instead of relying on rescue alone.
-        E11y::Buffers::RequestScopedBuffer.flush_on_error if E11y.config.request_buffer&.enabled && status.to_i >= 500
+        # Flush buffer if status matches configured flush_on_statuses (default: 5xx only)
+        E11y::Buffers::RequestScopedBuffer.flush_on_error if should_flush_buffer?(status)
 
         # Track SLO metrics (if enabled)
         track_http_request_slo(env, status, start_time)
@@ -75,18 +72,15 @@ module E11y
 
         [status, headers, body]
       rescue StandardError
-        # Fallback: flush buffer if exception propagated past ShowExceptions
-        # (e.g., custom middleware ordering or non-Rails Rack apps)
+        # Flush request buffer on error (includes debug events)
         E11y::Buffers::RequestScopedBuffer.flush_on_error if E11y.config.request_buffer&.enabled
 
         raise # Re-raise original exception
       ensure
-        if E11y.config.request_buffer&.enabled
-          # Discard remaining events on success (noop if buffer already flushed/empty)
-          E11y::Buffers::RequestScopedBuffer.discard unless $ERROR_INFO
-          # Always reset thread-local buffer so next request starts clean
-          E11y::Buffers::RequestScopedBuffer.reset_all
-        end
+        # Discard request buffer on success (not on error, already flushed above)
+        # We need to check if we're here from normal completion or exception
+        # If there was an exception, buffer was already flushed in rescue block
+        E11y::Buffers::RequestScopedBuffer.discard if !$ERROR_INFO && E11y.config.request_buffer&.enabled # No exception occurred
 
         # Reset context
         E11y::Current.reset
@@ -94,6 +88,38 @@ module E11y
       # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
       private
+
+      # Determine whether the request-scoped buffer should be flushed for this status code.
+      #
+      # Two independent conditions (either is sufficient):
+      # - +flush_on_error+ (default: true) — flushes on any 5xx server error
+      # - +flush_on_statuses+ (default: []) — extra status codes/ranges, e.g. [403]
+      #
+      # @example Default behaviour — flush on 5xx only
+      #   config.request_buffer.flush_on_error   = true  # default
+      #   config.request_buffer.flush_on_statuses = []   # default
+      #
+      # @example Flush on 403 in addition to 5xx
+      #   config.request_buffer.flush_on_statuses = [403]
+      #
+      # @example Flush only on explicit statuses (disable 5xx default)
+      #   config.request_buffer.flush_on_error    = false
+      #   config.request_buffer.flush_on_statuses = [403, 422]
+      #
+      # @param status [Integer] HTTP response status code
+      # @return [Boolean]
+      def should_flush_buffer?(status)
+        return false unless E11y.config.request_buffer&.enabled
+
+        buf = E11y.config.request_buffer
+
+        # Condition 1: server error flush (5xx)
+        return true if buf.flush_on_error && status >= 500
+
+        # Condition 2: explicit extra statuses
+        extra = buf.flush_on_statuses
+        extra&.any? { |s| s === status } || false # rubocop:disable Style/CaseEquality
+      end
 
       # Extract trace_id from request headers (W3C Trace Context or custom headers)
       # @param request [Rack::Request] Rack request

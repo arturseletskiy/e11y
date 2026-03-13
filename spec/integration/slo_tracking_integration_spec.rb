@@ -37,27 +37,21 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
       config.slo_tracking.enabled = true
     end
 
-    begin
-      Yabeda.configure do
-        group :e11y do
-          counter :slo_http_requests_total, tags: %i[controller action status], comment: "SLO HTTP requests"
-          histogram :slo_http_request_duration_seconds, tags: %i[controller action],
-                                                        buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
-                                                        comment: "SLO HTTP request duration"
-          counter :slo_background_jobs_total, tags: %i[job_class status queue], comment: "SLO background jobs"
-          histogram :slo_background_job_duration_seconds, tags: %i[job_class queue],
-                                                          buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
-                                                          comment: "SLO background job duration"
-        end
-      end
-      Yabeda.configure! unless Yabeda.configured?
-    rescue Prometheus::Client::Registry::AlreadyRegisteredError
-      # Metrics already registered by previous test - reuse existing
-    end
+    # Unified approach: use YabedaHelpers (see spec/support/yabeda_helpers.rb)
+    register_yabeda_metric_if_needed(:counter, :slo_http_requests_total,
+                                     tags: %i[controller action status], comment: "SLO HTTP requests")
+    register_yabeda_metric_if_needed(:histogram, :slo_http_request_duration_seconds,
+                                     tags: %i[controller action],
+                                     buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+                                     comment: "SLO HTTP request duration")
+    register_yabeda_metric_if_needed(:counter, :slo_background_jobs_total,
+                                     tags: %i[job_class status queue], comment: "SLO background jobs")
+    register_yabeda_metric_if_needed(:histogram, :slo_background_job_duration_seconds,
+                                     tags: %i[job_class queue],
+                                     buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+                                     comment: "SLO background job duration")
 
-    # Reset Yabeda counter values between tests (without calling Yabeda.reset!)
-    # This ensures tests don't accumulate counter values
-    reset_yabeda_metrics!
+    reset_yabeda_values!
 
     # Configure Yabeda adapter
     yabeda_adapter_instance = E11y::Adapters::Yabeda.new(
@@ -72,23 +66,6 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
     E11y.config.fallback_adapters = %i[memory yabeda]
   end
 
-  # Helper method to reset Yabeda metric values without calling Yabeda.reset!
-  def reset_yabeda_metrics! # rubocop:todo Metrics/AbcSize
-    return unless Yabeda.respond_to?(:e11y) && Yabeda.e11y
-
-    # Reset counter and histogram values by accessing their internal storage
-    Yabeda.e11y.slo_http_requests_total.instance_variable_get(:@values)&.clear if Yabeda.e11y.respond_to?(:slo_http_requests_total)
-    if Yabeda.e11y.respond_to?(:slo_http_request_duration_seconds)
-      Yabeda.e11y.slo_http_request_duration_seconds.instance_variable_get(:@values)&.clear
-    end
-    Yabeda.e11y.slo_background_jobs_total.instance_variable_get(:@values)&.clear if Yabeda.e11y.respond_to?(:slo_background_jobs_total)
-    if Yabeda.e11y.respond_to?(:slo_background_job_duration_seconds)
-      Yabeda.e11y.slo_background_job_duration_seconds.instance_variable_get(:@values)&.clear
-    end
-  rescue StandardError
-    # If internal structure changed, fall back to no reset (tests may accumulate values)
-  end
-
   after do
     memory_adapter.clear!
     # Don't reset Yabeda - it causes issues with metric registration
@@ -97,7 +74,7 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
   end
 
   describe "Scenario 1: Availability SLO" do
-    it "calculates availability SLO (successes/total)" do # rubocop:todo RSpec/ExampleLength
+    it "calculates availability SLO (successes/total)" do
       # Setup: SLO target 99.9% availability, track 1000 HTTP requests (950 success, 50 errors)
       # Test: Track requests, calculate availability, verify SLO breach
       # Expected: Availability = 95%, breach detected (95% < 99.9%)
@@ -219,7 +196,7 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
 
       memory_adapter.clear!
 
-      # Track HTTP requests with durations including outliers: [50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000] ms
+      # Track HTTP requests with durations including outliers (50..1000 ms)
       # 66 requests each for first 14 durations, 10 requests at 1000ms for P99
       durations = [50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000]
       durations[0..13].each do |duration_ms|
@@ -335,8 +312,8 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
 
       # Expected error budget: (1 - 0.999) * 30 days = 43.2 minutes
       expected_budget_minutes = 43.2
-      expect(error_budget_minutes).to be_within(0.1).of(expected_budget_minutes),
-                                      "Expected error budget #{expected_budget_minutes} minutes, got #{error_budget_minutes}"
+      msg = "Expected error budget #{expected_budget_minutes} minutes, got #{error_budget_minutes}"
+      expect(error_budget_minutes).to be_within(0.1).of(expected_budget_minutes), msg
 
       # Track requests with errors
       error_durations = [100, 200, 300] # ms

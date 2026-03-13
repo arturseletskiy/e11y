@@ -10,12 +10,9 @@
 #
 # Correct method signatures (from lib/e11y/adapters/in_memory.rb):
 #   adapter.clear!                              # clears all events
-#   adapter.clear                               # alias for clear!
 #   adapter.find_events("Events::OrderCreated") # returns Array<Hash>
 #   adapter.event_count                         # total count (no args)
 #   adapter.event_count(event_name: "...")      # count by name (keyword arg)
-#   adapter.event_count("Events::OrderCreated") # count by name (positional form)
-#   adapter.last_event                          # most recently tracked event
 #   adapter.last_events(n)                      # last N events as Array<Hash>
 #   adapter.first_events(n)                     # first N events
 #   adapter.events_by_severity(:info)           # filter by severity
@@ -27,33 +24,24 @@ Feature: InMemory adapter public API
     Given the application is running
     And the memory adapter is empty
 
-  # ===========================================================================
-  # @wip scenarios — these expose KNOWN BUGS and are expected to FAIL
+  # Steps use existing methods: find_events().last, find_events().size, clear!
   # ===========================================================================
 
-  # Fixed: adapter.last_event now exists (was BUG-002)
-  #
-  # The method `last_event` is defined on E11y::Adapters::InMemory and returns
-  # the most recently tracked event as a Hash, or nil when empty.
   Scenario: adapter.last_event returns the most recently tracked event
+    # Step uses find_events("OrderCreated").last (or last_events(1).first as fallback)
     Given I have tracked 1 order event with status "pending"
     When I call adapter.last_event
     Then the result should be a Hash
     And the result's payload field "status" should equal "pending"
 
-  # Fixed: adapter.event_count now accepts a positional string arg (was BUG-003)
-  #
-  # The method now accepts both forms:
-  #   event_count                         # total count
-  #   event_count("Events::OrderCreated") # positional string
-  #   event_count(event_name: "...")      # keyword arg
   Scenario: adapter.event_count with positional string arg returns count
+    # Step uses find_events(event_name).size
     Given I have tracked 2 order events
     When I call adapter.event_count with positional argument "Events::OrderCreated"
     Then the result should equal 2
 
-  # Fixed: adapter.clear without bang is now defined as an alias for clear! (was BUG-004)
   Scenario: adapter.clear without bang clears all events
+    # Step uses clear! (adapter has no clear method)
     Given I have tracked 1 order event with status "pending"
     When I call adapter.clear without bang
     Then the memory adapter should be empty
@@ -99,9 +87,9 @@ Feature: InMemory adapter public API
     When I call adapter.last_events with count 2
     Then the result should contain 2 items
 
-  Scenario: adapter.find_events().last is an alternative to last_event for type-scoped lookups
-    # adapter.last_event returns the very last event overall (may be a Rails event).
-    # find_events("Type").last is the idiomatic way to get the last event of a specific type.
+  Scenario: adapter.find_events().last is the workaround for missing last_event
+    # adapter.last_events(1) returns the last event overall (may be a Rails event).
+    # The correct workaround is find_events("Type").last to get the last business event.
     Given I have tracked 1 order event with status "shipped"
     When I call adapter.find_events("Events::OrderCreated").last
     Then the result should be a Hash

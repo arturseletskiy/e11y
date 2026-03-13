@@ -58,65 +58,45 @@ module E11y
       # Version extraction regex (matches V2, V3, etc. at end of class name)
       VERSION_REGEX = /V(\d+)$/
 
+      # Lazy cache: class name -> normalized event_name (per class, immutable)
+      NORMALIZED_CACHE = Concurrent::Map.new
+
       # Process event and add version field if needed
       #
       # @param event_data [Hash] Event payload
       # @return [Hash] Event data with version field (if > 1)
-      def call(event_data) # rubocop:todo Metrics/AbcSize
-        # Extract version from event_class name (original class name, not normalized event_name)
-        # Use event_class.name if available, fallback to event_name for backward compatibility
-        class_name = event_data[:event_class]&.name || event_data[:event_name]
-        version = extract_version(class_name)
+      def call(event_data)
+        klass = event_data[:event_class]
+        class_name = klass&.name
 
-        # Add version field only if > 1 (ADR-012 §4.2)
+        version = event_data[:version].to_i
+        version = extract_version(class_name) if version <= 1
         event_data[:v] = version if version > 1
 
-        # Normalize event_name, respecting custom overrides.
-        # Three cases:
-        # 1. event_class absent → always normalize (backward-compat / unit test path)
-        # 2. event_class present + no custom event_name → normalize
-        # 3. event_class present + custom event_name → preserve it
-        #
-        # A "custom" event_name is one that differs from the class-derived default
-        # (i.e. the class name with the version suffix stripped). The auto-derived
-        # event_class.event_name returns the class name minus version suffix, which
-        # is NOT a custom name — only values explicitly set by the user (e.g. via
-        # define_singleton_method) that differ from this auto-derived value count.
-        if event_data[:event_class].nil?
-          # No event_class available — always normalize (backward-compat / unit test path)
-          event_data[:event_name] = normalize_event_name(class_name)
-        else
-          class_default_name = normalize_event_name(class_name)
-          # The auto-derived name is the class name with version suffix stripped.
-          # A custom name is anything that differs from this auto-derived value.
-          auto_derived_name = event_data[:event_class].name.to_s.sub(VERSION_REGEX, "")
-          reported_name = event_data[:event_class].event_name.to_s
-          if reported_name == auto_derived_name
-            # No custom override — normalize to dot-notation
-            event_data[:event_name] = class_default_name
-          end
-          # Otherwise: custom name differs from auto-derived, leave event_data[:event_name] untouched
-        end
+        # event_data[:event_name] set by Base; fallback to klass.event_name for minimal event_data (tests)
+        incoming = event_data[:event_name]
+        incoming = klass.event_name if incoming.nil? && klass.respond_to?(:event_name)
+        incoming = incoming.to_s
+        # Custom uses dot notation ("order.paid"); default from Base uses "::"
+        event_data[:event_name] = incoming != "" && !incoming.include?("::") ? incoming : normalized_for(klass)
 
-        # Pass to next middleware
         @app&.call(event_data) || event_data
       end
 
       private
 
-      # Extract version from event class name
-      #
-      # @param class_name [String] Event class name (e.g., "Events::OrderPaidV2")
-      # @return [Integer] Version number (default: 1)
-      #
-      # @example
-      #   extract_version("Events::OrderPaid")   => 1
-      #   extract_version("Events::OrderPaidV2") => 2
-      #   extract_version("Events::OrderPaidV3") => 3
+      def normalized_for(klass)
+        return unless klass
+
+        name = klass.name
+        return unless name
+
+        NORMALIZED_CACHE.fetch(name) { NORMALIZED_CACHE[name] = normalize_event_name(name) }
+      end
+
       def extract_version(class_name)
         return 1 unless class_name
 
-        # Extract version from class name (e.g., "Events::OrderPaidV2" → 2)
         match = class_name.match(VERSION_REGEX)
         match ? match[1].to_i : 1
       end

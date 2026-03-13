@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-# rubocop:disable Performance/CollectionLiteralInLoop, Lint/MissingCopEnableDirective
-
 require "rails_helper"
 
 # EventSLO Middleware Integration Tests for ADR-014, UC-004
@@ -57,6 +55,7 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
   after do
     memory_adapter.clear!
     E11y::Current.reset
+    # Don't Yabeda.reset! — it destroys the :e11y group and breaks subsequent specs
     # Reset pipeline to avoid state pollution between test files
     E11y.config.instance_variable_set(:@built_pipeline, nil)
   end
@@ -106,11 +105,13 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
 
       # Event should still be stored (after Versioning middleware, event_name is normalized)
       all_events = memory_adapter.events
-      events = all_events.select { |e| ["payment.processed", "Events::PaymentProcessed"].include?(e[:event_name]) }
-
-      expect(events.count).to eq(1), "Event should be stored. Total events: #{all_events.count}, event_names: #{all_events.map do |e|
+      valid_names = ["payment.processed", "Events::PaymentProcessed"]
+      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
+      event_names_msg = "Total events: #{all_events.count}, event_names: #{all_events.map do |e|
         e[:event_name]
       end.uniq.inspect}"
+      msg = format("Event should be stored. %s", event_names_msg)
+      expect(events.count).to eq(1), msg
     end
 
     it "emits metrics with correct labels" do
@@ -271,8 +272,9 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
 
       Events::TaskPending.track(task_id: 1, status: "pending")
 
-      # Should not emit metric (slo_status is nil)
-      expect(E11y::Metrics).not_to have_received(:increment)
+      # Should not emit SLO metric (slo_status is nil)
+      # Note: TraceContext/Validation/Routing may call Metrics.increment — only check SLO metric
+      expect(E11y::Metrics).not_to have_received(:increment).with(:slo_event_result_total, anything)
     end
   end
 
@@ -301,12 +303,13 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
 
       Events::HealthCheck.track(service: "api", status: "ok")
 
-      # Should not emit SLO metric
-      expect(E11y::Metrics).not_to have_received(:increment)
+      # Should not emit SLO metric (TraceContext/Validation/Routing may call increment)
+      expect(E11y::Metrics).not_to have_received(:increment).with(:slo_event_result_total, anything)
 
       # Event should still be stored (after Versioning middleware, event_name is normalized)
       all_events = memory_adapter.events
-      events = all_events.select { |e| ["health.check", "Events::HealthCheck"].include?(e[:event_name]) }
+      valid_names = ["health.check", "Events::HealthCheck"]
+      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
       expect(events.count).to eq(1)
     end
 
@@ -340,12 +343,13 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
 
       Events::DisabledSLOEvent.track(data: "test")
 
-      # Should not emit SLO metric
-      expect(E11y::Metrics).not_to have_received(:increment)
+      # Should not emit SLO metric (TraceContext/Validation/Routing may call increment)
+      expect(E11y::Metrics).not_to have_received(:increment).with(:slo_event_result_total, anything)
 
       # Event should still be stored (after Versioning middleware, event_name is normalized)
       all_events = memory_adapter.events
-      events = all_events.select { |e| ["disabled.slo.event", "Events::DisabledSLOEvent"].include?(e[:event_name]) }
+      valid_names = ["disabled.slo.event", "Events::DisabledSLOEvent"]
+      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
       expect(events.count).to eq(1)
     end
   end
@@ -389,7 +393,8 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
 
       # Event should still be stored (after Versioning middleware, event_name is normalized)
       all_events = memory_adapter.events
-      events = all_events.select { |e| ["error.slo.event", "Events::ErrorSLOEvent"].include?(e[:event_name]) }
+      valid_names = ["error.slo.event", "Events::ErrorSLOEvent"]
+      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
       expect(events.count).to eq(1)
     end
 
@@ -422,8 +427,10 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
       end
       stub_const("Events::MetricErrorEvent", slo_event_class)
 
-      # Mock Metrics.increment to raise error
-      allow(E11y::Metrics).to receive(:increment).and_raise(StandardError.new("Metric error"))
+      # Mock Metrics.increment to raise only when EventSLO calls it (TraceContext runs first)
+      allow(E11y::Metrics).to receive(:increment).and_call_original
+      allow(E11y::Metrics).to receive(:increment).with(:slo_event_result_total, anything)
+                                                 .and_raise(StandardError.new("Metric error"))
 
       # Should not raise error (graceful handling)
       expect do
@@ -432,8 +439,8 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
 
       # Event should still be stored (after Versioning middleware, event_name is normalized)
       all_events = memory_adapter.events
-      metric_error_names = ["metric.error.event", "Events::MetricErrorEvent"]
-      events = all_events.select { |e| metric_error_names.include?(e[:event_name]) }
+      valid_names = ["metric.error.event", "Events::MetricErrorEvent"]
+      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
       expect(events.count).to eq(1)
     end
   end

@@ -127,41 +127,25 @@ RSpec.configure do |config|
       config.rate_limiting.enabled = false if config.respond_to?(:rate_limiting)
     end
 
+    # Capture canonical pipeline for restoration between examples (like Cucumber hooks.rb)
+    # Prevents cross-spec pollution when specs mutate the pipeline (sampling, versioning, etc.)
+    Object.const_set(:INITIAL_PIPELINE_MIDDLEWARES, E11y.config.pipeline.middlewares.dup.freeze) \
+      unless defined?(INITIAL_PIPELINE_MIDDLEWARES)
+
     # NOTE: E11y instrumentation is set up automatically by Railtie initializers
     # DO NOT call setup methods here or it will cause double instrumentation!
     # The initializers run as part of Rails.application.initialize! above.
-
-    # Capture default pipeline for restoration (specs modify pipeline and must not pollute others)
-    $e11y_default_pipeline_middlewares = Marshal.load(Marshal.dump(E11y.config.pipeline.middlewares)) # rubocop:todo Style/GlobalVars
   end
 
   config.before do |example|
+    # Clear E11y adapter events and restore pipeline before each integration test
     if example.metadata[:integration] || %i[integration request].include?(example.metadata[:type])
-      # Clear E11y adapter events before each test (but don't reset config!)
       adapter = E11y.config.adapters[:memory]
       adapter.clear! if adapter.respond_to?(:clear!)
-      # Ensure fallback_adapters = [:memory] for consistent event routing across specs
-      E11y.config.fallback_adapters = [:memory]
-      # Restore default pipeline (specs like rate_limiting/sampling modify it)
-      if $e11y_default_pipeline_middlewares # rubocop:todo Style/GlobalVars
-        E11y.config.pipeline.middlewares.replace(
-          Marshal.load(Marshal.dump($e11y_default_pipeline_middlewares)) # rubocop:todo Style/GlobalVars
-        )
-        E11y.config.instance_variable_set(:@built_pipeline, nil)
-      end
-      # Ensure Yabeda.e11y exists (yabeda_integration_spec may call Yabeda.reset!)
-      if defined?(Yabeda) && (!Yabeda.respond_to?(:e11y) || !Yabeda.e11y)
-        begin
-          Yabeda.configure do
-            group :e11y do
-              # Empty - specs register their own metrics
-            end
-          end
-          Yabeda.configure! unless Yabeda.configured?
-        rescue StandardError => e
-          raise "Error configuring Yabeda: #{e.message}"
-        end
-      end
+
+      # Restore pipeline to prevent cross-spec pollution (like Cucumber hooks.rb)
+      E11y.config.pipeline.instance_variable_set(:@middlewares, INITIAL_PIPELINE_MIDDLEWARES.dup) if defined?(INITIAL_PIPELINE_MIDDLEWARES)
+      E11y.config.instance_variable_set(:@built_pipeline, nil)
     end
   end
 

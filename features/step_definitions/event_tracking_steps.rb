@@ -39,23 +39,6 @@ When("I make a GET request to {string} ignoring exceptions") do |path|
 end
 
 # ---------------------------------------------------------------------------
-# @wip step: calls E11y.track directly (currently raises NotImplementedError)
-# ---------------------------------------------------------------------------
-
-# This step calls E11y.track(event_instance) and captures any exception.
-# When the bug is fixed, @last_exception should be nil and the event should
-# appear in the memory adapter.
-When("I call E11y.track with a new Events::OrderCreated instance") do
-  @last_exception = nil
-  begin
-    event_instance = Events::OrderCreated.new
-    E11y.track(event_instance)
-  rescue StandardError => e
-    @last_exception = e
-  end
-end
-
-# ---------------------------------------------------------------------------
 # Exception assertions
 # ---------------------------------------------------------------------------
 
@@ -67,8 +50,8 @@ end
 Then("a {string} exception should have been raised") do |exception_class_name|
   expect(@last_exception).not_to be_nil,
                                  "Expected a #{exception_class_name} to be raised but no exception occurred."
-  expect(@last_exception.class.name).to eq(exception_class_name),
-                                        "Expected #{exception_class_name} but got #{@last_exception.class.name}: #{@last_exception.message}"
+  msg = "Expected #{exception_class_name} but got #{@last_exception.class.name}: #{@last_exception.message}"
+  expect(@last_exception.class.name).to eq(exception_class_name), msg
 end
 
 # ---------------------------------------------------------------------------

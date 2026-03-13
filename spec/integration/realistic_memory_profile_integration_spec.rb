@@ -17,9 +17,10 @@ require "memory_profiler"
 # retained = 0 IS asserted: if it fails, there is a real pipeline-level memory leak.
 
 RSpec.describe "Realistic Memory Profile", :integration do
-  # Route all events through NullAdapter — discards immediately, no retention.
+  # Route all events through NullAdapter with store_events: false — truly discards, no retention.
+  # (Default Null stores events for test assertion; memory profiling needs zero retention.)
   before do
-    E11y.config.adapters[:null] ||= E11y::Adapters::Null.new
+    E11y.config.adapters[:null] ||= E11y::Adapters::Null.new(store_events: false)
     E11y.config.fallback_adapters = [:null]
   end
 

@@ -64,7 +64,7 @@ RSpec.describe E11y::Adapters::Loki do
     stub_request(:post, "#{loki_url}/loki/api/v1/push")
       .to_return(status: 204, body: "", headers: {})
     stub_request(:get, "#{loki_url}/ready")
-      .to_return(status: 200, body: "ready", headers: {})
+      .to_return(status: 200, body: "", headers: {})
   end
 
   after do

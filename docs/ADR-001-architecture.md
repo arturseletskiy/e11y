@@ -1636,6 +1636,9 @@ Buffer → Adapters (receive normalized event_name)
 
 ## 5. Memory Optimization Strategy
 
+> **📖 For full design, implementation details, and trade-offs, see:**
+> **[ADR-018: Memory Optimization](ADR-018-memory-optimization.md)**
+
 ### 5.1. Zero-Allocation Pattern
 
 **Key Principle:** No object instances, only hashes.

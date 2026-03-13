@@ -36,7 +36,6 @@ namespace :spec do
   desc "Run integration tests (requires Rails, bundle install --with integration)"
   task :integration do
     # Run integration tests with explicit file patterns to avoid loading all specs
-    # This prevents test pollution from unit test files
     sh "INTEGRATION=true bundle exec rspec " \
        "spec/integration/*.rb " \
        "spec/e11y/adapters/*_spec.rb " \
@@ -49,7 +48,7 @@ namespace :spec do
     sh "bundle exec rspec spec/e11y/railtie_integration_spec.rb --tag railtie_integration"
   end
 
-  desc "Run all tests (unit + memory + integration + railtie, ~1736 examples)"
+  desc "Run all tests (unit + memory + integration + railtie + cucumber)"
   task :all do
     puts "\n#{'=' * 80}"
     puts "Running UNIT tests (spec/e11y + top-level specs)..."
@@ -70,6 +69,15 @@ namespace :spec do
     puts "Running RAILTIE tests (Rails initialization)..."
     puts "#{'=' * 80}\n"
     Rake::Task["spec:railtie"].invoke
+
+    if Rake::Task.task_defined?("cucumber:passing")
+      puts "\n#{'=' * 80}"
+      puts "Running CUCUMBER tests (features/, exclude @wip)..."
+      puts "#{'=' * 80}\n"
+      Rake::Task["cucumber:passing"].invoke
+    else
+      puts "\n⚠️  Skipping Cucumber (bundle install --with development)"
+    end
 
     puts "\n#{'=' * 80}"
     puts "✅ All test suites completed!"
@@ -99,14 +107,15 @@ namespace :spec do
        "--tag memory --format documentation"
   end
 
-  desc "Run ALL tests including benchmarks (very slow)"
+  desc "Run ALL tests including benchmarks and cucumber (very slow)"
   task :everything do
     puts "\n#{'=' * 80}"
-    puts "Running ALL tests (unit + integration + railtie + benchmarks)"
+    puts "Running ALL tests (unit + integration + railtie + cucumber + benchmarks)"
     puts "#{'=' * 80}\n"
     Rake::Task["spec:unit"].invoke
     Rake::Task["spec:integration"].invoke
     Rake::Task["spec:railtie"].invoke
+    Rake::Task["cucumber:passing"].invoke if Rake::Task.task_defined?("cucumber:passing")
     Rake::Task["spec:benchmark"].invoke
     Rake::Task["spec:memory"].invoke
 
@@ -200,9 +209,11 @@ namespace :release do
       )
 
       # Add new [Unreleased] section at the top
+      unreleased = "## [Unreleased]\n\n### Added\n\n### Changed\n\n### Fixed\n\n"
+      unreleased += "### Deprecated\n\n### Removed\n\n### Security\n\n\\1"
       updated_changelog = updated_changelog.sub(
         /(## \[#{Regexp.escape(new_version)}\] - #{today})/,
-        "## [Unreleased]\n\n### Added\n\n### Changed\n\n### Fixed\n\n### Deprecated\n\n### Removed\n\n### Security\n\n\\1"
+        unreleased
       )
 
       File.write(changelog_file, updated_changelog)
@@ -215,10 +226,10 @@ namespace :release do
       # Find where to insert (after the header, before first version)
 
       if /(## \[\d+\.\d+\.\d+\])/.match?(changelog_content)
-        updated_changelog = changelog_content.sub(
-          /(## \[\d+\.\d+\.\d+\])/,
-          "## [Unreleased]\n\n### Added\n\n### Changed\n\n### Fixed\n\n### Deprecated\n\n### Removed\n\n### Security\n\n## [#{new_version}] - #{today}\n\n### Added\n- Version bump\n\n\\1" # rubocop:disable Layout/LineLength
-        )
+        new_section = "## [Unreleased]\n\n### Added\n\n### Changed\n\n### Fixed\n\n"
+        new_section += "### Deprecated\n\n### Removed\n\n### Security\n\n"
+        new_section += "## [#{new_version}] - #{today}\n\n### Added\n- Version bump\n\n\\1"
+        updated_changelog = changelog_content.sub(/(## \[\d+\.\d+\.\d+\])/, new_section)
       else
         # No previous versions, add after header
         header_end = changelog_content.index("\n\n") || 0
@@ -446,7 +457,8 @@ begin
 
     desc "Run passing Cucumber scenarios (exclude @wip)"
     Cucumber::Rake::Task.new(:passing) do |t|
-      t.cucumber_opts = ["--tags", "not @wip", "--format", "progress", "features/"]
+      # Quote tag expression so shell keeps "not @wip" as one arg (Cucumber::Rake::Task uses cmd.join(' '))
+      t.cucumber_opts = ["--tags", '"not @wip"', "--format", "progress", "features/"]
     end
   end
 

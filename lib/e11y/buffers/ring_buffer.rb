@@ -216,14 +216,14 @@ module E11y
           push(event) # Retry push (recursive, but will succeed)
         when :drop_newest
           # Drop new event, keep buffer unchanged
-          increment_metric("e11y.buffer.overflow.drop_newest")
+          E11y::Metrics.increment(:e11y_buffer_overflow_total, event: "drop_newest")
           false
         when :block
           # Wait for space, with timeout
           wait_for_space
           if full?
             # Timeout reached, drop event
-            increment_metric("e11y.buffer.overflow.block_timeout")
+            E11y::Metrics.increment(:e11y_buffer_overflow_total, event: "block_timeout")
             false
           else
             push(event) # Retry after space freed
@@ -248,17 +248,6 @@ module E11y
           # Brief sleep to avoid busy-wait
           sleep 0.001 # 1ms
         end
-      end
-
-      # Increment metric (placeholder for Phase 3: Metrics)
-      #
-      # TODO Phase 3: Replace with actual Yabeda metrics
-      #
-      # @param metric_name [String] Metric to increment
-      # @return [void]
-      def increment_metric(metric_name)
-        # Placeholder - will be implemented in Phase 3
-        # Yabeda.e11y.buffer_overflow.increment(strategy: @overflow_strategy)
       end
     end
   end

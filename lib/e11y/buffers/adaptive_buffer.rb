@@ -285,7 +285,7 @@ module E11y
             # Check timeout
             if Time.now - wait_start > @max_block_time
               # Timeout exceeded - drop event
-              increment_metric("e11y.buffer.memory_exhaustion.dropped")
+              E11y::Metrics.increment(:e11y_buffer_overflow_total, event: "memory_exhaustion_dropped")
               return false
             end
 
@@ -294,12 +294,12 @@ module E11y
           end
 
           # Space available - retry add
-          increment_metric("e11y.buffer.memory_exhaustion.blocked")
+          E11y::Metrics.increment(:e11y_buffer_overflow_total, event: "memory_exhaustion_blocked")
           add_event(event_data)
 
         when :drop
           # Drop new event
-          increment_metric("e11y.buffer.memory_exhaustion.dropped")
+          E11y::Metrics.increment(:e11y_buffer_overflow_total, event: "memory_exhaustion_dropped")
           false
         end
       end
@@ -319,16 +319,6 @@ module E11y
         warn "E11y: Early flush callback failed: #{e.message}"
       end
 
-      # Increment metric (placeholder for Phase 3: Metrics)
-      #
-      # TODO Phase 3: Replace with actual Yabeda metrics
-      #
-      # @param metric_name [String] Metric to increment
-      # @return [void]
-      def increment_metric(metric_name)
-        # Placeholder - will be implemented in Phase 3
-        # Yabeda.e11y.buffer_memory_exhaustion.increment(strategy: @backpressure_strategy)
-      end
       # rubocop:enable Metrics/ClassLength
     end
   end

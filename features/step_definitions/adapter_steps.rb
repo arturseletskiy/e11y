@@ -136,6 +136,9 @@ end
 Then("calling healthy? should not raise an error") do
   expect(@health_error).to be_nil,
                            "healthy? raised: #{@health_error&.class}: #{@health_error&.message}"
+  expect(@health_result).to be(true),
+                            "Expected healthy? to return true when Loki is reachable, got: #{@health_result.inspect}. " \
+                            "Ensure Loki is running: docker-compose up -d loki"
 end
 
 # ---------------------------------------------------------------------------

@@ -31,16 +31,16 @@ RSpec.describe "Critical Adapters Integration", :integration do
         url: loki_url,
         labels: { app: "test_app", env: "test" },
         batch_size: 3,
-        batch_timeout: 1,
+        batch_timeout: 0.5, # Faster flush for tests
         compress: false
       )
     end
 
     before do
       require_dependency!("Faraday", gem_name: "faraday")
-      require_service!("Loki", url: loki_url, env_var: "LOKI_URL")
+      skip_unless_service!("Loki", url: loki_url, env_var: "LOKI_URL")
 
-      # Register Loki adapter
+      # Register Loki adapter (only reached when service is available)
       E11y.config.adapters[:loki] = loki_adapter
     end
 
@@ -82,7 +82,7 @@ RSpec.describe "Critical Adapters Integration", :integration do
 
       expect(entries.size).to be >= 1, "Event should appear in Loki"
       log_data = entries.first[:log]
-      payload = log_data["payload"] || log_data
+      payload = log_data["payload"] || log_data # Support both nested and flat formats
       expect(payload["test_id"]).to eq(1)
       expect(payload["message"]).to eq("Loki integration test")
     end
@@ -91,29 +91,28 @@ RSpec.describe "Critical Adapters Integration", :integration do
       # Setup: Loki adapter with batch_size: 3
       # Test: Track 5 events
       # Expected: All 5 events appear in Loki (may be batched)
-
-      test_event_class = Class.new(E11y::Event::Base) do
+      # Use unique event name to avoid pollution from previous test runs (Loki persists data)
+      batch_id = SecureRandom.hex(4)
+      batch_event_class = Class.new(E11y::Event::Base) do
         adapters :loki
       end
-      stub_const("Events::TestLokiBatch", test_event_class)
+      stub_const("Events::TestLokiBatch#{batch_id}", batch_event_class)
 
       # Clear pipeline cache
       E11y.config.instance_variable_set(:@built_pipeline, nil)
 
       # Track 5 events
       5.times do |i|
-        Events::TestLokiBatch.track(test_id: i, message: "Batch test #{i}")
+        batch_event_class.track(test_id: i, message: "Batch test #{i}")
       end
 
-      # Wait for batch flush (batch_size 3 → 2 batches; batch_timeout 1s)
-      sleep(2.5)
-      loki_adapter.close
-
-      # Loki ingester may need time to flush chunks (chunk_max_age: 2s)
+      # Wait for batch flush (batch_timeout=0.5s) + Loki ingester chunk_idle_period=1s
       sleep(3)
+      loki_adapter.close
+      sleep(1) # Allow Loki to ingest after close
 
-      # Verify all 5 events appear in Loki (Loki may need time to index)
-      event_name_normalized = normalize_event_name_for_loki("Events::TestLokiBatch")
+      # Verify all 5 events appear in Loki
+      event_name_normalized = normalize_event_name_for_loki("Events::TestLokiBatch#{batch_id}")
       entries = wait_for_loki_events(
         loki_url,
         label_selector: { app: "test_app", env: "test", event_name: event_name_normalized },
@@ -121,12 +120,10 @@ RSpec.describe "Critical Adapters Integration", :integration do
         timeout: 15
       )
 
-      expect(entries.size).to be >= 5,
-                              "All 5 events should appear in Loki (got #{entries.size}). " \
-                              "Query: event_name=#{event_name_normalized}"
-      # Verify all test_ids 0-4 are present (payload may be nested; may have duplicates from other runs)
-      test_ids = entries.filter_map { |e| (e[:log]["payload"] || e[:log])["test_id"] }.uniq.sort
-      expect(test_ids).to include(0, 1, 2, 3, 4)
+      expect(entries.size).to eq(5), "All 5 events should appear in Loki (got #{entries.size})"
+      # Verify all test_ids are present (payload is nested in log)
+      test_ids = entries.map { |e| (e[:log]["payload"] || e[:log])["test_id"] }.sort
+      expect(test_ids).to eq([0, 1, 2, 3, 4])
     end
 
     it "includes static labels in Loki payload" do
@@ -288,7 +285,6 @@ RSpec.describe "Critical Adapters Integration", :integration do
   describe "OTel Logs Adapter Integration" do
     let(:otel_adapter) do
       require_dependency!("OpenTelemetry", gem_name: "opentelemetry-sdk")
-      require "opentelemetry-logs-sdk" # Provides OpenTelemetry::SDK::Logs
       require "e11y/adapters/otel_logs"
       E11y::Adapters::OTelLogs.new(
         service_name: "test_service",
@@ -298,7 +294,6 @@ RSpec.describe "Critical Adapters Integration", :integration do
 
     before do
       require_dependency!("OpenTelemetry", gem_name: "opentelemetry-sdk")
-      require "opentelemetry-logs-sdk" # Provides OpenTelemetry::SDK::Logs
 
       # Register OTel adapter
       E11y.config.adapters[:otel_logs] = otel_adapter
@@ -323,12 +318,13 @@ RSpec.describe "Critical Adapters Integration", :integration do
       stub_const("Events::TestOTel", test_event_class)
 
       logger = double("Logger")
-      otel_adapter.instance_variable_set(:@logger, logger)
+      double("LogRecord")
 
+      otel_adapter.instance_variable_set(:@logger, logger)
       expect(logger).to receive(:on_emit).with(hash_including(
                                                  body: "Events::TestOTel",
                                                  severity_number: 9,
-                                                 severity_text: "INFO"
+                                                 attributes: hash_including("event.name" => "Events::TestOTel", "service.name" => "test_service")
                                                ))
 
       Events::TestOTel.track(test_id: 1, message: "OTel integration test")
@@ -355,10 +351,13 @@ RSpec.describe "Critical Adapters Integration", :integration do
         stub_const("Events::TestOTelSeverity#{e11y_severity.to_s.capitalize}", test_event_class)
 
         logger = double("Logger")
-        otel_adapter.instance_variable_set(:@logger, logger)
+        log_record = double("LogRecord")
+
+        allow(otel_adapter).to receive(:logger).and_return(logger)
+        allow(OpenTelemetry::SDK::Logs::LogRecord).to receive(:new).and_return(log_record)
 
         # Verify severity_number is set correctly
-        expect(logger).to receive(:on_emit).with(
+        expect(OpenTelemetry::SDK::Logs::LogRecord).to receive(:new).with(
           hash_including(severity_number: otel_severity_number)
         )
 
@@ -380,18 +379,21 @@ RSpec.describe "Critical Adapters Integration", :integration do
       stub_const("Events::TestOTelPII", test_event_class)
 
       logger = double("Logger")
-      otel_adapter.instance_variable_set(:@logger, logger)
+      log_record = double("LogRecord")
+
+      allow(otel_adapter).to receive(:logger).and_return(logger)
+      allow(OpenTelemetry::SDK::Logs::LogRecord).to receive(:new).and_return(log_record)
 
       # Set context with PII and safe keys
       E11y::Current.trace_id = "trace-123"
       E11y::Current.span_id = "span-456"
       # Simulate PII in context (email, phone should be filtered)
 
-      # Verify baggage only contains allowlisted keys (attributes keys are strings like "event.email")
-      expect(logger).to receive(:on_emit).with(
+      # Verify baggage only contains allowlisted keys
+      expect(OpenTelemetry::SDK::Logs::LogRecord).to receive(:new).with(
         hash_including(
           body: anything,
-          attributes: hash_excluding("event.email", "event.phone", "event.password")
+          attributes: hash_excluding("event.email", "event.phone", "event.password") # PII should be filtered
         )
       )
 
@@ -404,27 +406,29 @@ RSpec.describe "Critical Adapters Integration", :integration do
     end
 
     it "maps event payload to OTel attributes" do
-      # Setup: Event with payload data, adapter with allowlist including test_id and message
+      # Setup: Event with payload data, adapter with allowlist including payload keys
       # Test: Track event
       # Expected: Payload mapped to OTel attributes (event.name, event.test_id, event.message)
 
-      # Use adapter with baggage_allowlist that includes payload keys for this test
       attributes_adapter = E11y::Adapters::OTelLogs.new(
         service_name: "test_service",
         baggage_allowlist: %i[trace_id span_id user_id test_id message]
       )
-      E11y.config.adapters[:otel_logs_attrs] = attributes_adapter
+      E11y.config.adapters[:otel_logs] = attributes_adapter
 
       test_event_class = Class.new(E11y::Event::Base) do
-        adapters :otel_logs_attrs
+        adapters :otel_logs
       end
       stub_const("Events::TestOTelAttributes", test_event_class)
 
       logger = double("Logger")
-      attributes_adapter.instance_variable_set(:@logger, logger)
+      log_record = double("LogRecord")
 
-      # Verify attributes include event payload (adapter uses "event." prefix for payload keys)
-      expect(logger).to receive(:on_emit).with(
+      allow(attributes_adapter).to receive(:logger).and_return(logger)
+      allow(OpenTelemetry::SDK::Logs::LogRecord).to receive(:new).and_return(log_record)
+
+      # Verify attributes include event payload (adapter uses "event.<key>" format)
+      expect(OpenTelemetry::SDK::Logs::LogRecord).to receive(:new).with(
         hash_including(
           attributes: hash_including(
             "event.name" => "Events::TestOTelAttributes",
@@ -434,10 +438,9 @@ RSpec.describe "Critical Adapters Integration", :integration do
         )
       )
 
-      E11y.config.instance_variable_set(:@built_pipeline, nil)
       Events::TestOTelAttributes.track(test_id: 1, message: "Attributes test")
-
-      E11y.config.adapters.delete(:otel_logs_attrs)
+    ensure
+      E11y.config.adapters[:otel_logs] = otel_adapter
     end
 
     it "handles OTel SDK errors gracefully" do
@@ -464,13 +467,14 @@ RSpec.describe "Critical Adapters Integration", :integration do
     end
 
     it "respects max_attributes limit for cardinality protection" do
-      # Setup: OTel adapter with max_attributes: 5
+      # Setup: OTel adapter with max_attributes: 5, allowlist including payload keys
       # Test: Track event with 10 attributes
-      # Expected: Only first 5 attributes included
+      # Expected: Only first 5 attributes included (event.name, service.name + 3 payload attrs)
 
       otel_adapter_limited = E11y::Adapters::OTelLogs.new(
         service_name: "test_service",
-        max_attributes: 5
+        max_attributes: 5,
+        baggage_allowlist: %i[trace_id span_id attr1 attr2 attr3 attr4 attr5 attr6 attr7 attr8 attr9 attr10]
       )
       E11y.config.adapters[:otel_logs_limited] = otel_adapter_limited
 
@@ -480,12 +484,16 @@ RSpec.describe "Critical Adapters Integration", :integration do
       stub_const("Events::TestOTelCardinality", test_event_class)
 
       logger = double("Logger")
-      otel_adapter_limited.instance_variable_set(:@logger, logger)
+      log_record = double("LogRecord")
 
-      # Verify attributes are limited
-      expect(logger).to receive(:on_emit) do |args|
+      allow(otel_adapter_limited).to receive(:logger).and_return(logger)
+      allow(OpenTelemetry::SDK::Logs::LogRecord).to receive(:new).and_return(log_record)
+
+      # Verify attributes are limited (event.name + service.name + first 3 payload attrs = 5)
+      expect(OpenTelemetry::SDK::Logs::LogRecord).to receive(:new) do |args|
         attributes = args[:attributes]
         expect(attributes.keys.length).to be <= 5, "Attributes should be limited to max_attributes"
+        log_record
       end
 
       Events::TestOTelCardinality.track(

@@ -15,8 +15,7 @@ module Events
 
     pii_filtering do
       masks :cvv
-      allows :payment_id, :amount, :currency, :card_number
-      # billing not in allows - nested PII (email, phone) filtered by pattern matching
+      allows :payment_id, :amount, :currency, :card_number, :billing
     end
 
     # Use fallback routing for integration tests

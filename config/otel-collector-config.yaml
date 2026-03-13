@@ -1,0 +1,44 @@
+# OpenTelemetry Collector config for E11y integration tests
+# Receives OTLP (logs, traces, metrics) and exports to debug + Loki
+#
+# Usage: docker compose up -d otel-collector
+# App sends to: http://localhost:4318 (HTTP) or localhost:4317 (gRPC)
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+exporters:
+  debug:
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+  # Forward logs to Loki (same backend as direct Loki adapter)
+  # Requires contrib image: otel/opentelemetry-collector-contrib
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug, loki]
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]

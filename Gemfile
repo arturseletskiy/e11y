@@ -60,11 +60,13 @@ group :integration do
   gem "sidekiq", "~> 7.0" # Sidekiq for job processing tests
 
   # OpenTelemetry SDK for OTel adapter tests
+  gem "opentelemetry-exporter-otlp-logs", "~> 0.2" # OTLP export to Collector
   gem "opentelemetry-logs-api", "~> 0.1"
   gem "opentelemetry-logs-sdk", "~> 0.1"
   gem "opentelemetry-sdk", "~> 1.0"
 
   # Yabeda for Yabeda adapter tests
+  gem "anyway_config", "~> 2.7" # anyway_config 2.8+ calls Rails.env at load time, breaking yabeda specs
   gem "yabeda", "~> 0.12" # Yabeda core
   gem "yabeda-prometheus", "~> 0.9" # Prometheus exporter
 
@@ -81,6 +83,7 @@ end
 group :development, :test do
   gem "bundler-audit", "~> 0.9" # Check for vulnerable dependencies
   gem "rubocop-performance", "~> 1.21" # Performance cops
+  gem "rubocop-rspec_rails", "~> 2.29.1" # 2.30+ required for rubocop >= 1.85 compatibility
   gem "simplecov", require: false
   gem "simplecov-cobertura", require: false
 end

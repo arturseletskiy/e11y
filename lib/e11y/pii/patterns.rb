@@ -40,6 +40,17 @@ module E11y
         PHONE
       ].freeze
 
+      # Patterns applied to STRING VALUES only (excludes PASSWORD_FIELDS).
+      # PASSWORD_FIELDS matches field names (password, token, api_key), not values.
+      # Applying it to values corrupts legitimate strings like "process_token_renewal_completed".
+      VALUE_PATTERNS = [
+        EMAIL,
+        SSN,
+        CREDIT_CARD,
+        IPV4,
+        PHONE
+      ].freeze
+
       # Field name patterns that indicate PII
       # Used for field-level detection (case-insensitive)
       FIELD_PATTERNS = {

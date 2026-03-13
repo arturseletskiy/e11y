@@ -130,7 +130,8 @@ RSpec.describe "Routing Middleware Integration", :integration do
       # Event should go to memory (from first rule)
       memory_events = find_events_by_class(memory_adapter, test_event_class)
       event_names = memory_adapter.events.map { |e| e[:event_name] }.uniq.inspect
-      msg = "Routing rule should route to memory adapter. Total events: #{memory_adapter.events.count}, event_names: #{event_names}"
+      msg = "Routing rule should route to memory adapter. Total events: #{memory_adapter.events.count}, " \
+            "event_names: #{event_names}"
       expect(memory_events.count).to eq(1), msg
     end
 
@@ -161,7 +162,8 @@ RSpec.describe "Routing Middleware Integration", :integration do
       # Event should go to fallback adapter (memory)
       memory_events = find_events_by_class(memory_adapter, test_event_class)
       event_names = memory_adapter.events.map { |e| e[:event_name] }.uniq.inspect
-      msg = "Event should be routed to fallback adapter when no rule matches. Total: #{memory_adapter.events.count}, event_names: #{event_names}"
+      msg = "Event should be routed to fallback adapter when no rule matches. Total events: " \
+            "#{memory_adapter.events.count}, event_names: #{event_names}"
       expect(memory_events.count).to eq(1), msg
     end
 
@@ -196,9 +198,9 @@ RSpec.describe "Routing Middleware Integration", :integration do
       # Event should go to memory adapter (long retention rule matches)
       memory_events = find_events_by_class(memory_adapter, test_event_class)
       event_names = memory_adapter.events.map { |e| e[:event_name] }.uniq.inspect
-      retention_until = memory_adapter.events.map { |e| e[:retention_until] }.uniq.inspect
-      msg = "Long retention event should route to memory adapter. Total: #{memory_adapter.events.count}, " \
-            "event_names: #{event_names}, retention_until: #{retention_until}"
+      retention_vals = memory_adapter.events.map { |e| e[:retention_until] }.uniq.inspect
+      msg = "Long retention event should route to memory adapter. Total events: #{memory_adapter.events.count}, " \
+            "event_names: #{event_names}, retention_until: #{retention_vals}"
       expect(memory_events.count).to eq(1), msg
     end
   end
@@ -251,8 +253,8 @@ RSpec.describe "Routing Middleware Integration", :integration do
       # This depends on implementation - verify graceful handling
       memory_events = memory_adapter.find_events("Events::TestNoFallback")
       # Accept either 0 (dropped) or 1 (default adapter) - both are valid behaviors
-      expect(memory_events.count).to be_between(0, 1),
-                                     "Event should be handled gracefully when no adapters available (dropped or default adapter)"
+      msg = "Event should be handled gracefully when no adapters available (dropped or default adapter)"
+      expect(memory_events.count).to be_between(0, 1), msg
     end
   end
 

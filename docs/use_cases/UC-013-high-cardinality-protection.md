@@ -13,12 +13,10 @@
 
 **The $68,000/month mistake:**
 ```ruby
-# ❌ CATASTROPHIC: Using user_id as metric label
-E11y.configure do |config|
-  config.metrics do
-    counter_for pattern: 'user.action',
-                name: 'user_actions_total',
-                tags: [:user_id, :action_type]  # ← 💸💸💸
+# ❌ CATASTROPHIC: Using user_id as metric label (event-level example - avoid!)
+class Events::UserAction < E11y::Event::Base
+  metrics do
+    counter :user_actions_total, tags: [:user_id, :action_type]  # ← 💸💸💸 DON'T
   end
 end
 
@@ -35,42 +33,24 @@ end
 - **Query timeouts** (PromQL queries take 30+ seconds)
 - **Incident during Black Friday** (metrics system collapsed)
 
-### E11y Solution
+### E11y Solution (Event-Level)
 
-**4-Layer Defense System + 99% Cost Reduction:**
+**Use low-cardinality tags in event-level metrics:**
 ```ruby
-# ✅ SAFE: Aggregate user_id → user_segment
-E11y.configure do |config|
-  config.metrics do
-    # Layer 1: Denylist (hard block)
-    forbidden_labels :user_id, :order_id, :session_id, :trace_id
-    
-    # Layer 2: Safe aggregation
-    counter_for pattern: 'user.action',
-                name: 'user_actions_total',
-                tags: [:user_segment, :action_type],  # ← 3 segments × 10 actions = 30 series
-                tag_extractors: {
-                  user_segment: ->(event) {
-                    user = User.find(event.payload[:user_id])
-                    user.segment  # 'free', 'paid', 'enterprise'
-                  }
-                }
-    
-    # Layer 3: Per-metric limits
-    cardinality_limit_for 'user_actions_total', max: 100
-    
-    # Layer 4: Dynamic monitoring
-    cardinality_monitoring do
-      warn_threshold 0.7   # Alert at 70%
-      auto_aggregate true  # Auto-fix if exceeded
-    end
+# ✅ SAFE: Use user_segment, not user_id
+class Events::UserAction < E11y::Event::Base
+  schema do
+    required(:user_id).filled(:string)
+    required(:action_type).filled(:string)
+    required(:user_segment).filled(:string)  # pre-aggregated: 'free', 'paid', 'enterprise'
+  end
+
+  metrics do
+    counter :user_actions_total, tags: [:user_segment, :action_type]  # 3 × 10 = 30 series
   end
 end
 
-# Result:
-# - 200 services × 10 segments × 5 dimensions = 10,000 series
-# - Datadog cost: $680/month
-# - Savings: $67,320/month (99% reduction) ✅
+# Result: low cardinality, manageable cost
 ```
 
 ---
@@ -428,85 +408,11 @@ Events::OrderPlaced.track(
 > - ✅ **Compliance stays intact:** Audit logs remain complete and unfiltered
 > - ✅ **Best of both worlds:** Safety for metrics + completeness for logs/errors
 
-**Universal denylist - NEVER use these as labels (for metrics adapters):**
-
-```ruby
-E11y.configure do |config|
-  config.metrics do
-    # === UNBOUNDED IDENTIFIERS (FORBIDDEN) ===
-    forbidden_labels :user_id, :customer_id, :account_id,
-                     :order_id, :transaction_id, :invoice_id,
-                     :session_id, :request_id, :trace_id, :span_id
-    
-    # === INFRASTRUCTURE (FORBIDDEN) ===
-    forbidden_labels :pod_uid, :container_id, :instance_id,
-                     :node_name  # If dynamic
-    
-    # === NETWORK/HTTP (FORBIDDEN) ===
-    forbidden_labels :url,          # With query strings
-                     :ip_address,
-                     :user_agent,
-                     :hostname      # If ephemeral
-    
-    # === TIME-BASED (FORBIDDEN) ===
-    forbidden_labels :timestamp, :created_at,
-                     :version      # Patch-level: 2.5.7234
-    
-    # === ENFORCEMENT ===
-    enforcement :strict  # ERROR on forbidden label usage
-    # OR
-    enforcement :warn    # Log warning but allow
-    # OR
-    enforcement :aggregate  # Auto-aggregate to "_other"
-  end
-end
-
-# Usage:
-counter_for pattern: 'user.action',
-            tags: [:user_id]  # ← ERROR: "user_id is forbidden!"
-
-# Development warning:
-# [E11y ERROR] Metric 'user.action_total' uses forbidden label 'user_id'
-# Cardinality explosion risk! Use 'user_segment' instead.
-```
+**Avoid these as metric tags:** user_id, customer_id, order_id, session_id, trace_id, url, ip_address, timestamp.
 
 ---
 
-### Layer 2: Allowlist (Strict Mode)
-
-**Only allow explicitly safe labels:**
-
-```ruby
-E11y.configure do |config|
-  config.metrics do
-    # Strict mode: ONLY these labels allowed
-    allowed_labels_only true
-    
-    # === BUSINESS DIMENSIONS (< 50 values) ===
-    allowed_labels :status,          # pending, paid, failed (4-10 values)
-                   :payment_method,  # card, paypal (5-20 values)
-                   :plan_tier        # free, pro, enterprise (3-5 values)
-    
-    # === INFRASTRUCTURE (< 20 values) ===
-    allowed_labels :env,             # production, staging, dev (3 values)
-                   :region,          # us-east, eu-west (5-20 values)
-                   :cluster,         # main, backup (2-5 values)
-                   :availability_zone
-    
-    # === HTTP/SERVICE (< 100 values) ===
-    allowed_labels :http_method,     # GET, POST, PUT, DELETE (10 values)
-                   :http_status_code, # 200, 404, 500 (50 values)
-                   :controller_action # UsersController#show (20-100 values)
-  end
-end
-
-# Usage:
-counter_for pattern: 'order.paid',
-            tags: [:currency]  # ← ERROR: "currency not in allowlist!"
-
-# Must explicitly allow:
-allowed_labels :currency  # USD, EUR, GBP (3-20 values)
-```
+### Layer 2: Safe Labels
 
 **Rule of thumb:**
 - ✅ **< 10 values** - Always safe
@@ -517,51 +423,7 @@ allowed_labels :currency  # USD, EUR, GBP (3-20 values)
 
 ### Layer 3: Per-Metric Limits
 
-**Set cardinality limits per metric:**
-
-```ruby
-E11y.configure do |config|
-  config.metrics do
-    # === GLOBAL DEFAULT ===
-    default_cardinality_limit 1_000
-    
-    # === PER-METRIC LIMITS ===
-    cardinality_limit_for 'http.requests' do
-      max_cardinality 2_000           # Higher limit for this metric
-      overflow_strategy :drop         # → Drop overflow events
-      overflow_sample_rate 0.1        # Sample 10% of overflow events
-    end
-    
-    cardinality_limit_for 'user.actions' do
-      max_cardinality 500             # Lower limit
-      overflow_strategy :drop         # Drop overflow events
-      overflow_alert true             # Alert on overflow
-    end
-    
-    cardinality_limit_for 'orders.paid' do
-      max_cardinality 100
-      overflow_strategy :alert        # Alert ops team + drop
-    end
-  end
-end
-
-# How it works:
-# 1. Track unique label combinations per metric
-# 2. If exceeds limit:
-#    - :drop → Discard overflow events (increment drop counter)
-#    - :alert → Alert ops team + drop
-# 
-# NOTE: For aggregation/relabeling (e.g., user_id → user_segment),
-#       use tag_extractors (see "Aggregation" section below), 
-#       NOT overflow_strategy.
-```
-
-**Overflow strategies:**
-
-| Strategy | Behavior | Use Case |
-|----------|----------|----------|
-| `:drop` | Discard overflow events | Default, simplest |
-| `:alert` | Alert ops team + drop | Critical metrics |
+**Yabeda adapter supports cardinality limits** via its config. Use low-cardinality tags in event-level metrics.
 
 #### Thread Safety
 
@@ -2097,7 +1959,7 @@ end
 
 ## 📚 Related Use Cases
 
-- **[UC-003: Pattern-Based Metrics](./UC-003-pattern-based-metrics.md)** - Auto-generate metrics
+- **[UC-003: Event Metrics](./UC-003-event-metrics.md)** - Metrics in event classes
 - **[UC-008: OpenTelemetry Integration](./UC-008-opentelemetry-integration.md)** - OTLP cardinality protection (C04)
 - **[UC-015: Cost Optimization](./UC-015-cost-optimization.md)** - Reduce observability costs
 

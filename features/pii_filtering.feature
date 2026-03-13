@@ -49,10 +49,6 @@ Feature: PII Filtering
     Then 1 event of type "Events::PaymentSubmitted" should have been tracked
     And the last "Events::PaymentSubmitted" event's field "cvv" should be filtered
 
-  # BUG-010: pii_filtering { allows :card_number } does not protect against
-  # apply_pattern_filtering. The CREDIT_CARD regex matches "4111111111111111"
-  # and replaces it with "[FILTERED]" even though the field is explicitly allowed.
-  # The allows directive bypasses field-level masking but NOT pattern-based value filtering.
   Scenario: Card number is retained when explicitly allowed in pii_filtering config
     # pii_filtering allows :card_number — expect value to pass through unchanged.
     # BUG: apply_pattern_filtering runs after field strategies and catches the card number.
@@ -71,17 +67,11 @@ Feature: PII Filtering
     Then 1 event of type "Events::ProtectedRequest" should have been tracked
     And the last "Events::ProtectedRequest" event's field "authorization" should be filtered
 
-  # BUG-008: filter_string_patterns applies PASSWORD_FIELDS regex to string values.
-  # "process_token_renewal_completed" → "process_[FILTERED]_renewal_completed"
-  # The word "token" inside a non-sensitive status string is corrupted.
   Scenario: Legitimate status string containing the word "token" is not corrupted
     When I POST order params with a token-like status to "/orders"
     Then 1 event of type "Events::OrderCreated" should have been tracked
     And the last "Events::OrderCreated" event's field "status" should equal "process_token_renewal_completed"
 
-  # BUG-009: Same root cause — filter_string_patterns applies PASSWORD_FIELDS to values.
-  # "password_reset_email_sent" → "[FILTERED]_reset_email_sent"
-  # A status string containing "password" as a substring is corrupted.
   Scenario: Legitimate description containing the word "password" is not corrupted
     When I POST report params with description "password_reset_email_sent" to "/reports"
     Then 1 event of type "Events::ReportCreated" should have been tracked

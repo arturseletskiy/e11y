@@ -752,27 +752,15 @@ app_wide:
 ### 6.1. Yabeda Metrics Definition
 
 ```ruby
-# config/initializers/e11y.rb
-E11y.configure do |config|
-  config.metrics do
-    enabled true
-    adapter :yabeda
-    
-    # Define SLO metrics
-    Yabeda.configure do
-      group :e11y_slo do
-        # Availability metric (counter)
-        counter :event_result_total,
-                comment: "Total count of Event SLO results (success/failure)",
-                tags: [:event_class, :slo_name, :slo_status]  # slo_status = 'success' | 'failure'
-        
-        # Latency metric (histogram)
-        histogram :event_duration_seconds,
-                  comment: "Event processing duration for SLO (seconds)",
-                  tags: [:event_class, :slo_name],
-                  buckets: [0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0]
-      end
-    end
+Yabeda.configure do
+  group :e11y_slo do
+    counter :event_result_total,
+            comment: "Event SLO results (success/failure)",
+            tags: [:event_class, :slo_name, :slo_status]
+    histogram :event_duration_seconds,
+              comment: "Event processing duration (seconds)",
+              tags: [:event_class, :slo_name],
+              buckets: [0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0]
   end
 end
 ```

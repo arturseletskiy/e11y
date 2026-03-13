@@ -12,7 +12,7 @@ rescue LoadError => e
         "Original error: #{e.message}"
 end
 
-# Pattern-based metrics integration tests for UC-003
+# Event metrics integration tests for UC-003
 # Tests pattern matching, label extraction, value extraction, and Yabeda integration
 #
 # Scenarios:
@@ -28,46 +28,19 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
   let(:yabeda_adapter) { E11y.config.adapters[:yabeda] }
   let(:registry) { E11y::Metrics::Registry.instance }
 
-  # Helper to reset Yabeda metric values (not definitions)
-  # This ensures test isolation without destroying metric definitions
-  def reset_yabeda_values!
-    return unless defined?(Yabeda) && Yabeda.configured?
-
-    # Get all metrics in :e11y group and clear their values
-    # Yabeda.metrics returns a hash: "group_name" => metric_object
-    Yabeda.metrics.each do |metric_name, metric|
-      # Filter only :e11y group metrics
-      next unless metric_name.to_s.start_with?("e11y_")
-
-      # Access internal storage and clear values
-      # This works for Counter, Gauge, and Histogram
-      values = metric.instance_variable_get(:@values)
-      values&.clear if values.respond_to?(:clear)
-    end
-  rescue StandardError => e
-    # Log but don't fail - this is just cleanup
-    warn "Could not reset Yabeda values: #{e.message}"
-  end
-
   before do
     memory_adapter.clear!
-    # Reset Yabeda metric values (not definitions) for test isolation
-    reset_yabeda_values!
 
-    # CRITICAL: Don't clear Registry - event classes were loaded in rails_helper
-    # and registered their metrics. Clearing would require reloading classes.
-    # The Registry is a singleton that persists across tests.
-
-    # Configure Yabeda adapter
-    yabeda_adapter_instance = E11y::Adapters::Yabeda.new(
-      auto_register: true
-    )
+    # Create adapter FIRST so it registers metrics via Yabeda.configure (before configure!)
+    # Yabeda.configure! freezes config — metrics must be registered before that
+    yabeda_adapter_instance = E11y::Adapters::Yabeda.new(auto_register: true)
     E11y.config.adapters[:yabeda] = yabeda_adapter_instance
 
-    # CRITICAL: In Rails environment, Yabeda.configure! was already called by Railtie
-    # We MUST NOT call Yabeda.configure! again - it will raise AlreadyConfiguredError
-    # Metrics are registered immediately when using Yabeda.configure (without bang)
-    # The :e11y group is already configured by Railtie or previous tests
+    # Apply Yabeda config if not yet applied (e.g. after Yabeda.reset! from yabeda_integration_spec)
+    Yabeda.configure! if defined?(Yabeda) && !Yabeda.configured?
+
+    # Reset Yabeda metric values (not definitions) for test isolation
+    reset_yabeda_values!
 
     # Configure fallback adapters (used when event has adapters [])
     # Events::OrderPaid uses `adapters []` to force fallback routing
@@ -106,8 +79,8 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
       # Verify pattern matching (metrics should be registered after event class loaded)
       event_name = Events::OrderPaid.event_name
       matching_metrics = registry.find_matching(event_name)
-      all_metrics = registry.all.map { |m| "#{m[:pattern]} -> #{m[:name]}" }.join(", ")
-      msg = "Expected metrics to be registered for #{event_name}. Registry size: #{registry.size}, All metrics: #{all_metrics}"
+      all_metrics_str = registry.all.map { |m| "#{m[:pattern]} -> #{m[:name]}" }.join(", ")
+      msg = "Expected metrics for #{event_name}. Registry: #{registry.size}, All: #{all_metrics_str}"
       expect(matching_metrics).not_to be_empty, msg
 
       # Find the specific metric we care about (ignore wildcard matches from other tests)
@@ -342,7 +315,7 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
       original_metrics.each { |m| registry.register(m) }
     end
 
-    it "meets performance requirements (<10μs per pattern match)" do # rubocop:todo RSpec/ExampleLength
+    it "meets performance requirements (<10μs per pattern match)" do
       # Setup: 100 registered metrics with various patterns
       # Test: Benchmark pattern matching speed for 10,000 events
       # Expected: Pattern matching speed <10μs per pattern match, no performance degradation
@@ -378,8 +351,8 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
       # Verify performance: <10μs per pattern match (realistic for Ruby regex)
       # Note: 10μs = 0.01ms = 0.00001 seconds
       # Ruby regex matching is typically 1-10μs per match, not nanoseconds
-      expect(average_time_microseconds).to be < 10,
-                                           "Expected average pattern matching time <10μs, got #{average_time_microseconds.round(3)}μs"
+      msg = "Expected average pattern matching time <10μs, got #{average_time_microseconds.round(3)}μs"
+      expect(average_time_microseconds).to be < 10, msg
 
       # Verify pattern compilation overhead: <1ms for 100 patterns
       compilation_times = []
@@ -402,8 +375,8 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
       avg_compilation_time = compilation_times.sum / compilation_times.size
       # Relaxed limit to 5ms to account for CI environment and slower machines
       # Original requirement was 1ms but this is too strict for integration tests
-      expect(avg_compilation_time).to be < 0.005,
-                                      "Expected pattern compilation time <5ms for 100 patterns, got #{(avg_compilation_time * 1000).round(3)}ms"
+      msg = "Expected pattern compilation <5ms for 100 patterns, got #{(avg_compilation_time * 1000).round(3)}ms"
+      expect(avg_compilation_time).to be < 0.005, msg
     end
   end
 end

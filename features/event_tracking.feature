@@ -2,24 +2,14 @@
 #
 # Verifies the core event tracking API:
 #   - EventClass.track(**payload) — the working path
-#   - E11y.track(event_instance)  — delegates to EventClass.track
 #   - Schema field capture in the memory adapter
 #   - No phantom events on failed Rails validations
 #   - Error-level events on unhandled exceptions
-#
-# Tag legend:
-#   @wip  — scenario exposes a known bug; expected to FAIL until the bug is fixed.
-#           Run: bundle exec rake cucumber:wip
 
 Feature: Core event tracking API
 
   Background:
     Given the application is running
-
-  Scenario: Calling E11y.track with an event instance delivers the event
-    When I call E11y.track with a new Events::OrderCreated instance
-    Then no exception should have been raised
-    And 1 event of type "Events::OrderCreated" should have been tracked
 
   # ---------------------------------------------------------------------------
   # Happy path — EventClass.track works correctly

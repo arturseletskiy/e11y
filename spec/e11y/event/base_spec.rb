@@ -433,6 +433,8 @@ RSpec.describe E11y::Event::Base do
           end
 
           audit_event true
+          adapters :stdout # Explicit adapters for unit test (routing validation)
+          contains_pii false # Tier 1 - skip Rails filter in unit tests (no Rails)
         end
 
         result = audit_class.track(data: "test")
@@ -448,6 +450,8 @@ RSpec.describe E11y::Event::Base do
 
           audit_event true
           retention_period 7.years
+          adapters :stdout # Explicit adapters for unit test (routing validation)
+          contains_pii false # Tier 1 - skip Rails filter in unit tests (no Rails)
         end
 
         result = audit_class.track(user_id: 123)

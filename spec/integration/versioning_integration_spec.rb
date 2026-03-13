@@ -67,10 +67,13 @@ RSpec.describe "Versioning Middleware Integration", :integration do
       # Check event in memory adapter
       # Note: After Versioning middleware, event_name is normalized to "order.paid"
       all_events = memory_adapter.events
-      order_paid_names = ["order.paid", "Events::OrderPaid"]
-      events = all_events.select { |e| order_paid_names.include?(e[:event_name]) }
-      event_names = all_events.map { |e| e[:event_name] }.uniq.inspect
-      expect(events.count).to eq(1), "Event should be stored in memory adapter. Total events: #{all_events.count}, event_names: #{event_names}"
+      valid_names = ["order.paid", "Events::OrderPaid"]
+      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
+      event_names_msg = "Total events: #{all_events.count}, event_names: #{all_events.map do |e|
+        e[:event_name]
+      end.uniq.inspect}"
+      msg = format("Event should be stored in memory adapter. %s", event_names_msg)
+      expect(events.count).to eq(1), msg
 
       event = events.first
       expect(event[:v]).to be_nil, "V1 events should not have `v:` field"
@@ -98,8 +101,8 @@ RSpec.describe "Versioning Middleware Integration", :integration do
       Events::OrderPaid.track(order_id: 123)
 
       all_events = memory_adapter.events
-      order_paid_names = ["order.paid", "Events::OrderPaid"]
-      events = all_events.select { |e| order_paid_names.include?(e[:event_name]) }
+      valid_names = ["order.paid", "Events::OrderPaid"]
+      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
       expect(events.count).to eq(1)
       expect(events.first[:event_name]).to eq("order.paid")
     end
@@ -128,10 +131,13 @@ RSpec.describe "Versioning Middleware Integration", :integration do
 
       # NOTE: After Versioning middleware, event_name is normalized to "order.paid"
       all_events = memory_adapter.events
-      order_paid_v2_names = ["order.paid", "Events::OrderPaidV2"]
-      events = all_events.select { |e| order_paid_v2_names.include?(e[:event_name]) }
-      event_names = all_events.map { |e| e[:event_name] }.uniq.inspect
-      expect(events.count).to eq(1), "Event should be stored in memory adapter. Total events: #{all_events.count}, event_names: #{event_names}"
+      valid_names = ["order.paid", "Events::OrderPaidV2"]
+      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
+      event_names_msg = "Total events: #{all_events.count}, event_names: #{all_events.map do |e|
+        e[:event_name]
+      end.uniq.inspect}"
+      msg = format("Event should be stored in memory adapter. %s", event_names_msg)
+      expect(events.count).to eq(1), msg
 
       event = events.first
       expect(event[:v]).to eq(2), "V2 events should have `v: 2` field"
@@ -159,8 +165,8 @@ RSpec.describe "Versioning Middleware Integration", :integration do
       Events::OrderPaidV3.track(order_id: 123, amount: 100.0, currency: "USD", tax: 10.0)
 
       all_events = memory_adapter.events
-      order_paid_v3_names = ["order.paid", "Events::OrderPaidV3"]
-      events = all_events.select { |e| order_paid_v3_names.include?(e[:event_name]) }
+      valid_names = ["order.paid", "Events::OrderPaidV3"]
+      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
       expect(events.count).to eq(1)
 
       event = events.first
@@ -189,8 +195,8 @@ RSpec.describe "Versioning Middleware Integration", :integration do
       Events::OrderPaidV2.track(order_id: 123)
 
       all_events = memory_adapter.events
-      order_paid_v2_names = ["order.paid", "Events::OrderPaidV2"]
-      events = all_events.select { |e| order_paid_v2_names.include?(e[:event_name]) }
+      valid_names = ["order.paid", "Events::OrderPaidV2"]
+      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
       expect(events.count).to eq(1)
       event = events.first
 
@@ -252,8 +258,8 @@ RSpec.describe "Versioning Middleware Integration", :integration do
       Events::UserSignupV2.track(user_id: 123)
 
       all_events = memory_adapter.events
-      user_signup_v2_names = ["user.signup", "Events::UserSignupV2"]
-      events = all_events.select { |e| user_signup_v2_names.include?(e[:event_name]) }
+      valid_names = ["user.signup", "Events::UserSignupV2"]
+      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
       expect(events.count).to eq(1)
       event = events.first
 
@@ -362,8 +368,8 @@ RSpec.describe "Versioning Middleware Integration", :integration do
       # Both should have same normalized event_name (enables version-agnostic queries)
       expect(v1_event[:event_name]).to eq("order.paid")
       expect(v2_event[:event_name]).to eq("order.paid")
-      expect(v1_event[:event_name]).to eq(v2_event[:event_name]),
-                                       "V1 and V2 events should have same normalized event_name for version-agnostic queries"
+      msg = "V1 and V2 events should have same normalized event_name for version-agnostic queries"
+      expect(v1_event[:event_name]).to eq(v2_event[:event_name]), msg
     end
   end
 end

@@ -38,12 +38,12 @@ RSpec.describe E11y::Adapters::OTelLogs, :integration do
   end
 
   describe "#initialize" do
-    it "sets default baggage allowlist" do
+    it "defaults to :all baggage allowlist (all payload keys pass through)" do
       allowlist = adapter.instance_variable_get(:@baggage_allowlist)
-      expect(allowlist).to include(:trace_id, :span_id, :request_id)
+      expect(allowlist).to eq(:all)
     end
 
-    it "accepts custom baggage allowlist" do
+    it "accepts custom baggage allowlist for backward compat" do
       custom_adapter = described_class.new(baggage_allowlist: [:custom_key])
       allowlist = custom_adapter.instance_variable_get(:@baggage_allowlist)
       expect(allowlist).to eq([:custom_key])
@@ -59,7 +59,7 @@ RSpec.describe E11y::Adapters::OTelLogs, :integration do
     let(:logger) { instance_double(OpenTelemetry::SDK::Logs::Logger) }
 
     before do
-      allow(adapter.instance_variable_get(:@logger)).to receive(:on_emit)
+      allow(adapter.instance_variable_get(:@logger)).to receive(:emit_log_record)
     end
 
     it "emits log record to OTel logger" do
@@ -67,7 +67,7 @@ RSpec.describe E11y::Adapters::OTelLogs, :integration do
     end
 
     it "returns false on error" do
-      allow(adapter).to receive(:build_emit_params).and_raise(StandardError, "OTel error")
+      allow(adapter).to receive(:build_log_record_params).and_raise(StandardError, "OTel error")
       expect(adapter.write(event_data)).to be false
     end
   end
@@ -126,15 +126,11 @@ RSpec.describe E11y::Adapters::OTelLogs, :integration do
         expect(attributes["event.version"]).to eq(2)
       end
 
-      it "prefixes payload attributes with 'event.'" do
-        # The baggage allowlist needs to include these keys
-        custom_adapter = described_class.new(
-          service_name: "test-service",
-          baggage_allowlist: %i[order_id amount user_id trace_id span_id]
-        )
-        attributes = custom_adapter.send(:build_attributes, event_data)
+      it "prefixes payload attributes with 'event.' and includes all business keys by default" do
+        attributes = adapter.send(:build_attributes, event_data)
         expect(attributes).to have_key("event.order_id")
         expect(attributes).to have_key("event.amount")
+        expect(attributes).to have_key("event.user_id")
       end
     end
   end
@@ -145,46 +141,45 @@ RSpec.describe E11y::Adapters::OTelLogs, :integration do
         event_name: "user.signup",
         severity: :info,
         payload: {
-          user_id: "user123", # Allowed
-          email: "user@example.com", # PII - should be dropped
-          phone: "+1234567890", # PII - should be dropped
-          trace_id: "trace123" # Allowed
+          user_id: "user123",
+          email: "user@example.com",
+          phone: "+1234567890",
+          trace_id: "trace123"
         }
       }
     end
 
-    it "only includes allowlisted keys in attributes" do
+    it "passes all keys through when baggage_allowlist is :all (default)" do
+      # PII stripping is handled upstream by Middleware::PIIFilter — not here.
+      # With :all, the adapter forwards whatever it receives.
+      attributes = adapter.send(:build_attributes, pii_event)
+      expect(attributes).to have_key("event.user_id")
+      expect(attributes).to have_key("event.email")
+    end
+
+    it "restricts to explicit allowlist when one is provided (backward compat)" do
       adapter_with_allowlist = described_class.new(
         baggage_allowlist: %i[user_id trace_id]
       )
 
       attributes = adapter_with_allowlist.send(:build_attributes, pii_event)
 
-      # Allowed keys present
       expect(attributes).to have_key("event.user_id")
       expect(attributes).to have_key("event.trace_id")
-
-      # PII keys dropped
       expect(attributes).not_to have_key("event.email")
       expect(attributes).not_to have_key("event.phone")
     end
 
-    it "uses default allowlist for safe keys" do
-      adapter.send(:build_attributes, event_data)
-
-      # Default allowlist includes these keys
-      expect(adapter.instance_variable_get(:@baggage_allowlist)).to include(:trace_id, :span_id)
+    it "baggage_allowed? returns true for all keys in :all mode" do
+      expect(adapter.send(:baggage_allowed?, :email)).to be(true)
+      expect(adapter.send(:baggage_allowed?, :ssn)).to be(true)
+      expect(adapter.send(:baggage_allowed?, :order_id)).to be(true)
     end
 
-    it "prevents PII leakage through baggage" do
-      # C08: Baggage must not contain PII
-      # Only explicitly allowlisted keys are sent
-
-      pii_keys = %i[email phone ssn credit_card]
-      pii_keys.each do |pii_key|
-        is_allowed = adapter.send(:baggage_allowed?, pii_key)
-        expect(is_allowed).to be(false), "PII key #{pii_key} should not be allowed"
-      end
+    it "baggage_allowed? returns false for non-allowlisted keys in restricted mode" do
+      restricted = described_class.new(baggage_allowlist: %i[user_id])
+      expect(restricted.send(:baggage_allowed?, :email)).to be(false)
+      expect(restricted.send(:baggage_allowed?, :user_id)).to be(true)
     end
   end
 
@@ -213,9 +208,7 @@ RSpec.describe E11y::Adapters::OTelLogs, :integration do
 
     it "protects against attribute explosion" do
       # C04: Prevent high-cardinality attributes from overwhelming OTel
-      adapter_with_limit = described_class.new(max_attributes: 20, baggage_allowlist: (1..100).map do |i|
-        :"key_#{i}"
-      end)
+      adapter_with_limit = described_class.new(max_attributes: 20)
       attributes = adapter_with_limit.send(:build_attributes, high_cardinality_event)
 
       # Cardinality protected (limited to max_attributes)
@@ -226,7 +219,7 @@ RSpec.describe E11y::Adapters::OTelLogs, :integration do
   describe "UC-008 compliance (OpenTelemetry Integration)" do
     it "sends events to OpenTelemetry Logs API" do
       # UC-008: E11y events sent to OTel Collector
-      allow(adapter.instance_variable_get(:@logger)).to receive(:on_emit)
+      allow(adapter.instance_variable_get(:@logger)).to receive(:emit_log_record)
 
       result = adapter.write(event_data)
       expect(result).to be true
@@ -241,9 +234,15 @@ RSpec.describe E11y::Adapters::OTelLogs, :integration do
     it "documents that OTel SDK is optional dependency" do
       # UC-008: OpenTelemetry integration is opt-in
       # User must add 'opentelemetry-sdk' to Gemfile
-
-      # This test documents the opt-in nature
       expect(described_class::DEFAULT_BAGGAGE_ALLOWLIST).to be_a(Array)
+    end
+
+    it "sends all payload attributes by default (no PII filter at adapter layer)" do
+      log_record = adapter.send(:build_log_record, event_data)
+      attrs = log_record.attributes
+      expect(attrs).to have_key("event.order_id")
+      expect(attrs).to have_key("event.amount")
+      expect(attrs).to have_key("event.user_id")
     end
   end
 
