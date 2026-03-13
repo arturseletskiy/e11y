@@ -6,7 +6,7 @@ require "e11y/tracing/faraday_middleware"
 
 RSpec.describe E11y::Tracing::FaradayMiddleware do
   before do
-    skip "Faraday not available" unless defined?(::Faraday)
+    skip "Faraday not available" unless defined?(Faraday)
 
     E11y::Current.reset
   end
@@ -22,17 +22,17 @@ RSpec.describe E11y::Tracing::FaradayMiddleware do
     captured = captured_headers
     proc do |env|
       captured.merge!(env.request_headers)
-      ::Faraday::Response.new(env)
+      Faraday::Response.new(env)
     end
   end
 
   let(:middleware) { described_class.new(faraday_app) }
 
   def build_env(headers = {})
-    ::Faraday::Env.from(
+    Faraday::Env.from(
       method: :get,
       url: URI("http://example.com/"),
-      request_headers: ::Faraday::Utils::Headers.new(headers)
+      request_headers: Faraday::Utils::Headers.new(headers)
     )
   end
 
@@ -80,7 +80,7 @@ RSpec.describe E11y::Tracing::FaradayMiddleware do
   describe "E11y::Tracing.install_faraday_middleware!" do
     it "registers :e11y_tracing middleware with Faraday" do
       E11y::Tracing.install_faraday_middleware!
-      expect(::Faraday::Request.lookup_middleware(:e11y_tracing)).to eq(described_class)
+      expect(Faraday::Request.lookup_middleware(:e11y_tracing)).to eq(described_class)
     end
 
     it "is idempotent — calling twice does not raise" do

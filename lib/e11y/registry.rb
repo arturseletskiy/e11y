@@ -110,7 +110,7 @@ module E11y
     #
     # Creates an empty, thread-safe registry backed by a Mutex-protected Hash.
     def initialize
-      @registry = {}        # event_name (String) => Array<Class>
+      @registry = {} # event_name (String) => Array<Class>
       @mutex = Mutex.new
     end
 
@@ -257,7 +257,7 @@ module E11y
       return nil unless klass.respond_to?(:compiled_schema)
 
       schema = klass.compiled_schema
-      return nil unless schema&.respond_to?(:key_map)
+      return nil unless schema.respond_to?(:key_map)
 
       schema.key_map.keys.map(&:name)
     rescue StandardError

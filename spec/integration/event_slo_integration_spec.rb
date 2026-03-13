@@ -430,7 +430,7 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
       # Mock Metrics.increment to raise only when EventSLO calls it (TraceContext runs first)
       allow(E11y::Metrics).to receive(:increment).and_call_original
       allow(E11y::Metrics).to receive(:increment).with(:slo_event_result_total, anything)
-        .and_raise(StandardError.new("Metric error"))
+                                                 .and_raise(StandardError.new("Metric error"))
 
       # Should not raise error (graceful handling)
       expect do

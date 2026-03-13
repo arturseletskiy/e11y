@@ -228,7 +228,7 @@ module E11y
           da = E11y.config.request_buffer&.debug_adapters
           return nil unless da&.any?
 
-          da.map { |name| E11y.configuration.adapters[name] }.compact
+          da.filter_map { |name| E11y.configuration.adapters[name] }
         end
 
         # Flush single event to adapters via pipeline or debug_adapters

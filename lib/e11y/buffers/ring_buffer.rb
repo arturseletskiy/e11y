@@ -249,7 +249,6 @@ module E11y
           sleep 0.001 # 1ms
         end
       end
-
     end
   end
 end

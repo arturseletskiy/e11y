@@ -36,7 +36,7 @@ RSpec.describe E11y::Tracing::Propagator do
       it "uses the provided ids instead of Current" do
         result = described_class.build_traceparent(
           trace_id: "aabbccddee001122334455667788aabb",
-          span_id:  "1122334455667788"
+          span_id: "1122334455667788"
         )
         expect(result).to eq("00-aabbccddee001122334455667788aabb-1122334455667788-01")
       end
@@ -45,7 +45,7 @@ RSpec.describe E11y::Tracing::Propagator do
         E11y::Current.trace_id = "ffffffffffffffffffffffffffffffff"
         result = described_class.build_traceparent(
           trace_id: "aabbccddee001122334455667788aabb",
-          span_id:  "deadbeefcafebabe"
+          span_id: "deadbeefcafebabe"
         )
         expect(result).to start_with("00-aabbccddee001122334455667788aabb-")
       end

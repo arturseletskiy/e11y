@@ -17,7 +17,7 @@ RSpec.describe E11y::Tracing::NetHTTPPatch do
   let(:http_subclass) do
     Class.new(Net::HTTP) do
       # Capture headers of requests passed to #request without making real network calls
-      def request(req, body = nil, &block)
+      def request(_req, _body = nil)
         # Return a minimal response-like object (don't actually connect)
         Net::HTTPResponse.new("1.1", "200", "OK")
       end
@@ -82,13 +82,13 @@ RSpec.describe E11y::Tracing::NetHTTPPatch do
   describe "E11y::Tracing.patch_net_http!" do
     it "prepends NetHTTPPatch into Net::HTTP" do
       E11y::Tracing.patch_net_http!
-      expect(Net::HTTP.ancestors).to include(E11y::Tracing::NetHTTPPatch)
+      expect(Net::HTTP.ancestors).to include(described_class)
     end
 
     it "is idempotent — calling twice does not double-prepend" do
       E11y::Tracing.patch_net_http!
       E11y::Tracing.patch_net_http!
-      patch_count = Net::HTTP.ancestors.count { |a| a == E11y::Tracing::NetHTTPPatch }
+      patch_count = Net::HTTP.ancestors.count { |a| a == described_class }
       expect(patch_count).to eq(1)
     end
   end

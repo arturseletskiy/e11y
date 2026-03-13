@@ -23,7 +23,7 @@ module E11y
       # @param req  [Net::HTTPRequest] Outgoing HTTP request object
       # @param body [String, nil]      Optional body
       # @return [Net::HTTPResponse]
-      def request(req, body = nil, &block)
+      def request(req, body = nil, &)
         header_value = Propagator.build_traceparent
         req[Propagator::TRACEPARENT_HEADER] = header_value if header_value && !req[Propagator::TRACEPARENT_HEADER]
         super

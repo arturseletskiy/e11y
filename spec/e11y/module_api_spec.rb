@@ -136,28 +136,28 @@ RSpec.describe E11y, "module API" do
       end
 
       it "returns true when a healthy adapter is registered for the severity" do
-        adapter = instance_double("E11y::Adapters::Base", healthy?: true)
+        adapter = instance_double(E11y::Adapters::Base, healthy?: true)
         described_class.configure { |c| c.adapters[:logs] = adapter }
 
         expect(described_class.enabled_for?(:info)).to be(true)
       end
 
       it "returns false when the matched adapter is unhealthy" do
-        adapter = instance_double("E11y::Adapters::Base", healthy?: false)
+        adapter = instance_double(E11y::Adapters::Base, healthy?: false)
         described_class.configure { |c| c.adapters[:logs] = adapter }
 
         expect(described_class.enabled_for?(:info)).to be(false)
       end
 
       it "returns false when adapter is registered but not under mapped name" do
-        adapter = instance_double("E11y::Adapters::Base", healthy?: true)
+        adapter = instance_double(E11y::Adapters::Base, healthy?: true)
         described_class.configure { |c| c.adapters[:unrelated] = adapter }
 
         expect(described_class.enabled_for?(:info)).to be(false)
       end
 
       it "returns false and does not raise when adapter.healthy? raises" do
-        adapter = instance_double("E11y::Adapters::Base")
+        adapter = instance_double(E11y::Adapters::Base)
         allow(adapter).to receive(:healthy?).and_raise(RuntimeError, "network down")
         described_class.configure { |c| c.adapters[:logs] = adapter }
 
@@ -205,7 +205,7 @@ RSpec.describe E11y, "module API" do
     end
 
     it "returns :closed for adapters without a circuit breaker" do
-      adapter = instance_double("E11y::Adapters::Base")
+      adapter = instance_double(E11y::Adapters::Base)
       allow(adapter).to receive(:respond_to?).with(:circuit_breaker_state).and_return(false)
       described_class.configure { |c| c.adapters[:logs] = adapter }
 

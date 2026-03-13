@@ -513,7 +513,7 @@ RSpec.describe "Reliability Features Integration", :integration do
             max_attempts: 2,
             base_delay_ms: 1,
             max_delay_ms: 5,
-            fail_on_error: true   # raise RetryExhaustedError so handle_reliability_error is called
+            fail_on_error: true # raise RetryExhaustedError so handle_reliability_error is called
           }
         }
       )
@@ -529,7 +529,7 @@ RSpec.describe "Reliability Features Integration", :integration do
     end
 
     after do
-      FileUtils.rm_rf(temp_dlq_dir) if Dir.exist?(temp_dlq_dir)
+      FileUtils.rm_rf(temp_dlq_dir)
     end
 
     it "does not raise ArgumentError during delivery failure (BUG-001 regression)" do
@@ -567,7 +567,10 @@ RSpec.describe "Reliability Features Integration", :integration do
       )
       stub_storage = instance_double(E11y::Reliability::DLQ::FileStorage)
       saved_entries = []
-      allow(stub_storage).to receive(:save) { |ev, metadata: {}| saved_entries << ev; "fake-id" }
+      allow(stub_storage).to receive(:save) { |ev, metadata: {}|
+        saved_entries << ev
+        "fake-id"
+      }
 
       failing_adapter.instance_variable_set(:@dlq_filter, filter)
       failing_adapter.instance_variable_set(:@dlq_storage, stub_storage)
@@ -595,7 +598,10 @@ RSpec.describe "Reliability Features Integration", :integration do
       )
       stub_storage = instance_double(E11y::Reliability::DLQ::FileStorage)
       saved_entries = []
-      allow(stub_storage).to receive(:save) { |ev, metadata: {}| saved_entries << ev; "fake-id" }
+      allow(stub_storage).to receive(:save) { |ev, metadata: {}|
+        saved_entries << ev
+        "fake-id"
+      }
 
       failing_adapter.instance_variable_set(:@dlq_filter, filter)
       failing_adapter.instance_variable_set(:@dlq_storage, stub_storage)
@@ -622,7 +628,10 @@ RSpec.describe "Reliability Features Integration", :integration do
       )
       stub_storage = instance_double(E11y::Reliability::DLQ::FileStorage)
       saved_entries = []
-      allow(stub_storage).to receive(:save) { |ev, metadata: {}| saved_entries << ev; "fake-id" }
+      allow(stub_storage).to receive(:save) { |ev, metadata: {}|
+        saved_entries << ev
+        "fake-id"
+      }
 
       failing_adapter.instance_variable_set(:@dlq_filter, filter)
       failing_adapter.instance_variable_set(:@dlq_storage, stub_storage)
@@ -750,7 +759,7 @@ RSpec.describe "Reliability Features Integration", :integration do
       # Second attempt: rate limiter allows 1 retry, blocks the rest
       # With :dlq on_limit_exceeded, handler returns nil after rate-limited retry
       expect(write_call_count.size).to be <= 3,
-        "Rate limiter with limit:1 should abort after the first blocked retry (got #{write_call_count.size} writes)"
+                                       "Rate limiter with limit:1 should abort after the first blocked retry (got #{write_call_count.size} writes)"
     end
 
     it "prevents thundering herd: N events each capped at rate limit" do
@@ -779,7 +788,7 @@ RSpec.describe "Reliability Features Integration", :integration do
       # Total writes must be <= 5 (initial attempts) + 2 (total allowed retries across all events)
       # = 7 maximum
       expect(write_call_count.size).to be <= 7,
-        "Thundering herd prevention: expected ≤7 total write calls, got #{write_call_count.size}"
+                                       "Thundering herd prevention: expected ≤7 total write calls, got #{write_call_count.size}"
     end
   end
 
@@ -798,7 +807,7 @@ RSpec.describe "Reliability Features Integration", :integration do
     end
 
     after do
-      FileUtils.rm_rf(temp_dlq_dir) if Dir.exist?(temp_dlq_dir)
+      FileUtils.rm_rf(temp_dlq_dir)
     end
 
     it "replays a saved event by ID through the pipeline" do
@@ -845,7 +854,7 @@ RSpec.describe "Reliability Features Integration", :integration do
 
       # id1 and id2 should attempt replay (success depends on pipeline config);
       # "bad-id" must fail
-      expect(result[:failure_count]).to be >= 1  # "bad-id" always fails
+      expect(result[:failure_count]).to be >= 1 # "bad-id" always fails
       expect(result[:success_count] + result[:failure_count]).to eq(3)
     end
   end
@@ -916,7 +925,7 @@ RSpec.describe "Reliability Features Integration", :integration do
     end
 
     after do
-      FileUtils.rm_rf(temp_dlq_dir) if Dir.exist?(temp_dlq_dir)
+      FileUtils.rm_rf(temp_dlq_dir)
     end
 
     it "DLQ storage.save receives an Exception object, not a String (BUG-003 regression)" do
@@ -933,7 +942,7 @@ RSpec.describe "Reliability Features Integration", :integration do
 
       expect(stub_storage).to have_received(:save).once
       expect(captured_metadata[:error]).to be_a(Exception),
-        "Expected metadata[:error] to be an Exception object, got #{captured_metadata[:error].class}"
+                                           "Expected metadata[:error] to be an Exception object, got #{captured_metadata[:error].class}"
       # Specifically must NOT be a String (that was the BUG-003 regression)
       expect(captured_metadata[:error]).not_to be_a(String)
       # And the Exception must carry the original message
@@ -950,14 +959,14 @@ RSpec.describe "Reliability Features Integration", :integration do
 
       entries = real_dlq.list(limit: 10)
       expect(entries.count).to eq(1),
-        "Expected exactly 1 DLQ entry after retry exhaustion, got #{entries.count}"
+                               "Expected exactly 1 DLQ entry after retry exhaustion, got #{entries.count}"
       expect(entries.first[:event_name]).to eq("payment.failed")
       # Verify error metadata was serialised correctly via Exception#message (not NoMethodError).
       # The error passed into save_to_dlq_if_needed is RetryExhaustedError (which wraps the
       # original Errno::ECONNREFUSED), so error_message includes the exhaustion text.
       saved_meta = entries.first[:metadata]
       expect(saved_meta[:error_message]).to include("adapter down"),
-        "Expected error_message to contain 'adapter down', got: #{saved_meta[:error_message].inspect}"
+                                            "Expected error_message to contain 'adapter down', got: #{saved_meta[:error_message].inspect}"
       expect(saved_meta[:error_class]).to eq("E11y::Reliability::RetryHandler::RetryExhaustedError")
     end
 
@@ -972,7 +981,7 @@ RSpec.describe "Reliability Features Integration", :integration do
       end.not_to raise_error
 
       expect(result).to be(false),
-        "Expected write_with_reliability to return false on retry exhaustion, got #{result.inspect}"
+                        "Expected write_with_reliability to return false on retry exhaustion, got #{result.inspect}"
     end
 
     it "write_with_reliability raises when global fail_on_error: true" do
@@ -1056,7 +1065,7 @@ RSpec.describe "Reliability Features Integration", :integration do
 
     it "eventually succeeds after N transient failures (fewer than max_attempts)" do
       call_count = 0
-      failures = 2  # Less than max_attempts(3) so should succeed on 3rd call
+      failures = 2 # Less than max_attempts(3) so should succeed on 3rd call
 
       allow(adapter).to receive(:write) do
         call_count += 1

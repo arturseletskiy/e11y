@@ -42,9 +42,11 @@ Then("those debug events should have been generated during that request") do
   # Flushed events went through the pipeline (have trace_id) and match the controller's PostDebug event
   expect(events).not_to be_empty
   expect(events).to all(include(:trace_id)),
-    "Expected flushed debug events to have trace_id (proving they went through the pipeline)."
+                    "Expected flushed debug events to have trace_id (proving they went through the pipeline)."
   expect(events.map { |e| e[:event_name] }.uniq).to include("Events::PostDebug"),
-    "Expected PostDebug events from the controller; got: #{events.map { |e| e[:event_name] }.uniq.inspect}"
+                                                    "Expected PostDebug events from the controller; got: #{events.map do |e|
+                                                      e[:event_name]
+                                                    end.uniq.inspect}"
 end
 
 Then("at least {int} event with severity {string} should be in the adapter") do |min, severity|

@@ -140,7 +140,7 @@ module E11y
       end
 
       # Handle failed execution in CLOSED state.
-      def on_failure(error)
+      def on_failure(_error)
         @mutex.synchronize do
           @failure_count += 1
           @last_failure_time = Time.now

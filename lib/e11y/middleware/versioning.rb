@@ -78,7 +78,7 @@ module E11y
         incoming = klass.event_name if incoming.nil? && klass.respond_to?(:event_name)
         incoming = incoming.to_s
         # Custom uses dot notation ("order.paid"); default from Base uses "::"
-        event_data[:event_name] = (incoming != "" && !incoming.include?("::")) ? incoming : normalized_for(klass)
+        event_data[:event_name] = incoming != "" && !incoming.include?("::") ? incoming : normalized_for(klass)
 
         @app&.call(event_data) || event_data
       end

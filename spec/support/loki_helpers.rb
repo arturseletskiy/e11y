@@ -8,7 +8,7 @@ module LokiHelpers
   # @param label_selector [Hash] Label selector (e.g., { app: "test_app", event_name: "test.event" })
   # @param limit [Integer] Maximum number of results (default: 100)
   # @return [Array<Hash>] Array of log entries
-  def query_loki_logs(loki_url, label_selector:, limit: 100) # rubocop:todo Metrics/AbcSize
+  def query_loki_logs(loki_url, label_selector:, limit: 100)
     require "net/http"
     require "uri"
     require "json"

@@ -782,7 +782,7 @@ RSpec.describe "Sampling Middleware Integration", :integration do
       # event_data[:payload][:amount] where track() puts the user fields.
       track_api_event_class = Class.new(E11y::Event::Base) do
         severity :info
-        sample_rate 0.0       # never sampled without value rule
+        sample_rate 0.0 # never sampled without value rule
         contains_pii false
         sample_by_value :amount, greater_than: 1000
 
@@ -924,7 +924,7 @@ RSpec.describe "Sampling Middleware Integration", :integration do
     end
 
     it "is thread-safe under concurrent writes" do
-      threads = 10.times.map do |i|
+      threads = Array.new(10) do |i|
         Thread.new do
           100.times do
             tracker.record_sample(

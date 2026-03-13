@@ -100,7 +100,7 @@ module E11y
           block_result = nil
           if block
             start = Process.clock_gettime(Process::CLOCK_MONOTONIC, :millisecond)
-            block_result = block.call
+            block_result = yield
             payload = payload.merge(duration_ms: Process.clock_gettime(Process::CLOCK_MONOTONIC, :millisecond) - start)
           end
 
@@ -256,9 +256,7 @@ module E11y
         #   end
         def severity(value = nil)
           if value
-            unless SEVERITIES.include?(value)
-              raise ArgumentError, "Invalid severity: #{value}. Must be one of: #{SEVERITIES.join(', ')}"
-            end
+            raise ArgumentError, "Invalid severity: #{value}. Must be one of: #{SEVERITIES.join(', ')}" unless SEVERITIES.include?(value)
 
             @severity = value
           end
@@ -317,16 +315,14 @@ module E11y
           @retention_period = value if value
           # Return explicitly set retention_period OR inherit from parent (if set) OR config default OR final fallback
           return @retention_period if @retention_period
-          if superclass != E11y::Event::Base && superclass.instance_variable_get(:@retention_period)
-            return superclass.retention_period
-          end
+          return superclass.retention_period if superclass != E11y::Event::Base && superclass.instance_variable_get(:@retention_period)
 
           # Fallback to configuration or 30 days
           E11y.configuration&.default_retention_period || 30.days
         end
 
         # Convenience alias — matches Quick Start documentation.
-        alias_method :retention, :retention_period
+        alias retention retention_period
 
         # Set or get adapters for this event
         #
@@ -412,7 +408,6 @@ module E11y
         #   class CriticalEvent < E11y::Event::Base
         #     sample_rate 1.0  # 100% sampling
         #   end
-        # rubocop:disable Metrics/CyclomaticComplexity
         def sample_rate(value = nil)
           if value
             unless value.is_a?(Numeric) && value >= 0.0 && value <= 1.0
@@ -424,13 +419,10 @@ module E11y
 
           # Return explicitly set sample_rate OR inherit from parent (if set) OR nil (use resolve_sample_rate)
           return @sample_rate if @sample_rate
-          if superclass != E11y::Event::Base && superclass.instance_variable_get(:@sample_rate)
-            return superclass.sample_rate
-          end
+          return superclass.sample_rate if superclass != E11y::Event::Base && superclass.instance_variable_get(:@sample_rate)
 
           nil
         end
-        # rubocop:enable Metrics/CyclomaticComplexity
 
         # Configure value-based sampling (FEAT-4849)
         #
@@ -507,9 +499,7 @@ module E11y
 
           # Return explicitly set config OR inherit from parent (if set) OR nil
           return @adaptive_sampling if @adaptive_sampling
-          if superclass != E11y::Event::Base && superclass.instance_variable_get(:@adaptive_sampling)
-            return superclass.adaptive_sampling
-          end
+          return superclass.adaptive_sampling if superclass != E11y::Event::Base && superclass.instance_variable_get(:@adaptive_sampling)
 
           nil
         end
@@ -653,6 +643,7 @@ module E11y
         def contains_pii(value = nil)
           if value.nil?
             return superclass.contains_pii if !instance_variable_defined?(:@contains_pii) && superclass.respond_to?(:contains_pii)
+
             @contains_pii
           else
             @contains_pii = value
@@ -679,13 +670,13 @@ module E11y
         #     hashes :email, :phone
         #     allows :user_id, :amount
         #   end
-        def pii_filtering(&block)
+        def pii_filtering(&)
           if @pii_filtering_config.nil?
             parent_config = superclass.respond_to?(:pii_filtering_config) && superclass.pii_filtering_config
             @pii_filtering_config = parent_config ? { fields: parent_config[:fields].dup } : { fields: {} }
           end
           builder = PIIFilteringBuilder.new(@pii_filtering_config)
-          builder.instance_eval(&block)
+          builder.instance_eval(&)
         end
 
         # Get PII filtering configuration (inherits from superclass if not defined)
@@ -693,7 +684,8 @@ module E11y
         # @return [Hash, nil] PII filtering config
         def pii_filtering_config
           return @pii_filtering_config if instance_variable_defined?(:@pii_filtering_config) && @pii_filtering_config
-          return superclass.pii_filtering_config if superclass.respond_to?(:pii_filtering_config)
+
+          superclass.pii_filtering_config if superclass.respond_to?(:pii_filtering_config)
         end
 
         # PII Filtering DSL Builder
@@ -896,9 +888,7 @@ module E11y
         #   metric :counter, name: :orders_total, tags: [:currency]
         #   metric :histogram, name: :order_amount, value: :amount, tags: [:currency]
         def metric(type, name:, **opts)
-          unless %i[counter histogram gauge].include?(type)
-            raise ArgumentError, "Unknown metric type: #{type}. Use :counter, :histogram, or :gauge"
-          end
+          raise ArgumentError, "Unknown metric type: #{type}. Use :counter, :histogram, or :gauge" unless %i[counter histogram gauge].include?(type)
 
           @metrics_config ||= []
           @metrics_config << { type: type, name: name }.merge(opts).compact
@@ -1006,7 +996,6 @@ module E11y
           end
         end
       end
-
     end
     # rubocop:enable Metrics/ClassLength
   end

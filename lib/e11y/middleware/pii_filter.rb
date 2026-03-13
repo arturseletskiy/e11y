@@ -147,7 +147,7 @@ module E11y
       # @param payload [Hash] Payload to filter
       # @param config [Hash] PII configuration
       # @return [Hash] Filtered payload
-      # rubocop:disable Metrics/CyclomaticComplexity, Metrics/MethodLength
+      # rubocop:disable Metrics/MethodLength
       # Field strategies require case/when for each PII filtering strategy type
       def apply_field_strategies(payload, config)
         return payload unless config
@@ -180,7 +180,7 @@ module E11y
 
         filtered
       end
-      # rubocop:enable Metrics/CyclomaticComplexity, Metrics/MethodLength
+      # rubocop:enable Metrics/MethodLength
 
       # Apply pattern-based filtering to string values
       #
@@ -294,10 +294,10 @@ module E11y
         return @parameter_filter if defined?(@parameter_filter) && !@parameter_filter.nil?
 
         filters = if defined?(Rails) && Rails.application
-          Rails.application.config.filter_parameters
-        else
-          []
-        end
+                    Rails.application.config.filter_parameters
+                  else
+                    []
+                  end
         @parameter_filter = ActiveSupport::ParameterFilter.new(filters)
       end
     end

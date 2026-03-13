@@ -104,7 +104,6 @@ module E11y
           E11y::Metrics.increment(:e11y_retry_rate_limiter_total, adapter: adapter_name, event: "dlq", delay_sec: "")
         end
       end
-
     end
   end
 end

@@ -122,7 +122,6 @@ module E11y
 
         "Validation failed for #{event_class.name}: #{error_details}"
       end
-
     end
   end
 end

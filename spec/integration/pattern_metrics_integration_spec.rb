@@ -37,9 +37,7 @@ RSpec.describe "Pattern-Based Metrics Integration", :integration do
     E11y.config.adapters[:yabeda] = yabeda_adapter_instance
 
     # Apply Yabeda config if not yet applied (e.g. after Yabeda.reset! from yabeda_integration_spec)
-    if defined?(Yabeda) && !Yabeda.configured?
-      Yabeda.configure!
-    end
+    Yabeda.configure! if defined?(Yabeda) && !Yabeda.configured?
 
     # Reset Yabeda metric values (not definitions) for test isolation
     reset_yabeda_values!

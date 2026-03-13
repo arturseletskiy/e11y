@@ -22,7 +22,7 @@ RSpec.describe E11y::Generators::PrometheusAlertsGenerator, type: :generator do
     yield
   end
 
-  tests E11y::Generators::PrometheusAlertsGenerator
+  tests described_class
   destination File.expand_path("../../../tmp/generators/prometheus", __dir__)
 
   before do
@@ -97,7 +97,7 @@ RSpec.describe E11y::Generators::PrometheusAlertsGenerator, type: :generator do
         parsed = YAML.safe_load(content.force_encoding("UTF-8"))
         e11y_group = parsed["groups"].find { |g| g["name"] == "e11y" }
         e11y_group["rules"].each do |rule|
-          expect(rule).to have_key("expr"), "Rule #{rule["alert"].inspect} is missing expr"
+          expect(rule).to have_key("expr"), "Rule #{rule['alert'].inspect} is missing expr"
         end
       end
     end
@@ -109,7 +109,7 @@ RSpec.describe E11y::Generators::PrometheusAlertsGenerator, type: :generator do
         e11y_group = parsed["groups"].find { |g| g["name"] == "e11y" }
         e11y_group["rules"].each do |rule|
           expect(rule["annotations"]).to have_key("summary"),
-            "Rule #{rule["alert"].inspect} is missing annotations.summary"
+                                         "Rule #{rule['alert'].inspect} is missing annotations.summary"
         end
       end
     end

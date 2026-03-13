@@ -182,9 +182,7 @@ Then("the last versioned {string} event does not have a {string} field") do |eve
                             "but it was present with value: #{last_event[key].inspect}"
 end
 
-# rubocop:disable Layout/LineLength
 Then("the last versioned {string} event has a {string} field equal to {int}") do |event_class_name, field_name, expected_value|
-  # rubocop:enable Layout/LineLength
   events = find_versioned_events(event_class_name)
   expect(events).not_to be_empty,
                         "No events found for class #{event_class_name}"

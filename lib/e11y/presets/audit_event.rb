@@ -65,6 +65,7 @@ module E11y
         def adapters(*list)
           @adapters = list.flatten if list.any?
           return @adapters if @adapters
+
           []
         end
       end

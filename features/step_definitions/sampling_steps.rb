@@ -28,9 +28,7 @@ Given("the Sampling middleware is reconfigured with trace_aware false and defaul
   reconfigure_sampling_middleware(default_sample_rate: rate, trace_aware: false)
 end
 
-# rubocop:disable Layout/LineLength
 Given("the Sampling middleware is reconfigured with error_based_adaptive true and default_sample_rate {float}") do |rate|
-  # rubocop:enable Layout/LineLength
   reconfigure_sampling_middleware(
     default_sample_rate: rate,
     trace_aware: false,
@@ -117,9 +115,7 @@ Given("a LoadMonitor with normal threshold {int} events per second and window {i
   )
 end
 
-# rubocop:disable Layout/LineLength
 Given("a LoadMonitor with normal threshold {int}, high threshold {int} events per second and window {int} second") do |normal, high, window|
-  # rubocop:enable Layout/LineLength
   @load_monitor = E11y::Sampling::LoadMonitor.new(
     window: window,
     thresholds: { normal: normal, high: high, very_high: high * 2, overload: high * 4 }

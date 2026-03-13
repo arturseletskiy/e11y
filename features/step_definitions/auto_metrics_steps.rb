@@ -57,9 +57,7 @@ When("I define an event class with a histogram {string} and buckets {int} {int} 
   end
 end
 
-# rubocop:disable Layout/LineLength
 Then("the Metrics Registry should contain a histogram {string} with buckets {int} {int} {int} {int}") do |name, b1, b2, b3, b4|
-  # rubocop:enable Layout/LineLength
   expected_buckets = [b1, b2, b3, b4]
   registry = E11y::Metrics::Registry.instance
   entry = registry.all.find { |m| m[:name] == name.to_sym && m[:type] == :histogram }
@@ -151,8 +149,8 @@ Then("at least 1 internal middleware metric should have been tracked") do
   trace_context_metrics = ["e11y.middleware.trace_context.processed", :e11y_middleware_trace_context_processed]
   found = calls.any? { |c| trace_context_metrics.include?(c) }
   expect(found).to be(true),
-                    "Expected TraceContext middleware to call E11y::Metrics.increment, " \
-                    "but calls were: #{calls.inspect}"
+                   "Expected TraceContext middleware to call E11y::Metrics.increment, " \
+                   "but calls were: #{calls.inspect}"
 
   backend = E11y::Metrics.backend
   expect(backend).not_to be_nil,

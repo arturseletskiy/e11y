@@ -139,7 +139,6 @@ module E11y
       #
       #   apply_routing_rules(event_data)
       #   # => [:audit_encrypted] or [:loki] or [:archive]
-      # rubocop:disable Metrics/AbcSize
       def apply_routing_rules(event_data)
         matched_adapters = []
 
@@ -162,7 +161,6 @@ module E11y
           E11y.configuration.fallback_adapters || [:stdout]
         end
       end
-      # rubocop:enable Metrics/AbcSize
 
       # Log routing decision for debugging.
       #
@@ -197,7 +195,6 @@ module E11y
       # @param target_adapters [Array<Symbol>] Target adapters
       # @raise [E11y::Error] if audit event misconfigured
       # @return [void]
-      # rubocop:disable Metrics/MethodLength
       def validate_audit_routing!(event_data, target_adapters)
         return unless event_data[:audit_event]
 
@@ -230,7 +227,6 @@ module E11y
 
         raise E11y::Error, error_message
       end
-      # rubocop:enable Metrics/MethodLength
     end
   end
 end

@@ -144,9 +144,7 @@ RSpec.configure do |config|
       adapter.clear! if adapter.respond_to?(:clear!)
 
       # Restore pipeline to prevent cross-spec pollution (like Cucumber hooks.rb)
-      if defined?(INITIAL_PIPELINE_MIDDLEWARES)
-        E11y.config.pipeline.instance_variable_set(:@middlewares, INITIAL_PIPELINE_MIDDLEWARES.dup)
-      end
+      E11y.config.pipeline.instance_variable_set(:@middlewares, INITIAL_PIPELINE_MIDDLEWARES.dup) if defined?(INITIAL_PIPELINE_MIDDLEWARES)
       E11y.config.instance_variable_set(:@built_pipeline, nil)
     end
   end

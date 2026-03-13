@@ -124,7 +124,7 @@ module E11y
 
         E11y::Metrics.increment(:e11y_events_dropped_total, {
                                   reason: reason,
-          event_type: event_data[:event_name].to_s
+                                  event_type: event_data[:event_name].to_s
                                 })
       rescue StandardError
         # non-fatal

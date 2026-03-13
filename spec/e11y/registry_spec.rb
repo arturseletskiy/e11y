@@ -377,7 +377,7 @@ RSpec.describe E11y::Registry do
   # -------------------------------------------------------------------------
   describe "thread safety" do
     it "handles concurrent registrations without errors" do
-      threads = 20.times.map do |i|
+      threads = Array.new(20) do |i|
         Thread.new do
           klass = Class.new(E11y::Event::Base) { contains_pii false }
           # Use the setter so @event_name_explicit is set, required for registration guard
@@ -397,7 +397,7 @@ RSpec.describe E11y::Registry do
       end
       registry.register(klass)
 
-      results = 10.times.map do
+      results = Array.new(10) do
         Thread.new { registry.all_events }
       end.map(&:value)
 
@@ -412,7 +412,7 @@ RSpec.describe E11y::Registry do
   # -------------------------------------------------------------------------
   describe "auto-registration via E11y::Event::Base#event_name setter" do
     it "auto-registers when event_name DSL is called on a subclass" do
-      before_size = E11y::Registry.size
+      described_class.size
 
       klass = Class.new(E11y::Event::Base) do
         event_name "auto.registered.ev.#{rand(100_000)}"
@@ -420,21 +420,21 @@ RSpec.describe E11y::Registry do
       end
 
       event_n = klass.event_name
-      expect(E11y::Registry.find(event_n)).to eq(klass)
+      expect(described_class.find(event_n)).to eq(klass)
 
       # Clean up global registry
-      E11y::Registry.instance.clear!
+      described_class.instance.clear!
     end
 
     it "does NOT auto-register anonymous classes with no explicit event_name" do
       # Classes that never call event_name(...) with a value should not pollute the global registry.
-      size_before = E11y::Registry.size
+      size_before = described_class.size
       _anon = Class.new(E11y::Event::Base) do
         contains_pii false
         # No event_name call here
       end
       # AnonymousEvent guard prevents registration
-      expect(E11y::Registry.size).to eq(size_before)
+      expect(described_class.size).to eq(size_before)
     end
   end
 
@@ -443,20 +443,20 @@ RSpec.describe E11y::Registry do
   # -------------------------------------------------------------------------
   describe "singleton" do
     it "E11y::Registry.instance returns the same object on repeated calls" do
-      expect(E11y::Registry.instance).to be(E11y::Registry.instance)
+      expect(described_class.instance).to be(described_class.instance)
     end
 
     it "E11y.registry returns the Registry instance" do
-      expect(E11y.registry).to be(E11y::Registry.instance)
+      expect(E11y.registry).to be(described_class.instance)
     end
 
     it "reset! replaces the singleton with a fresh instance" do
-      original = E11y::Registry.instance
-      E11y::Registry.reset!
-      new_instance = E11y::Registry.instance
+      original = described_class.instance
+      described_class.reset!
+      new_instance = described_class.instance
       expect(new_instance).not_to be(original)
       # Restore singleton so other tests are not affected
-      E11y::Registry.reset!
+      described_class.reset!
     end
   end
 
@@ -464,16 +464,16 @@ RSpec.describe E11y::Registry do
   # Class-level delegation
   # -------------------------------------------------------------------------
   describe "class-level delegation to singleton" do
-    before { E11y::Registry.instance.clear! }
-    after  { E11y::Registry.instance.clear! }
+    before { described_class.instance.clear! }
+    after  { described_class.instance.clear! }
 
     it "E11y::Registry.register delegates to instance" do
       klass = Class.new(E11y::Event::Base) do
         contains_pii false
         event_name "delg.register"
       end
-      E11y::Registry.register(klass)
-      expect(E11y::Registry.find("delg.register")).to eq(klass)
+      described_class.register(klass)
+      expect(described_class.find("delg.register")).to eq(klass)
     end
 
     it "E11y::Registry.all_events delegates to instance" do
@@ -481,8 +481,8 @@ RSpec.describe E11y::Registry do
         contains_pii false
         event_name "delg.all_events"
       end
-      E11y::Registry.register(klass)
-      expect(E11y::Registry.all_events).to include(klass)
+      described_class.register(klass)
+      expect(described_class.all_events).to include(klass)
     end
 
     it "E11y::Registry.size delegates to instance" do
@@ -490,8 +490,8 @@ RSpec.describe E11y::Registry do
         contains_pii false
         event_name "delg.size"
       end
-      E11y::Registry.register(klass)
-      expect(E11y::Registry.size).to be >= 1
+      described_class.register(klass)
+      expect(described_class.size).to be >= 1
     end
 
     it "E11y::Registry.validate delegates to instance" do
@@ -500,8 +500,8 @@ RSpec.describe E11y::Registry do
         contains_pii false
         schema { required(:id).filled(:string) }
       end
-      E11y::Registry.register(klass)
-      expect(E11y::Registry.validate("delg.validate")).to be(true)
+      described_class.register(klass)
+      expect(described_class.validate("delg.validate")).to be(true)
     end
 
     it "E11y::Registry.where delegates to instance" do
@@ -510,8 +510,8 @@ RSpec.describe E11y::Registry do
         event_name "delg.where"
         severity :warn
       end
-      E11y::Registry.register(klass)
-      expect(E11y::Registry.where(severity: :warn)).to include(klass)
+      described_class.register(klass)
+      expect(described_class.where(severity: :warn)).to include(klass)
     end
 
     it "E11y::Registry.to_documentation delegates to instance" do
@@ -519,8 +519,8 @@ RSpec.describe E11y::Registry do
         contains_pii false
         event_name "delg.docs"
       end
-      E11y::Registry.register(klass)
-      docs = E11y::Registry.to_documentation
+      described_class.register(klass)
+      docs = described_class.to_documentation
       expect(docs.map { |d| d[:name] }).to include("delg.docs")
     end
 
@@ -529,9 +529,9 @@ RSpec.describe E11y::Registry do
         contains_pii false
         event_name "delg.clear"
       end
-      E11y::Registry.register(klass)
-      E11y::Registry.clear!
-      expect(E11y::Registry.size).to eq(0)
+      described_class.register(klass)
+      described_class.clear!
+      expect(described_class.size).to eq(0)
     end
   end
 end

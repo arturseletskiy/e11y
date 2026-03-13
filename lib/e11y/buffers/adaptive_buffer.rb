@@ -299,7 +299,7 @@ module E11y
 
         when :drop
           # Drop new event
-              E11y::Metrics.increment(:e11y_buffer_overflow_total, event: "memory_exhaustion_dropped")
+          E11y::Metrics.increment(:e11y_buffer_overflow_total, event: "memory_exhaustion_dropped")
           false
         end
       end

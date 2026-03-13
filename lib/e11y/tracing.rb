@@ -25,7 +25,7 @@ module E11y
     def self.patch_net_http!
       require "net/http"
       require "e11y/tracing/net_http_patch"
-      return if ::Net::HTTP.ancestors.include?(E11y::Tracing::NetHTTPPatch)
+      return if ::Net::HTTP <= E11y::Tracing::NetHTTPPatch
 
       ::Net::HTTP.prepend(E11y::Tracing::NetHTTPPatch)
     end

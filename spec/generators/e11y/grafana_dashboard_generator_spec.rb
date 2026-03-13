@@ -22,7 +22,7 @@ RSpec.describe E11y::Generators::GrafanaDashboardGenerator, type: :generator do
     yield
   end
 
-  tests E11y::Generators::GrafanaDashboardGenerator
+  tests described_class
   destination File.expand_path("../../../tmp/generators/grafana", __dir__)
 
   before do

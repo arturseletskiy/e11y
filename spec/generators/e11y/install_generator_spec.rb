@@ -21,7 +21,7 @@ RSpec.describe E11y::Generators::InstallGenerator, type: :generator do
     yield
   end
 
-  tests E11y::Generators::InstallGenerator
+  tests described_class
   destination File.expand_path("../../../tmp/generators/install", __dir__)
 
   before do

@@ -115,9 +115,7 @@ namespace :spec do
     Rake::Task["spec:unit"].invoke
     Rake::Task["spec:integration"].invoke
     Rake::Task["spec:railtie"].invoke
-    if Rake::Task.task_defined?("cucumber:passing")
-      Rake::Task["cucumber:passing"].invoke
-    end
+    Rake::Task["cucumber:passing"].invoke if Rake::Task.task_defined?("cucumber:passing")
     Rake::Task["spec:benchmark"].invoke
     Rake::Task["spec:memory"].invoke
 

@@ -106,7 +106,6 @@ RSpec.describe "Rate Limiting Integration", :integration do
   end
 
   describe "Scenario 2: Over global limit" do
-    # rubocop:disable RSpec/ExampleLength
     it "rate-limits events when global limit exceeded" do
       # Setup: Global limit: 10 events/sec, Per-event limit: 100 events/sec (high)
       # Test: Send 15 events (mix: 5 Events::EventA, 5 Events::EventB, 5 Events::EventC)
@@ -146,11 +145,9 @@ RSpec.describe "Rate Limiting Integration", :integration do
       # Total should be 10, distributed across event types
       expect(event_a_count + event_b_count + event_c_count).to eq(10)
     end
-    # rubocop:enable RSpec/ExampleLength
   end
 
   describe "Scenario 3: Over per-event limit" do
-    # rubocop:disable RSpec/ExampleLength
     it "rate-limits events when per-event limit exceeded" do
       # Setup: Global limit: 100 events/sec (high), Per-event limit: 5 events/sec
       # Test: Send 8 events of same type: Events::TestEvent
@@ -188,11 +185,9 @@ RSpec.describe "Rate Limiting Integration", :integration do
       expect(memory_adapter.events.count).to eq(5),
                                              "Expected 5 total events, got #{memory_adapter.events.count}"
     end
-    # rubocop:enable RSpec/ExampleLength
   end
 
   describe "Scenario 4: Reset after window expires" do
-    # rubocop:disable RSpec/ExampleLength
     it "resets rate limit after window expires" do
       # Setup: Global limit: 5 events/sec, Window: 1 second, Use Timecop
       # Test:
@@ -236,7 +231,6 @@ RSpec.describe "Rate Limiting Integration", :integration do
       Events::TestEvent.track(message: "Event 7")
       expect(memory_adapter.events.count).to eq(6), "Expected 7th event to pass after window reset"
     end
-    # rubocop:enable RSpec/ExampleLength
   end
 
   describe "Scenario 5: Per-user rate limiting" do
@@ -309,7 +303,6 @@ RSpec.describe "Rate Limiting Integration", :integration do
   end
 
   describe "Edge Case 1: Critical event bypass (DLQ integration)" do
-    # rubocop:disable RSpec/ExampleLength
     it "saves rate-limited critical events to DLQ" do
       # Setup: Per-event limit: 5 events/sec, DLQ filter: always_save_patterns = [/^payment\./]
       # Test:
@@ -355,11 +348,9 @@ RSpec.describe "Rate Limiting Integration", :integration do
       # Verify still only 5 events in adapter (6th went to DLQ)
       expect(memory_adapter.find_events("Events::PaymentFailed").count).to eq(5)
     end
-    # rubocop:enable RSpec/ExampleLength
   end
 
   describe "Edge Case 2: Non-critical event drop" do
-    # rubocop:disable RSpec/ExampleLength
     it "drops rate-limited non-critical events (not saved to DLQ)" do
       # Setup: Per-event limit: 5 events/sec
       #        DLQ filter: always_save_patterns = [/^payment\./] (log events NOT in pattern)
@@ -403,11 +394,9 @@ RSpec.describe "Rate Limiting Integration", :integration do
       # Verify still only 5 events in adapter (6th dropped, not saved to DLQ)
       expect(memory_adapter.find_events("Events::LogInfo").count).to eq(5)
     end
-    # rubocop:enable RSpec/ExampleLength
   end
 
   describe "Edge Case 3: DLQ save failure (C18 Resolution)" do
-    # rubocop:disable RSpec/ExampleLength
     it "does not crash middleware when DLQ save fails" do
       # Setup: Per-event limit: 5 events/sec, DLQ filter: always_save_patterns = [/^payment\./]
       #        DLQ storage: Mock to raise StandardError
@@ -453,11 +442,9 @@ RSpec.describe "Rate Limiting Integration", :integration do
       # Verify still only 5 events in adapter (6th not saved due to DLQ failure)
       expect(memory_adapter.find_events("Events::PaymentFailed").count).to eq(5)
     end
-    # rubocop:enable RSpec/ExampleLength
   end
 
   describe "Edge Case 4: Multiple event types (separate buckets)" do
-    # rubocop:disable RSpec/ExampleLength
     it "maintains separate rate limit buckets for different event types" do
       # Setup: Global limit: 100 events/sec (high), Per-event limit: 5 events/sec
       # Test:
@@ -507,6 +494,5 @@ RSpec.describe "Rate Limiting Integration", :integration do
       # Verify both event types have separate buckets
       expect(memory_adapter.events.count).to eq(10)
     end
-    # rubocop:enable RSpec/ExampleLength
   end
 end

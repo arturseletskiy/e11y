@@ -179,7 +179,7 @@ RSpec.describe E11y::Configuration do
     it "configures denylist via DSL method" do
       E11y.configure do |c|
         c.cardinality_protection do
-          denylist [:user_id, :email]
+          denylist %i[user_id email]
         end
       end
       # denylist is a DSL setter (requires 1 arg), read via ivar
@@ -242,7 +242,7 @@ RSpec.describe E11y::Configuration do
     end
 
     it "returns the array of adapter names set via default_adapters=" do
-      config.default_adapters = [:loki, :sentry]
+      config.default_adapters = %i[loki sentry]
       expect(config.default_adapters).to eq(%i[loki sentry])
     end
 

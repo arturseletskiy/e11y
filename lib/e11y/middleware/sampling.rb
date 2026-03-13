@@ -99,7 +99,7 @@ module E11y
             if defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:increment)
               E11y::Metrics.increment(:e11y_events_dropped_total, {
                                         reason: "sampled_out",
-                event_type: event_data[:event_name].to_s
+                                        event_type: event_data[:event_name].to_s
                                       })
             end
           rescue StandardError

@@ -354,9 +354,11 @@ module E11y
           { name: :e11y_events_dropped_total, tags: %i[reason event_type] },
           # SLO tracking (Request middleware triggers on every HTTP request when enabled)
           { name: :slo_http_requests_total, tags: %i[controller action status] },
-          { name: :slo_http_request_duration_seconds, type: :histogram, tags: %i[controller action], buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0] },
+          { name: :slo_http_request_duration_seconds, type: :histogram, tags: %i[controller action],
+            buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0] },
           { name: :slo_background_jobs_total, tags: %i[job_class status queue] },
-          { name: :slo_background_job_duration_seconds, type: :histogram, tags: %i[job_class queue], buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0] }
+          { name: :slo_background_job_duration_seconds, type: :histogram, tags: %i[job_class queue],
+            buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0] }
         ]
 
         metrics.each do |m|
@@ -384,7 +386,7 @@ module E11y
 
         # Define metric in Yabeda group
         ::Yabeda.configure do |config = nil|
-          next unless config&.respond_to?(:group)
+          next unless config.respond_to?(:group)
 
           config.group :e11y do
             case metric_type
@@ -420,7 +422,7 @@ module E11y
         return if ::Yabeda.metrics.key?("e11y_#{name}")
 
         ::Yabeda.configure do |config = nil|
-          next unless config&.respond_to?(:group)
+          next unless config.respond_to?(:group)
 
           config.group :e11y do
             case type

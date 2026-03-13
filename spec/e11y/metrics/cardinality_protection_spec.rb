@@ -305,18 +305,18 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
       ).at_least(:once)
     end
 
-      it "handles metrics tracking errors gracefully" do
-        stub_const("E11y::Metrics", double)
-        allow(E11y::Metrics).to receive(:increment).and_raise(StandardError, "metrics error")
-        allow(E11y::Metrics).to receive(:reset_backend!)
+    it "handles metrics tracking errors gracefully" do
+      stub_const("E11y::Metrics", double)
+      allow(E11y::Metrics).to receive(:increment).and_raise(StandardError, "metrics error")
+      allow(E11y::Metrics).to receive(:reset_backend!)
 
-        protection = described_class.new(cardinality_limit: 1, overflow_strategy: :drop)
+      protection = described_class.new(cardinality_limit: 1, overflow_strategy: :drop)
 
-        protection.filter({ status: "paid" }, "orders.total")
+      protection.filter({ status: "paid" }, "orders.total")
 
-        expect(E11y.logger).to receive(:warn).with(/Failed to track cardinality metric/)
-        protection.filter({ status: "pending" }, "orders.total")
-      end
+      expect(E11y.logger).to receive(:warn).with(/Failed to track cardinality metric/)
+      protection.filter({ status: "pending" }, "orders.total")
+    end
   end
 
   describe "relabeling integration" do

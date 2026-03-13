@@ -109,7 +109,7 @@ module E11y
               if on_limit == :delay
                 window_sec = @rate_limiter.instance_variable_get(:@window)
                 jitter = rand(0..(delay_ms * 0.2))
-                sleep((window_sec * 1000 + jitter) / 1000.0)
+                sleep(((window_sec * 1000) + jitter) / 1000.0)
               end
 
               raise RetryExhaustedError.new(e, retry_count: attempt) if @fail_on_error
@@ -195,7 +195,7 @@ module E11y
       end
 
       # Handle retry attempt.
-      def on_retry_attempt(adapter, _event, error, attempt, delay_ms)
+      def on_retry_attempt(adapter, _event, error, attempt, _delay_ms)
         E11y::Metrics.increment(
           "e11y.retry.attempt",
           adapter: adapter.class.name,

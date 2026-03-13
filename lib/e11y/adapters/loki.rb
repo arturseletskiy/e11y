@@ -354,10 +354,10 @@ module E11y
 
         n = name.sub(/^Events::/, "").sub(/V\d+$/, "")
         n.gsub("::", ".")
-           .gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
-           .gsub(/([a-z\d])([A-Z])/, '\1_\2')
-           .downcase
-           .tr("_", ".")
+         .gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
+         .gsub(/([a-z\d])([A-Z])/, '\1_\2')
+         .downcase
+         .tr("_", ".")
       end
 
       # Build HTTP headers

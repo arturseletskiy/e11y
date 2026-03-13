@@ -21,7 +21,7 @@ RSpec.describe E11y::Generators::EventGenerator, type: :generator do
     yield
   end
 
-  tests E11y::Generators::EventGenerator
+  tests described_class
   destination File.expand_path("../../../tmp/generators/event", __dir__)
 
   before do

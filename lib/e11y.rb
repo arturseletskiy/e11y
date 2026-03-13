@@ -155,12 +155,12 @@ module E11y
     #
     # @return [Hash{Symbol => Symbol}] adapter_name => :closed / :open / :half_open
     def circuit_breaker_state
-      configuration.adapters.each_with_object({}) do |(name, adapter), result|
-        result[name] = if adapter.respond_to?(:circuit_breaker_state)
-                         adapter.circuit_breaker_state
-                       else
-                         :closed
-                       end
+      configuration.adapters.transform_values do |adapter|
+        if adapter.respond_to?(:circuit_breaker_state)
+          adapter.circuit_breaker_state
+        else
+          :closed
+        end
       end
     end
 
@@ -283,8 +283,8 @@ module E11y
     #   end
     # @example Plain access
     #   config.rate_limiting.enabled = true
-    def rate_limiting(&block)
-      block_given? ? @rate_limiting.instance_eval(&block) : @rate_limiting
+    def rate_limiting(&)
+      block_given? ? @rate_limiting.instance_eval(&) : @rate_limiting
     end
 
     # SLO tracking config — call with block for DSL, without for plain access.
@@ -298,13 +298,13 @@ module E11y
     #       latency_target 200
     #     end
     #   end
-    def slo(&block)
-      block_given? ? @slo_tracking.instance_eval(&block) : @slo_tracking
+    def slo(&)
+      block_given? ? @slo_tracking.instance_eval(&) : @slo_tracking
     end
 
     # @return [SLOTrackingConfig]
-    def slo_tracking(&block)
-      block_given? ? @slo_tracking.instance_eval(&block) : @slo_tracking
+    def slo_tracking(&)
+      block_given? ? @slo_tracking.instance_eval(&) : @slo_tracking
     end
 
     # Set slo_tracking — accepts Boolean (coerced) or SLOTrackingConfig.
@@ -328,8 +328,8 @@ module E11y
     #     denylist [:user_id, :order_id, :email]
     #     overflow_strategy :relabel
     #   end
-    def cardinality_protection(&block)
-      block_given? ? @cardinality_protection.instance_eval(&block) : @cardinality_protection
+    def cardinality_protection(&)
+      block_given? ? @cardinality_protection.instance_eval(&) : @cardinality_protection
     end
 
     # Register an adapter instance by name (convenience alias for config.adapters[name] = instance).
@@ -389,7 +389,7 @@ module E11y
     def configure_default_pipeline
       # Zone: :pre_processing
       @pipeline.use E11y::Middleware::TraceContext
-      @pipeline.use E11y::Middleware::Versioning   # normalise names before validation
+      @pipeline.use E11y::Middleware::Versioning # normalise names before validation
       @pipeline.use E11y::Middleware::Validation
 
       # Zone: :security
@@ -541,7 +541,7 @@ module E11y
     attr_reader :per_event_limits
 
     def initialize
-      @enabled = false      # Opt-in (enable explicitly)
+      @enabled = false # Opt-in (enable explicitly)
       @global_limit = 10_000 # Max 10K events/sec globally
       @global_window = 1.0   # 1 second window
       @per_event_limit = 1_000 # Default per-event limit (used when no per_event_limits rules match)
@@ -554,7 +554,7 @@ module E11y
     end
 
     def window=(value)
-      @global_window = (defined?(ActiveSupport::Duration) && value.is_a?(ActiveSupport::Duration)) ? value.to_f : value.to_f
+      @global_window = defined?(ActiveSupport::Duration) && value.is_a?(ActiveSupport::Duration) ? value.to_f : value.to_f
     end
 
     # Set global rate limit.
@@ -639,18 +639,18 @@ module E11y
     # Per-controller SLO config.
     # @param name [String] Controller class name
     # @param action [String, nil] Specific action (nil = all actions)
-    def controller(name, action: nil, &block)
+    def controller(name, action: nil, &)
       key = action ? "#{name}##{action}" : name
       cfg = ControllerSLOConfig.new
-      cfg.instance_eval(&block) if block_given?
+      cfg.instance_eval(&) if block_given?
       @controller_configs[key] = cfg
     end
 
     # Per-job SLO config.
     # @param name [String] Job class name
-    def job(name, &block)
+    def job(name, &)
       cfg = JobSLOConfig.new
-      cfg.instance_eval(&block) if block_given?
+      cfg.instance_eval(&) if block_given?
       @job_configs[name] = cfg
     end
 

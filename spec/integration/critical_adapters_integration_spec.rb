@@ -233,7 +233,7 @@ RSpec.describe "Critical Adapters Integration", :integration do
       )
 
       expect(entries.size).to be > initial_count, "Event should appear in Loki after flush"
-      entry = entries.find { |e| ((e[:log]["payload"] || e[:log])["test_id"]) == 1 }
+      entry = entries.find { |e| (e[:log]["payload"] || e[:log])["test_id"] == 1 }
       log_data = entry&.dig(:log)
       expect(log_data).not_to be_nil, "Flushed event should be in Loki"
       payload = log_data["payload"] || log_data
@@ -318,14 +318,14 @@ RSpec.describe "Critical Adapters Integration", :integration do
       stub_const("Events::TestOTel", test_event_class)
 
       logger = double("Logger")
-      log_record = double("LogRecord")
+      double("LogRecord")
 
       otel_adapter.instance_variable_set(:@logger, logger)
       expect(logger).to receive(:on_emit).with(hash_including(
-        body: "Events::TestOTel",
-        severity_number: 9,
-        attributes: hash_including("event.name" => "Events::TestOTel", "service.name" => "test_service")
-      ))
+                                                 body: "Events::TestOTel",
+                                                 severity_number: 9,
+                                                 attributes: hash_including("event.name" => "Events::TestOTel", "service.name" => "test_service")
+                                               ))
 
       Events::TestOTel.track(test_id: 1, message: "OTel integration test")
     end
