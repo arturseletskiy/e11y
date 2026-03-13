@@ -208,21 +208,29 @@ module E11y
 
       # Increment retry metric.
       #
-      # @param metric_name [String] Metric name
+      # @param metric_name [String] Metric name (e.g., "e11y.retry.success")
       # @param tags [Hash] Additional tags
       def increment_metric(metric_name, tags = {})
-        # TODO: Integrate with Yabeda metrics
-        # E11y::Metrics.increment(metric_name, tags)
+        return unless defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:increment)
+
+        name = "e11y_retry_#{metric_name.to_s.split('.').last}".to_sym
+        E11y::Metrics.increment(name, tags)
+      rescue StandardError => e
+        E11y.logger&.warn("E11y RetryHandler metric error: #{e.message}")
       end
 
       # Track histogram metric.
       #
-      # @param metric_name [String] Metric name
+      # @param metric_name [String] Metric name (e.g., "e11y.retry.backoff_delay_ms")
       # @param value [Numeric] Value to track
       # @param tags [Hash] Additional tags
       def track_histogram(metric_name, value, tags = {})
-        # TODO: Integrate with Yabeda metrics
-        # E11y::Metrics.histogram(metric_name, value, tags)
+        return unless defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:histogram)
+
+        name = "e11y_retry_#{metric_name.to_s.split('.').last}".to_sym
+        E11y::Metrics.histogram(name, value, tags)
+      rescue StandardError => e
+        E11y.logger&.warn("E11y RetryHandler histogram error: #{e.message}")
       end
     end
   end
