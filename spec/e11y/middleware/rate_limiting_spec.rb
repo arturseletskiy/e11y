@@ -64,6 +64,18 @@ RSpec.describe E11y::Middleware::RateLimiting do
         expect(middleware).to receive(:warn).with(/Rate limit exceeded \(global\)/)
         middleware.call(event_data)
       end
+
+      it "increments e11y_events_dropped_total with reason rate_limited_global when event is dropped" do
+        allow(E11y::Metrics).to receive(:increment)
+        10.times { middleware.call(event_data) }
+
+        middleware.call(event_data)
+
+        expect(E11y::Metrics).to have_received(:increment).with(
+          :e11y_events_dropped_total,
+          hash_including(reason: "rate_limited_global", event_type: "test.event")
+        )
+      end
     end
 
     context "when per-event limit exceeded" do
@@ -81,6 +93,18 @@ RSpec.describe E11y::Middleware::RateLimiting do
 
         expect(middleware).to receive(:warn).with(/Rate limit exceeded \(per_event\)/)
         middleware.call(event_data)
+      end
+
+      it "increments e11y_events_dropped_total with reason rate_limited_per_event when event is dropped" do
+        allow(E11y::Metrics).to receive(:increment)
+        5.times { middleware.call(event_data) }
+
+        middleware.call(event_data)
+
+        expect(E11y::Metrics).to have_received(:increment).with(
+          :e11y_events_dropped_total,
+          hash_including(reason: "rate_limited_per_event", event_type: "test.event")
+        )
       end
 
       it "limits per event type separately" do
@@ -156,6 +180,19 @@ RSpec.describe E11y::Middleware::RateLimiting do
         expect(middleware).to receive(:warn).with(/Rate-limited critical event saved to DLQ/).ordered
 
         middleware.call(payment_event)
+      end
+
+      it "increments e11y_events_dropped_total with reason rate_limited_per_event_dlq when saved to DLQ" do
+        allow(E11y::Metrics).to receive(:increment)
+        allow(dlq_storage).to receive(:save)
+        5.times { middleware.call(payment_event) }
+
+        middleware.call(payment_event)
+
+        expect(E11y::Metrics).to have_received(:increment).with(
+          :e11y_events_dropped_total,
+          hash_including(reason: "rate_limited_per_event_dlq", event_type: "payment.failed")
+        )
       end
     end
 

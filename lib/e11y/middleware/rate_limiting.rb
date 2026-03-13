@@ -101,12 +101,27 @@ module E11y
         warn "[E11y] Rate limit exceeded (#{limit_type}) for event: #{event_name}"
 
         # C02 Resolution: Check if event should be saved to DLQ
-        return unless should_save_to_dlq?(event_data)
+        if should_save_to_dlq?(event_data)
+          record_dropped_metric(event_data, "rate_limited_#{limit_type}_dlq")
+          save_to_dlq(event_data, limit_type)
+        else
+          record_dropped_metric(event_data, "rate_limited_#{limit_type}")
+        end
+      end
 
-        save_to_dlq(event_data, limit_type)
+      # Record e11y_events_dropped_total metric (non-fatal, safe when Metrics unavailable)
+      #
+      # @param event_data [Hash] Event payload
+      # @param reason [String] Drop reason (e.g., sampled_out, rate_limited_global)
+      def record_dropped_metric(event_data, reason)
+        return unless defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:increment)
 
-        # Non-critical events are dropped (no DLQ)
-        # TODO: Track metric e11y.rate_limiter.dropped
+        E11y::Metrics.increment(:e11y_events_dropped_total, {
+                                  reason: reason,
+          event_type: event_data[:event_name].to_s
+                                })
+      rescue StandardError
+        # non-fatal
       end
 
       # Check if rate-limited event should be saved to DLQ (C02 Resolution)

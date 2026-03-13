@@ -92,7 +92,19 @@ module E11y
 
         # Determine if event should be sampled
         # Drop event if not sampled
-        return nil unless should_sample?(event_data, event_class)
+        unless should_sample?(event_data, event_class)
+          begin
+            if defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:increment)
+              E11y::Metrics.increment(:e11y_events_dropped_total, {
+                                        reason: "sampled_out",
+                event_type: event_data[:event_name].to_s
+                                      })
+            end
+          rescue StandardError
+            # non-fatal
+          end
+          return nil
+        end
 
         # Mark as sampled for downstream middleware
         event_data[:sampled] = true

@@ -94,6 +94,17 @@ RSpec.describe E11y::Middleware::Sampling do
           expect(result).to be_nil
         end
       end
+
+      it "increments e11y_events_dropped_total with reason sampled_out when event is dropped" do
+        allow(E11y::Metrics).to receive(:increment)
+
+        3.times { middleware.call(event_data.dup) }
+
+        expect(E11y::Metrics).to have_received(:increment).with(
+          :e11y_events_dropped_total,
+          hash_including(reason: "sampled_out", event_type: "test.event")
+        ).exactly(3).times
+      end
     end
 
     context "with 50% sampling via severity override" do
