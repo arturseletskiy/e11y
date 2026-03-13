@@ -15,7 +15,32 @@ Production-ready Ruby gem для структурированных бизнес
 
 ---
 
-## 🎯 **NEW: IMPLEMENTATION PLAN (2026-01-17)** ⭐
+## 🆕 What's New in v0.2.0
+
+Key improvements shipped in v0.2.0 (see [QUICK-START.md](./QUICK-START.md) for full details):
+
+| Feature | Notes |
+|---------|-------|
+| **Rate Limiting in default pipeline** | `config.rate_limiting.enabled = true` now actually works — middleware is wired in |
+| **Event name normalization** | `Middleware::Versioning` now available in default pipeline (opt-in) |
+| **OTelLogs full payload** | All event payload attributes now included in OTel log records; PII filtering happens upstream |
+| **`E11y.start!` / `E11y.stop!`** | Lifecycle methods for graceful startup/shutdown |
+| **Rails generators** | `rails g e11y:install` — scaffold initializer and event directory |
+| **`NullAdapter`** | `E11y::Adapters::NullAdapter.new` for testing — discards all events silently |
+| **`config.slo_tracking = true`** | Boolean shorthand now accepted (coerced to config object) |
+| **`retention` alias** | `retention` is now an alias for `retention_period` in the event DSL |
+| **Full block DSLs** | `config.slo do`, `config.rate_limiting do`, `config.cardinality_protection do` |
+| **`config.register_adapter`** | Alias for `config.adapters[name] =` |
+| **`track() { }` block** | Block form measures duration automatically (`event.duration_ms`) |
+| **`E11y.enabled_for?` / `E11y.buffer_size`** | Diagnostic helpers on the top-level module |
+| **`metric :counter` single-call DSL** | Define a single metric without a full `metrics do` block |
+
+> **Audit:** See [docs/analysis/DOCUMENTATION_VS_REALITY_AUDIT.md](./analysis/DOCUMENTATION_VS_REALITY_AUDIT.md)
+> for a complete implementation status matrix.
+
+---
+
+## 🎯 **IMPLEMENTATION PLAN (2026-01-17)** ⭐
 
 **Complete implementation plan ready for execution!**
 
@@ -72,7 +97,7 @@ Production-ready Ruby gem для структурированных бизнес
 - **[Use Cases Index](./use_cases/README.md)** - All use cases by category
 - **[UC-001: Request-Scoped Debug Buffering](./use_cases/UC-001-request-scoped-debug-buffering.md)** ⭐ Killer feature
 - **[UC-002: Business Event Tracking](./use_cases/UC-002-business-event-tracking.md)** ⭐ Core feature
-- **[UC-003: Event Metrics](./use_cases/UC-003-event-metrics.md)**
+- **[UC-003: Event Metrics](./use_cases/UC-003-event-metrics.md)** — requires `E11y::Adapters::Yabeda.new` in `config.adapters`
 - **[UC-004: Zero-Config SLO Tracking](./use_cases/UC-004-zero-config-slo-tracking.md)** ⭐ Killer feature
 - **[UC-005: PII Filtering](./use_cases/UC-005-pii-filtering.md)**
 - **[UC-006-016: Additional Use Cases](./use_cases/README.md)**
@@ -291,6 +316,6 @@ E11y is released under the [MIT License](../LICENSE.md).
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** January 12, 2026  
-**Project Status:** MVP Development (Phase 1)
+**Document Version:** 1.1
+**Last Updated:** March 13, 2026
+**Project Status:** v0.2.0 — Active development, production validation in progress

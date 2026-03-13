@@ -469,9 +469,14 @@ module E11y
       def setup_reliability_layer
         reliability_config = @config.fetch(:reliability, {})
 
-        # Setup RetryHandler
+        # Setup RetryHandler (C06: wire RetryRateLimiter for thundering herd prevention)
         retry_config = reliability_config.fetch(:retry, {})
-        @retry_handler = E11y::Reliability::RetryHandler.new(config: retry_config)
+        rate_limiter = reliability_config[:retry_rate_limiter] ||
+                       E11y::Reliability::RetryRateLimiter.new
+        @retry_handler = E11y::Reliability::RetryHandler.new(
+          config: retry_config,
+          rate_limiter: rate_limiter
+        )
 
         # Setup CircuitBreaker
         circuit_breaker_config = reliability_config.fetch(:circuit_breaker, {})
@@ -525,7 +530,7 @@ module E11y
         return unless @dlq_filter&.should_save?(event_data, error)
 
         @dlq_storage&.save(event_data, metadata: {
-                             error: error.message,
+                             error: error,
                              error_class: error.class.name,
                              reason: reason,
                              adapter: self.class.name,

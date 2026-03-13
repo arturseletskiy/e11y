@@ -81,15 +81,28 @@ module E11y
         # - Auto-calculated retention_until from retention_period
         #
         # @param payload [Hash] Event data matching the schema
+        # @yield Optional block — measured for duration; adds :duration_ms to payload
         # @return [Hash] Event hash (includes metadata)
         #
-        # @example
+        # @example Without block
         #   UserSignupEvent.track(user_id: 123, email: "user@example.com")
         #   # => { event_name: "UserSignupEvent", payload: {...}, severity: :info, adapters: [:logs], ... }
         #
+        # @example With block (duration measurement)
+        #   Events::OrderPaid.track(order_id: '123') { ExternalPaymentService.charge! }
+        #   # => payload includes duration_ms automatically
+        #
         # @raise [E11y::ValidationError] if payload doesn't match schema (when validation runs)
-        def track(**payload)
+        def track(**payload, &block)
           return unless E11y.config.enabled
+
+          # Block form: execute block, measure duration, capture return value
+          block_result = nil
+          if block
+            start = Process.clock_gettime(Process::CLOCK_MONOTONIC, :millisecond)
+            block_result = block.call
+            payload = payload.merge(duration_ms: Process.clock_gettime(Process::CLOCK_MONOTONIC, :millisecond) - start)
+          end
 
           # Severity: payload override (e.g. exception → :error) or class default
           resolved_severity = payload[:severity] || payload["severity"] || severity
@@ -112,8 +125,8 @@ module E11y
           # Routing middleware is the LAST middleware and it writes to adapters directly
           E11y.config.built_pipeline.call(event_data)
 
-          # Return event data for testing/debugging
-          event_data
+          # With block: return block's result (caller cares about it); without: return event_data
+          block ? block_result : event_data
         end
 
         # Build event hash
@@ -312,6 +325,9 @@ module E11y
           E11y.configuration&.default_retention_period || 30.days
         end
 
+        # Convenience alias — matches Quick Start documentation.
+        alias_method :retention, :retention_period
+
         # Set or get adapters for this event
         #
         # Adapters are referenced by NAME (e.g., :logs, :errors_tracker).
@@ -489,6 +505,30 @@ module E11y
           end
         end
 
+        # Set a per-event-class rate limit for the RateLimiting middleware.
+        #
+        # Overrides the global rate limit for events of this class.
+        # error/fatal events are always exempt (never rate-limited).
+        #
+        # @param count [Integer] Max events allowed per window
+        # @param window [Numeric, ActiveSupport::Duration] Time window in seconds (default: 1.0)
+        #
+        # @example Strict limit for login failures (brute-force protection)
+        #   class Events::UserLoginFailed < E11y::Event::Base
+        #     rate_limit 100, window: 60
+        #   end
+        def rate_limit(count, window: 1.0)
+          @rate_limit_count = count
+          @rate_limit_window = window.is_a?(ActiveSupport::Duration) ? window.to_f : window.to_f
+        end
+
+        # Per-event rate limit configuration.
+        #
+        # @return [Hash] { count: Integer|nil, window: Float|nil }
+        def rate_limit_config
+          { count: @rate_limit_count, window: @rate_limit_window }
+        end
+
         private
 
         # Determine if validation should run for this event
@@ -588,10 +628,9 @@ module E11y
         #   end
         def contains_pii(value = nil)
           if value.nil?
-            # Getter
+            return superclass.contains_pii if !instance_variable_defined?(:@contains_pii) && superclass.respond_to?(:contains_pii)
             @contains_pii
           else
-            # Setter
             @contains_pii = value
           end
         end
@@ -616,16 +655,22 @@ module E11y
         #     hashes :email, :phone
         #     allows :user_id, :amount
         #   end
-        def pii_filtering(&)
-          @pii_filtering_config ||= { fields: {} }
+        def pii_filtering(&block)
+          if @pii_filtering_config.nil?
+            parent_config = superclass.respond_to?(:pii_filtering_config) && superclass.pii_filtering_config
+            @pii_filtering_config = parent_config ? { fields: parent_config[:fields].dup } : { fields: {} }
+          end
           builder = PIIFilteringBuilder.new(@pii_filtering_config)
-          builder.instance_eval(&)
+          builder.instance_eval(&block)
         end
 
-        # Get PII filtering configuration
+        # Get PII filtering configuration (inherits from superclass if not defined)
         #
-        # @return [Hash] PII filtering config
-        attr_reader :pii_filtering_config
+        # @return [Hash, nil] PII filtering config
+        def pii_filtering_config
+          return @pii_filtering_config if instance_variable_defined?(:@pii_filtering_config) && @pii_filtering_config
+          return superclass.pii_filtering_config if superclass.respond_to?(:pii_filtering_config)
+        end
 
         # PII Filtering DSL Builder
         #
@@ -817,6 +862,25 @@ module E11y
           register_metrics_in_registry!
         end
 
+        # Single-call metric shorthand — equivalent to a one-metric `metrics` block.
+        #
+        # @param type [Symbol] :counter, :histogram, or :gauge
+        # @param name [Symbol] Metric name
+        # @param opts [Hash] Options: tags:, value: (histogram/gauge), buckets: (histogram)
+        #
+        # @example
+        #   metric :counter, name: :orders_total, tags: [:currency]
+        #   metric :histogram, name: :order_amount, value: :amount, tags: [:currency]
+        def metric(type, name:, **opts)
+          unless %i[counter histogram gauge].include?(type)
+            raise ArgumentError, "Unknown metric type: #{type}. Use :counter, :histogram, or :gauge"
+          end
+
+          @metrics_config ||= []
+          @metrics_config << { type: type, name: name }.merge(opts).compact
+          register_metrics_in_registry!
+        end
+
         # Get metrics configuration
         #
         # @return [Array<Hash>] Metrics configuration
@@ -919,47 +983,6 @@ module E11y
         end
       end
 
-      # Builder for PII filtering DSL
-      class PIIFilteringBuilder
-        def initialize(config)
-          @config = config
-        end
-
-        # Mask fields (strategy: :mask)
-        def masks(*fields)
-          fields.each do |field|
-            @config[:fields][field] = { strategy: :mask }
-          end
-        end
-
-        # Hash fields (strategy: :hash)
-        def hashes(*fields)
-          fields.each do |field|
-            @config[:fields][field] = { strategy: :hash }
-          end
-        end
-
-        # Allow fields (strategy: :allow)
-        def allows(*fields)
-          fields.each do |field|
-            @config[:fields][field] = { strategy: :allow }
-          end
-        end
-
-        # Partial mask fields (strategy: :partial)
-        def partials(*fields)
-          fields.each do |field|
-            @config[:fields][field] = { strategy: :partial }
-          end
-        end
-
-        # Redact fields (strategy: :redact)
-        def redacts(*fields)
-          fields.each do |field|
-            @config[:fields][field] = { strategy: :redact }
-          end
-        end
-      end
     end
     # rubocop:enable Metrics/ClassLength
   end

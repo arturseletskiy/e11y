@@ -121,6 +121,89 @@ RSpec.describe E11y::Middleware::PIIFilter do
       end
     end
 
+    context "when using inheritance (child inherits and overrides parent pii_filtering)" do
+      let(:parent_class) do
+        Class.new(E11y::Event::Base) do
+          def self.name
+            "Events::BaseUserEvent"
+          end
+
+          schema do
+            required(:email).filled(:string)
+            required(:password).filled(:string)
+          end
+
+          contains_pii true
+
+          pii_filtering do
+            hashes :email
+            masks :password
+          end
+        end
+      end
+
+      let(:child_class) do
+        Class.new(parent_class) do
+          def self.name
+            "Events::PaymentCreated"
+          end
+
+          schema do
+            required(:email).filled(:string)
+            required(:password).filled(:string)
+            required(:card_number).filled(:string)
+          end
+
+          pii_filtering do
+            masks :card_number
+          end
+        end
+      end
+
+      it "child inherits parent rules and adds own" do
+        event_data = {
+          event_class: child_class,
+          payload: {
+            email: "user@example.com",
+            password: "secret",
+            card_number: "4111111111111111"
+          }
+        }
+
+        result = middleware.call(event_data)
+
+        expect(result[:payload][:email]).to match(/^hashed_[a-f0-9]{16}$/)
+        expect(result[:payload][:password]).to eq("[FILTERED]")
+        expect(result[:payload][:card_number]).to eq("[FILTERED]")
+      end
+
+      it "child without pii_filtering inherits parent config" do
+        child_no_override = Class.new(parent_class) do
+          def self.name
+            "Events::UserLogin"
+          end
+
+          schema do
+            required(:email).filled(:string)
+            required(:password).filled(:string)
+          end
+        end
+
+        event_data = {
+          event_class: child_no_override,
+          payload: {
+            email: "user@example.com",
+            password: "secret"
+          }
+        }
+
+        result = middleware.call(event_data)
+
+        expect(result[:payload][:email]).to match(/^hashed_[a-f0-9]{16}$/)
+        expect(result[:payload][:password]).to eq("[FILTERED]")
+      end
+    end
+
     context "when event class has unknown or invalid pii_tier" do
       let(:event_class) do
         Class.new(E11y::Event::Base) do

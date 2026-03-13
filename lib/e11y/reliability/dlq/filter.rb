@@ -47,10 +47,11 @@ module E11y
         # 4. Default behavior
         #
         # @param event_data [Hash] Event data
+        # @param error [StandardError, nil] The error that caused the DLQ save (optional, for context)
         # @return [Boolean] true if event should be saved to DLQ
         # rubocop:disable Metrics/MethodLength
         # DLQ filter requires 4-priority decision tree with metrics tracking for each branch
-        def should_save?(event_data)
+        def should_save?(event_data, error = nil)
           event_name = event_data[:event_name].to_s
           severity = event_data[:severity]
 

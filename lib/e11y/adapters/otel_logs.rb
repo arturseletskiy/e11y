@@ -74,7 +74,8 @@ module E11y
         fatal: 21  # FATAL
       }.freeze
 
-      # Default baggage allowlist (safe keys that don't contain PII)
+      # Default baggage allowlist kept for reference / backward compat.
+      # @deprecated Pass baggage_allowlist: :all (the new default) or an explicit Array.
       DEFAULT_BAGGAGE_ALLOWLIST = %i[
         trace_id
         span_id
@@ -86,11 +87,14 @@ module E11y
       # Initialize OTel Logs adapter
       #
       # @param service_name [String] Service name for OTel (default: from config)
-      # @param baggage_allowlist [Array<Symbol>] Allowlist of safe baggage keys
+      # @param baggage_allowlist [Array<Symbol>, :all] Keys to include in OTel attributes.
+      #   `:all` (default) passes every payload key — PII is already stripped upstream by
+      #   Middleware::PIIFilter before the adapter is called.
+      #   Pass an explicit Array for stricter filtering (backward compat).
       # @param max_attributes [Integer] Max attributes per log (cardinality protection)
       # @param endpoint [String, nil] OTLP endpoint (e.g. http://localhost:4318/v1/logs).
       #   When set, logs are exported to OTel Collector. Default: in-process only.
-      def initialize(service_name: nil, baggage_allowlist: DEFAULT_BAGGAGE_ALLOWLIST, max_attributes: 50, endpoint: nil, **)
+      def initialize(service_name: nil, baggage_allowlist: :all, max_attributes: 50, endpoint: nil, **)
         super(**)
         @service_name = service_name
         @baggage_allowlist = baggage_allowlist
@@ -195,7 +199,11 @@ module E11y
       #
       # Applies:
       # - Cardinality protection (C04 Resolution)
-      # - Baggage PII filtering (C08 Resolution)
+      # - Optional baggage allowlist filter (C08 Resolution — pass an Array to enable)
+      #
+      # By default (`baggage_allowlist: :all`) all payload keys are included.
+      # PII fields are stripped upstream by Middleware::PIIFilter before any adapter
+      # is called, so no additional filtering is needed at this layer.
       #
       # @param event_data [Hash] E11y event payload
       # @return [Hash] OTel attributes
@@ -213,7 +221,7 @@ module E11y
           # C04: Cardinality protection - limit attributes
           break if attributes.size >= @max_attributes
 
-          # C08: Baggage PII protection - only allowlisted keys
+          # C08: Optional allowlist — skip unless allowed
           next unless baggage_allowed?(key)
 
           attributes["event.#{key}"] = value
@@ -222,11 +230,16 @@ module E11y
         attributes
       end
 
-      # Check if key is allowed in baggage (C08 Resolution)
+      # Check if key is allowed in baggage.
+      #
+      # Returns true when allowlist is :all (default).
+      # Returns true only for listed keys when an explicit Array was configured.
       #
       # @param key [Symbol, String] Attribute key
-      # @return [Boolean] true if key is in allowlist
+      # @return [Boolean]
       def baggage_allowed?(key)
+        return true if @baggage_allowlist == :all
+
         @baggage_allowlist.include?(key.to_sym)
       end
     end

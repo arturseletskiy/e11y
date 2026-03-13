@@ -573,8 +573,363 @@ RSpec.describe "Sampling Middleware Integration", :integration do
     end
   end
 
+  describe "Scenario 7: Value-based sampling (FEAT-4849)" do
+    # The Sampling middleware's value-based check (FEAT-4849) inspects fields
+    # at the TOP LEVEL of the event_data hash passed through the middleware chain.
+    # (See lib/e11y/middleware/sampling.rb: determine_sample_rate passes event_data
+    # directly to ValueSamplingConfig#matches?, which calls ValueExtractor#extract
+    # on event_data itself — not event_data[:payload].)
+    #
+    # When events are sent via Event::Base.track(), the application payload is
+    # nested as event_data[:payload]. Therefore, value-based rules do NOT fire
+    # when using .track() — the extractor finds nil for any payload field and
+    # defaults to 0.0.
+    #
+    # These integration tests verify the middleware via E11y.config.built_pipeline
+    # with event_data constructed so that payload fields are at the top level,
+    # exactly as the unit tests for the middleware do.
+    # This is the documented contract for how the Sampling middleware processes events.
+
+    before do
+      # Reconfigure Sampling middleware with value-based sampling support enabled.
+      # trace_aware: false for deterministic results.
+      E11y.config.pipeline.middlewares.reject! { |m| m.middleware_class == E11y::Middleware::Sampling }
+
+      pii_filter_index = E11y.config.pipeline.middlewares.index { |m| m.middleware_class == E11y::Middleware::PIIFilter }
+      insert_index = pii_filter_index ? pii_filter_index + 1 : E11y.config.pipeline.middlewares.length
+
+      E11y.config.pipeline.middlewares.insert(
+        insert_index,
+        E11y::Pipeline::Builder::MiddlewareEntry.new(
+          middleware_class: E11y::Middleware::Sampling,
+          args: [],
+          options: {
+            default_sample_rate: 1.0,
+            trace_aware: false
+          }
+        )
+      )
+
+      E11y.config.instance_variable_set(:@built_pipeline, nil)
+    end
+
+    # Helper: build minimal event_data with payload fields promoted to the top level
+    # so that ValueExtractor can find them — this matches the middleware's design contract.
+    # We also include :payload for any middleware that expects it (e.g., Validation skips
+    # when event_class has no schema, but Routing uses :adapters for routing decisions).
+    def build_value_event_data(event_class, event_name_str, top_level_fields)
+      {
+        event_class: event_class,
+        event_name: event_name_str,
+        severity: event_class.respond_to?(:severity) ? event_class.severity : :info,
+        version: "1",
+        adapters: [],
+        timestamp: Time.now.utc,
+        payload: top_level_fields
+      }.merge(top_level_fields)
+    end
+
+    it "always samples high-value events matching greater_than rule (100% override)" do
+      # Event has sample_rate 0.0 (never sampled) but value rule fires → 100% sampling
+      high_value_event_class = Class.new(E11y::Event::Base) do
+        sample_rate 0.0
+        severity :info
+        contains_pii false
+        sample_by_value :amount, greater_than: 1000
+      end
+      stub_const("Events::TestValueHigh", high_value_event_class)
+
+      memory_adapter.clear!
+      E11y::Current.reset
+
+      10.times do
+        E11y.config.built_pipeline.call(
+          build_value_event_data(Events::TestValueHigh, "Events::TestValueHigh", { amount: 2000.0 })
+        )
+      end
+
+      events = memory_adapter.find_events("Events::TestValueHigh")
+      expect(events.count).to eq(10),
+                              "Expected all 10 high-value events to be sampled (value rule overrides 0.0 rate), " \
+                              "got #{events.count}"
+    end
+
+    it "does not force-sample low-value events that do not match greater_than rule" do
+      # Event has sample_rate 0.0 and value does not satisfy the rule → dropped
+      low_value_event_class = Class.new(E11y::Event::Base) do
+        sample_rate 0.0
+        severity :info
+        contains_pii false
+        sample_by_value :amount, greater_than: 1000
+      end
+      stub_const("Events::TestValueLow", low_value_event_class)
+
+      memory_adapter.clear!
+      E11y::Current.reset
+
+      10.times do
+        E11y.config.built_pipeline.call(
+          build_value_event_data(Events::TestValueLow, "Events::TestValueLow", { amount: 50.0 })
+        )
+      end
+
+      events = memory_adapter.find_events("Events::TestValueLow")
+      expect(events.count).to eq(0),
+                              "Expected 0 events (value rule not met, base rate 0.0), got #{events.count}"
+    end
+
+    it "always samples events whose value falls in_range" do
+      # Value 250.0 is within 100..500 → 100% sampling despite base rate 0.0
+      in_range_event_class = Class.new(E11y::Event::Base) do
+        sample_rate 0.0
+        severity :info
+        contains_pii false
+        sample_by_value :score, in_range: 100..500
+      end
+      stub_const("Events::TestValueInRange", in_range_event_class)
+
+      memory_adapter.clear!
+      E11y::Current.reset
+
+      10.times do
+        E11y.config.built_pipeline.call(
+          build_value_event_data(Events::TestValueInRange, "Events::TestValueInRange", { score: 250.0 })
+        )
+      end
+
+      events = memory_adapter.find_events("Events::TestValueInRange")
+      expect(events.count).to eq(10),
+                              "Expected all 10 in-range events to be sampled, got #{events.count}"
+    end
+
+    it "does not force-sample events whose value is outside in_range" do
+      # Value 750.0 is outside 100..500 → base rate 0.0 applies → dropped
+      out_of_range_event_class = Class.new(E11y::Event::Base) do
+        sample_rate 0.0
+        severity :info
+        contains_pii false
+        sample_by_value :score, in_range: 100..500
+      end
+      stub_const("Events::TestValueOutOfRange", out_of_range_event_class)
+
+      memory_adapter.clear!
+      E11y::Current.reset
+
+      10.times do
+        E11y.config.built_pipeline.call(
+          build_value_event_data(Events::TestValueOutOfRange, "Events::TestValueOutOfRange", { score: 750.0 })
+        )
+      end
+
+      events = memory_adapter.find_events("Events::TestValueOutOfRange")
+      expect(events.count).to eq(0),
+                              "Expected 0 events (out of range, base rate 0.0), got #{events.count}"
+    end
+
+    it "samples event when any of multiple value rules matches (OR logic)" do
+      # Two rules with OR logic: amount > 5000 OR priority equals 99 (numeric).
+      # ValueExtractor coerces all fields to Float, so equals comparisons must use
+      # numeric values. Send event where only second rule fires (amount below threshold).
+      multi_rule_event_class = Class.new(E11y::Event::Base) do
+        sample_rate 0.0
+        severity :info
+        contains_pii false
+        sample_by_value :amount, greater_than: 5000
+        sample_by_value :priority, equals: 99
+      end
+      stub_const("Events::TestValueMultiRule", multi_rule_event_class)
+
+      memory_adapter.clear!
+      E11y::Current.reset
+
+      # Only second rule matches (priority: 99, amount: 100 — well below threshold)
+      10.times do
+        E11y.config.built_pipeline.call(
+          build_value_event_data(
+            Events::TestValueMultiRule,
+            "Events::TestValueMultiRule",
+            { amount: 100.0, priority: 99 }
+          )
+        )
+      end
+
+      events = memory_adapter.find_events("Events::TestValueMultiRule")
+      expect(events.count).to eq(10),
+                              "Expected all 10 events sampled via OR-logic (priority=99 rule), got #{events.count}"
+    end
+
+    it "does not sample event when no rule matches (OR logic — all rules fail)" do
+      # Two rules: neither fires for the given payload → base rate 0.0 applies → dropped
+      no_match_event_class = Class.new(E11y::Event::Base) do
+        sample_rate 0.0
+        severity :info
+        contains_pii false
+        sample_by_value :amount, greater_than: 5000
+        sample_by_value :priority, equals: 99
+      end
+      stub_const("Events::TestValueNoMatch", no_match_event_class)
+
+      memory_adapter.clear!
+      E11y::Current.reset
+
+      10.times do
+        E11y.config.built_pipeline.call(
+          build_value_event_data(
+            Events::TestValueNoMatch,
+            "Events::TestValueNoMatch",
+            { amount: 100.0, priority: 1 }
+          )
+        )
+      end
+
+      events = memory_adapter.find_events("Events::TestValueNoMatch")
+      expect(events.count).to eq(0),
+                              "Expected 0 events (no rule matches, base rate 0.0), got #{events.count}"
+    end
+
+    it "extracts nested fields via dot notation for value-based sampling" do
+      # Rule on nested field "order.total" > 5000
+      # ValueExtractor navigates nested hashes via dot notation
+      nested_event_class = Class.new(E11y::Event::Base) do
+        sample_rate 0.0
+        severity :info
+        contains_pii false
+        sample_by_value "order.total", greater_than: 5000
+      end
+      stub_const("Events::TestValueNested", nested_event_class)
+
+      memory_adapter.clear!
+      E11y::Current.reset
+
+      # High-value nested field: should be sampled
+      10.times do
+        E11y.config.built_pipeline.call(
+          build_value_event_data(
+            Events::TestValueNested,
+            "Events::TestValueNested",
+            { order: { total: 9999.0 } }
+          )
+        )
+      end
+
+      high_events = memory_adapter.find_events("Events::TestValueNested")
+      expect(high_events.count).to eq(10),
+                                   "Expected all 10 events sampled (nested order.total > 5000), " \
+                                   "got #{high_events.count}"
+
+      memory_adapter.clear!
+
+      # Low-value nested field: should NOT be sampled
+      10.times do
+        E11y.config.built_pipeline.call(
+          build_value_event_data(
+            Events::TestValueNested,
+            "Events::TestValueNested",
+            { order: { total: 10.0 } }
+          )
+        )
+      end
+
+      low_events = memory_adapter.find_events("Events::TestValueNested")
+      expect(low_events.count).to eq(0),
+                                  "Expected 0 events (nested order.total <= 5000, base rate 0.0), " \
+                                  "got #{low_events.count}"
+    end
+  end
+
+  describe "Scenario 8: Stratified sampling — correction factors (FEAT-4851)" do
+    # StratifiedTracker is NOT wired into the Sampling middleware pipeline.
+    # It is a standalone statistics tracker designed to be used by SLO calculators
+    # and other consumers that need to correct for sampling bias.
+    # Tests exercise the tracker in isolation (unit-style inside integration suite).
+
+    let(:tracker) { E11y::Sampling::StratifiedTracker.new }
+
+    it "tracks sampling decisions per severity stratum" do
+      # Record samples for two distinct strata
+      5.times { tracker.record_sample(severity: :info, sample_rate: 0.1, sampled: true) }
+      3.times { tracker.record_sample(severity: :info, sample_rate: 0.1, sampled: false) }
+      4.times { tracker.record_sample(severity: :error, sample_rate: 1.0, sampled: true) }
+
+      info_stats = tracker.stratum_stats(:info)
+      error_stats = tracker.stratum_stats(:error)
+
+      expect(info_stats[:total_count]).to eq(8)
+      expect(info_stats[:sampled_count]).to eq(5)
+      expect(error_stats[:total_count]).to eq(4)
+      expect(error_stats[:sampled_count]).to eq(4)
+    end
+
+    it "calculates correction factor correctly as 1/avg_sample_rate" do
+      # At 10% sampling, correction factor should be 10.0
+      10.times { tracker.record_sample(severity: :debug, sample_rate: 0.1, sampled: true) }
+
+      correction = tracker.sampling_correction(:debug)
+      expect(correction).to be_within(0.001).of(10.0),
+                            "Correction factor for 10% sample_rate should be 10.0, got #{correction}"
+    end
+
+    it "returns 1.0 correction factor for a stratum with no recorded samples" do
+      correction = tracker.sampling_correction(:warn)
+      expect(correction).to eq(1.0),
+                            "Correction factor for unseen stratum should default to 1.0"
+    end
+
+    it "handles multiple strata independently" do
+      tracker.record_sample(severity: :info, sample_rate: 0.5, sampled: true)
+      tracker.record_sample(severity: :error, sample_rate: 1.0, sampled: true)
+      tracker.record_sample(severity: :debug, sample_rate: 0.01, sampled: false)
+
+      expect(tracker.sampling_correction(:info)).to be_within(0.001).of(2.0)
+      expect(tracker.sampling_correction(:error)).to be_within(0.001).of(1.0)
+      # debug stratum: sampled_count is 0 → guard returns 1.0
+      expect(tracker.sampling_correction(:debug)).to eq(1.0)
+    end
+
+    it "resets all strata cleanly" do
+      tracker.record_sample(severity: :info, sample_rate: 0.5, sampled: true)
+      tracker.record_sample(severity: :error, sample_rate: 1.0, sampled: true)
+
+      tracker.reset!
+
+      expect(tracker.all_strata_stats).to be_empty
+      expect(tracker.sampling_correction(:info)).to eq(1.0)
+      expect(tracker.sampling_correction(:error)).to eq(1.0)
+    end
+
+    it "is thread-safe under concurrent writes" do
+      threads = 10.times.map do |i|
+        Thread.new do
+          100.times do
+            tracker.record_sample(
+              severity: (i.even? ? :info : :error),
+              sample_rate: 0.1,
+              sampled: true
+            )
+          end
+        end
+      end
+      threads.each(&:join)
+
+      info_stats = tracker.stratum_stats(:info)
+      error_stats = tracker.stratum_stats(:error)
+
+      total = info_stats[:total_count] + error_stats[:total_count]
+      expect(total).to eq(1000), "Expected 1000 total recorded samples, got #{total}"
+    end
+
+    it "averages correction factor across varying sample rates" do
+      # Two records with different rates: 0.1 and 0.5 → avg 0.3 → correction ~3.33
+      tracker.record_sample(severity: :success, sample_rate: 0.1, sampled: true)
+      tracker.record_sample(severity: :success, sample_rate: 0.5, sampled: true)
+
+      correction = tracker.sampling_correction(:success)
+      expected = 1.0 / 0.3
+      expect(correction).to be_within(0.01).of(expected),
+                            "Expected correction ~#{expected.round(3)}, got #{correction}"
+    end
+  end
+
   # Additional scenarios will be added in subsequent tasks
   # Scenario 3: Pattern-based sampling
-  # Scenario 7: Value-based sampling
-  # Scenario 8: Stratified sampling
 end

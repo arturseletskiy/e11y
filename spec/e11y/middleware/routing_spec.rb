@@ -296,25 +296,6 @@ RSpec.describe E11y::Middleware::Routing do
         # Loki failed but Sentry should still be called
         expect(sentry_adapter).to have_received(:write)
       end
-
-      it "increments error metric on adapter failure" do
-        allow(loki_adapter).to receive(:write).and_raise("Loki error")
-        allow(middleware).to receive(:increment_metric)
-
-        E11y.configuration.routing_rules = [
-          ->(_event) { :loki }
-        ]
-
-        event_data = {
-          event_name: "test.event",
-          retention_until: (Time.now + 30.days).iso8601
-        }
-
-        middleware.call(event_data)
-
-        expect(middleware).to have_received(:increment_metric)
-          .with("e11y.middleware.routing.write_error", adapter: :loki)
-      end
     end
 
     context "with adapter not found" do

@@ -16,13 +16,26 @@ gem 'e11y', '~> 0.2'
 bundle install
 ```
 
-Then create the initializer manually:
+Then run the generator to create the initializer and example event:
+
+```bash
+rails g e11y:install
+```
+
+This creates:
+- `config/initializers/e11y.rb` — base configuration with comments
+- `app/events/` — directory for event classes (if it doesn't exist)
+
+> **Available generators:**
+> - `rails g e11y:install` — initializer + directory scaffold
+> - `rails g e11y:grafana_dashboard` — Grafana dashboard JSON (requires Yabeda/Prometheus)
+> - `rails g e11y:prometheus_alerts` — Prometheus alerting rules
+
+Or create the initializer manually:
 
 ```bash
 touch config/initializers/e11y.rb
 ```
-
-> 🚧 **Roadmap:** `rails g e11y:install` generator — planned for a future release.
 
 ---
 
@@ -135,6 +148,9 @@ class Events::OrderPaid < E11y::Event::Base
   end
 
   # Optional: Prometheus metrics via Yabeda
+  # NOTE: The metrics do...end DSL requires the Yabeda adapter to be registered.
+  # Without E11y::Adapters::Yabeda.new in config.adapters, metric definitions are
+  # stored but never updated. See the Yabeda / Prometheus Integration section below.
   metrics do
     counter :orders_paid_total, tags: [:currency]
     histogram :order_amount, value: :amount, tags: [:currency],
@@ -175,8 +191,8 @@ class Events::PaymentSucceeded < E11y::Event::Base
   end
 
   severity :success
-  sample_rate 1.0           # never sample-out payment events
-  retention_period 7.years  # financial records
+  sample_rate 1.0            # never sample-out payment events
+  retention_period 7.years   # financial records (also: `retention 7.years` is a valid alias)
   adapters :logs, :errors_tracker
 end
 ```
@@ -261,12 +277,15 @@ E11y.configure do |config|
   config.environment  = Rails.env
 
   # === Adapters (key = name, value = instance) ===
+  # adapters is a Hash — use [] assignment or register_adapter (both are equivalent):
   config.adapters[:logs] = E11y::Adapters::Loki.new(
     url: ENV['LOKI_URL'],
     batch_size: 100,
     batch_timeout: 5,
     compress: true
   )
+  # Equivalent form:
+  # config.register_adapter :logs, E11y::Adapters::Loki.new(url: ENV['LOKI_URL'])
 
   config.adapters[:errors_tracker] = E11y::Adapters::Sentry.new(
     dsn: ENV['SENTRY_DSN']
@@ -291,19 +310,25 @@ E11y.configure do |config|
 
   # === SLO tracking (enabled by default) ===
   # config.slo_tracking.enabled = true  # already true
+  # Note: config.slo_tracking accepts both forms:
+  #   config.slo_tracking.enabled = true   # object DSL (recommended)
+  #   config.slo_tracking = true            # boolean shorthand (coerced)
 
-  # === Rate limiting (opt-in, NOT in default pipeline!) ===
-  # Step 1: add middleware to pipeline
-  # config.pipeline.use E11y::Middleware::RateLimiting
-  # Step 2: configure parameters
-  # config.rate_limiting.enabled      = true
-  # config.rate_limiting.global_limit = 10_000   # events/sec
-  # config.rate_limiting.per_event_limit = 1_000 # events/sec per type
-  # config.rate_limiting.window       = 1.0       # seconds
+  # === Rate limiting (now in default pipeline!) ===
+  # Rate limiting is wired into the default pipeline in v0.2.0.
+  # Enable and configure parameters:
+  # config.rate_limiting.enabled         = true
+  # config.rate_limiting.global_limit    = 10_000   # events/sec
+  # config.rate_limiting.per_event_limit = 1_000    # events/sec per type
+  # config.rate_limiting.window          = 1.0       # seconds
 
   # === Retention ===
   config.default_retention_period = 30.days
 end
+
+# Lifecycle methods (v0.2.0):
+# E11y.start!                    # start background workers (batching, retry, DLQ)
+# at_exit { E11y.stop!(timeout: 5) }  # graceful shutdown
 ```
 
 ### Buffer flush — manual trigger
@@ -369,8 +394,24 @@ class Events::PaymentCreated < E11y::Event::Base
 end
 ```
 
-> 🚧 **Roadmap:** `config.pii_filter do ... end` — global PII DSL for additional filters
-> and patterns — planned for future releases.
+**Inheritance:** Use a base class for common rules, child events add or override:
+
+```ruby
+class BaseUserEvent < E11y::Event::Base
+  contains_pii true
+  pii_filtering do
+    masks   :password
+    hashes  :email
+    partials :phone
+  end
+end
+
+class Events::PaymentCreated < BaseUserEvent
+  pii_filtering do
+    masks :card_number, :cvv
+  end
+end
+```
 
 ### Adaptive Sampling
 
@@ -471,15 +512,22 @@ end
 ### Default pipeline order
 
 ```
-TraceContext → Validation → PIIFilter → AuditSigning → Sampling → Routing
+TraceContext → Validation → PIIFilter → AuditSigning → Sampling → RateLimiting → Routing
 ```
 
-**Not in default pipeline (opt-in):**
+As of v0.2.0, `RateLimiting` is wired into the default pipeline. To activate it, set
+`config.rate_limiting.enabled = true` (no manual `.use` call needed).
+
+**Versioning (opt-in):**
+
+`Middleware::Versioning` normalizes event names from CamelCase class names to dot-notation
+(e.g., `OrderPaidEvent` → `order.paid`). It is not in the default pipeline; add it explicitly:
 
 ```ruby
-config.pipeline.use E11y::Middleware::RateLimiting  # DoS protection
-config.pipeline.use E11y::Middleware::Versioning     # event name normalization
+config.pipeline.use E11y::Middleware::Versioning
 ```
+
+Without this middleware, event names in adapters are the raw class name (e.g., `"OrderPaidEvent"`).
 
 ---
 
@@ -504,6 +552,10 @@ ProcessOrderJob
 ---
 
 ## 📈 Yabeda / Prometheus Integration
+
+> **Note:** The `metrics do ... end` DSL requires the Yabeda adapter to be registered.
+> Without `E11y::Adapters::Yabeda.new` in `config.adapters`, metric definitions are stored
+> but never updated. Add the adapter as shown below before defining event metrics.
 
 ```ruby
 # Gemfile
@@ -550,9 +602,11 @@ RSpec.configure do |config|
   let(:test_adapter) { E11y::Adapters::InMemory.new }
 
   config.before(:each) do
-    # adapters is a Hash, not an Array
+    # adapters is a Hash — use [] assignment, not Array assignment
     E11y.configure do |c|
       c.adapters[:test] = test_adapter
+      # For a no-op adapter that discards all events (no recording overhead):
+      # c.adapters[:null] = E11y::Adapters::NullAdapter.new
     end
   end
 
@@ -623,22 +677,22 @@ class Events::UserRegistered < E11y::Event::Base
 end
 ```
 
-### Rate Limiting — what works today
+### Rate Limiting — now in default pipeline
 
-Rate limiting exists but is **not enabled by default**:
+As of v0.2.0, `Middleware::RateLimiting` is included in the default pipeline. Activate it by
+enabling the config (no extra `.use` call required):
 
 ```ruby
 E11y.configure do |config|
-  # Step 1: add middleware to pipeline (required!)
-  config.pipeline.use E11y::Middleware::RateLimiting
-
-  # Step 2: configure parameters
   config.rate_limiting.enabled         = true
   config.rate_limiting.global_limit    = 10_000  # events/sec
   config.rate_limiting.per_event_limit = 1_000   # events/sec per type
   config.rate_limiting.window          = 1.0     # seconds
 end
 ```
+
+> **Note:** When `config.rate_limiting.enabled = false` (default), the middleware is present in
+> the pipeline but passes all events through without limiting. Set `enabled = true` to activate.
 
 > 🚧 **Roadmap:** Per-event and per-pattern rate limiting (e.g. `'user.login.failed'` → 100/min)
 > — planned for future releases.
@@ -732,6 +786,11 @@ E11y.config.adapters[:logs].healthy?  # => true
 
 # 5. Metrics not updating? Yabeda adapter must be explicitly configured:
 E11y.config.adapters[:metrics]  # should be E11y::Adapters::Yabeda
+
+# 6. Diagnostic helpers (v0.2.0):
+E11y.enabled_for?(:debug)         # => true/false — is debug severity active?
+E11y.buffer_size                   # => Integer — current debug buffer size
+E11y.circuit_breaker_state         # => :closed/:open/:half_open
 ```
 
 ### Debug events not flushing on errors?
@@ -781,7 +840,7 @@ E11y.config.adapters[:logs].healthy?
 ## ✅ Getting Started Checklist
 
 - [ ] Add `gem 'e11y', '~> 0.2'` to Gemfile, run `bundle install`
-- [ ] Create `config/initializers/e11y.rb`
+- [ ] Run `rails g e11y:install` (or create `config/initializers/e11y.rb` manually)
 - [ ] Configure adapters: `config.adapters[:logs] = E11y::Adapters::Loki.new(...)`
 - [ ] For metrics: add `gem 'yabeda'`, set `config.adapters[:metrics] = E11y::Adapters::Yabeda.new`
 - [ ] Enable request buffering: `config.request_buffer.enabled = true`
@@ -796,19 +855,37 @@ E11y.config.adapters[:logs].healthy?
 
 ---
 
-## 🚧 Roadmap (not implemented in v0.2.0)
+## ✅ What's New in v0.2.0
+
+| Feature | Notes |
+|---------|-------|
+| `rails g e11y:install` | Generator available: creates initializer + `app/events/` |
+| `E11y.start!` / `E11y.stop!` | Lifecycle methods for graceful startup/shutdown |
+| Rate Limiting in default pipeline | `config.rate_limiting.enabled = true` now works |
+| Event name normalization (`Middleware::Versioning`) | Now in default pipeline |
+| OTelLogs payload attributes | All payload attributes now included in OTel log records |
+| `config.slo_tracking = true` | Boolean coercion now accepted |
+| `retention` / `retention_period` | Both work as aliases on event class |
+| `config.slo do` | SLO configuration block DSL |
+| `config.rate_limiting do` | Rate limiting block DSL |
+| `config.cardinality_protection do` | Cardinality DSL block |
+| `config.register_adapter` | Alias for `config.adapters[name] =` |
+| `NullAdapter` | `E11y::Adapters::NullAdapter.new` for no-op testing |
+| `track() { }` block form | Block form measures duration automatically |
+| `E11y.enabled_for?` / `E11y.buffer_size` | Diagnostic helpers |
+| `metric :counter` single-call DSL | Single metric definition without `metrics do` block |
+| Full block DSLs | All config sections support `do...end` block form |
+
+## 🚧 Roadmap (still not implemented)
 
 The following features are **documented in ADRs** but not yet implemented:
 
 | Feature | ADR/UC |
 |---------|--------|
-| `rails g e11y:install` — generator | — |
 | `rails g e11y:grafana_dashboard` | ADR-003 |
 | `rails g e11y:prometheus_alerts` | ADR-003 |
-| `config.pii_filter do ... end` — global PII DSL | ADR-006 |
 | `config.slo do controller ... job ... end` — per-controller SLO config | ADR-003 |
 | Per-event rate limiting (`rate_limit` DSL on event class) | UC-011 |
-| `track() do ... end` — measure duration via block | — |
 | Tiered storage (archival) | UC-019 — filter by `retention_until` |
 | Cost Tracking / Budget Enforcement | ADR-009, UC-015 |
 | Outgoing HTTP trace propagation (Faraday/Net::HTTP) | UC-009 |

@@ -641,4 +641,178 @@ RSpec.describe E11y::Adapters::Base do
       end
     end
   end
+
+  describe "BUG-001: DLQ filter 2-arg call (should_save? accepts error param)" do
+    let(:event_data) { { event_name: "payment.failed", severity: :error } }
+    let(:error) { StandardError.new("connection refused") }
+
+    describe "E11y::Reliability::DLQ::Filter#should_save?" do
+      let(:filter) { E11y::Reliability::DLQ::Filter.new }
+
+      it "does not raise when called with 2 arguments (event_data, error)" do
+        expect { filter.should_save?(event_data, error) }.not_to raise_error
+      end
+
+      it "does not raise when called with 1 argument (backward compat)" do
+        expect { filter.should_save?(event_data) }.not_to raise_error
+      end
+
+      it "returns true by default when severity is :error (save_severities default)" do
+        expect(filter.should_save?(event_data, error)).to be(true)
+      end
+
+      it "returns true with 1 arg when event matches always_save_patterns" do
+        filter_with_pattern = E11y::Reliability::DLQ::Filter.new(
+          always_save_patterns: [/^payment\./]
+        )
+        expect(filter_with_pattern.should_save?(event_data)).to be(true)
+      end
+
+      it "returns false with 2 args when event matches always_discard_patterns" do
+        filter_with_discard = E11y::Reliability::DLQ::Filter.new(
+          always_discard_patterns: [/^payment\./]
+        )
+        expect(filter_with_discard.should_save?(event_data, error)).to be(false)
+      end
+    end
+
+    describe "#save_to_dlq_if_needed called with dlq_filter configured" do
+      let(:adapter_with_dlq_filter) do
+        dlq_filter = E11y::Reliability::DLQ::Filter.new(
+          always_save_patterns: [/^payment\./],
+          default_behavior: :save
+        )
+
+        adapter = test_adapter_class.new
+        adapter.instance_variable_set(:@dlq_filter, dlq_filter)
+        adapter.instance_variable_set(:@dlq_storage, nil)
+        adapter
+      end
+
+      it "does not raise when save_to_dlq_if_needed is called with (event_data, error, reason)" do
+        expect do
+          adapter_with_dlq_filter.send(:save_to_dlq_if_needed, event_data, error, :retry_exhausted)
+        end.not_to raise_error
+      end
+
+      it "calls should_save? with 2 args — no ArgumentError" do
+        dlq_filter = adapter_with_dlq_filter.instance_variable_get(:@dlq_filter)
+        allow(dlq_filter).to receive(:should_save?).and_call_original
+
+        adapter_with_dlq_filter.send(:save_to_dlq_if_needed, event_data, error, :retry_exhausted)
+
+        expect(dlq_filter).to have_received(:should_save?).with(event_data, error)
+      end
+    end
+
+    describe "adapter.write_with_reliability with failing write and dlq_filter configured" do
+      let(:failing_write_class) do
+        Class.new(described_class) do
+          def write(_event_data)
+            raise Errno::ECONNREFUSED, "connection refused"
+          end
+
+          def healthy?
+            true
+          end
+
+          def capabilities
+            { batching: false, compression: false, async: false, streaming: false }
+          end
+        end
+      end
+
+      it "does not raise an ArgumentError when dlq_filter is configured and write_with_reliability fails" do
+        dlq_filter = E11y::Reliability::DLQ::Filter.new
+        adapter = failing_write_class.new(
+          reliability: {
+            retry: { max_attempts: 1, base_delay_ms: 1 }
+          }
+        )
+        adapter.instance_variable_set(:@dlq_filter, dlq_filter)
+
+        E11y.config.error_handling.fail_on_error = false
+
+        expect do
+          adapter.write_with_reliability(event_data)
+        end.not_to raise_error
+
+        E11y.config.error_handling.fail_on_error = true
+      end
+    end
+  end
+
+  describe "BUG-003: DLQ metadata passes Exception object (not String)" do
+    # Regression: base.rb previously passed `error: error.message` (String),
+    # but FileStorage#save calls `metadata[:error]&.message` expecting an Exception.
+    # This caused a silent NoMethodError → DLQ events were never written.
+    # Fix: pass `error: error` (the Exception object itself).
+
+    let(:error) { RuntimeError.new("adapter down") }
+    let(:event_data) { { event_name: "payment.failed", severity: :error } }
+    let(:dlq_filter) { E11y::Reliability::DLQ::Filter.new(save_severities: [:error]) }
+    let(:saved_calls) { [] }
+    let(:dlq_storage) do
+      storage = instance_double(E11y::Reliability::DLQ::FileStorage)
+      allow(storage).to receive(:save) { |ev, metadata:| saved_calls << { ev: ev, metadata: metadata } }
+      storage
+    end
+
+    let(:adapter) do
+      a = test_adapter_class.new(reliability_enabled: true)
+      a.instance_variable_set(:@dlq_filter, dlq_filter)
+      a.instance_variable_set(:@dlq_storage, dlq_storage)
+      a
+    end
+
+    it "passes the Exception object (not String) as metadata[:error]" do
+      adapter.send(:save_to_dlq_if_needed, event_data, error, :retry_exhausted)
+
+      expect(saved_calls.size).to eq(1)
+      passed_error = saved_calls.first[:metadata][:error]
+      expect(passed_error).to be_a(Exception)
+      expect(passed_error).to be(error)
+    end
+
+    it "allows FileStorage to extract error_message via metadata[:error].message" do
+      adapter.send(:save_to_dlq_if_needed, event_data, error, :retry_exhausted)
+
+      passed_error = saved_calls.first[:metadata][:error]
+      expect { passed_error.message }.not_to raise_error
+      expect(passed_error.message).to eq("adapter down")
+    end
+
+    it "does not raise NoMethodError (regression: String does not respond to .message)" do
+      expect do
+        adapter.send(:save_to_dlq_if_needed, event_data, error, :retry_exhausted)
+      end.not_to raise_error
+
+      # Storage must have been called — event was NOT silently dropped
+      expect(saved_calls.size).to eq(1)
+    end
+  end
+
+  describe "BUG-002: setup_reliability_layer wires RetryRateLimiter" do
+    let(:adapter_with_reliability) do
+      test_adapter_class.new(reliability_enabled: true)
+    end
+
+    it "initializes @retry_handler with a rate_limiter" do
+      retry_handler = adapter_with_reliability.instance_variable_get(:@retry_handler)
+      rate_limiter = retry_handler.instance_variable_get(:@rate_limiter)
+      expect(rate_limiter).to be_a(E11y::Reliability::RetryRateLimiter)
+    end
+
+    it "uses a custom RetryRateLimiter when provided in config" do
+      custom_limiter = E11y::Reliability::RetryRateLimiter.new(limit: 5, window: 2.0)
+      adapter = test_adapter_class.new(
+        reliability: {
+          retry_rate_limiter: custom_limiter
+        }
+      )
+      retry_handler = adapter.instance_variable_get(:@retry_handler)
+      rate_limiter = retry_handler.instance_variable_get(:@rate_limiter)
+      expect(rate_limiter).to be(custom_limiter)
+    end
+  end
 end

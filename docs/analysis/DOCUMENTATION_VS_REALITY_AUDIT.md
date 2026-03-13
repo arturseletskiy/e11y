@@ -26,8 +26,7 @@ The following issues from the initial audit (2026-03-12) have been resolved in b
 | 9 | `metric :counter` single-call DSL missing | `metric` class method added to `Event::Base` |
 | 10 | `track() { }` block duration measurement missing | Block form added to `track()` |
 | 11 | `E11y.enabled_for?` / `E11y.buffer_size` missing | Added to top-level `E11y` module |
-| 12 | `config.pii_filter do` block DSL missing | `PIIFilterConfig` with block DSL added to `Configuration` |
-| 13 | `config.register_adapter` missing | `register_adapter(name, instance)` method added to `Configuration` |
+| 12 | `config.register_adapter` missing | `register_adapter(name, instance)` method added to `Configuration` |
 | 14 | `config.slo do` block DSL missing | `SLOTrackingConfig` extended with block DSL |
 | 15 | `config.rate_limiting do` block DSL missing | `RateLimitingConfig` extended with block DSL |
 | 16 | `config.cardinality_protection do` block DSL missing | `cardinality_protection` block DSL added to `Configuration` |
@@ -54,8 +53,7 @@ The following issues from the initial audit (2026-03-12) have been resolved in b
 | Metrics DSL (event-level) | ✅ | ✅ | ⚠️ Yabeda required | Low |
 | 7 Adapters (core) | ✅ | ✅ | ✅ Works | — |
 | OTelLogs payload attributes | ✅ | ✅ | ✅ Works | — |
-| PII Filtering (event DSL) | ✅ | ✅ | ✅ Works | — |
-| PII Filtering (config block DSL) | — | ✅ | ✅ Works | — |
+| PII Filtering (event DSL + inheritance) | ✅ | ✅ | ✅ Works | — |
 | Adaptive Sampling | ✅ | ✅ | ✅ Works | — |
 | Rate Limiting in default pipeline | ✅ | ✅ | ✅ Works | — |
 | Rate Limiting event DSL (`rate_limit`) | — | ✅ NEW v1.1 | ❌ Missing | High |
@@ -160,20 +158,27 @@ or removed by the time they are serialized to OTel.
 
 ---
 
-### 7. ✅ PII Filtering — Config Block DSL (Fixed in v0.2.0)
+### 7. ✅ PII Filtering — Event-Level + Inheritance
 
-**Was:** `E11y::Configuration` had no `pii_filter` method and no corresponding config class.
-
-**Fix:** `PIIFilterConfig` class added to `Configuration`. The block DSL is now callable:
+**Approach:** Event-level `pii_filtering do` in event classes. No global `config.pii_filter` — use inheritance for shared rules:
 
 ```ruby
-config.pii_filter do
-  use_rails_filter_parameters true
-  filter_parameters [:password, :token, :ssn]
-  allow_parameters [:user_id, :order_id]
-  filter_pattern /credit_card|cvv/i
+class BaseUserEvent < E11y::Event::Base
+  contains_pii true
+  pii_filtering do
+    masks :password
+    hashes :email
+  end
+end
+
+class Events::PaymentCreated < BaseUserEvent
+  pii_filtering do
+    masks :card_number
+  end
 end
 ```
+
+Child inherits parent's rules; child's block adds or overrides. `contains_pii` also inherits.
 
 ---
 
@@ -521,7 +526,7 @@ c.adapters[:null] = E11y::Adapters::NullAdapter.new
 - Core event system (`Event::Base`, `track()`, schemas, block form with `duration_ms`)
 - Request-scoped debug buffering
 - Loki, Sentry, File, Stdout, InMemory, NullAdapter adapters
-- PII filtering — event-level DSL + global `config.pii_filter do` block
+- PII filtering — event-level DSL + inheritance
 - Adaptive sampling (error-spike, load-based, value-based)
 - Rails + ActiveJob + Sidekiq instrumentation
 - Presets (HighValueEvent, AuditEvent, DebugEvent)

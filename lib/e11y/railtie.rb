@@ -33,6 +33,13 @@ module E11y
   # including configuration, middleware insertion, instrumentation setup,
   # and console integration.
   class Railtie < Rails::Railtie
+    # Wire up generators so `rails g e11y:*` commands are discoverable.
+    generators do
+      require "generators/e11y/install/install_generator"
+      require "generators/e11y/event/event_generator"
+      require "generators/e11y/grafana_dashboard/grafana_dashboard_generator"
+      require "generators/e11y/prometheus_alerts/prometheus_alerts_generator"
+    end
     # Derive service name from Rails application class
     # @return [String] Service name (e.g., "my_app")
     def self.derive_service_name

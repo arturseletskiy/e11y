@@ -15,6 +15,8 @@ loader.inflector.inflect(
 )
 # Don't autoload railtie - it will be required manually when Rails is available
 loader.do_not_eager_load("#{__dir__}/e11y/railtie.rb")
+# Generators live under lib/generators/ — not part of the autoloaded tree
+loader.ignore("#{__dir__}/generators")
 loader.setup
 
 # E11y - Event-Driven Observability for Ruby on Rails
@@ -62,6 +64,73 @@ module E11y
       @logger ||= ::Logger.new($stdout)
     end
 
+    # Initialize E11y and all configured adapters.
+    # Call after the configure block at application startup.
+    #
+    # @return [void]
+    def start!
+      return unless configuration.enabled
+
+      configuration.adapters.each_value do |adapter|
+        adapter.start! if adapter.respond_to?(:start!)
+      end
+      logger.info("[E11y] Started (#{configuration.adapters.size} adapters)")
+    end
+
+    # Gracefully shut down E11y, flushing pending events.
+    #
+    # @param timeout [Integer] Seconds to wait for each adapter flush (default: 5)
+    # @return [void]
+    def stop!(timeout: 5)
+      require "timeout"
+      configuration.adapters.each_value do |adapter|
+        if adapter.respond_to?(:stop!)
+          adapter.stop!(timeout: timeout)
+        elsif adapter.respond_to?(:flush!)
+          Timeout.timeout(timeout) { adapter.flush! }
+        end
+      rescue StandardError => e
+        logger.warn("[E11y] Adapter stop error: #{e.message}")
+      end
+      logger.info("[E11y] Stopped")
+    end
+
+    # Check whether E11y will process events with the given severity.
+    # Returns false if no healthy adapter is registered for that severity.
+    #
+    # @param severity [Symbol] e.g. :debug, :info, :error
+    # @return [Boolean]
+    def enabled_for?(severity)
+      return false unless configuration.enabled
+
+      configuration.adapters_for_severity(severity).any? do |name|
+        configuration.adapters[name]&.healthy?
+      end
+    rescue StandardError
+      false
+    end
+
+    # Current size of the request-scoped debug buffer for this thread.
+    #
+    # @return [Integer]
+    def buffer_size
+      buffer = Thread.current[:e11y_request_buffer]
+      buffer.respond_to?(:size) ? buffer.size : 0
+    end
+
+    # Circuit breaker states for all adapters.
+    #
+    # @return [Hash{Symbol => Symbol}] adapter_name => :closed / :open / :half_open
+    def circuit_breaker_state
+      configuration.adapters.each_with_object({}) do |(name, adapter), result|
+        result[name] = if adapter.respond_to?(:circuit_breaker_state)
+                         adapter.circuit_breaker_state
+                       else
+                         :closed
+                       end
+      end
+    end
+
     # Reset configuration (primarily for testing)
     #
     # @return [void]
@@ -98,7 +167,7 @@ module E11y
     attr_accessor :adapters, :log_level, :enabled, :environment, :service_name, :default_retention_period,
                   :routing_rules, :fallback_adapters
     attr_reader :adapter_mapping, :pipeline, :rails_instrumentation, :logger_bridge, :request_buffer, :active_job,
-                :sidekiq, :error_handling, :dlq_storage, :dlq_filter, :rate_limiting, :slo_tracking
+                :sidekiq, :error_handling, :dlq_storage, :dlq_filter, :cardinality_protection
 
     def initialize
       initialize_basic_config
@@ -136,6 +205,7 @@ module E11y
       @dlq_filter = nil # Set by user (e.g., DLQ::Filter instance)
       @rate_limiting = RateLimitingConfig.new
       @slo_tracking = SLOTrackingConfig.new # ✅ L3.14.1
+      @cardinality_protection = CardinalityProtectionConfig.new
     end
 
     public
@@ -153,6 +223,86 @@ module E11y
     # @return [#call] Built middleware pipeline
     def built_pipeline
       @built_pipeline ||= @pipeline.build(->(_event_data) {})
+    end
+
+    # Rate limiting config — call with block for DSL, without for plain access.
+    #
+    # @example DSL form
+    #   config.rate_limiting do
+    #     global limit: 10_000, window: 1.minute
+    #     per_event "user.login.failed", limit: 100, window: 1.minute
+    #   end
+    # @example Plain access
+    #   config.rate_limiting.enabled = true
+    def rate_limiting(&block)
+      block_given? ? @rate_limiting.instance_eval(&block) : @rate_limiting
+    end
+
+    # SLO tracking config — call with block for DSL, without for plain access.
+    #
+    # @example DSL form
+    #   config.slo do
+    #     http_ignore_statuses [404, 401]
+    #     latency_percentiles [50, 95, 99]
+    #     controller "Api::OrdersController", action: "show" do
+    #       slo_target 0.999
+    #       latency_target 200
+    #     end
+    #   end
+    def slo(&block)
+      block_given? ? @slo_tracking.instance_eval(&block) : @slo_tracking
+    end
+
+    # @return [SLOTrackingConfig]
+    def slo_tracking(&block)
+      block_given? ? @slo_tracking.instance_eval(&block) : @slo_tracking
+    end
+
+    # Set slo_tracking — accepts Boolean (coerced) or SLOTrackingConfig.
+    #
+    # @param value [Boolean, SLOTrackingConfig]
+    # @example config.slo_tracking = true  # enables; no longer crashes
+    def slo_tracking=(value)
+      case value
+      when TrueClass, FalseClass
+        @slo_tracking.enabled = value
+      when SLOTrackingConfig
+        @slo_tracking = value
+      end
+    end
+
+    # Cardinality protection config — call with block for DSL, without for plain access.
+    #
+    # @example
+    #   config.cardinality_protection do
+    #     max_cardinality 1000
+    #     denylist [:user_id, :order_id, :email]
+    #     overflow_strategy :relabel
+    #   end
+    def cardinality_protection(&block)
+      block_given? ? @cardinality_protection.instance_eval(&block) : @cardinality_protection
+    end
+
+    # Register an adapter instance by name (convenience alias for config.adapters[name] = instance).
+    #
+    # @param name [Symbol, String] Adapter name (e.g. :loki, :sentry)
+    # @param instance [E11y::Adapters::Base] Adapter instance
+    # @example config.register_adapter :loki, E11y::Adapters::Loki.new(url: ENV["LOKI_URL"])
+    def register_adapter(name, instance)
+      @adapters[name.to_sym] = instance
+    end
+
+    # Set the default adapter(s) used when no severity-specific mapping matches.
+    #
+    # @param names [Symbol, Array<Symbol>]
+    # @example config.default_adapters = [:loki]
+    def default_adapters=(names)
+      @adapter_mapping[:default] = Array(names).map(&:to_sym)
+    end
+
+    # @return [Array<Symbol>] Default adapter names
+    def default_adapters
+      @adapter_mapping[:default]
     end
 
     private
@@ -175,18 +325,21 @@ module E11y
     # Setup default middleware pipeline
     #
     # Default pipeline order (per ADR-015):
-    # 1. TraceContext - Add trace_id, span_id, timestamp (zone: :pre_processing)
-    # 2. Validation - Schema validation (zone: :pre_processing)
-    # 3. PIIFilter - PII filtering (zone: :security)
-    # 4. AuditSigning - Audit event signing (zone: :security)
-    # 5. Sampling - Adaptive sampling (zone: :routing)
-    # 6. Routing - Buffer routing (zone: :adapters)
+    # 1. TraceContext  - Add trace_id, span_id, timestamp (zone: :pre_processing)
+    # 2. Versioning    - Normalize event names: OrderPaidEvent → order.paid (zone: :pre_processing)
+    # 3. Validation    - Schema validation (zone: :pre_processing)
+    # 4. PIIFilter     - PII filtering (zone: :security)
+    # 5. AuditSigning  - Audit event signing (zone: :security)
+    # 6. Sampling      - Adaptive sampling (zone: :routing)
+    # 7. RateLimiting  - DoS protection, token bucket (zone: :routing)
+    # 8. Routing       - Buffer routing (zone: :adapters)
     #
     # @return [void]
     # @see ADR-015 Middleware Execution Order
     def configure_default_pipeline
       # Zone: :pre_processing
       @pipeline.use E11y::Middleware::TraceContext
+      @pipeline.use E11y::Middleware::Versioning   # normalise names before validation
       @pipeline.use E11y::Middleware::Validation
 
       # Zone: :security
@@ -195,6 +348,7 @@ module E11y
 
       # Zone: :routing
       @pipeline.use E11y::Middleware::Sampling
+      @pipeline.use E11y::Middleware::RateLimiting  # DoS protection before routing
 
       # Zone: :adapters
       @pipeline.use E11y::Middleware::Routing
@@ -308,17 +462,59 @@ module E11y
   # Rate Limiting configuration (UC-011, C02 Resolution)
   #
   # Protects adapters from event floods using token bucket algorithm.
+  # Supports global limits and per-event-pattern limits.
   #
   # @see UC-011 (Rate Limiting - DoS Protection)
   # @see ADR-013 §4.6 (C02 Resolution)
+  #
+  # @example Block DSL
+  #   config.rate_limiting do
+  #     global limit: 10_000, window: 1.minute
+  #     per_event "user.login.failed", limit: 100, window: 1.minute
+  #     per_event "payment.*", limit: 500, window: 1.minute
+  #   end
   class RateLimitingConfig
-    attr_accessor :enabled, :global_limit, :per_event_limit, :window
+    attr_accessor :enabled, :global_limit, :global_window
+    attr_reader :per_event_limits
 
     def initialize
-      @enabled = false # Opt-in (enable explicitly)
+      @enabled = false      # Opt-in (enable explicitly)
       @global_limit = 10_000 # Max 10K events/sec globally
-      @per_event_limit = 1_000 # Max 1K events/sec per event type
-      @window = 1.0 # 1 second window
+      @global_window = 1.0   # 1 second window
+      @per_event_limits = []
+    end
+
+    # Set global rate limit.
+    # @param limit [Integer] Max events per window globally
+    # @param window [Numeric, ActiveSupport::Duration] Window size
+    def global(limit:, window: 1.0)
+      @global_limit = limit
+      @global_window = window.is_a?(ActiveSupport::Duration) ? window.to_f : window.to_f
+    end
+
+    # Set per-event (or per-pattern) rate limit.
+    # @param pattern [String] Event name or glob pattern (e.g. "payment.*")
+    # @param limit [Integer] Max events per window for this pattern
+    # @param window [Numeric, ActiveSupport::Duration] Window size
+    def per_event(pattern, limit:, window: 1.0)
+      @per_event_limits << {
+        pattern: pattern.to_s,
+        limit: limit,
+        window: window.is_a?(ActiveSupport::Duration) ? window.to_f : window.to_f
+      }
+    end
+
+    # Find the most specific rate limit config for a given event name.
+    # Per-event rules take precedence; falls back to global config.
+    #
+    # @param event_name [String] Event name to look up
+    # @return [Hash] { limit:, window: }
+    def limit_for(event_name)
+      match = @per_event_limits.find do |rule|
+        pattern = rule[:pattern].gsub(".", "\\.").gsub("*", ".*")
+        Regexp.new("^#{pattern}$").match?(event_name.to_s)
+      end
+      match || { limit: @global_limit, window: @global_window }
     end
   end
 
@@ -332,11 +528,115 @@ module E11y
   #
   # @note C11 Resolution (Sampling Correction): Requires Phase 2.8 (Stratified Sampling).
   #   Without stratified sampling, SLO metrics may be inaccurate when adaptive sampling is enabled.
+  #
+  # @example Block DSL
+  #   config.slo do
+  #     http_ignore_statuses [404, 401]
+  #     latency_percentiles [50, 95, 99]
+  #     controller "Api::OrdersController", action: "show" do
+  #       slo_target 0.999
+  #       latency_target 200
+  #     end
+  #     job "ReportGenerationJob" do
+  #       ignore true
+  #     end
+  #   end
   class SLOTrackingConfig
     attr_accessor :enabled
+    attr_reader :http_ignore_statuses, :latency_percentiles, :controller_configs, :job_configs
 
     def initialize
       @enabled = true # Zero-config: enabled by default
+      @http_ignore_statuses = []
+      @latency_percentiles = [50, 95, 99]
+      @controller_configs = {}
+      @job_configs = {}
+    end
+
+    # @param statuses [Array<Integer>] HTTP status codes to exclude from SLO calculations
+    def http_ignore_statuses(statuses)
+      @http_ignore_statuses = Array(statuses)
+    end
+
+    # @param percentiles [Array<Integer>] Latency percentiles to track (e.g. [50, 95, 99])
+    def latency_percentiles(percentiles)
+      @latency_percentiles = Array(percentiles)
+    end
+
+    # Per-controller SLO config.
+    # @param name [String] Controller class name
+    # @param action [String, nil] Specific action (nil = all actions)
+    def controller(name, action: nil, &block)
+      key = action ? "#{name}##{action}" : name
+      cfg = ControllerSLOConfig.new
+      cfg.instance_eval(&block) if block_given?
+      @controller_configs[key] = cfg
+    end
+
+    # Per-job SLO config.
+    # @param name [String] Job class name
+    def job(name, &block)
+      cfg = JobSLOConfig.new
+      cfg.instance_eval(&block) if block_given?
+      @job_configs[name] = cfg
+    end
+
+    # Per-controller SLO target config.
+    class ControllerSLOConfig
+      attr_reader :slo_target, :latency_target
+
+      def slo_target(value = nil)
+        value ? @slo_target = value : @slo_target
+      end
+
+      def latency_target(value = nil)
+        value ? @latency_target = value : @latency_target
+      end
+    end
+
+    # Per-job SLO config.
+    class JobSLOConfig
+      attr_reader :ignore
+
+      def ignore(value = nil)
+        value.nil? ? @ignore : @ignore = value
+      end
+    end
+  end
+
+  # Cardinality Protection configuration
+  #
+  # Global cardinality limits applied by adapters that support it (e.g. Yabeda).
+  # Per-adapter config can still be passed at instantiation; this provides a global default.
+  #
+  # @example
+  #   config.cardinality_protection do
+  #     max_cardinality 1000
+  #     denylist [:user_id, :order_id, :email]
+  #     overflow_strategy :relabel
+  #   end
+  class CardinalityProtectionConfig
+    attr_reader :max_cardinality_limit, :denylist, :overflow_strategy
+
+    def initialize
+      @max_cardinality_limit = 1000
+      @overflow_strategy = :relabel
+      @denylist = []
+    end
+
+    # @param value [Integer]
+    def max_cardinality(value)
+      @max_cardinality_limit = value
+    end
+
+    # @param keys [Array<Symbol>]
+    def denylist(keys)
+      @denylist = Array(keys).map(&:to_sym)
+    end
+
+    # @param strategy [Symbol] :relabel or :drop
+    def overflow_strategy(strategy)
+      @overflow_strategy = strategy
     end
   end
 end

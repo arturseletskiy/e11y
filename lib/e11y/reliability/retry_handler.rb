@@ -50,12 +50,14 @@ module E11y
       # @option config [Float] :max_delay_ms Maximum delay in milliseconds (default: 5000)
       # @option config [Float] :jitter_factor Jitter factor (0.0-1.0, default: 0.1)
       # @option config [Boolean] :fail_on_error Raise error after max retries (default: true)
-      def initialize(config: {})
+      # @param rate_limiter [RetryRateLimiter, nil] Optional rate limiter for thundering herd prevention (C06)
+      def initialize(config: {}, rate_limiter: nil)
         @max_attempts = config[:max_attempts] || 3
         @base_delay_ms = config[:base_delay_ms] || 100.0
         @max_delay_ms = config[:max_delay_ms] || 5000.0
         @jitter_factor = config[:jitter_factor] || 0.1
         @fail_on_error = config.fetch(:fail_on_error, true)
+        @rate_limiter = rate_limiter
       end
 
       # Execute block with retry logic.
@@ -97,6 +99,22 @@ module E11y
             # Calculate backoff delay
             delay_ms = calculate_backoff_delay(attempt)
             on_retry_attempt(adapter, event, e, attempt, delay_ms)
+
+            # C06: Thundering herd prevention — check rate limiter before sleeping
+            if @rate_limiter && !@rate_limiter.allow?(adapter.class.name, event)
+              # Rate limit exceeded: use the configured action
+              case @rate_limiter.instance_variable_get(:@on_limit_exceeded)
+              when :dlq
+                # Abort retry, let caller save to DLQ
+                raise RetryExhaustedError.new(e, retry_count: attempt) if @fail_on_error
+
+                return nil
+              else
+                # :delay — sleep for the full window + jitter before retrying
+                jitter = rand(0..(delay_ms * 0.2))
+                sleep((@rate_limiter.instance_variable_get(:@window) * 1000 + jitter) / 1000.0)
+              end
+            end
 
             # Sleep with backoff
             sleep(delay_ms / 1000.0)

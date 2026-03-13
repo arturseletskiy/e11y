@@ -89,11 +89,9 @@ module E11y
 
           begin
             adapter.write(event_data)
-            increment_metric("e11y.middleware.routing.write_success", adapter: adapter_name)
           rescue StandardError => e
             # Log routing error but don't fail pipeline
             warn "E11y routing error for adapter #{adapter_name}: #{e.message}"
-            increment_metric("e11y.middleware.routing.write_error", adapter: adapter_name)
           end
         end
 
