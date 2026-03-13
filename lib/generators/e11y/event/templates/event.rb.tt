@@ -1,0 +1,16 @@
+# frozen_string_literal: true
+
+module Events
+  class <%= class_name %> < E11y::Event::Base
+    # severity :info   # auto-inferred from class name; override if needed
+
+    schema do
+      # required(:field_name).filled(:string)
+      # optional(:other_field).maybe(:integer)
+    end
+
+    # metrics do
+    #   counter :<%= file_name.gsub("/", "_") %>_total
+    # end
+  end
+end

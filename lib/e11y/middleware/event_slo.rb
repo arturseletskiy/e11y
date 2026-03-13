@@ -69,23 +69,30 @@ module E11y
         # Skip if SLO not enabled for this event
         # Support explicit event_class (for testing) or resolve from event_name
         event_class = event_data[:event_class] || resolve_event_class(event_data)
-        return event_data unless event_class.respond_to?(:slo_config)
-        return event_data unless event_class.slo_config&.enabled?
+        unless event_class.respond_to?(:slo_config) && event_class.slo_config&.enabled?
+          # Pass to next middleware even if SLO not enabled
+          return @app&.call(event_data) || event_data
+        end
 
         # Compute slo_status from payload
         slo_status = compute_slo_status(event_class, event_data[:payload])
-        return event_data unless slo_status
+        unless slo_status
+          # Pass to next middleware even if slo_status is nil
+          return @app&.call(event_data) || event_data
+        end
 
         # Emit SLO metric
         emit_slo_metric(event_class, slo_status, event_data[:payload])
 
-        event_data # Passthrough (never modify event_data)
+        # Pass to next middleware (Routing writes to adapters)
+        @app&.call(event_data) || event_data
       rescue StandardError => e
         # Never fail event tracking due to SLO processing
         E11y.logger.error(
           "[E11y::Middleware::EventSlo] SLO processing failed for #{event_data[:event_name]}: #{e.message}"
         )
-        event_data
+        # Still pass to next middleware even on error
+        @app&.call(event_data) || event_data
       end
 
       private

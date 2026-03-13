@@ -32,12 +32,6 @@ RSpec.describe E11y do
     end
   end
 
-  describe ".track" do
-    it "raises NotImplementedError" do
-      expect { described_class.track(double("event")) }.to raise_error(NotImplementedError, /Phase 1/)
-    end
-  end
-
   describe ".logger" do
     it "returns logger instance" do
       expect(described_class.logger).to respond_to(:info)

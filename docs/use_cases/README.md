@@ -7,7 +7,7 @@
 ### Core Use Cases
 - **[UC-001: Request-Scoped Debug Buffering](./UC-001-request-scoped-debug-buffering.md)** - Killer feature: debug events только при ошибках
 - **[UC-002: Business Event Tracking](./UC-002-business-event-tracking.md)** - Структурированные бизнес-события
-- **[UC-003: Pattern-Based Metrics](./UC-003-pattern-based-metrics.md)** - Автоматические метрики из событий
+- **[UC-003: Event Metrics](./UC-003-event-metrics.md)** - Метрики в event-классах
 - **[UC-004: Zero-Config SLO Tracking](./UC-004-zero-config-slo-tracking.md)** - Built-in SLO monitoring
 
 ### Integration Use Cases
@@ -60,7 +60,7 @@
 **Engineering Managers/CTOs:**
 - UC-015 (Cost Optimization)
 - UC-013 (High Cardinality Protection)
-- UC-003 (Pattern-Based Metrics)
+- UC-003 (Event Metrics)
 
 ### By Complexity
 
@@ -72,7 +72,7 @@
 
 **Intermediate (15-60 min setup):**
 - UC-001 (Request-Scoped Debug Buffering)
-- UC-003 (Pattern-Based Metrics)
+- UC-003 (Event Metrics)
 - UC-004 (Zero-Config SLO Tracking)
 - UC-006 (Trace Context Management)
 - UC-007 (PII Filtering)

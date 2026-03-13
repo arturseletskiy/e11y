@@ -81,22 +81,38 @@ module E11y
         # - Auto-calculated retention_until from retention_period
         #
         # @param payload [Hash] Event data matching the schema
+        # @yield Optional block — measured for duration; adds :duration_ms to payload
         # @return [Hash] Event hash (includes metadata)
         #
-        # @example
+        # @example Without block
         #   UserSignupEvent.track(user_id: 123, email: "user@example.com")
         #   # => { event_name: "UserSignupEvent", payload: {...}, severity: :info, adapters: [:logs], ... }
         #
+        # @example With block (duration measurement)
+        #   Events::OrderPaid.track(order_id: '123') { ExternalPaymentService.charge! }
+        #   # => payload includes duration_ms automatically
+        #
         # @raise [E11y::ValidationError] if payload doesn't match schema (when validation runs)
-        def track(**payload)
+        def track(**payload, &block)
           return unless E11y.config.enabled
+
+          # Block form: execute block, measure duration, capture return value
+          block_result = nil
+          if block
+            start = Process.clock_gettime(Process::CLOCK_MONOTONIC, :millisecond)
+            block_result = yield
+            payload = payload.merge(duration_ms: Process.clock_gettime(Process::CLOCK_MONOTONIC, :millisecond) - start)
+          end
+
+          # Severity: payload override (e.g. exception → :error) or class default
+          resolved_severity = payload[:severity] || payload["severity"] || severity
 
           # Build event data hash for pipeline processing
           event_data = {
             event_class: self,
             event_name: event_name,
             payload: payload,
-            severity: severity,
+            severity: resolved_severity,
             version: version,
             adapters: adapters,
             timestamp: Time.now.utc,
@@ -109,8 +125,8 @@ module E11y
           # Routing middleware is the LAST middleware and it writes to adapters directly
           E11y.config.built_pipeline.call(event_data)
 
-          # Return event data for testing/debugging
-          event_data
+          # With block: return block's result (caller cares about it); without: return event_data
+          block ? block_result : event_data
         end
 
         # Build event hash
@@ -240,9 +256,7 @@ module E11y
         #   end
         def severity(value = nil)
           if value
-            unless SEVERITIES.include?(value)
-              raise ArgumentError, "Invalid severity: #{value}. Must be one of: #{SEVERITIES.join(', ')}"
-            end
+            raise ArgumentError, "Invalid severity: #{value}. Must be one of: #{SEVERITIES.join(', ')}" unless SEVERITIES.include?(value)
 
             @severity = value
           end
@@ -263,13 +277,15 @@ module E11y
         #   class OrderPaidEventV2 < E11y::Event::Base
         #     version 2
         #   end
+        VERSION_REGEX = /V(\d+)$/
+
         def version(value = nil)
           @version = value if value
-          # Return explicitly set version OR inherit from parent (if set) OR default to 1
           return @version if @version
-          return superclass.version if superclass != E11y::Event::Base && superclass.instance_variable_get(:@version)
 
-          1
+          # Auto-extract from class name (e.g. OrderPaidV2 → 2)
+          match = name&.match(VERSION_REGEX)
+          match ? match[1].to_i : 1
         end
 
         # Set or get retention period for this event
@@ -299,13 +315,14 @@ module E11y
           @retention_period = value if value
           # Return explicitly set retention_period OR inherit from parent (if set) OR config default OR final fallback
           return @retention_period if @retention_period
-          if superclass != E11y::Event::Base && superclass.instance_variable_get(:@retention_period)
-            return superclass.retention_period
-          end
+          return superclass.retention_period if superclass != E11y::Event::Base && superclass.instance_variable_get(:@retention_period)
 
           # Fallback to configuration or 30 days
           E11y.configuration&.default_retention_period || 30.days
         end
+
+        # Convenience alias — matches Quick Start documentation.
+        alias retention retention_period
 
         # Set or get adapters for this event
         #
@@ -331,16 +348,42 @@ module E11y
           return @adapters if @adapters
           return superclass.adapters if superclass != E11y::Event::Base && superclass.instance_variable_get(:@adapters)
 
+          # No explicit adapters: inherit from parent or resolve from severity
+          # (audit events and regular events both use severity-based mapping)
           resolved_adapters
         end
 
-        # Get event name (normalized)
+        # Get or set event name (normalized)
         #
-        # @return [String] Event name without version suffix
+        # When called with a value, stores it and auto-registers the class in `E11y::Registry`.
+        # When called without a value, derives the name from the class name (stripping version suffix).
         #
-        # @example
+        # @param value [String, Symbol, nil] Explicit event name to set, or nil to read
+        # @return [String] Event name
+        #
+        # @example Explicit name
+        #   class OrderPaidEvent < E11y::Event::Base
+        #     event_name "order.paid"
+        #   end
+        #
+        # @example Auto-derived name
         #   OrderPaidEventV2.event_name # => "OrderPaidEvent"
-        def event_name
+        def event_name(value = nil)
+          if value
+            @event_name = value.to_s
+            @event_name_explicit = true
+            # Auto-register in E11y::Registry when an explicit name is set.
+            # Guard with defined? so that loading order does not matter.
+            # NOTE: call register AFTER setting @event_name_explicit so that any
+            # re-entrant call to event_name (from Registry#register) returns the
+            # correct value instead of falling through to the auto-derive path.
+            E11y::Registry.register(self) if defined?(E11y::Registry)
+            return @event_name
+          end
+
+          # Return explicitly-set name unconditionally (works for anonymous classes too)
+          return @event_name if @event_name_explicit
+
           # Don't cache for anonymous classes (name returns nil)
           return @event_name if @event_name && name
 
@@ -365,7 +408,6 @@ module E11y
         #   class CriticalEvent < E11y::Event::Base
         #     sample_rate 1.0  # 100% sampling
         #   end
-        # rubocop:disable Metrics/CyclomaticComplexity
         def sample_rate(value = nil)
           if value
             unless value.is_a?(Numeric) && value >= 0.0 && value <= 1.0
@@ -377,13 +419,10 @@ module E11y
 
           # Return explicitly set sample_rate OR inherit from parent (if set) OR nil (use resolve_sample_rate)
           return @sample_rate if @sample_rate
-          if superclass != E11y::Event::Base && superclass.instance_variable_get(:@sample_rate)
-            return superclass.sample_rate
-          end
+          return superclass.sample_rate if superclass != E11y::Event::Base && superclass.instance_variable_get(:@sample_rate)
 
           nil
         end
-        # rubocop:enable Metrics/CyclomaticComplexity
 
         # Configure value-based sampling (FEAT-4849)
         #
@@ -460,9 +499,7 @@ module E11y
 
           # Return explicitly set config OR inherit from parent (if set) OR nil
           return @adaptive_sampling if @adaptive_sampling
-          if superclass != E11y::Event::Base && superclass.instance_variable_get(:@adaptive_sampling)
-            return superclass.adaptive_sampling
-          end
+          return superclass.adaptive_sampling if superclass != E11y::Event::Base && superclass.instance_variable_get(:@adaptive_sampling)
 
           nil
         end
@@ -480,6 +517,30 @@ module E11y
           else
             1000 # 1000 events/sec
           end
+        end
+
+        # Set a per-event-class rate limit for the RateLimiting middleware.
+        #
+        # Overrides the global rate limit for events of this class.
+        # error/fatal events are always exempt (never rate-limited).
+        #
+        # @param count [Integer] Max events allowed per window
+        # @param window [Numeric, ActiveSupport::Duration] Time window in seconds (default: 1.0)
+        #
+        # @example Strict limit for login failures (brute-force protection)
+        #   class Events::UserLoginFailed < E11y::Event::Base
+        #     rate_limit 100, window: 60
+        #   end
+        def rate_limit(count, window: 1.0)
+          @rate_limit_count = count
+          @rate_limit_window = window.to_f
+        end
+
+        # Per-event rate limit configuration.
+        #
+        # @return [Hash] { count: Integer|nil, window: Float|nil }
+        def rate_limit_config
+          { count: @rate_limit_count, window: @rate_limit_window }
         end
 
         private
@@ -581,10 +642,10 @@ module E11y
         #   end
         def contains_pii(value = nil)
           if value.nil?
-            # Getter
+            return superclass.contains_pii if !instance_variable_defined?(:@contains_pii) && superclass.respond_to?(:contains_pii)
+
             @contains_pii
           else
-            # Setter
             @contains_pii = value
           end
         end
@@ -610,15 +671,22 @@ module E11y
         #     allows :user_id, :amount
         #   end
         def pii_filtering(&)
-          @pii_filtering_config ||= { fields: {} }
+          if @pii_filtering_config.nil?
+            parent_config = superclass.respond_to?(:pii_filtering_config) && superclass.pii_filtering_config
+            @pii_filtering_config = parent_config ? { fields: parent_config[:fields].dup } : { fields: {} }
+          end
           builder = PIIFilteringBuilder.new(@pii_filtering_config)
           builder.instance_eval(&)
         end
 
-        # Get PII filtering configuration
+        # Get PII filtering configuration (inherits from superclass if not defined)
         #
-        # @return [Hash] PII filtering config
-        attr_reader :pii_filtering_config
+        # @return [Hash, nil] PII filtering config
+        def pii_filtering_config
+          return @pii_filtering_config if instance_variable_defined?(:@pii_filtering_config) && @pii_filtering_config
+
+          superclass.pii_filtering_config if superclass.respond_to?(:pii_filtering_config)
+        end
 
         # PII Filtering DSL Builder
         #
@@ -759,7 +827,7 @@ module E11y
           audit_event? && signing_enabled?
         end
 
-        # === Metrics DSL (ADR-002, UC-003) ===
+        # === Metrics DSL (ADR-002, UC-003 Event Metrics) ===
 
         # Define metrics for this event
         #
@@ -807,6 +875,23 @@ module E11y
           builder.instance_eval(&block)
 
           # Register metrics in global registry
+          register_metrics_in_registry!
+        end
+
+        # Single-call metric shorthand — equivalent to a one-metric `metrics` block.
+        #
+        # @param type [Symbol] :counter, :histogram, or :gauge
+        # @param name [Symbol] Metric name
+        # @param opts [Hash] Options: tags:, value: (histogram/gauge), buckets: (histogram)
+        #
+        # @example
+        #   metric :counter, name: :orders_total, tags: [:currency]
+        #   metric :histogram, name: :order_amount, value: :amount, tags: [:currency]
+        def metric(type, name:, **opts)
+          raise ArgumentError, "Unknown metric type: #{type}. Use :counter, :histogram, or :gauge" unless %i[counter histogram gauge].include?(type)
+
+          @metrics_config ||= []
+          @metrics_config << { type: type, name: name }.merge(opts).compact
           register_metrics_in_registry!
         end
 
@@ -908,48 +993,6 @@ module E11y
               value: value,
               tags: tags
             }
-          end
-        end
-      end
-
-      # Builder for PII filtering DSL
-      class PIIFilteringBuilder
-        def initialize(config)
-          @config = config
-        end
-
-        # Mask fields (strategy: :mask)
-        def masks(*fields)
-          fields.each do |field|
-            @config[:fields][field] = { strategy: :mask }
-          end
-        end
-
-        # Hash fields (strategy: :hash)
-        def hashes(*fields)
-          fields.each do |field|
-            @config[:fields][field] = { strategy: :hash }
-          end
-        end
-
-        # Allow fields (strategy: :allow)
-        def allows(*fields)
-          fields.each do |field|
-            @config[:fields][field] = { strategy: :allow }
-          end
-        end
-
-        # Partial mask fields (strategy: :partial)
-        def partials(*fields)
-          fields.each do |field|
-            @config[:fields][field] = { strategy: :partial }
-          end
-        end
-
-        # Redact fields (strategy: :redact)
-        def redacts(*fields)
-          fields.each do |field|
-            @config[:fields][field] = { strategy: :redact }
           end
         end
       end

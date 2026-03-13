@@ -56,7 +56,7 @@ module E11y
       # @option event_data [Hash] :payload The event payload (required)
       # @return [Hash, nil] Validated event data, or nil if dropped
       # @raise [E11y::ValidationError] if validation fails
-      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
       def call(event_data)
         # Skip validation if no event_class or payload
         return @app.call(event_data) unless event_data[:event_class] && event_data[:payload]
@@ -69,7 +69,7 @@ module E11y
 
         # Skip validation if mode is :never
         if validation_mode == :never
-          increment_metric("e11y.middleware.validation.skipped")
+          E11y::Metrics.increment(:e11y_middleware_validation_total, result: "skipped")
           return @app.call(event_data)
         end
 
@@ -77,7 +77,7 @@ module E11y
         if validation_mode == :sampled
           sample_rate = event_class.respond_to?(:validation_sample_rate) ? event_class.validation_sample_rate : 0.01
           if rand >= sample_rate
-            increment_metric("e11y.middleware.validation.skipped")
+            E11y::Metrics.increment(:e11y_middleware_validation_total, result: "skipped")
             return @app.call(event_data)
           end
         end
@@ -87,7 +87,7 @@ module E11y
 
         # Skip validation if no schema defined (schema-less events)
         unless schema
-          increment_metric("e11y.middleware.validation.skipped")
+          E11y::Metrics.increment(:e11y_middleware_validation_total, result: "skipped")
           return @app.call(event_data)
         end
 
@@ -96,17 +96,17 @@ module E11y
 
         if result.success?
           # Validation passed
-          increment_metric("e11y.middleware.validation.passed")
+          E11y::Metrics.increment(:e11y_middleware_validation_total, result: "passed")
           @app.call(event_data)
         else
           # Validation failed - raise error with details
-          increment_metric("e11y.middleware.validation.failed")
+          E11y::Metrics.increment(:e11y_middleware_validation_total, result: "failed")
 
           error_message = format_validation_errors(event_class, result.errors)
           raise E11y::ValidationError, error_message
         end
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
       private
 
@@ -121,15 +121,6 @@ module E11y
         end.join("; ")
 
         "Validation failed for #{event_class.name}: #{error_details}"
-      end
-
-      # Placeholder for metrics instrumentation.
-      #
-      # @param metric_name [String] Metric name
-      # @return [void]
-      def increment_metric(_metric_name)
-        # TODO: Integrate with Yabeda/Prometheus in Phase 2
-        # Yabeda.e11y.middleware_validation_passed.increment
       end
     end
   end

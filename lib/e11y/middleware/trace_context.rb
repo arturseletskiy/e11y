@@ -56,13 +56,13 @@ module E11y
       def call(event_data)
         enrich_trace_context(event_data)
         enrich_service_context(event_data)
-        increment_metric("e11y.middleware.trace_context.processed")
+        E11y::Metrics.increment("e11y.middleware.trace_context.processed")
         @app.call(event_data)
       end
 
       private
 
-      # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # rubocop:disable Metrics/AbcSize
       # Add distributed tracing fields to event data
       # @param event_data [Hash] Event data to enrich
       # @return [void]
@@ -93,7 +93,7 @@ module E11y
 
         event_data[:audit_event] = event_class.audit_event?
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # rubocop:enable Metrics/AbcSize
 
       # Add service context fields to event data
       # @param event_data [Hash] Event data to enrich
@@ -151,10 +151,6 @@ module E11y
       #
       # @param metric_name [String] Metric name
       # @return [void]
-      def increment_metric(_metric_name)
-        # TODO: Integrate with Yabeda/Prometheus in Phase 2
-        # Yabeda.e11y.middleware_trace_context_processed.increment
-      end
     end
   end
 end

@@ -208,7 +208,6 @@ module E11y
       #
       # @param event [Hash] Event that caused overflow
       # @return [Boolean] true if event was eventually added, false if dropped
-      # rubocop:disable Metrics/MethodLength
       def handle_overflow(event)
         case @overflow_strategy
         when :drop_oldest
@@ -217,21 +216,20 @@ module E11y
           push(event) # Retry push (recursive, but will succeed)
         when :drop_newest
           # Drop new event, keep buffer unchanged
-          increment_metric("e11y.buffer.overflow.drop_newest")
+          E11y::Metrics.increment(:e11y_buffer_overflow_total, event: "drop_newest")
           false
         when :block
           # Wait for space, with timeout
           wait_for_space
           if full?
             # Timeout reached, drop event
-            increment_metric("e11y.buffer.overflow.block_timeout")
+            E11y::Metrics.increment(:e11y_buffer_overflow_total, event: "block_timeout")
             false
           else
             push(event) # Retry after space freed
           end
         end
       end
-      # rubocop:enable Metrics/MethodLength
 
       # Wait for buffer space (with timeout)
       #
@@ -250,17 +248,6 @@ module E11y
           # Brief sleep to avoid busy-wait
           sleep 0.001 # 1ms
         end
-      end
-
-      # Increment metric (placeholder for Phase 3: Metrics)
-      #
-      # TODO Phase 3: Replace with actual Yabeda metrics
-      #
-      # @param metric_name [String] Metric to increment
-      # @return [void]
-      def increment_metric(metric_name)
-        # Placeholder - will be implemented in Phase 3
-        # Yabeda.e11y.buffer_overflow.increment(strategy: @overflow_strategy)
       end
     end
   end

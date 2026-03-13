@@ -124,7 +124,6 @@ module E11y
       # @param message [String, nil] Log message
       # @yield Block that returns log message
       # @return [void]
-      # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
       # Logger tracking requires message extraction, validation, event class lookup, and error handling
       def track_to_e11y(severity, message = nil)
         # Extract message
@@ -143,7 +142,6 @@ module E11y
         # In development/test, you might want to log this
         warn "E11y logger tracking failed: #{e.message}" if defined?(::Rails) && ::Rails.env.development?
       end
-      # rubocop:enable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
       # Get event class for severity
       # @param severity [Symbol] E11y severity

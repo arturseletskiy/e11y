@@ -205,12 +205,11 @@ RSpec.describe E11y::Middleware::TraceContext do
 
     describe "metrics" do
       it "increments processed counter" do
-        # Using allow/expect pattern for metric verification
-        allow(middleware).to receive(:increment_metric)
+        allow(E11y::Metrics).to receive(:increment)
 
         middleware.call(event_data)
 
-        expect(middleware).to have_received(:increment_metric)
+        expect(E11y::Metrics).to have_received(:increment)
           .with("e11y.middleware.trace_context.processed")
       end
     end

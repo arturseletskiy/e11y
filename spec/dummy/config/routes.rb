@@ -7,4 +7,16 @@ Rails.application.routes.draw do
   get "/test_error", to: "posts#error"
   get "/test_redirect", to: "posts#redirect"
   get "/posts_list", to: "posts#list"
+
+  resources :users, only: [:create]
+  resources :orders, only: [:create]
+  resources :documents, only: [:create]
+  resources :reports, only: [:create]
+
+  namespace :api do
+    namespace :v1 do
+      resources :payments, only: [:create]
+      get "/protected", to: "protected#index"
+    end
+  end
 end

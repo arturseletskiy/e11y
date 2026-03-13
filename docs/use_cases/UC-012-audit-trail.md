@@ -424,15 +424,11 @@ Events::UserDeleted.track(
 E11y.configure do |config|
   config.audit_trail do
     # Separate storage for audit events
-    storage adapter: :postgresql,  # OR :s3, :file
+    storage adapter: :postgresql,  # OR :file
             table: 'audit_events',
             read_only: true  # Can't UPDATE/DELETE
     
-    # S3 with object lock (true immutability)
-    # storage adapter: :s3,
-    #         bucket: 'company-audit-trail',
-    #         object_lock: true,  # WORM (Write Once Read Many)
-    #         retention_period: 7.years
+    # Object storage with WORM (external; E11y uses retention_until for archival filtering)
   end
 end
 
@@ -568,14 +564,13 @@ E11y.configure do |config|
     
     # === ARCHIVAL ===
     archive_after 1.year,
-                  to: :s3_glacier,  # Cheaper cold storage
-                  bucket: 'company-audit-archive'
+                  to: :archive,  # Cold storage (external job filters by retention_until)
   end
 end
 
 # How it works:
-# 1. Events stored in hot storage (PostgreSQL/S3)
-# 2. After 1 year → moved to cold storage (Glacier)
+# 1. Events stored in hot storage (PostgreSQL/File)
+# 2. After 1 year → moved to cold storage (archival job filters by retention_until)
 # 3. After retention period → permanently deleted
 # 4. Deletion logged as audit event (audit the audit!)
 ```
@@ -1554,17 +1549,18 @@ module E11y
 end
 ```
 
-**3. S3 Audit Adapter (Cloud, Object Lock WORM)**
+**3. Object Storage Audit Adapter (conceptual; not in E11y)**
+
+> E11y does not provide an S3/object-storage adapter. For cloud WORM storage, use OTel Collector's object-storage exporter, or an external archival job that filters Loki by `retention_until`. Events carry `retention_until` (ISO8601) for easy filtering.
 
 ```ruby
-# lib/e11y/adapters/s3_audit.rb
+# Conceptual: Object storage with WORM (e.g., S3 Object Lock)
+# E11y does NOT implement this — use external archival
 module E11y
   module Adapters
-    class S3Audit < Base
+    class ObjectStorageAudit < Base  # Conceptual only
       def initialize(config)
         @bucket = config.bucket
-        @s3_client = Aws::S3::Client.new
-        @object_lock = config.object_lock || true
         @retention_days = config.retention_days || 2555  # 7 years
       end
       
@@ -1573,37 +1569,16 @@ module E11y
       end
       
       def write(event_data)
-        object_key = audit_object_key(event_data)
-        
-        @s3_client.put_object(
-          bucket: @bucket,
-          key: object_key,
-          body: event_data.to_json,
-          content_type: 'application/json',
-          
-          # WORM: Object Lock prevents deletion
-          object_lock_mode: 'GOVERNANCE',  # OR 'COMPLIANCE' (stricter)
-          object_lock_retain_until_date: @retention_days.days.from_now,
-          
-          # Metadata for audit
-          metadata: {
-            'event-id' => event_data[:event_id],
-            'event-name' => event_data[:event_name],
-            'signed-at' => event_data[:signed_at],
-            'signature-algorithm' => event_data[:signature_algorithm]
-          }
-        )
+        # Filter by retention_until for archival decisions
+        # object_key = "#{event_data[:retention_until]}/#{event_data[:event_id]}.json"
+        # ... PUT to object storage with WORM ...
       end
       
       private
       
       def audit_object_key(event_data)
-        timestamp = event_data[:timestamp]
-        date = timestamp.to_date
-        hour = timestamp.hour
-        
-        # Partition by date and hour for efficient queries
-        "audit/#{date.strftime('%Y/%m/%d')}/hour=#{hour.to_s.rjust(2, '0')}/#{event_data[:event_id]}.json"
+        ts = Time.parse(event_data[:timestamp])
+        "audit/#{ts.strftime('%Y/%m/%d')}/#{event_data[:event_id]}.json"
       end
     end
   end
@@ -1880,10 +1855,10 @@ end
 |-----------------|---------------------|------------|----------|
 | **File (append-only)** | 1-2ms | 10,000/sec | Simple, local, fast |
 | **PostgreSQL** | 2-5ms | 5,000/sec | Queryable, ACID |
-| **S3 (Object Lock)** | 10-50ms | 1,000/sec | Cloud, immutable (WORM) |
+| **Object storage (WORM)** | 10-50ms | 1,000/sec | Cloud, immutable (external archival) |
 | **Elasticsearch** | 5-10ms | 3,000/sec | Full-text search |
 
-**Recommendation:** Use **File adapter** for lowest latency, **PostgreSQL** for queryability, **S3** for compliance (true WORM).
+**Recommendation:** Use **File adapter** for lowest latency, **PostgreSQL** for queryability. For cloud WORM, use external archival (filter by `retention_until`).
 
 ---
 

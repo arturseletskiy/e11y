@@ -44,9 +44,7 @@ module E11y
       def self.signing_key
         @signing_key ||= ENV.fetch("E11Y_AUDIT_SIGNING_KEY") do
           # Development fallback (NOT for production!)
-          if defined?(::Rails) && ::Rails.env.production?
-            raise E11y::Error, "E11Y_AUDIT_SIGNING_KEY must be set in production"
-          end
+          raise E11y::Error, "E11Y_AUDIT_SIGNING_KEY must be set in production" if defined?(::Rails) && ::Rails.env.production?
 
           "development_key_#{SecureRandom.hex(32)}"
         end
@@ -73,19 +71,58 @@ module E11y
 
       # Verify signature (for testing/validation)
       #
+      # Uses the stored audit_canonical to recompute the expected HMAC and compares
+      # against audit_signature. Detects tampering with the canonical representation
+      # (e.g., if someone modifies the stored canonical in the audit log).
+      #
       # @param event_data [Hash] Event data with signature
       # @return [Boolean] true if signature is valid
       # rubocop:disable Naming/PredicateMethod
       def self.verify_signature(event_data)
         expected_signature = event_data[:audit_signature]
-        canonical = event_data[:audit_canonical]
+        return false unless expected_signature
 
-        return false unless expected_signature && canonical
+        # Recompute canonical from CURRENT payload (detects payload tampering)
+        recomputed = canonical_representation(event_data)
+        # Verify stored canonical matches recomputed (detects canonical tampering)
+        return false if event_data[:audit_canonical] && event_data[:audit_canonical] != recomputed
 
-        actual_signature = OpenSSL::HMAC.hexdigest("SHA256", signing_key, canonical)
+        actual_signature = OpenSSL::HMAC.hexdigest("SHA256", signing_key, recomputed)
         actual_signature == expected_signature
       end
       # rubocop:enable Naming/PredicateMethod
+
+      # Create canonical representation for signing (class method for verification)
+      #
+      # @param event_data [Hash] Event data
+      # @return [String] Canonical JSON string
+      def self.canonical_representation(event_data)
+        # Extract fields that should be signed
+        signable_data = {
+          event_name: event_data[:event_name],
+          payload: event_data[:payload],
+          timestamp: event_data[:timestamp],
+          version: event_data[:version]
+        }
+
+        # Convert to sorted JSON (deterministic)
+        JSON.generate(sort_hash(signable_data))
+      end
+
+      # Sort hash recursively for deterministic JSON (class method)
+      #
+      # @param obj [Object] Object to sort
+      # @return [Object] Sorted object
+      def self.sort_hash(obj)
+        case obj
+        when Hash
+          obj.keys.sort.to_h { |k| [k, sort_hash(obj[k])] }
+        when Array
+          obj.map { |v| sort_hash(v) }
+        else
+          obj
+        end
+      end
 
       private
 

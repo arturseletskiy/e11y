@@ -155,7 +155,6 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
   end
 
   describe "metric inheritance" do
-    # rubocop:disable RSpec/ExampleLength
     # Integration test for inheritance requires full class hierarchy setup
     it "inherits metrics from base class" do
       base_class = Class.new(E11y::Event::Base) do
@@ -189,7 +188,6 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
       expect(base_metrics.map { |m| m[:name] }).to include(:orders_total)
       expect(child_metrics.map { |m| m[:name] }).to include(:order_amount)
     end
-    # rubocop:enable RSpec/ExampleLength
   end
 
   describe "validation on registration" do

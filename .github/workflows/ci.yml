@@ -207,9 +207,39 @@ jobs:
           REDIS_URL: redis://localhost:6379
         run: |
           echo "🧪 Starting integration tests with Rails ${{ matrix.rails }} at $(date)"
-          timeout 5m bundle exec rspec --format documentation --profile 10 || (echo "⚠️ Integration tests timeout or failed at $(date)"; exit 1)
+          echo ""
+          echo "📋 Configuration:"
+          echo "   INTEGRATION=$INTEGRATION"
+          echo "   RAILS_VERSION=$RAILS_VERSION"
+          echo ""
+          echo "📋 Services URLs:"
+          echo "   LOKI_URL=$LOKI_URL"
+          echo "   PROMETHEUS_URL=$PROMETHEUS_URL"
+          echo "   ELASTICSEARCH_URL=$ELASTICSEARCH_URL"
+          echo "   REDIS_URL=$REDIS_URL"
+          echo ""
+          echo "🔍 Verifying services are accessible..."
+          curl -sf http://localhost:3100/ready && echo "✅ Loki is ready" || (echo "❌ Loki not accessible"; exit 1)
+          curl -sf http://localhost:9090/-/healthy && echo "✅ Prometheus is ready" || (echo "❌ Prometheus not accessible"; exit 1)
+          curl -sf http://localhost:9200/_cluster/health && echo "✅ Elasticsearch is ready" || (echo "❌ Elasticsearch not accessible"; exit 1)
+          nc -z localhost 6379 && echo "✅ Redis is ready" || (echo "❌ Redis not accessible"; exit 1)
+          echo ""
+          echo "🔧 Verifying dependencies are installed..."
+          bundle list | grep -E "(faraday|opentelemetry|yabeda|rails)" || (echo "⚠️ Some dependencies may be missing"; exit 1)
+          echo ""
+          echo "🚀 Running integration tests with REAL services (WebMock disabled)..."
+          echo "   Command: bundle exec rspec spec/integration/ --format documentation --profile 10"
+          echo ""
+          timeout 5m bundle exec rspec spec/integration/ --format documentation --profile 10 || (echo "⚠️ Integration tests timeout or failed at $(date)"; exit 1)
+          echo ""
           echo "✅ Integration tests completed at $(date)"
       
+      - name: Run memory specs
+        if: matrix.rails == '8.0'
+        run: |
+          bundle exec rspec spec/e11y/memory_spec.rb spec/e11y/event/base_benchmark_spec.rb \
+            --tag memory --format documentation
+
       - name: Upload integration test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -218,10 +248,45 @@ jobs:
           path: tmp/rspec_results.xml
           if-no-files-found: ignore
 
+  test-cucumber:
+    name: Cucumber Acceptance Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      loki:
+        image: grafana/loki:2.9.0
+        ports:
+          - 3100:3100
+        options: >-
+          --health-cmd "wget --spider -q http://localhost:3100/ready"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Install development dependencies
+        run: bundle config set --local with 'development' && bundle install
+
+      - name: Wait for Loki
+        run: |
+          echo "Waiting for Loki..."
+          timeout 30 bash -c 'until curl -sf http://localhost:3100/ready; do echo "Loki not ready yet..."; sleep 1; done' || (echo "❌ Loki timeout"; exit 1)
+          echo "✅ Loki ready"
+
+      - name: Run Cucumber acceptance tests (excluding @wip)
+        run: bundle exec cucumber features/ --tags "not @wip" --format progress
+
   build:
     name: Build Gem
     runs-on: ubuntu-latest
-    needs: [lint, security, test-unit, test-integration]
+    needs: [lint, security, test-unit, test-integration, test-cucumber]
     steps:
       - uses: actions/checkout@v4
       

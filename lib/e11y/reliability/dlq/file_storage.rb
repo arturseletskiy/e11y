@@ -38,7 +38,6 @@ module E11y
         # @param event_data [Hash] Event data
         # @param metadata [Hash] Failure metadata (error, retry_count, adapter, etc.)
         # @return [String] Event ID (UUID)
-        # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
         # DLQ save requires building entry, writing, rotation, cleanup, and metrics
         def save(event_data, metadata: {})
           event_id = SecureRandom.uuid
@@ -61,11 +60,10 @@ module E11y
           rotate_if_needed
           cleanup_old_files
 
-          increment_metric("e11y.dlq.saved", event_name: event_data[:event_name])
+          E11y::Metrics.increment("e11y.dlq.saved", event_name: event_data[:event_name])
 
           event_id
         end
-        # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
         # List DLQ entries with optional filters.
         #
@@ -73,7 +71,7 @@ module E11y
         # @param offset [Integer] Number of entries to skip
         # @param filters [Hash] Filter options (event_name, after, before)
         # @return [Array<Hash>] Array of DLQ entries
-        # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+        # rubocop:disable Metrics/AbcSize
         # DLQ listing requires file iteration, pagination, multiple filters, and error handling
         def list(limit: 100, offset: 0, filters: {})
           entries = []
@@ -97,15 +95,14 @@ module E11y
           entries
         rescue JSON::ParserError => e
           # Log parsing error but don't crash
-          increment_metric("e11y.dlq.parse_error", error: e.class.name)
+          E11y::Metrics.increment("e11y.dlq.parse_error", error: e.class.name)
           entries
         end
-        # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+        # rubocop:enable Metrics/AbcSize
 
         # Get DLQ statistics.
         #
         # @return [Hash] Statistics (total_entries, file_size_mb, oldest_entry, newest_entry)
-        # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
         # DLQ stats requires reading file size, counting entries, extracting timestamps, and error handling
         def stats
           return default_stats unless File.exist?(@file_path)
@@ -130,13 +127,13 @@ module E11y
             newest_entry: newest_entry,
             file_path: @file_path
           }
-        rescue StandardError => e
-          increment_metric("e11y.dlq.stats_error", error: e.class.name)
+        rescue StandardError
           default_stats
         end
-        # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
         # Replay single event from DLQ.
+        #
+        # Re-dispatches event through E11y pipeline so it reaches adapters.
         #
         # @param event_id [String] Event ID to replay
         # @return [Boolean] true if replayed successfully
@@ -144,15 +141,14 @@ module E11y
           entry = find_entry(event_id)
           return false unless entry
 
-          # Re-dispatch event through E11y pipeline
-          # TODO: Implement E11y::Pipeline.dispatch
-          # E11y::Pipeline.dispatch(entry[:event_data], metadata: entry[:metadata].merge(replayed: true))
+          event_data = entry[:event_data]
+          return false unless event_data
 
-          # For now, just mark as replayed
-          increment_metric("e11y.dlq.replayed", event_name: entry[:event_name])
+          E11y.config.built_pipeline.call(event_data)
+          E11y::Metrics.increment("e11y.dlq.replayed", event_name: entry[:event_name])
           true
         rescue StandardError => e
-          increment_metric("e11y.dlq.replay_failed", error: e.class.name)
+          E11y::Metrics.increment("e11y.dlq.replay_failed", error: e.class.name)
           false
         end
 
@@ -177,22 +173,47 @@ module E11y
 
         # Delete entry from DLQ.
         #
-        # Note: This is a simplified implementation.
-        # In production, consider using a database or append-only log with tombstones.
+        # Rewrites file excluding the entry. For large files this is expensive.
         #
         # @param event_id [String] Event ID to delete
         # @return [Boolean] true if deleted
-        # rubocop:disable Naming/PredicateMethod
         # delete is an action method returning boolean status, not a predicate query
-        def delete(_event_id)
-          # TODO: Implement deletion (requires rewriting file)
-          # For JSONL, deletion is expensive (requires full file rewrite)
-          # Consider marking as deleted instead or using database
+        def delete(event_id)
+          return false unless File.exist?(@file_path)
+
+          entries, found = read_entries_excluding(event_id)
+          return false unless found
+
+          rewrite_file_with(entries)
+          true
+        rescue StandardError
           false
         end
-        # rubocop:enable Naming/PredicateMethod
 
         private
+
+        def read_entries_excluding(event_id)
+          entries = []
+          found = false
+          File.foreach(@file_path) do |line|
+            entry = JSON.parse(line, symbolize_names: true)
+            if entry[:id] == event_id
+              found = true
+            else
+              entries << entry
+            end
+          end
+          [entries, found]
+        end
+
+        def rewrite_file_with(entries)
+          @mutex.synchronize do
+            File.open(@file_path, "w") do |f|
+              f.flock(File::LOCK_EX)
+              entries.each { |e| f.puts(JSON.generate(e)) }
+            end
+          end
+        end
 
         # Get default file path (log/e11y_dlq.jsonl).
         def default_file_path
@@ -226,8 +247,6 @@ module E11y
             rotated_path = @file_path.sub(/\.jsonl$/, ".#{timestamp}.jsonl")
 
             FileUtils.mv(@file_path, rotated_path)
-
-            increment_metric("e11y.dlq.rotated", new_file: rotated_path)
           end
         end
 
@@ -244,10 +263,7 @@ module E11y
 
             file_age_days = (Time.now - File.mtime(file)) / 86_400
 
-            if file_age_days > @retention_days
-              File.delete(file)
-              increment_metric("e11y.dlq.cleaned_up", file: file)
-            end
+            File.delete(file) if file_age_days > @retention_days
           end
         end
 
@@ -277,10 +293,8 @@ module E11y
         end
 
         # Increment DLQ metric.
-        def increment_metric(metric_name, tags = {})
-          # TODO: Integrate with Yabeda metrics
-          # E11y::Metrics.increment(metric_name, tags)
-        end
+        #
+        # Normalizes metric_name like "e11y.dlq.saved" to :e11y_dlq_saved_total.
       end
       # rubocop:enable Metrics/ClassLength
     end

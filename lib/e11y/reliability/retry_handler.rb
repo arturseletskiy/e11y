@@ -50,12 +50,15 @@ module E11y
       # @option config [Float] :max_delay_ms Maximum delay in milliseconds (default: 5000)
       # @option config [Float] :jitter_factor Jitter factor (0.0-1.0, default: 0.1)
       # @option config [Boolean] :fail_on_error Raise error after max retries (default: true)
-      def initialize(config: {})
+      # @param rate_limiter [RetryRateLimiter, nil] Optional rate limiter for thundering herd prevention (C06)
+      # @param retry_rate_limiter [RetryRateLimiter, nil] Alias for rate_limiter (backward compatibility)
+      def initialize(config: {}, rate_limiter: nil, retry_rate_limiter: nil)
         @max_attempts = config[:max_attempts] || 3
         @base_delay_ms = config[:base_delay_ms] || 100.0
         @max_delay_ms = config[:max_delay_ms] || 5000.0
         @jitter_factor = config[:jitter_factor] || 0.1
         @fail_on_error = config.fetch(:fail_on_error, true)
+        @rate_limiter = rate_limiter || retry_rate_limiter
       end
 
       # Execute block with retry logic.
@@ -97,6 +100,22 @@ module E11y
             # Calculate backoff delay
             delay_ms = calculate_backoff_delay(attempt)
             on_retry_attempt(adapter, event, e, attempt, delay_ms)
+
+            # C06: Thundering herd prevention — check rate limiter before sleeping
+            if @rate_limiter && !@rate_limiter.allow?(adapter.class.name, event)
+              # Rate limit exceeded: stop retrying to prevent thundering herd
+              # With :delay strategy, sleep first to spread out retry load
+              on_limit = @rate_limiter.instance_variable_get(:@on_limit_exceeded)
+              if on_limit == :delay
+                window_sec = @rate_limiter.instance_variable_get(:@window)
+                jitter = rand(0..(delay_ms * 0.2))
+                sleep(((window_sec * 1000) + jitter) / 1000.0)
+              end
+
+              raise RetryExhaustedError.new(e, retry_count: attempt) if @fail_on_error
+
+              return nil
+            end
 
             # Sleep with backoff
             sleep(delay_ms / 1000.0)
@@ -147,17 +166,17 @@ module E11y
 
       # Handle successful execution.
       def on_success(adapter, _event, attempt)
-        increment_metric("e11y.retry.success", adapter: adapter.class.name, attempts: attempt)
+        E11y::Metrics.increment("e11y.retry.success", adapter: adapter.class.name, attempts: attempt)
 
         # Log if retry was needed
         return unless attempt > 1
 
-        increment_metric("e11y.retry.recovered", adapter: adapter.class.name, attempts: attempt)
+        E11y::Metrics.increment("e11y.retry.recovered", adapter: adapter.class.name, attempts: attempt)
       end
 
       # Handle permanent failure (non-retriable error).
       def on_permanent_failure(adapter, _event, error, attempt)
-        increment_metric(
+        E11y::Metrics.increment(
           "e11y.retry.permanent_failure",
           adapter: adapter.class.name,
           error: error.class.name,
@@ -167,7 +186,7 @@ module E11y
 
       # Handle max retries exhausted (all attempts failed).
       def on_max_retries_exhausted(adapter, _event, error, attempt)
-        increment_metric(
+        E11y::Metrics.increment(
           "e11y.retry.exhausted",
           adapter: adapter.class.name,
           error: error.class.name,
@@ -176,35 +195,13 @@ module E11y
       end
 
       # Handle retry attempt.
-      def on_retry_attempt(adapter, _event, error, attempt, delay_ms)
-        increment_metric(
+      def on_retry_attempt(adapter, _event, error, attempt, _delay_ms)
+        E11y::Metrics.increment(
           "e11y.retry.attempt",
           adapter: adapter.class.name,
           error: error.class.name,
           attempt: attempt
         )
-
-        # Track backoff delay histogram
-        track_histogram("e11y.retry.backoff_delay_ms", delay_ms, adapter: adapter.class.name)
-      end
-
-      # Increment retry metric.
-      #
-      # @param metric_name [String] Metric name
-      # @param tags [Hash] Additional tags
-      def increment_metric(metric_name, tags = {})
-        # TODO: Integrate with Yabeda metrics
-        # E11y::Metrics.increment(metric_name, tags)
-      end
-
-      # Track histogram metric.
-      #
-      # @param metric_name [String] Metric name
-      # @param value [Numeric] Value to track
-      # @param tags [Hash] Additional tags
-      def track_histogram(metric_name, value, tags = {})
-        # TODO: Integrate with Yabeda metrics
-        # E11y::Metrics.histogram(metric_name, value, tags)
       end
     end
   end

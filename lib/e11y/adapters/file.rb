@@ -152,7 +152,7 @@ module E11y
 
       # Open file for writing
       def open_file!
-        @file = ::File.open(@path, "a")
+        @file = ::File.open(@path, "a") # rubocop:disable Style/FileOpen -- intentional: adapter keeps file handle open for lifecycle of adapter
         @file.sync = true
         @current_date = Date.today if @rotation == :daily
       end

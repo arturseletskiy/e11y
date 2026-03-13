@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "active_support/parameter_filter"
+
 module E11y
   module Middleware
     # PII Filter Middleware - 3-Tier Strategy
@@ -130,9 +132,11 @@ module E11y
           pii_config
         )
 
-        # Apply pattern-based filtering
+        # Apply pattern-based filtering (respects allows, uses VALUE_PATTERNS only)
         filtered_data[:payload] = apply_pattern_filtering(
-          filtered_data[:payload]
+          filtered_data[:payload],
+          pii_config,
+          []
         )
 
         filtered_data
@@ -143,7 +147,7 @@ module E11y
       # @param payload [Hash] Payload to filter
       # @param config [Hash] PII configuration
       # @return [Hash] Filtered payload
-      # rubocop:disable Metrics/CyclomaticComplexity, Metrics/MethodLength
+      # rubocop:disable Metrics/MethodLength
       # Field strategies require case/when for each PII filtering strategy type
       def apply_field_strategies(payload, config)
         return payload unless config
@@ -151,7 +155,9 @@ module E11y
         filtered = {}
 
         payload.each do |key, value|
-          strategy = config.dig(:fields, key, :strategy) || :allow
+          # Normalize key to symbol for config lookup (config uses symbol keys)
+          normalized_key = key.is_a?(Symbol) ? key : key.to_sym
+          strategy = config.dig(:fields, normalized_key, :strategy) || :allow
 
           # rubocop:disable Lint/DuplicateBranch
           # Unknown strategies intentionally fallback to allow (same as :allow)
@@ -174,34 +180,54 @@ module E11y
 
         filtered
       end
-      # rubocop:enable Metrics/CyclomaticComplexity, Metrics/MethodLength
+      # rubocop:enable Metrics/MethodLength
 
       # Apply pattern-based filtering to string values
       #
+      # Uses VALUE_PATTERNS only (excludes PASSWORD_FIELDS) so field-name patterns
+      # are not applied to values (avoids corrupting "process_token_renewal_completed").
+      # Skips filtering when value is under an allowed key (e.g. allows :card_number).
+      #
       # @param data [Object] Data to filter (recursively)
+      # @param pii_config [Hash] PII config with :fields (strategy per key)
+      # @param path [Array<Symbol>] Key path from payload root
       # @return [Object] Filtered data
-      def apply_pattern_filtering(data)
+      def apply_pattern_filtering(data, pii_config = nil, path = [])
         case data
-        when Hash
-          data.transform_values { |v| apply_pattern_filtering(v) }
-        when Array
-          data.map { |v| apply_pattern_filtering(v) }
-        when String
-          filter_string_patterns(data)
-        else
-          data
+        when Hash then apply_pattern_filtering_hash(data, pii_config, path)
+        when Array then data.map { |v| apply_pattern_filtering(v, pii_config, path) }
+        when String then filter_string_if_needed(data, path, pii_config)
+        else data
         end
       end
 
-      # Filter PII patterns in string
+      def apply_pattern_filtering_hash(data, pii_config, path)
+        data.each_with_object({}) do |(k, v), acc|
+          key_sym = k.is_a?(Symbol) ? k : k.to_sym
+          acc[k] = apply_pattern_filtering(v, pii_config, path + [key_sym])
+        end
+      end
+
+      def filter_string_if_needed(str, path, pii_config)
+        path_under_allowed_key?(path, pii_config) ? str : filter_string_patterns(str)
+      end
+
+      # Check if any ancestor key in path is explicitly allowed
+      def path_under_allowed_key?(path, pii_config)
+        return false unless pii_config && pii_config[:fields]
+
+        allowed_keys = pii_config[:fields].select { |_k, v| v[:strategy] == :allow }.keys
+        path.any? { |p| allowed_keys.include?(p) }
+      end
+
+      # Filter PII patterns in string (VALUE_PATTERNS only, not PASSWORD_FIELDS)
       #
       # @param str [String] String to filter
       # @return [String] Filtered string
       def filter_string_patterns(str)
         result = str.dup
 
-        # Apply all PII patterns
-        E11y::PII::Patterns::ALL.each do |pattern|
+        E11y::PII::Patterns::VALUE_PATTERNS.each do |pattern|
           result = result.gsub(pattern, "[FILTERED]")
         end
 
@@ -261,12 +287,18 @@ module E11y
       # Get Rails parameter filter
       #
       # Uses Rails.application.config.filter_parameters for PII filtering.
+      # When Rails is not loaded (e.g. unit tests), uses empty filter (no-op).
       #
       # @return [ActiveSupport::ParameterFilter] Parameter filter
       def parameter_filter
-        @parameter_filter ||= ActiveSupport::ParameterFilter.new(
-          Rails.application.config.filter_parameters
-        )
+        return @parameter_filter if defined?(@parameter_filter) && !@parameter_filter.nil?
+
+        filters = if defined?(Rails) && Rails.application
+                    Rails.application.config.filter_parameters
+                  else
+                    []
+                  end
+        @parameter_filter = ActiveSupport::ParameterFilter.new(filters)
       end
     end
     # rubocop:enable Metrics/ClassLength

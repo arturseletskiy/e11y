@@ -2,9 +2,8 @@
 
 require "spec_helper"
 
-# Unit tests for Yabeda adapter (without real Yabeda gem)
+# Unit tests for Yabeda adapter using real Yabeda (configured metrics)
 RSpec.describe E11y::Adapters::Yabeda do
-  # Skip if Yabeda not available
   begin
     require "yabeda"
   rescue LoadError
@@ -15,11 +14,18 @@ RSpec.describe E11y::Adapters::Yabeda do
   let(:adapter) { described_class.new(auto_register: false) }
 
   before do
-    # Mock Yabeda
-    allow(Yabeda).to receive_messages(configured?: true, configure!: true)
-    allow(Yabeda).to receive(:configure).and_yield
+    Yabeda.reset!
+    Yabeda.configure do
+      group :e11y do
+        counter :orders_total, tags: [:status], comment: "Test"
+        counter :test_counter, tags: [], comment: "Test"
+        histogram :order_amount, tags: [:currency], buckets: [0.01, 0.1, 1, 10], comment: "Test"
+        histogram :request_duration, tags: [], buckets: [0.01, 0.1, 1, 10], comment: "Test"
+        gauge :queue_size, tags: [:queue], comment: "Test"
+      end
+    end
+    Yabeda.configure!
 
-    # Clear registry
     registry.clear!
   end
 
@@ -52,6 +58,7 @@ RSpec.describe E11y::Adapters::Yabeda do
 
       adapter = described_class.allocate
       expect(adapter).to receive(:register_metrics_from_registry!)
+      expect(adapter).to receive(:register_middleware_metrics!)
       adapter.send(:initialize, auto_register: true)
     end
 
@@ -63,13 +70,7 @@ RSpec.describe E11y::Adapters::Yabeda do
   end
 
   describe "#write" do
-    let(:yabeda_group) { double("YabedaGroup") }
-    let(:yabeda_metric) { double("YabedaMetric", increment: true, measure: true, set: true) }
-
     before do
-      allow(Yabeda).to receive(:e11y).and_return(yabeda_group)
-      allow(yabeda_group).to receive(:orders_total).and_return(yabeda_metric)
-
       registry.register(
         type: :counter,
         pattern: "order.*",
@@ -81,22 +82,19 @@ RSpec.describe E11y::Adapters::Yabeda do
     it "writes event and updates matching metrics" do
       event = { event_name: "order.created", status: "paid" }
 
-      expect(yabeda_metric).to receive(:increment).with({ status: "paid" })
-      expect(adapter.write(event)).to be true
+      adapter.write(event)
+
+      expect(Yabeda.e11y.orders_total.get(status: "paid")).to eq(1)
     end
 
     it "returns false on error" do
-      event = { event_name: "order.created", status: "paid" }
-
       allow(registry).to receive(:find_matching).and_raise(StandardError, "Test error")
-      expect(adapter.write(event)).to be false
+      expect(adapter.write(event: {})).to be false
     end
 
     it "warns on error" do
-      event = { event_name: "order.created", status: "paid" }
-
       allow(registry).to receive(:find_matching).and_raise(StandardError, "Test error")
-      expect { adapter.write(event) }.to output(/Yabeda adapter error/).to_stderr
+      expect { adapter.write(event: {}) }.to output(/Yabeda adapter error/).to_stderr
     end
   end
 
@@ -118,13 +116,12 @@ RSpec.describe E11y::Adapters::Yabeda do
   end
 
   describe "#healthy?" do
-    it "returns true when Yabeda is configured" do
-      allow(Yabeda).to receive(:configured?).and_return(true)
+    it "returns true when Yabeda is configured and e11y group exists" do
       expect(adapter.healthy?).to be true
     end
 
     it "returns false when Yabeda is not configured" do
-      allow(Yabeda).to receive(:configured?).and_return(false)
+      Yabeda.reset!
       expect(adapter.healthy?).to be false
     end
 
@@ -152,92 +149,61 @@ RSpec.describe E11y::Adapters::Yabeda do
   end
 
   describe "#increment" do
-    let(:yabeda_group) { double("YabedaGroup") }
-    let(:yabeda_metric) { double("YabedaMetric") }
-
-    before do
-      allow(Yabeda).to receive_messages(e11y: yabeda_group, metrics: {})
-      allow(yabeda_group).to receive(:test_counter).and_return(yabeda_metric)
-      allow(adapter).to receive(:register_metric_if_needed)
-    end
-
     it "increments counter metric" do
-      expect(yabeda_metric).to receive(:increment).with({}, by: 1)
       adapter.increment(:test_counter)
+      expect(Yabeda.e11y.test_counter.get({})).to eq(1)
     end
 
     it "increments with labels" do
-      expect(yabeda_metric).to receive(:increment).with({ status: "success" }, by: 1)
       adapter.increment(:test_counter, { status: "success" })
+      expect(Yabeda.e11y.test_counter.get(status: "success")).to eq(1)
     end
 
     it "increments with custom value" do
-      expect(yabeda_metric).to receive(:increment).with({}, by: 5)
       adapter.increment(:test_counter, {}, value: 5)
+      expect(Yabeda.e11y.test_counter.get({})).to eq(5)
     end
 
     it "applies cardinality protection" do
       allow(adapter.instance_variable_get(:@cardinality_protection)).to receive(:filter).and_return({})
-      expect(yabeda_metric).to receive(:increment).with({}, by: 1)
       adapter.increment(:test_counter, { user_id: 123 })
+      expect(Yabeda.e11y.test_counter.get({})).to eq(1)
     end
 
     it "handles errors gracefully" do
-      allow(yabeda_metric).to receive(:increment).and_raise(StandardError)
+      allow(Yabeda.e11y).to receive(:send).and_raise(StandardError)
       expect { adapter.increment(:test_counter) }.not_to raise_error
     end
   end
 
   describe "#histogram" do
-    let(:yabeda_group) { double("YabedaGroup") }
-    let(:yabeda_metric) { double("YabedaMetric") }
-
-    before do
-      allow(Yabeda).to receive_messages(e11y: yabeda_group, metrics: {})
-      allow(yabeda_group).to receive(:request_duration).and_return(yabeda_metric)
-      allow(adapter).to receive(:register_metric_if_needed)
-    end
-
     it "observes histogram value" do
-      expect(yabeda_metric).to receive(:measure).with({}, 0.5)
-      adapter.histogram(:request_duration, 0.5)
+      expect { adapter.histogram(:request_duration, 0.5) }.not_to raise_error
+      # Use .values[] directly: Metric#get calls .value (works for Counter's Concurrent::Atom,
+      # breaks for Histogram's raw Float stored by Histogram#measure).
+      expect(Yabeda.e11y.request_duration.values[{}]).to eq(0.5)
     end
 
     it "observes with labels" do
-      expect(yabeda_metric).to receive(:measure).with({ method: "GET" }, 1.2)
-      adapter.histogram(:request_duration, 1.2, { method: "GET" })
+      expect { adapter.histogram(:request_duration, 1.2, { method: "GET" }) }.not_to raise_error
+      expect(Yabeda.e11y.request_duration.values[{ method: "GET" }]).to eq(1.2)
     end
 
     it "accepts custom buckets" do
-      expect(adapter).to receive(:register_metric_if_needed).with(
-        :request_duration,
-        :histogram,
-        [],
-        buckets: [0.1, 1.0, 10.0]
-      )
-      expect(yabeda_metric).to receive(:measure).with({}, 0.5)
-      adapter.histogram(:request_duration, 0.5, {}, buckets: [0.1, 1.0, 10.0])
+      expect { adapter.histogram(:request_duration, 0.5, {}, buckets: [0.1, 1.0, 10.0]) }.not_to raise_error
+      expect(Yabeda.e11y.request_duration.values[{}]).to eq(0.5)
     end
   end
 
   describe "#gauge" do
-    let(:yabeda_group) { double("YabedaGroup") }
-    let(:yabeda_metric) { double("YabedaMetric") }
-
-    before do
-      allow(Yabeda).to receive_messages(e11y: yabeda_group, metrics: {})
-      allow(yabeda_group).to receive(:queue_size).and_return(yabeda_metric)
-      allow(adapter).to receive(:register_metric_if_needed)
-    end
-
     it "sets gauge value" do
-      expect(yabeda_metric).to receive(:set).with({}, 42)
       adapter.gauge(:queue_size, 42)
+      expect(Yabeda.e11y.queue_size.get({})).to eq(42)
     end
 
     it "sets with labels" do
-      expect(yabeda_metric).to receive(:set).with({ queue: "default" }, 10)
       adapter.gauge(:queue_size, 10, { queue: "default" })
+      expect(Yabeda.e11y.queue_size.get(queue: "default")).to eq(10)
     end
   end
 

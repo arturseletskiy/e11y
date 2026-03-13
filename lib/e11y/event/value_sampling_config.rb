@@ -69,7 +69,6 @@ module E11y
 
       private
 
-      # rubocop:disable Metrics/CyclomaticComplexity
       # Validation requires checking multiple comparison types and threshold types
       def validate_comparisons!
         raise ArgumentError, "At least one comparison required" if comparisons.empty?
@@ -79,12 +78,9 @@ module E11y
 
           raise ArgumentError, "in_range requires a Range" if type == :in_range && !threshold.is_a?(Range)
 
-          if NUMERIC_COMPARISON_TYPES.include?(type) && !threshold.is_a?(Numeric)
-            raise ArgumentError, "#{type} requires a Numeric threshold"
-          end
+          raise ArgumentError, "#{type} requires a Numeric threshold" if NUMERIC_COMPARISON_TYPES.include?(type) && !threshold.is_a?(Numeric)
         end
       end
-      # rubocop:enable Metrics/CyclomaticComplexity
     end
   end
 end

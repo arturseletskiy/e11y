@@ -11,6 +11,8 @@ RSpec.describe E11y::Events do
         end
 
         severity :info # User must explicitly set severity
+        adapters :stdout # Explicit adapters for unit test (routing validation)
+        contains_pii false # Tier 1 - skip Rails filter in unit tests (no Rails)
 
         schema do
           required(:user_id).filled(:integer)
@@ -69,7 +71,7 @@ RSpec.describe E11y::Events do
 
       expect(result[:event_name]).to eq("UserLoginAudit")
       expect(result[:severity]).to eq(:info)
-      expect(result[:adapters]).to eq([:logs]) # Based on :info severity
+      expect(result[:adapters]).to eq([:stdout]) # Explicit adapters for unit test
     end
 
     context "with different severities" do
@@ -83,7 +85,8 @@ RSpec.describe E11y::Events do
         end
 
         expect(fatal_audit.severity).to eq(:fatal)
-        expect(fatal_audit.adapters).to eq(%i[logs errors_tracker]) # Based on :fatal
+        # Audit events without explicit adapters use routing rules (UC-012), not severity-based
+        expect(fatal_audit.adapters).to eq([])
         expect(fatal_audit.resolve_sample_rate).to eq(1.0) # Still 100%
         expect(fatal_audit.resolve_rate_limit).to be_nil # Still unlimited
       end

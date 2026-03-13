@@ -1,0 +1,64 @@
+# PII Sample Data for Integration Tests
+# DO NOT use real PII - all data is synthetic
+
+emails:
+  valid:
+    - user@example.com
+    - test+alias@gmail.com
+    - user.name@company.co.uk
+    - admin_123@test-domain.org
+  international:
+    - юзер@пример.рф # Cyrillic
+  edge_cases:
+    - a@b.co # Shortest
+    - very.long.local.part.with.many.dots@subdomain.example.com
+
+passwords:
+  weak:
+    - password123
+    - qwerty
+  strong:
+    - MyS3cur3P@ssw0rd!
+    - "aB3#fG7*kL9&mN2"
+  edge:
+    - "" # Empty
+    - "p" # Single char
+
+credit_cards:
+  visa:
+    - "4111111111111111" # Test card
+    - "4111-1111-1111-1111"
+    - "4111 1111 1111 1111"
+  mastercard:
+    - "5500000000000004"
+  amex:
+    - "378282246310005"
+  invalid:
+    - "1234567890123456" # Fails Luhn
+
+ssns:
+  valid_format:
+    - "123-45-6789"
+    - "987-65-4321"
+  no_dashes:
+    - "123456789"
+
+phones:
+  us:
+    - "+1-555-123-4567"
+    - "(555) 123-4567"
+    - "555.123.4567"
+  international:
+    - "+44-20-7946-0958" # UK
+    - "+7-495-123-45-67" # Russia
+
+api_keys:
+  stripe:
+    - "sk_live_4eC39HqLyjWDarjtT1zdp7dc"
+    - "pk_test_TYooMQauvdEDq54NiTphI7jx"
+  aws:
+    - "AKIAIOSFODNN7EXAMPLE"
+
+employee_ids:
+  - "EMP-12345"
+  - "EMP-99999"

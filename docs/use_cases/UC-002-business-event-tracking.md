@@ -42,7 +42,7 @@ Events::OrderPaid.track(
 
 # Result:
 # 1. Structured log in ELK/Loki (JSON)
-# 2. Auto-generated metrics (pattern-based)
+# 2. Event metrics (from metrics do block)
 # 3. Trace context (automatic correlation)
 ```
 
@@ -102,22 +102,13 @@ class OrdersController < ApplicationController
   end
 end
 
-# Step 3: Configure pattern-based metrics (config/initializers/e11y.rb)
-E11y.configure do |config|
-  config.metrics do
-    # Counter: orders.created.total
-    counter_for pattern: 'order.created',
-                name: 'orders.created.total',
-                tags: [:currency]
-    
-    # Histogram: orders.created.amount
-    histogram_for pattern: 'order.created',
-                  name: 'orders.created.amount',
-                  value: ->(e) { e.payload[:total_amount] },
-                  tags: [:currency],
-                  buckets: [10, 50, 100, 500, 1000, 5000]
-  end
-end
+# Step 3: Add metrics in event class
+# class Events::OrderCreated < E11y::Event::Base
+#   metrics do
+#     counter :orders_created_total, tags: [:currency]
+#     histogram :orders_created_amount, value: :total_amount, tags: [:currency], buckets: [10, 50, 100, 500]
+#   end
+# end
 ```
 
 **Result in Logs (Loki/ELK):**
@@ -231,21 +222,7 @@ class RegistrationsController < ApplicationController
   end
 end
 
-# Metrics configuration
-E11y.configure do |config|
-  config.metrics do
-    # Funnel counter
-    counter_for pattern: 'registration.*',
-                name: 'registration.funnel.total',
-                tags: [:event_name, :source]
-    
-    # Time to first login
-    histogram_for pattern: 'first.login',
-                  name: 'registration.time_to_first_login_hours',
-                  value: ->(e) { e.payload[:time_since_registration_hours] },
-                  buckets: [1, 6, 12, 24, 48, 72, 168]  # hours
-  end
-end
+# Add metrics do in each event class (Events::RegistrationStarted, Events::EmailVerified, etc.)
 ```
 
 **Funnel Analysis (Grafana/Prometheus):**
@@ -353,28 +330,7 @@ class ProcessPaymentJob < ApplicationJob
   end
 end
 
-# Metrics
-E11y.configure do |config|
-  config.metrics do
-    # Success rate (critical metric!)
-    success_rate_for pattern: 'payment.*',
-                     name: 'payments.success_rate',
-                     tags: [:payment_method]
-    # Auto-calculates: succeeded / (succeeded + failed) * 100
-    
-    # Payment duration (performance)
-    histogram_for pattern: 'payment.succeeded',
-                  value: ->(e) { e.duration_ms },
-                  name: 'payments.duration_ms',
-                  tags: [:payment_method],
-                  buckets: [100, 250, 500, 1000, 2000, 5000]
-    
-    # Failed payments by error code (debugging)
-    counter_for pattern: 'payment.failed',
-                name: 'payments.failed.total',
-                tags: [:error_code, :payment_method]
-  end
-end
+# Add metrics do in PaymentSucceeded, PaymentFailed event classes
 ```
 
 **Alerts (Prometheus):**
@@ -505,7 +461,7 @@ module Events
     rate_limit 1000
     sample_rate 1.0  # Never sample payments (high-value)
     retention 7.years  # Financial records
-    adapters [:loki, :sentry, :s3_archive]
+    adapters [:loki, :sentry]
     
     # Common PII filtering
     contains_pii true
@@ -605,7 +561,7 @@ module E11y
         rate_limit 10_000
         sample_rate 1.0  # Never sample
         retention 7.years
-        adapters [:loki, :sentry, :s3_archive]
+        adapters [:loki, :sentry]
       end
     end
     
@@ -669,7 +625,7 @@ module Events
         rate_limit 5000
         sample_rate 1.0
         retention 7.years
-        adapters [:loki, :elasticsearch, :s3_archive, :slack_business]
+        adapters [:loki, :elasticsearch, :slack_business]
         
         metric :counter,
                name: 'critical_business_events.total',
@@ -1051,9 +1007,7 @@ E11y.configure do |config|
     config.register_adapter :loki, E11y::Adapters::LokiAdapter.new(
       url: ENV['LOKI_URL']
     )
-    config.register_adapter :s3_archive, E11y::Adapters::S3Adapter.new(
-      bucket: 'payment-archive'
-    )
+    # Archival: external jobs filter Loki by retention_until (ISO8601) for tier migration
     config.default_adapters = [:loki]
     
   when 'staging'
@@ -1082,9 +1036,9 @@ module Events
       required(:amount).filled(:decimal)
     end
     
-    # Production: also archive to S3
+    # Production: retention_period 7.years → retention_until in payload; archival jobs filter by it
     if Rails.env.production?
-      adapters [:loki, :s3_archive]
+      adapters [:loki]
     end
     # Other envs: use default_adapters
   end
@@ -1095,36 +1049,13 @@ end
 
 ## 📊 Metrics Configuration
 
-### Pattern-Based Auto-Metrics
+Define metrics in each event class:
 
 ```ruby
-E11y.configure do |config|
-  config.metrics do
-    # Global counter for ALL events
-    counter_for pattern: '*',
-                name: 'business_events.total',
-                tags: [:event_name, :severity]
-    
-    # Domain-specific counters
-    counter_for pattern: 'order.*',
-                name: 'orders.events.total',
-                tags: [:event_name]
-    
-    counter_for pattern: 'user.*',
-                name: 'users.events.total',
-                tags: [:event_name]
-    
-    # Histograms for amounts/durations
-    histogram_for pattern: '*.paid',
-                  name: 'payments.amount',
-                  value: ->(e) { e.payload[:amount] },
-                  tags: [:currency],
-                  buckets: [10, 50, 100, 500, 1000, 5000, 10000]
-    
-    # Success rate (special metric type)
-    success_rate_for pattern: 'payment.*',
-                     name: 'payments.success_rate'
-    # Automatically calculates from :success and :error events
+class Events::OrderCreated < E11y::Event::Base
+  metrics do
+    counter :orders_created_total, tags: [:currency]
+    histogram :order_amount, value: :amount, tags: [:currency], buckets: [10, 50, 100, 500]
   end
 end
 ```
@@ -1542,7 +1473,7 @@ E11y is designed for **high-performance production environments** with strict SL
 ```ruby
 # Benchmark: 1000 events/sec
 Benchmark.ips do |x|
-  x.report("E11y.track") do
+  x.report("EventClass.track") do
     Events::OrderPaid.track(
       order_id: 'ORD-123',
       amount: 99.99
@@ -1551,7 +1482,7 @@ Benchmark.ips do |x|
 end
 
 # Results:
-# E11y.track: 100,000 i/s → ~0.01ms per call
+# EventClass.track: 100,000 i/s → ~0.01ms per call
 # p99 latency: <1ms ✅
 ```
 
@@ -1918,11 +1849,11 @@ end
 class Events::CriticalPayment < Events::BasePaymentEvent
   include E11y::Presets::HighValueEvent
   
-  adapters [:loki, :sentry, :s3_archive]  # Override base (add S3)
+  adapters [:loki, :sentry]
   
   # Final config:
   # - severity: :success (from base)
-  # - adapters: [:loki, :sentry, :s3_archive] (event-level override)
+  # - adapters: [:loki, :sentry] (event-level override)
   # - sample_rate: 1.0 (from base)
   # - rate_limit: 10_000 (from preset)
   # - retention: 7.years (from preset)
@@ -1943,7 +1874,7 @@ end
 ## 📚 Related Use Cases
 
 - **[UC-001: Request-Scoped Debug Buffering](./UC-001-request-scoped-debug-buffering.md)** - Debug vs business events
-- **[UC-003: Pattern-Based Metrics](./UC-003-pattern-based-metrics.md)** - Auto-generate metrics
+- **[UC-003: Event Metrics](./UC-003-event-metrics.md)** - Metrics in event classes
 - **[UC-005: PII Filtering](./UC-005-pii-filtering.md)** - Secure event data
 
 ---

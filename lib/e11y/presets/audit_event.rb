@@ -38,11 +38,11 @@ module E11y
     module AuditEvent
       def self.included(base)
         base.class_eval do
-          # Audit events will use audit pipeline (Phase 4)
+          audit_event true
           # Severity is NOT set by preset - user decides based on event criticality
         end
 
-        # Extend class with audit-specific methods
+        # Extend class with audit-specific methods (resolve_sample_rate 1.0, resolve_rate_limit nil)
         base.extend(ClassMethods)
       end
 
@@ -58,6 +58,15 @@ module E11y
         # Audit events must ALL be tracked, regardless of severity
         def resolve_sample_rate
           1.0 # 100% - compliance requirement
+        end
+
+        # Audit events use routing rules (UC-012), not severity-based adapters.
+        # Return [] when no explicit adapters; respect explicit adapters when set.
+        def adapters(*list)
+          @adapters = list.flatten if list.any?
+          return @adapters if @adapters
+
+          []
         end
       end
     end

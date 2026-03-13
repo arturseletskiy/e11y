@@ -1,0 +1,28 @@
+groups:
+  - name: e11y
+    rules:
+      # ── High adapter error rate ─────────────────────────────────────────
+      - alert: E11yHighAdapterErrorRate
+        expr: |
+          sum(rate(e11y_adapter_writes_total{status="failure"}[5m]))
+          / sum(rate(e11y_adapter_writes_total[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "E11y adapter write error rate above 5%"
+          description: "Adapter error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      # ── High validation failure rate ────────────────────────────────────
+      - alert: E11yHighValidationFailureRate
+        expr: |
+          rate(e11y_middleware_validation_total{result="failed"}[5m])
+          / (rate(e11y_middleware_validation_total{result="passed"}[5m]) + rate(e11y_middleware_validation_total{result="failed"}[5m])) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "E11y validation failure rate above 10%"
+
+      # Note: E11yRateLimitDrops, E11yCircuitBreakerOpen, E11yDLQGrowing, E11yAdapterUnhealthy
+      # require metrics not yet implemented. Add when rate_limiting, circuit_breaker, DLQ metrics are wired.

@@ -33,6 +33,13 @@ module E11y
   # including configuration, middleware insertion, instrumentation setup,
   # and console integration.
   class Railtie < Rails::Railtie
+    # Wire up generators so `rails g e11y:*` commands are discoverable.
+    generators do
+      require "generators/e11y/install/install_generator"
+      require "generators/e11y/event/event_generator"
+      require "generators/e11y/grafana_dashboard/grafana_dashboard_generator"
+      require "generators/e11y/prometheus_alerts/prometheus_alerts_generator"
+    end
     # Derive service name from Rails application class
     # @return [String] Service name (e.g., "my_app")
     def self.derive_service_name
@@ -47,8 +54,8 @@ module E11y
       E11y.configure do |config|
         config.environment ||= Rails.env.to_s
         config.service_name ||= E11y::Railtie.derive_service_name
-        # Only set enabled if not already configured
-        config.enabled = !Rails.env.test? if config.enabled.nil?
+        # Enable in dev/prod; disable in test by default (user can override in config/initializers/e11y.rb)
+        config.enabled = !Rails.env.test?
       end
     end
 
@@ -63,16 +70,26 @@ module E11y
       E11y::Railtie.setup_active_job if defined?(::ActiveJob) && E11y.config.active_job&.enabled
     end
 
+    # Outgoing HTTP trace propagation (UC-009)
+    initializer "e11y.http_tracing", after: :load_config_initializers do
+      next unless E11y.configuration.enable_http_tracing
+
+      E11y::Tracing.patch_net_http!
+    end
+
     # Middleware insertion
     initializer "e11y.middleware" do |app|
       next unless E11y.config.enabled
 
       # Insert E11y request middleware before Rails logger
       # This ensures trace context is set up before any Rails logging
-      app.middleware.insert_before(
-        Rails::Rack::Logger,
-        E11y::Middleware::Request
-      )
+      # API-only mode may omit Rails::Rack::Logger — fall back to unshift
+      begin
+        app.middleware.insert_before(Rails::Rack::Logger, E11y::Middleware::Request)
+      rescue RuntimeError
+        # Rails::Rack::Logger not in stack (e.g. api_only)
+        app.middleware.unshift(E11y::Middleware::Request)
+      end
     end
 
     # Console helpers

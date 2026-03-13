@@ -5,6 +5,9 @@ require "spec_helper"
 # Rate limiting integration tests require time-sensitive scenarios,
 # token bucket state management, and multiple test configurations.
 RSpec.describe E11y::Middleware::RateLimiting do
+  before { E11y.configuration.rate_limiting.enabled = true }
+  after  { E11y.configuration.rate_limiting.enabled = false }
+
   let(:next_middleware) { ->(event) { event } }
   let(:middleware) { described_class.new(next_middleware, global_limit: 10, per_event_limit: 5, window: 1.0) }
   let(:event_data) { { event_name: "test.event", severity: :info, payload: {} } }
@@ -61,8 +64,20 @@ RSpec.describe E11y::Middleware::RateLimiting do
       it "logs warning when global limit exceeded" do
         10.times { middleware.call(event_data) }
 
-        expect(middleware).to receive(:warn).with(/Rate limit exceeded \(global\)/)
+        expect(E11y.logger).to receive(:warn).with(/Rate limit exceeded \(global\)/)
         middleware.call(event_data)
+      end
+
+      it "increments e11y_events_dropped_total with reason rate_limited_global when event is dropped" do
+        allow(E11y::Metrics).to receive(:increment)
+        10.times { middleware.call(event_data) }
+
+        middleware.call(event_data)
+
+        expect(E11y::Metrics).to have_received(:increment).with(
+          :e11y_events_dropped_total,
+          hash_including(reason: "rate_limited_global", event_type: "test.event")
+        )
       end
     end
 
@@ -79,8 +94,20 @@ RSpec.describe E11y::Middleware::RateLimiting do
       it "logs warning when per-event limit exceeded" do
         5.times { middleware.call(event_data) }
 
-        expect(middleware).to receive(:warn).with(/Rate limit exceeded \(per_event\)/)
+        expect(E11y.logger).to receive(:warn).with(/Rate limit exceeded \(per_event\)/)
         middleware.call(event_data)
+      end
+
+      it "increments e11y_events_dropped_total with reason rate_limited_per_event when event is dropped" do
+        allow(E11y::Metrics).to receive(:increment)
+        5.times { middleware.call(event_data) }
+
+        middleware.call(event_data)
+
+        expect(E11y::Metrics).to have_received(:increment).with(
+          :e11y_events_dropped_total,
+          hash_including(reason: "rate_limited_per_event", event_type: "test.event")
+        )
       end
 
       it "limits per event type separately" do
@@ -152,10 +179,23 @@ RSpec.describe E11y::Middleware::RateLimiting do
 
         allow(dlq_storage).to receive(:save)
         # First warn: rate limit exceeded, Second warn: DLQ saved
-        expect(middleware).to receive(:warn).with(/Rate limit exceeded/).ordered
-        expect(middleware).to receive(:warn).with(/Rate-limited critical event saved to DLQ/).ordered
+        expect(E11y.logger).to receive(:warn).with(/Rate limit exceeded/).ordered
+        expect(E11y.logger).to receive(:warn).with(/Rate-limited critical event saved to DLQ/).ordered
 
         middleware.call(payment_event)
+      end
+
+      it "increments e11y_events_dropped_total with reason rate_limited_per_event_dlq when saved to DLQ" do
+        allow(E11y::Metrics).to receive(:increment)
+        allow(dlq_storage).to receive(:save)
+        5.times { middleware.call(payment_event) }
+
+        middleware.call(payment_event)
+
+        expect(E11y::Metrics).to have_received(:increment).with(
+          :e11y_events_dropped_total,
+          hash_including(reason: "rate_limited_per_event_dlq", event_type: "payment.failed")
+        )
       end
     end
 
@@ -192,7 +232,7 @@ RSpec.describe E11y::Middleware::RateLimiting do
 
         allow(dlq_storage).to receive(:save).and_raise(StandardError, "DLQ full")
         # First warn: rate limit exceeded, Second warn: DLQ save failed
-        allow(middleware).to receive(:warn) # Allow all warns (don't fail on unexpected)
+        allow(E11y.logger).to receive(:warn) # Allow all warns (don't fail on unexpected)
 
         # Should not raise exception (C18 Resolution)
         expect { middleware.call(payment_event) }.not_to raise_error

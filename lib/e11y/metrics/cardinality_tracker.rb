@@ -33,13 +33,15 @@ module E11y
       # Records unique label values per metric+label combination.
       # Thread-safe operation.
       #
-      # @param metric_name [String] Metric name
+      # @param metric_name [String, Symbol] Metric name
       # @param label_key [Symbol, String] Label key
       # @param label_value [Object] Label value to track
       # @return [Boolean] true if within limit, false if limit exceeded
       def track(metric_name, label_key, label_value)
         @mutex.synchronize do
-          value_set = @tracker[metric_name][label_key]
+          # Normalize metric_name to string for consistent key access
+          metric_key = metric_name.to_s
+          value_set = @tracker[metric_key][label_key]
 
           # Allow if already tracked (existing value)
           return true if value_set.include?(label_value)
@@ -66,7 +68,9 @@ module E11y
       # @return [void]
       def force_track(metric_name, label_key, label_value)
         @mutex.synchronize do
-          value_set = @tracker[metric_name][label_key]
+          # Normalize metric_name to string for consistent key access
+          metric_key = metric_name.to_s
+          value_set = @tracker[metric_key][label_key]
           value_set.add(label_value) unless value_set.include?(label_value)
         end
       end
@@ -78,7 +82,9 @@ module E11y
       # @return [Boolean] true if at or above limit
       def exceeded?(metric_name, label_key)
         @mutex.synchronize do
-          @tracker.dig(metric_name, label_key)&.size.to_i >= @limit
+          # Normalize metric_name to string for consistent key access
+          metric_key = metric_name.to_s
+          @tracker.dig(metric_key, label_key)&.size.to_i >= @limit
         end
       end
 
@@ -89,7 +95,9 @@ module E11y
       # @return [Integer] Number of unique values tracked
       def cardinality(metric_name, label_key)
         @mutex.synchronize do
-          @tracker.dig(metric_name, label_key)&.size || 0
+          # Normalize metric_name to string for consistent key access
+          metric_key = metric_name.to_s
+          @tracker.dig(metric_key, label_key)&.size || 0
         end
       end
 
@@ -99,7 +107,9 @@ module E11y
       # @return [Hash{Symbol => Integer}] Label key => cardinality
       def cardinalities(metric_name)
         @mutex.synchronize do
-          metric_data = @tracker[metric_name]
+          # Normalize metric_name to string for consistent key access
+          metric_key = metric_name.to_s
+          metric_data = @tracker[metric_key]
           metric_data.transform_values(&:size)
         end
       end

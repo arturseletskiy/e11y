@@ -94,17 +94,38 @@ if ENV["COVERAGE"]
   end
 end
 
+# Detect integration mode BEFORE loading E11y (critical for Railtie registration)
+# Avoid loading E11y before Rails in integration tests, or Railtie won't register.
+tag_integration = ARGV.each_cons(2).any? { |a, b| a == "--tag" && b == "integration" } ||
+                  ARGV.any?("--tag=integration") ||
+                  ENV["INTEGRATION"] == "true"
+tag_exclude_integration = ARGV.each_cons(2).any? { |a, b| a == "--tag" && b == "~integration" } ||
+                          ARGV.any?("--tag=~integration")
+running_integration_files = ARGV.any? { |arg| arg.include?("spec/integration/") }
+integration_run = (tag_integration || running_integration_files) && !tag_exclude_integration
+
 # Load ActiveSupport BEFORE core extensions (required for Rails 7.1+ deprecator)
 require "active_support"
 require "active_support/core_ext/numeric/time" # For 30.days, 7.years
 require "active_support/core_ext/integer/time"
 require "active_support/core_ext/object/blank" # For .present?
 require "climate_control" # For ENV manipulation in tests
+
+# In integration mode, ensure Rails::Railtie is defined BEFORE loading E11y
+# so E11y::Railtie registers properly and its initializers run on app boot.
+require "rails/railtie" if integration_run
 require "e11y"
 require "webmock/rspec"
 
 # Configure WebMock
-WebMock.disable_net_connect!(allow_localhost: true)
+# CRITICAL: Disable WebMock for integration tests - they must use real services
+if integration_run
+  # Integration tests use real services (Loki, Prometheus, etc.)
+  WebMock.allow_net_connect!
+else
+  # Unit tests use WebMock to prevent accidental network calls
+  WebMock.disable_net_connect!(allow_localhost: true)
+end
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure
@@ -127,20 +148,8 @@ RSpec.configure do |config|
   # Run integration tests with: INTEGRATION=true bundle exec rspec
   # Or with: bundle exec rspec --tag integration
 
-  # Detect if --tag integration is being used (but NOT --tag ~integration which EXCLUDES integration)
-  # Handle both "--tag integration" (two args) and "--tag=integration" (one arg)
-  tag_integration = ARGV.each_cons(2).any? { |a, b| a == "--tag" && b == "integration" } ||
-                    ARGV.any?("--tag=integration") ||
-                    ENV["INTEGRATION"] == "true"
-
-  tag_exclude_integration = ARGV.each_cons(2).any? { |a, b| a == "--tag" && b == "~integration" } ||
-                            ARGV.any?("--tag=~integration")
-
-  # Detect if running integration spec files directly (e.g., spec/integration/xxx_spec.rb)
-  # In this case, we should run integration tests even without explicit --tag
-  running_integration_files = ARGV.any? { |arg| arg.include?("spec/integration/") }
-
-  if (tag_integration || running_integration_files) && !tag_exclude_integration
+  # Integration detection is computed above (integration_run)
+  if integration_run
     ENV["INTEGRATION"] = "true" # Ensure rails_helper knows we're in integration mode
     # Run ONLY integration tests
     config.filter_run_including integration: true
@@ -151,9 +160,32 @@ RSpec.configure do |config|
     config.filter_run_excluding integration: true
   end
 
-  # Clean up after each test (but NOT for integration tests - they rely on Rails app config)
+  # Unit tests: ensure E11y is enabled and audit events have routing
+  config.before do |example|
+    next if example.metadata[:integration]
+
+    cfg = E11y.configuration
+    cfg.enabled = true if cfg.enabled.nil? # Default: enabled for unit tests (Railtie sets false in Rails test env)
+    cfg.routing_rules = [->(e) { :stdout if e[:audit_event] }] if cfg.routing_rules.empty?
+    # Quiet E11y logs in unit tests (unless VERBOSE)
+    cfg.logger = Logger.new(nil) unless ENV["VERBOSE"]
+  end
+
+  # Clean up after each test
   config.after do |example|
-    E11y.reset! if !example.metadata[:integration] && E11y.respond_to?(:reset!)
+    if example.metadata[:integration]
+      # Integration tests: Clear adapters and pipeline state, but keep Rails config
+      if E11y.configuration.respond_to?(:adapters)
+        E11y.configuration.adapters.each_value do |adapter|
+          adapter.clear! if adapter.respond_to?(:clear!)
+        end
+      end
+      # Clear pipeline state to force rebuild on next test
+      E11y.configuration&.instance_variable_set(:@built_pipeline, nil)
+    elsif E11y.respond_to?(:reset!)
+      # Unit tests: Full reset
+      E11y.reset!
+    end
   end
 
   # Load support files

@@ -27,6 +27,11 @@ ENV["RAILS_ENV"] = "test"
 # Set test-only environment variables BEFORE loading Rails
 ENV["E11Y_AUDIT_SIGNING_KEY"] ||= "test_signing_key_for_integration_tests_only"
 
+# Disable rate limiting for all integration tests (unless testing rate limiting specifically)
+# Rate limiting interferes with tests by blocking events unexpectedly
+# Tests for rate limiting feature itself will re-enable it explicitly
+ENV["E11Y_RATE_LIMITING_ENABLED"] = "false"
+
 # Load Rails environment file (but DON'T initialize yet - that happens in before(:suite))
 # Use global variable because constants don't persist across multiple file loads
 # rubocop:disable Style/GlobalVars
@@ -93,9 +98,39 @@ RSpec.configure do |config|
     # If routes are empty, reload them from config/routes.rb
     Rails.application.routes_reloader.reload! if Rails.application.routes.empty?
 
+    # Configure Yabeda ONCE for the test suite
+    # This creates the :e11y group so that Yabeda.e11y is accessible in tests
+    # Individual tests can add more metrics using Yabeda.configure (without bang)
+    begin
+      require "yabeda"
+      unless Yabeda.configured?
+        Yabeda.configure do
+          group :e11y do
+            # Empty group - metrics will be added by tests or event classes
+          end
+        end
+        Yabeda.configure!
+      end
+    rescue LoadError
+      # Yabeda not available - skip configuration
+      # Tests that require Yabeda will check for it explicitly
+    end
+
     # E11y is already configured in dummy/config/application.rb
     # Verify configuration is correct
     raise "E11y should be enabled for integration tests! Check dummy/config/application.rb" unless E11y.config.enabled
+
+    # Disable rate limiting globally for integration tests (unless testing rate limiting specifically)
+    # Rate limiting interferes with tests by blocking events unexpectedly
+    # Tests for UC-011 (rate limiting feature) will re-enable it explicitly
+    E11y.configure do |config|
+      config.rate_limiting.enabled = false if config.respond_to?(:rate_limiting)
+    end
+
+    # Capture canonical pipeline for restoration between examples (like Cucumber hooks.rb)
+    # Prevents cross-spec pollution when specs mutate the pipeline (sampling, versioning, etc.)
+    Object.const_set(:INITIAL_PIPELINE_MIDDLEWARES, E11y.config.pipeline.middlewares.dup.freeze) \
+      unless defined?(INITIAL_PIPELINE_MIDDLEWARES)
 
     # NOTE: E11y instrumentation is set up automatically by Railtie initializers
     # DO NOT call setup methods here or it will cause double instrumentation!
@@ -103,10 +138,14 @@ RSpec.configure do |config|
   end
 
   config.before do |example|
-    # Clear E11y adapter events before each test (but don't reset config!)
+    # Clear E11y adapter events and restore pipeline before each integration test
     if example.metadata[:integration] || %i[integration request].include?(example.metadata[:type])
       adapter = E11y.config.adapters[:memory]
       adapter.clear! if adapter.respond_to?(:clear!)
+
+      # Restore pipeline to prevent cross-spec pollution (like Cucumber hooks.rb)
+      E11y.config.pipeline.instance_variable_set(:@middlewares, INITIAL_PIPELINE_MIDDLEWARES.dup) if defined?(INITIAL_PIPELINE_MIDDLEWARES)
+      E11y.config.instance_variable_set(:@built_pipeline, nil)
     end
   end
 

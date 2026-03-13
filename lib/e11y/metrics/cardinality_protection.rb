@@ -85,7 +85,6 @@ module E11y
       # @option config [Float] :alert_threshold (0.8) Alert when cardinality reaches this ratio
       # @option config [Proc] :alert_callback Optional callback when alert triggered
       # @option config [Boolean] :auto_relabel (false) Auto-relabel to [OTHER] on overflow
-      # rubocop:disable Metrics/AbcSize
       # Cardinality protection initialization requires extracting multiple config options and setting up components
       def initialize(config = {})
         @cardinality_limit = config.fetch(:cardinality_limit, DEFAULT_CARDINALITY_LIMIT)
@@ -109,7 +108,6 @@ module E11y
         @overflow_counts = Hash.new(0)
         @overflow_mutex = Mutex.new
       end
-      # rubocop:enable Metrics/AbcSize
 
       # Define relabeling rule for a label
       #
@@ -222,7 +220,6 @@ module E11y
 
       # Check if approaching alert threshold (Layer 3: Monitoring)
       # @param metric_name [String] Metric name
-      # rubocop:disable Metrics/MethodLength
       # Alert threshold checking requires calculating ratio, checking conditions, and sending detailed alerts
       def check_alert_threshold(metric_name)
         return unless @alert_threshold
@@ -252,7 +249,6 @@ module E11y
         # Track metric
         track_cardinality_metric(metric_name, :threshold_exceeded, current_cardinality)
       end
-      # rubocop:enable Metrics/MethodLength
 
       # Handle overflow when cardinality limit exceeded (Layer 4: Dynamic Actions)
       # @param metric_name [String] Metric name
@@ -311,9 +307,11 @@ module E11y
           severity: :error
         )
 
-        # Also log warning
-        warn "E11y Metrics: Cardinality limit exceeded for #{metric_name}:#{key} " \
-             "(limit: #{@cardinality_limit}, current: #{current_cardinality})"
+        # Also log warning (via E11y.logger so it respects Rails.logger in test env)
+        E11y.logger&.warn(
+          "E11y Metrics: Cardinality limit exceeded for #{metric_name}:#{key} " \
+          "(limit: #{@cardinality_limit}, current: #{current_cardinality})"
+        )
       end
 
       # Handle relabel strategy - relabel to [OTHER]
@@ -385,7 +383,6 @@ module E11y
       # @param metric_name [String] Metric name
       # @param action [Symbol] Action type (:threshold_exceeded, :drop, :alert, :relabel)
       # @param value [Integer] Metric value
-      # rubocop:disable Metrics/MethodLength
       # Cardinality tracking requires incrementing overflow counters and updating gauge metrics
       def track_cardinality_metric(metric_name, action, value)
         return unless defined?(E11y::Metrics)
@@ -408,9 +405,8 @@ module E11y
         )
       rescue StandardError => e
         # Don't fail on metrics tracking errors
-        warn "E11y: Failed to track cardinality metric: #{e.message}"
+        E11y.logger&.warn("E11y: Failed to track cardinality metric: #{e.message}")
       end
-      # rubocop:enable Metrics/MethodLength
     end
     # rubocop:enable Metrics/ClassLength
   end

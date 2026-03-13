@@ -40,13 +40,8 @@ module E11y
     #   # Rule: ->(e) { :audit_encrypted if e[:audit_event] }
     #   # Routes to: [:audit_encrypted]
     #
-    # @example Retention-based routing
-    #   event_data = {
-    #     event_name: 'order.placed',
-    #     retention_until: '2026-04-21T...'  # 90 days
-    #   }
-    #   # Rule: ->(e) { days > 30 ? :s3_standard : :loki }
-    #   # Routes to: [:s3_standard]
+    # Note: retention_until is for archival jobs (run separately), not for routing.
+    # Archival happens later — cron/Loki compaction filters by retention_until.
     class Routing < Base
       middleware_zone :adapters
 
@@ -58,10 +53,23 @@ module E11y
       # @option event_data [Boolean] :audit_event Audit event flag (optional, for routing rules)
       # @option event_data [Symbol] :severity Event severity (optional, for routing rules)
       # @return [Hash, nil] Event data (passed to next middleware), or nil if dropped
-      # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # rubocop:disable Metrics/PerceivedComplexity
       # Routing logic requires adapter selection, iteration with error handling,
       # metadata enrichment, and metrics tracking
       def call(event_data)
+        # Handle nil from upstream middleware (e.g., rate limiting, sampling)
+        return nil unless event_data
+
+        # 0. Request-scoped buffer: buffer debug events instead of writing when enabled
+        # Skip when event is from a flush (avoid re-buffering)
+        if !event_data[:from_request_buffer_flush] &&
+           event_data[:severity] == :debug &&
+           E11y.config.request_buffer&.enabled &&
+           E11y::Buffers::RequestScopedBuffer.active? && E11y::Buffers::RequestScopedBuffer.add_event(event_data)
+          # Buffered — skip adapter writes, pass through
+          return @app&.call(event_data)
+        end
+
         # 1. Determine target adapters (explicit or via routing rules)
         target_adapters = if event_data[:adapters]&.any?
                             # Explicit adapters bypass routing rules
@@ -71,6 +79,9 @@ module E11y
                             apply_routing_rules(event_data)
                           end
 
+        # 1.5. Validate audit events have proper routing (UC-012 compliance requirement)
+        validate_audit_routing!(event_data, target_adapters)
+
         # 2. Write to selected adapters
         target_adapters.each do |adapter_name|
           adapter = E11y.configuration.adapters[adapter_name]
@@ -78,11 +89,9 @@ module E11y
 
           begin
             adapter.write(event_data)
-            increment_metric("e11y.middleware.routing.write_success", adapter: adapter_name)
           rescue StandardError => e
             # Log routing error but don't fail pipeline
             warn "E11y routing error for adapter #{adapter_name}: #{e.message}"
-            increment_metric("e11y.middleware.routing.write_error", adapter: adapter_name)
           end
         end
 
@@ -94,9 +103,9 @@ module E11y
         }
 
         # 4. Increment metrics
-        increment_metric("e11y.middleware.routing.routed",
-                         adapters_count: target_adapters.size,
-                         routing_type: event_data[:routing][:routing_type])
+        E11y::Metrics.increment("e11y.middleware.routing.routed",
+                                adapters_count: target_adapters.size,
+                                routing_type: event_data[:routing][:routing_type])
 
         # 5. Log routing decision (for debugging)
         log_routing_decision(event_data, target_adapters) if debug_enabled?
@@ -104,7 +113,7 @@ module E11y
         # 6. Pass to next app (if any)
         @app&.call(event_data)
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+      # rubocop:enable Metrics/PerceivedComplexity
 
       private
 
@@ -124,12 +133,12 @@ module E11y
       #     ->(event) { :audit_encrypted if event[:audit_event] },
       #     ->(event) {
       #       days = (Time.parse(event[:retention_until]) - Time.now) / 86400
-      #       days > 90 ? :s3_glacier : :loki
+      #       days > 90 ? :archive : :loki
       #     }
       #   ]
       #
       #   apply_routing_rules(event_data)
-      #   # => [:audit_encrypted] or [:loki] or [:s3_glacier]
+      #   # => [:audit_encrypted] or [:loki] or [:archive]
       def apply_routing_rules(event_data)
         matched_adapters = []
 
@@ -143,10 +152,12 @@ module E11y
           warn "E11y routing rule error: #{e.message}"
         end
 
-        # Return unique adapters or fallback
+        # Track whether fallback was used (for audit validation)
         if matched_adapters.any?
+          event_data[:routing_used_fallback] = false
           matched_adapters.uniq
         else
+          event_data[:routing_used_fallback] = true
           E11y.configuration.fallback_adapters || [:stdout]
         end
       end
@@ -175,9 +186,46 @@ module E11y
       # @param metric_name [String] Metric name
       # @param tags [Hash] Metric tags
       # @return [void]
-      def increment_metric(_metric_name, **_tags)
-        # TODO: Integrate with Yabeda/Prometheus
-        # Yabeda.e11y.middleware_routing_routed.increment(tags)
+      # Validate audit events have proper routing configuration.
+      #
+      # Audit events MUST be routed via explicit adapters OR routing rules.
+      # Relying on fallback routing (no rule matched) is a compliance configuration error.
+      #
+      # @param event_data [Hash] Event data
+      # @param target_adapters [Array<Symbol>] Target adapters
+      # @raise [E11y::Error] if audit event misconfigured
+      # @return [void]
+      def validate_audit_routing!(event_data, target_adapters)
+        return unless event_data[:audit_event]
+
+        # Audit events are valid if:
+        # 1. They have explicit adapters (non-empty), OR
+        # 2. They matched a routing rule (routing_used_fallback = false)
+
+        has_explicit_adapters = event_data[:adapters]&.any?
+        return if has_explicit_adapters # Explicit adapters → valid
+
+        # Check if fallback was used (set by apply_routing_rules)
+        used_fallback = event_data[:routing_used_fallback]
+        return unless used_fallback
+
+        # CRITICAL: Audit event using fallback routing (no rule matched!)
+        error_message = <<~ERROR
+          [E11y] CRITICAL: Audit event has no routing configuration!
+
+          Event: #{event_data[:event_name]}
+          Routed to: #{target_adapters.inspect} (fallback adapters)
+
+          Audit events MUST be explicitly routed to compliance-grade storage.
+
+          Fix options:
+          1. Add explicit adapters: `adapters :audit_encrypted`
+          2. Configure routing rule: `config.routing_rules = [->(e) { :audit_encrypted if e[:audit_event] }]`
+
+          See UC-012 Audit Trail documentation for details.
+        ERROR
+
+        raise E11y::Error, error_message
       end
     end
   end

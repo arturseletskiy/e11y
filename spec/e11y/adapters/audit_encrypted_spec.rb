@@ -120,38 +120,30 @@ RSpec.describe E11y::Adapters::AuditEncrypted do
 
     it "detects tampered ciphertext" do
       adapter.write(event_data)
-
       files = Dir.glob(File.join(temp_dir, "*.enc"))
       filepath = files.first
-
-      # Tamper with encrypted data
       encrypted = JSON.parse(File.read(filepath), symbolize_names: true)
       encrypted[:encrypted_data] = Base64.strict_encode64("tampered")
       File.write(filepath, JSON.generate(encrypted))
-
       event_id = File.basename(filepath)
 
-      expect do
-        adapter.read(event_id)
-      end.to raise_error(OpenSSL::Cipher::CipherError)
+      expect { adapter.read(event_id) }.to raise_error(OpenSSL::Cipher::CipherError)
     end
 
     it "detects tampered auth_tag" do
       adapter.write(event_data)
-
       files = Dir.glob(File.join(temp_dir, "*.enc"))
       filepath = files.first
-
-      # Tamper with auth tag
       encrypted = JSON.parse(File.read(filepath), symbolize_names: true)
       encrypted[:auth_tag] = Base64.strict_encode64("0" * 16)
       File.write(filepath, JSON.generate(encrypted))
-
       event_id = File.basename(filepath)
 
-      expect do
-        adapter.read(event_id)
-      end.to raise_error(OpenSSL::Cipher::CipherError)
+      expect { adapter.read(event_id) }.to raise_error(OpenSSL::Cipher::CipherError)
+    end
+
+    it "returns nil for a missing file" do
+      expect(adapter.read("nonexistent_file_id.enc")).to be_nil
     end
   end
 

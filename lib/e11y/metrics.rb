@@ -21,18 +21,41 @@ module E11y
   # @see ADR-002 §3 (Metrics Integration)
   # @see ADR-016 §3 (Self-Monitoring Metrics)
   module Metrics
+    # No-op metrics backend used when no real backend (e.g. Yabeda) is configured.
+    # Accepts all metric calls and silently discards them so callers never
+    # need to guard against a nil backend.
+    class NullBackend
+      def increment(_name, _labels = {}, value: 1); end
+      def histogram(_name, _value, _labels = {}, buckets: nil); end
+      def gauge(_name, _value, _labels = {}); end
+    end
+
     class << self
       # Track a counter metric (monotonically increasing value).
       #
-      # @param name [Symbol] Metric name (e.g., :http_requests_total)
+      # Accepts dotted names (e.g., "e11y.request_buffer.flushed") and normalizes to
+      # underscores. DLQ metrics get _total suffix. Labels[:events] is used as value if present.
+      # Safe: no-op when backend unavailable, rescues errors.
+      #
+      # @param name [Symbol, String] Metric name (e.g., :http_requests_total or "e11y.request_buffer.flushed")
       # @param labels [Hash] Metric labels (e.g., { method: 'GET', status: 200 })
-      # @param value [Integer] Increment value (default: 1)
+      # @param value [Integer] Increment value (default: 1, overridden by labels[:events] if present)
       # @return [void]
       #
       # @example
-      #   E11y::Metrics.increment(:e11y_events_tracked, { event_type: 'order.created' })
-      def increment(name, labels = {}, value: 1)
-        backend&.increment(name, labels, value: value)
+      #   E11y::Metrics.increment(:e11y_events_tracked, event_type: 'order.created')
+      #   E11y::Metrics.increment("e11y.request_buffer.flushed_on_error", value: 5)
+      def increment(name, labels = {}, value: 1, **labels_kw)
+        return unless backend
+
+        labels = labels.merge(labels_kw)
+        value = labels.delete(:events) if labels.key?(:events)
+        value ||= 1
+
+        normalized = normalize_metric_name(name)
+        backend.increment(normalized, labels, value: value)
+      rescue StandardError => e
+        E11y.logger&.debug("E11y metrics: #{e.message}")
       end
 
       # Track a histogram metric (distribution of values).
@@ -44,9 +67,15 @@ module E11y
       # @return [void]
       #
       # @example
-      #   E11y::Metrics.histogram(:e11y_track_duration_seconds, 0.0005, { event_type: 'order.created' })
-      def histogram(name, value, labels = {}, buckets: nil)
-        backend&.histogram(name, value, labels, buckets: buckets)
+      #   E11y::Metrics.histogram(:e11y_track_duration_seconds, 0.0005, event_type: 'order.created')
+      def histogram(name, value, labels = {}, buckets: nil, **labels_kw)
+        return unless backend
+
+        labels = labels.merge(labels_kw)
+        normalized = normalize_metric_name(name)
+        backend.histogram(normalized, value, labels, buckets: buckets)
+      rescue StandardError => e
+        E11y.logger&.debug("E11y metrics: #{e.message}")
       end
 
       # Track a gauge metric (current value that can go up or down).
@@ -85,6 +114,16 @@ module E11y
 
       private
 
+      # Normalize metric name: dots to underscores, DLQ metrics get _total suffix.
+      #
+      # @param name [Symbol, String] Raw metric name
+      # @return [Symbol] Normalized name for Prometheus (e.g., e11y_request_buffer_flushed_on_error)
+      def normalize_metric_name(name)
+        s = name.to_s.tr(".", "_")
+        s = "#{s}_total" if s.include?("e11y_dlq_") && !s.end_with?("_total")
+        s.to_sym
+      end
+
       # Detect the metrics backend from configured adapters.
       #
       # @return [Object, nil] Metrics backend or nil
@@ -99,8 +138,8 @@ module E11y
         # rubocop:enable Style/ClassEqualityComparison
         return yabeda_adapter if yabeda_adapter
 
-        # No backend configured → noop
-        nil
+        # No Yabeda adapter configured — fall back to NullBackend
+        NullBackend.new
       end
     end
   end

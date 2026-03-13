@@ -7,7 +7,6 @@ require "e11y/buffers/ring_buffer"
 #
 # These tests verify performance characteristics and stability under load.
 # We use smaller buffer sizes and extrapolate to production scale.
-# rubocop:disable RSpec/ExampleLength
 RSpec.describe E11y::Buffers::RingBuffer, :benchmark do
   let(:buffer_capacity) { 10_000 } # Smaller than production (100K) for faster tests
   let(:buffer) { described_class.new(capacity: buffer_capacity) }
@@ -357,4 +356,3 @@ RSpec.describe E11y::Buffers::RingBuffer, :benchmark do
     end
   end
 end
-# rubocop:enable RSpec/ExampleLength

@@ -114,6 +114,13 @@ RSpec.describe E11y::Reliability::DLQ::Filter do
       end
     end
 
+    it "accepts optional error argument (prevents BUG-001 crash)" do
+      error = StandardError.new("Adapter failed")
+      # Should not raise ArgumentError — base.rb calls with 2 args
+      expect { filter.should_save?(event_data, error) }.not_to raise_error
+      expect(filter.should_save?(event_data, error)).to be true
+    end
+
     context "with default_behavior (lowest priority)" do
       it "saves by default when :save" do
         filter_save = described_class.new(default_behavior: :save)
@@ -191,6 +198,78 @@ RSpec.describe E11y::Reliability::DLQ::Filter do
         save_severities: %i[error fatal],
         default_behavior: :save
       )
+    end
+  end
+
+  describe "metrics" do
+    let(:event_data) do
+      {
+        event_name: "test.event",
+        severity: :info,
+        payload: {}
+      }
+    end
+
+    before do
+      allow(E11y::Metrics).to receive(:increment)
+    end
+
+    it "increments e11y_dlq_filter_decisions_total with action discarded and reason always_discard_pattern" do
+      filter = described_class.new(always_discard_patterns: [/^test\./])
+      filter.should_save?(event_data)
+
+      expect(E11y::Metrics).to have_received(:increment).with(
+        :e11y_dlq_filter_decisions_total,
+        { action: "discarded", reason: "always_discard_pattern" }
+      )
+    end
+
+    it "increments e11y_dlq_filter_decisions_total with action saved and reason always_save_pattern" do
+      filter = described_class.new(always_save_patterns: [/^payment\./], save_severities: [], default_behavior: :discard)
+      filter.should_save?(event_data.merge(event_name: "payment.processed"))
+
+      expect(E11y::Metrics).to have_received(:increment).with(
+        :e11y_dlq_filter_decisions_total,
+        { action: "saved", reason: "always_save_pattern" }
+      )
+    end
+
+    it "increments e11y_dlq_filter_decisions_total with action saved and reason severity" do
+      filter = described_class.new(save_severities: %i[error fatal], default_behavior: :discard)
+      filter.should_save?(event_data.merge(severity: :error))
+
+      expect(E11y::Metrics).to have_received(:increment).with(
+        :e11y_dlq_filter_decisions_total,
+        { action: "saved", reason: "severity" }
+      )
+    end
+
+    it "increments e11y_dlq_filter_decisions_total with action saved and reason default" do
+      filter = described_class.new(default_behavior: :save)
+      filter.should_save?(event_data.merge(event_name: "random.event"))
+
+      expect(E11y::Metrics).to have_received(:increment).with(
+        :e11y_dlq_filter_decisions_total,
+        { action: "saved", reason: "default" }
+      )
+    end
+
+    it "increments e11y_dlq_filter_decisions_total with action discarded and reason default" do
+      filter = described_class.new(save_severities: [], default_behavior: :discard)
+      filter.should_save?(event_data.merge(event_name: "random.event"))
+
+      expect(E11y::Metrics).to have_received(:increment).with(
+        :e11y_dlq_filter_decisions_total,
+        { action: "discarded", reason: "default" }
+      )
+    end
+
+    it "does not call E11y::Metrics.increment when Metrics does not respond to increment" do
+      filter = described_class.new(always_discard_patterns: [/^test\./])
+      allow(E11y::Metrics).to receive(:respond_to?).with(:increment).and_return(false)
+
+      expect(filter.should_save?(event_data)).to be false
+      expect(E11y::Metrics).not_to have_received(:increment)
     end
   end
 

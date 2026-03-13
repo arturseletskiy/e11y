@@ -334,7 +334,6 @@ RSpec.describe E11y::Buffers::RingBuffer do
     end
 
     context "when stress testing with 100+ threads" do
-      # rubocop:disable RSpec/ExampleLength
       it "remains stable under high contention" do
         producers = 50
         consumers = 50
@@ -375,7 +374,6 @@ RSpec.describe E11y::Buffers::RingBuffer do
         expected_total = producers * events_per_producer
         expect(consumed_events.size).to be >= (expected_total * 0.9).to_i # Allow 10% loss
       end
-      # rubocop:enable RSpec/ExampleLength
 
       it "has no data races (verified by no exceptions)" do
         threads = 100

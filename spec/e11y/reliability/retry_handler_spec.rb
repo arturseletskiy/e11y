@@ -194,6 +194,38 @@ RSpec.describe E11y::Reliability::RetryHandler do
         expect(result).to be_nil
       end
     end
+
+    context "with retry_rate_limiter (BUG-002: thundering herd prevention)" do
+      let(:rate_limiter) { E11y::Reliability::RetryRateLimiter.new(limit: 2, window: 1.0) }
+      let(:rate_limited_handler) do
+        described_class.new(
+          config: { max_attempts: 5, base_delay_ms: 1, fail_on_error: false },
+          retry_rate_limiter: rate_limiter
+        )
+      end
+
+      it "accepts retry_rate_limiter kwarg without error" do
+        expect do
+          described_class.new(
+            config: { max_attempts: 3 },
+            retry_rate_limiter: rate_limiter
+          )
+        end.not_to raise_error
+      end
+
+      it "stops retrying when rate limiter blocks (prevents thundering herd)" do
+        attempt = 0
+
+        result = rate_limited_handler.with_retry(adapter: adapter, event: event_data) do
+          attempt += 1
+          raise Timeout::Error
+        end
+
+        # limit: 2 means only 2 retries allowed, so total attempts should be <= 3 (1 initial + 2 retries)
+        expect(attempt).to be <= 3
+        expect(result).to be_nil
+      end
+    end
   end
 
   describe "backoff calculation" do
@@ -321,6 +353,131 @@ RSpec.describe E11y::Reliability::RetryHandler do
       end
 
       expect { threads.each(&:join) }.not_to raise_error
+    end
+  end
+
+  describe "BUG-002: rate_limiter integration (thundering herd prevention)" do
+    let(:short_config) do
+      {
+        max_attempts: 3,
+        base_delay_ms: 1,
+        max_delay_ms: 10,
+        jitter_factor: 0.0,
+        fail_on_error: true
+      }
+    end
+
+    it "accepts rate_limiter: keyword argument in initialize" do
+      rate_limiter = E11y::Reliability::RetryRateLimiter.new
+      handler = described_class.new(config: short_config, rate_limiter: rate_limiter)
+      expect(handler.instance_variable_get(:@rate_limiter)).to be(rate_limiter)
+    end
+
+    it "works normally when no rate_limiter is provided" do
+      handler = described_class.new(config: short_config)
+      expect(handler.instance_variable_get(:@rate_limiter)).to be_nil
+
+      attempt = 0
+      result = handler.with_retry(adapter: adapter, event: event_data) do
+        attempt += 1
+        raise Timeout::Error if attempt < 2
+
+        "success"
+      end
+      expect(result).to eq("success")
+    end
+
+    context "when rate_limiter allows the retry (allow? returns true)" do
+      let(:permissive_limiter) do
+        limiter = instance_double(E11y::Reliability::RetryRateLimiter)
+        allow(limiter).to receive(:allow?).and_return(true)
+        allow(limiter).to receive(:instance_variable_get).with(:@on_limit_exceeded).and_return(:delay)
+        limiter
+      end
+
+      let(:handler_with_limiter) do
+        described_class.new(config: short_config, rate_limiter: permissive_limiter)
+      end
+
+      it "performs the retry when rate limiter allows" do
+        allow(handler_with_limiter).to receive(:sleep)
+
+        attempt = 0
+        result = handler_with_limiter.with_retry(adapter: adapter, event: event_data) do
+          attempt += 1
+          raise Timeout::Error if attempt < 2
+
+          "recovered"
+        end
+
+        expect(result).to eq("recovered")
+        expect(attempt).to eq(2)
+      end
+    end
+
+    context "when rate_limiter blocks the retry (allow? returns false, on_limit_exceeded: :dlq)" do
+      let(:blocking_limiter) do
+        limiter = instance_double(E11y::Reliability::RetryRateLimiter)
+        allow(limiter).to receive(:allow?).and_return(false)
+        allow(limiter).to receive(:instance_variable_get).with(:@on_limit_exceeded).and_return(:dlq)
+        limiter
+      end
+
+      let(:handler_with_blocking_limiter) do
+        described_class.new(config: short_config, rate_limiter: blocking_limiter)
+      end
+
+      it "aborts retry and raises RetryExhaustedError when fail_on_error is true" do
+        expect do
+          handler_with_blocking_limiter.with_retry(adapter: adapter, event: event_data) do
+            raise Timeout::Error, "transient"
+          end
+        end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError)
+      end
+
+      it "executes the block only once before rate limit kicks in" do
+        allow(handler_with_blocking_limiter).to receive(:sleep)
+        attempt = 0
+
+        expect do
+          handler_with_blocking_limiter.with_retry(adapter: adapter, event: event_data) do
+            attempt += 1
+            raise Timeout::Error
+          end
+        end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError)
+
+        # First attempt is made, then rate limiter blocks retrying
+        expect(attempt).to eq(1)
+      end
+    end
+
+    context "when rate_limiter blocks with :delay strategy" do
+      let(:delay_limiter) do
+        limiter = instance_double(E11y::Reliability::RetryRateLimiter)
+        allow(limiter).to receive(:allow?).and_return(false)
+        allow(limiter).to receive(:instance_variable_get).with(:@on_limit_exceeded).and_return(:delay)
+        allow(limiter).to receive(:instance_variable_get).with(:@window).and_return(0.001)
+        limiter
+      end
+
+      let(:handler_with_delay_limiter) do
+        described_class.new(config: short_config, rate_limiter: delay_limiter)
+      end
+
+      it "sleeps (extra delay) before eventually exhausting retries" do
+        allow(handler_with_delay_limiter).to receive(:sleep)
+
+        attempt = 0
+        expect do
+          handler_with_delay_limiter.with_retry(adapter: adapter, event: event_data) do
+            attempt += 1
+            raise Timeout::Error
+          end
+        end.to raise_error(E11y::Reliability::RetryHandler::RetryExhaustedError)
+
+        # sleep is called for rate-limiter delay AND for normal backoff
+        expect(handler_with_delay_limiter).to have_received(:sleep).at_least(:once)
+      end
     end
   end
 end

@@ -91,6 +91,8 @@ module E11y
         @labels = config.fetch(:labels, {})
         @batch_size = config.fetch(:batch_size, DEFAULT_BATCH_SIZE)
         @batch_timeout = config.fetch(:batch_timeout, DEFAULT_BATCH_TIMEOUT)
+        @timeout = config.fetch(:timeout, 5)
+        @health_check_timeout = [@timeout, 2].min
         @compress = config.fetch(:compress, true)
         @tenant_id = config[:tenant_id]
         @enable_cardinality_protection = config.fetch(:enable_cardinality_protection, false)
@@ -155,11 +157,22 @@ module E11y
         end
       end
 
-      # Check if adapter is healthy
+      # Loki health check endpoint
+      READY_PATH = "/ready"
+
+      # Check if adapter is healthy (Loki server reachable)
       #
-      # @return [Boolean] True if connection is established
+      # Performs actual HTTP GET to /ready. Returns false on connection failure,
+      # timeout, or non-2xx response.
+      #
+      # @return [Boolean] True if Loki responds with 2xx
       def healthy?
-        @connection&.respond_to?(:get)
+        return false unless @connection
+
+        response = @connection.get(READY_PATH)
+        (200..299).cover?(response.status)
+      rescue Faraday::Error, Errno::ECONNREFUSED, Errno::ETIMEDOUT
+        false
       end
 
       # Adapter capabilities
@@ -194,7 +207,6 @@ module E11y
       #
       # @see ADR-004 Section 7.1 (Retry Policy via gem-level middleware)
       # @see ADR-004 Section 6.1 (Connection pooling via HTTP client)
-      # rubocop:disable Metrics/MethodLength
       # HTTP client configuration requires detailed retry and connection settings
       def build_connection!
         @connection = Faraday.new(url: @url) do |f|
@@ -218,7 +230,6 @@ module E11y
           f.adapter Faraday.default_adapter
         end
       end
-      # rubocop:enable Metrics/MethodLength
 
       # Check if buffer should be flushed
       def flush_if_needed!
@@ -280,11 +291,14 @@ module E11y
 
       # Extract labels from event
       #
+      # Uses normalized event_name (e.g., "Events::TestLoki" -> "test.loki") for consistent
+      # querying via LogQL. Matches Versioning middleware convention.
+      #
       # @param event_data [Hash] Event data
       # @return [Hash] Labels for Loki stream
       def extract_labels(event_data)
         event_labels = {
-          event_name: event_data[:event_name].to_s,
+          event_name: normalize_event_name_for_labels(event_data[:event_name].to_s),
           severity: event_data[:severity].to_s
         }
 
@@ -293,9 +307,7 @@ module E11y
 
         # C04: Apply cardinality protection if enabled (enterprise use case)
         # Disabled by default - Loki is a log system, labels are for stream filtering only
-        if @enable_cardinality_protection && @cardinality_protection
-          all_labels = @cardinality_protection.filter(all_labels, "loki.stream")
-        end
+        all_labels = @cardinality_protection.filter(all_labels, "loki.stream") if @enable_cardinality_protection && @cardinality_protection
 
         all_labels.transform_keys(&:to_s)
       end
@@ -305,7 +317,17 @@ module E11y
       # @param event_data [Hash] Event data
       # @return [Array] [timestamp_ns, line]
       def format_loki_entry(event_data)
-        timestamp_ns = (event_data[:timestamp] || Time.now).to_f * 1_000_000_000
+        # Parse timestamp - can be Time object, ISO8601 string, or nil
+        timestamp = event_data[:timestamp]
+        timestamp = if timestamp.is_a?(String)
+                      Time.parse(timestamp)
+                    elsif timestamp.nil?
+                      Time.now
+                    else
+                      timestamp
+                    end
+
+        timestamp_ns = timestamp.to_f * 1_000_000_000
         line = event_data.to_json
 
         [timestamp_ns.to_i.to_s, line]
@@ -321,6 +343,21 @@ module E11y
         gz.write(body)
         gz.close
         io.string
+      end
+
+      # Normalize event name for Loki labels (matches Versioning middleware convention)
+      #
+      # @param name [String] Event name (e.g., "Events::TestLoki")
+      # @return [String] Normalized name (e.g., "test.loki")
+      def normalize_event_name_for_labels(name)
+        return name if name.nil? || name.empty?
+
+        n = name.sub(/^Events::/, "").sub(/V\d+$/, "")
+        n.gsub("::", ".")
+         .gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
+         .gsub(/([a-z\d])([A-Z])/, '\1_\2')
+         .downcase
+         .tr("_", ".")
       end
 
       # Build HTTP headers

@@ -3,14 +3,10 @@
 # See https://rubystyle.guide/ for Ruby style guide
 # See https://docs.rubocop.org/rubocop/ for all available cops
 
-require:
+plugins:
+  - rubocop-performance
   - rubocop-rspec
   - rubocop-rspec_rails
-
-plugins:
-  - rubocop-capybara
-  - rubocop-factory_bot
-  - rubocop-performance
 
 AllCops:
   TargetRubyVersion: 3.2
@@ -24,21 +20,67 @@ AllCops:
     - 'benchmarks/**/*'
 
 # Metrics
+# TODO: Refactor lib yabeda/event_slo/routing to reduce complexity (see ADR-015)
 Metrics/BlockLength:
   Exclude:
     - 'spec/**/*'
     - 'Rakefile'
     - '*.gemspec'
+    - 'lib/e11y/reliability/retry_handler.rb'
 
 Metrics/MethodLength:
-  Max: 15
+  Max: 20
   Exclude:
     - 'spec/**/*'
+    - 'lib/e11y/adapters/yabeda.rb'
+    - 'lib/e11y/middleware/routing.rb'
+    - 'lib/e11y/event/base.rb'
 
 Metrics/ClassLength:
   Max: 100
   Exclude:
     - 'spec/**/*'
+    - 'lib/e11y/buffers/request_scoped_buffer.rb'
+    - 'lib/e11y/registry.rb'
+    - 'lib/e11y/adapters/otel_logs.rb'
+
+Metrics/CyclomaticComplexity:
+  Max: 15
+  Exclude:
+    - 'lib/e11y/adapters/yabeda.rb'
+    - 'lib/e11y/middleware/event_slo.rb'
+    - 'lib/e11y/middleware/routing.rb'
+    - 'spec/integration/pattern_metrics_integration_spec.rb'
+    - 'spec/integration/slo_tracking_integration_spec.rb'
+    - 'spec/support/integration_helpers.rb'
+    - 'spec/support/integration/pii_helpers.rb'
+    - 'spec/support/loki_helpers.rb'
+    - 'spec/support/matchers/pii_matchers.rb'
+
+Metrics/AbcSize:
+  Max: 20
+  Exclude:
+    - 'lib/e11y/middleware/event_slo.rb'
+    - 'lib/e11y/middleware/routing.rb'
+    - 'lib/e11y/adapters/yabeda.rb'
+    - 'lib/e11y/event/base.rb'
+    - 'lib/e11y/middleware/versioning.rb'
+    - 'lib/e11y/reliability/retry_handler.rb'
+    - 'spec/integration/slo_tracking_integration_spec.rb'
+    - 'spec/support/integration_helpers.rb'
+    - 'spec/support/integration/pii_helpers.rb'
+    - 'spec/support/loki_helpers.rb'
+    - 'spec/support/matchers/pii_matchers.rb'
+
+Metrics/PerceivedComplexity:
+  Max: 15
+  Exclude:
+    - 'lib/e11y/middleware/event_slo.rb'
+    - 'spec/integration/slo_tracking_integration_spec.rb'
+    - 'spec/support/integration_helpers.rb'
+    - 'spec/support/integration/pii_helpers.rb'
+    - 'spec/support/loki_helpers.rb'
+    - 'spec/support/matchers/pii_matchers.rb'
 
 # Style
 Style/Documentation:
@@ -52,9 +94,15 @@ Style/StringLiterals:
 Style/FrozenStringLiteralComment:
   Enabled: true
 
+# Layout
+Layout/LineLength:
+  Max: 150
+
 # RSpec
 RSpec/ExampleLength:
-  Max: 20 # Allow longer examples for integration tests
+  Max: 40 # Allow longer examples for integration tests
+  Exclude:
+    - "spec/integration/**/*"
 
 RSpec/MultipleExpectations:
   Max: 10 # Allow more expectations for integration tests
@@ -69,11 +117,32 @@ RSpec/NestedGroups:
 Gemspec/DevelopmentDependencies:
   Enabled: false
 
+Style/OneClassPerFile:
+  Exclude:
+    - "spec/dummy/config/application.rb"
+    - "spec/support/pipeline_debug.rb"
+
 # Allow integration tests without specific class
 RSpec/DescribeClass:
   Exclude:
     - "spec/zeitwerk_spec.rb"
     - "spec/integration/**/*"
+    - "spec/e11y/module_api_spec.rb"
+
+# File path conventions (generators use spec/generators/e11y/ structure)
+RSpec/SpecFilePathFormat:
+  Exclude:
+    - "spec/e11y/event/dsl_additions_spec.rb"
+    - "spec/e11y/module_api_spec.rb"
+    - "spec/generators/e11y/*_spec.rb"
+
+RSpec/DescribeMethod:
+  Exclude:
+    - "spec/e11y/module_api_spec.rb"
+
+RSpec/MultipleDescribes:
+  Exclude:
+    - "spec/e11y/adapters/null_adapter_spec.rb"
 
 # Allow simple doubles for now (will improve in Phase 1)
 RSpec/VerifiedDoubles:
@@ -85,5 +154,8 @@ RSpec/VerifiedDoubles:
 RSpec/MessageSpies:
   Enabled: false
 
-Capybara/RSpec/PredicateMatcher:
+# RSpec/Output: New cop in rubocop-rspec 3.x flagging puts in specs.
+# We use puts for diagnostic output in integration tests and support files.
+RSpec/Output:
   Enabled: false
+

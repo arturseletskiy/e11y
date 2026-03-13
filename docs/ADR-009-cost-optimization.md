@@ -341,13 +341,13 @@ C4Context
     
     System_Ext(loki, "Loki", "$10K/year")
     System_Ext(sentry, "Sentry", "$3.6K/year")
-    System_Ext(s3, "S3", "$100/year")
+    System_Ext(archive, "Archive", "$100/year")
     
     Rel(dev, e11y, "Configures", "Sampling rules")
     Rel(rails_app, e11y, "Tracks events", "100% volume")
     Rel(e11y, loki, "20% sampled + compressed", "80% cost savings")
     Rel(e11y, sentry, "Errors only", "50% cost savings")
-    Rel(e11y, s3, "Cold storage", "Long-term archive")
+    Rel(e11y, archive, "Cold storage", "Long-term archive")
 ```
 
 ### 2.2. Component Architecture
@@ -373,7 +373,7 @@ graph TB
     subgraph "Smart Routing"
         Compressor --> Router[Smart Router]
         Router --> CriticalPath[Critical → Loki]
-        Router --> ArchivePath[Archive → S3]
+        Router --> ArchivePath[Archive]
         Router --> DebugPath[Debug → /dev/null]
     end
     
@@ -406,7 +406,7 @@ sequenceDiagram
     participant Compress as Compressor
     participant Router as Smart Router
     participant Loki as Loki (Expensive)
-    participant S3 as S3 (Cheap)
+    participant Archive as Archive (Cheap)
     
     App->>Sampler: Track event (100%)
     
@@ -426,13 +426,13 @@ sequenceDiagram
         alt Critical event
             Router->>Loki: Send to Loki (2.8% of original)
         else Archive-worthy
-            Router->>S3: Send to S3 (17.2% of original)
+            Router->>Archive: Send to archive (17.2% of original)
         end
     else Sample decision: DROP
         Note over Sampler: 80% dropped
     end
     
-    Note over Loki,S3: Final cost: 80% reduction
+    Note over Loki,Archive: Final cost: 80% reduction
 ```
 
 ---
@@ -2005,8 +2005,8 @@ E11y.configure do |config|
       event[:severity] == :debug
     end
     
-    # Rule 3: Archive events → S3 only
-    rule 'archive_events', adapters: [:s3] do |event|
+    # Rule 3: Archive events → archive adapter
+    rule 'archive_events', adapters: [:archive] do |event|
       event[:payload][:archive] == true
     end
     
@@ -2079,7 +2079,7 @@ E11y.configure do |config|
     # Rule 2: Long retention → cold storage
     ->(event) {
       days = (Time.parse(event[:retention_until]) - Time.now) / 86400
-      :s3_glacier if days > 90
+      :archive if days > 90
     },
     
     # Rule 3: Short retention → hot storage
@@ -2194,7 +2194,7 @@ E11y.configure do |config|
       case days
       when 0..30   then :loki        # Hot storage
       when 31..90  then :s3_standard # Warm storage
-      else              :s3_glacier   # Cold storage
+      else              :archive      # Cold storage
       end
     }
   ]
@@ -2225,7 +2225,7 @@ E11y.configure do |config|
     # Priority 4: Retention-based routing
     ->(event) {
       days = (Time.parse(event[:retention_until]) - Time.now) / 86400
-      days > 90 ? :s3_glacier : :loki
+      days > 90 ? :archive : :loki
     }
   ]
 end
@@ -2237,12 +2237,12 @@ end
 |----------|----------------|----------------|---------|
 | **Debug logs (7d retention)** | Loki (30d): $500/mo | stdout: $0/mo | **100%** |
 | **Business events (30d)** | Loki: $100/mo | Loki: $100/mo | 0% |
-| **Audit (7y retention)** | Loki: $5000/mo | S3 Glacier: $50/mo | **99%** |
+| **Audit (7y retention)** | Loki: $5000/mo | Cold tier: $50/mo | **99%** |
 | **Total** | $5,600/mo | $150/mo | **97.3%** |
 
 **Key Savings:**
 - ✅ Debug logs → stdout (free)
-- ✅ Audit logs → S3 Glacier ($0.004/GB vs $0.15/GB in Loki)
+- ✅ Audit logs → cold tier ($0.004/GB vs $0.15/GB in Loki; archival filters by `retention_until`)
 - ✅ Automatic tiering → no manual intervention
 
 ### 6.7. Advantages over TieredStorage Adapter
@@ -2267,7 +2267,7 @@ limits_config:
   retention_period: 720h  # 30 days
 ```
 
-**S3 Standard (Warm Storage - 90 days):**
+**Warm tier (90 days):**
 ```json
 {
   "Rules": [{
@@ -2281,7 +2281,7 @@ limits_config:
 }
 ```
 
-**S3 Glacier (Cold Storage - 7 years):**
+**Cold tier (7 years):**
 ```json
 {
   "Rules": [{
@@ -2294,7 +2294,7 @@ limits_config:
 }
 ```
 
-**Key Point:** E11y routes events to correct storage tier, downstream systems (Loki, S3) handle actual retention policies.
+**Key Point:** E11y adds `retention_until` to events. Downstream systems (Loki, archival jobs) filter by it for tier migration. No S3 adapter in E11y — archival is external.
 
 ---
 
@@ -3064,32 +3064,26 @@ E11y.configure do |config|
       end
     end
     
-    # Tiered storage
-    tiered_storage do
-      retention_rule(2555) { |e| e[:event_name].start_with?('audit.') }
-      retention_rule(90) { |e| e[:severity] >= :error }
-      retention_rule(7) { |e| e[:severity] == :debug }
-      default_retention 30
-    end
-    
-    # Payload minimization
-    payload_minimization do
-      enabled true
-      remove_nulls true
-      truncate_strings_at 1000
-      truncate_arrays_at 100
-    end
-    
     # Cost tracking
     cost_tracking do
       enabled true
       adapter_costs do
         loki 0.50
         sentry 10.00
-        s3 0.02
+        archive 0.02
       end
     end
   end
+  
+  # Routing by retention_until (replaces tiered_storage)
+  config.routing_rules = [
+    ->(e) { [:audit_encrypted, :loki] if e[:event_name].to_s.start_with?('audit.') },
+    ->(e) {
+      return nil unless e[:retention_until]
+      days = (Time.parse(e[:retention_until]) - Time.now) / 86400
+      days <= 7 ? :file : :loki
+    }
+  ]
 end
 ```
 

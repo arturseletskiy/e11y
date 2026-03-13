@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-# rubocop:disable RSpec/FilePath, RSpec/SpecFilePathFormat
+# rubocop:disable RSpec/SpecFilePathFormat
 # Organized under configuration/ directory for logical grouping.
 RSpec.describe E11y::ErrorHandlingConfig do
   let(:config) { described_class.new }
@@ -50,4 +50,4 @@ RSpec.describe E11y::ErrorHandlingConfig do
     end
   end
 end
-# rubocop:enable RSpec/FilePath, RSpec/SpecFilePathFormat
+# rubocop:enable RSpec/SpecFilePathFormat

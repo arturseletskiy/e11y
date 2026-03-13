@@ -15,8 +15,32 @@ require "rails/test_unit/railtie"
 # This ensures Railtie is registered before Rails collects railties
 require "e11y"
 
+# Load event classes BEFORE E11y config so Registry has metrics for Yabeda registration
+# (Yabeda.configure! freezes config; metrics must be registered before that)
+Dir[File.join(DUMMY_APP_ROOT, "app", "events", "**", "*.rb")].each { |f| require f }
+
+# Register metrics for yabeda_integration_spec (unified approach: no Yabeda.reset!)
+# Use _yabeda_spec suffix to avoid conflicts with event class metrics (e.g. OrderCreated.orders_total)
+# rubocop:disable Style/GlobalVars -- dummy app needs cross-load state for test suite
+unless $yabeda_integration_metrics_registered
+  reg = E11y::Metrics::Registry.instance
+  [
+    { type: :counter, pattern: "order.*", name: :orders_total_yabeda_spec, tags: %i[currency status] },
+    { type: :histogram, pattern: "order.paid", name: :order_amount_yabeda_spec, value: :amount, tags: [:currency],
+      buckets: [10, 50, 100, 500, 1000] },
+    { type: :gauge, pattern: "queue.*", name: :queue_depth_yabeda_spec, value: :size, tags: [:queue_name] },
+    { type: :counter, pattern: "api.*", name: :api_requests_yabeda_spec, tags: [:method] },
+    { type: :histogram, pattern: "request.*", name: :request_duration_yabeda_spec, value: :duration, tags: [:endpoint],
+      buckets: [0.001, 0.01, 0.1, 1.0] },
+    { type: :gauge, pattern: "connections.*", name: :active_connections_yabeda_spec, value: :count, tags: [:server] },
+    { type: :counter, pattern: "test.*", name: :protected_metric_yabeda_spec, tags: [:label1] },
+    { type: :counter, pattern: "export.*", name: :exported_metric_yabeda_spec, tags: [] },
+    { type: :counter, pattern: "auto.*", name: :auto_counter_yabeda_spec, tags: [:tag1] }
+  ].each { |m| reg.register(m) }
+  $yabeda_integration_metrics_registered = true
+end
+
 # Configure E11y ONCE (guard against multiple loads during test suite)
-# rubocop:disable Style/GlobalVars
 unless $e11y_dummy_configured
   E11y.configure do |config|
     config.enabled = true
@@ -28,6 +52,16 @@ unless $e11y_dummy_configured
 
     # Also register as :logs adapter so events go to memory by default
     config.adapters[:logs] = config.adapters[:memory]
+
+    # Yabeda adapter for metrics (E11y::Metrics.backend) — requires integration deps
+    begin
+      require "yabeda"
+      require "e11y/adapters/yabeda"
+      config.adapters[:yabeda] = E11y::Adapters::Yabeda.new
+    rescue LoadError => e
+      # Yabeda not in bundle (e.g. without --with integration)
+      warn "[E11y] Yabeda not available: #{e.message}. Run: bundle install --with integration" if ENV["VERBOSE"]
+    end
 
     # Enable instrumentation
     config.rails_instrumentation.enabled = true
@@ -45,7 +79,7 @@ unless $e11y_dummy_configured
     config.pipeline.use E11y::Middleware::Sampling,
                         default_sample_rate: 1.0,
                         trace_aware: false,
-                        severity_rates: { debug: 1.0, info: 1.0, warn: 1.0, error: 1.0, fatal: 1.0 }
+                        severity_rates: { debug: 1.0, info: 1.0, success: 1.0, warn: 1.0, error: 1.0, fatal: 1.0 }
     config.pipeline.use E11y::Middleware::Routing
   end
   $e11y_dummy_configured = true
@@ -94,6 +128,17 @@ module Dummy
     # Disable host authorization for testing
     # Rails 6.1+ has HostAuthorization middleware that blocks requests without proper Host header
     config.hosts.clear if config.respond_to?(:hosts)
+
+    # Filter parameters for PII filtering integration tests
+    config.filter_parameters += %i[
+      password
+      password_confirmation
+      api_key
+      token
+      authorization
+      secret
+      cvv
+    ]
   end
 end
 
