@@ -77,13 +77,16 @@ RSpec.describe E11y::Console do
     end
 
     describe "#events" do
-      it "returns empty array" do
+      it "delegates to Registry.all_events and returns event names" do
+        fake_event = double("Event", event_name: "order.created", name: "Events::OrderCreated")
+        allow(E11y::Registry).to receive(:all_events).and_return([fake_event])
         result = E11y.events
-        expect(result).to eq([])
+        expect(result).to eq(["order.created"])
       end
 
-      it "outputs to stdout" do
-        expect { E11y.events }.to output.to_stdout
+      it "returns array" do
+        allow(E11y::Registry).to receive(:all_events).and_return([])
+        expect(E11y.events).to eq([])
       end
     end
 

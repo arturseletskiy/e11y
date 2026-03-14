@@ -51,9 +51,7 @@ module E11y
 
       # List all registered event classes
       def events
-        puts "📋 E11y events list"
-        puts "   (Waiting for Event registry implementation)"
-        []
+        Registry.all_events.map { |e| e.respond_to?(:event_name) ? e.event_name : e.name }
       end
 
       # List all registered adapters
@@ -95,13 +93,8 @@ module E11y
     # @return [void]
     def self.configure_for_console
       E11y.configure do |config|
-        # Console-friendly output
-        config.adapters&.clear
-
-        # Use stdout adapter with pretty printing
-        config.adapters&.register :stdout, E11y::Adapters::Stdout.new(
-          colorize: true
-        )
+        config.adapters.clear
+        config.adapters[:stdout] = E11y::Adapters::Stdout.new(colorize: true)
 
         # Show all severities
         # TODO: Implement severity_threshold config

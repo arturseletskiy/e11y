@@ -18,10 +18,9 @@
    - Need to grep codebase to find event classes
    - Hard to document all events
 
-2. **No runtime introspection**
+2. **No runtime discovery**
    - Can't list all registered events at runtime
    - Can't find event class by name
-   - Can't inspect event schema programmatically
 
 3. **Hard to build tooling**
    - Can't build event explorer UI (no registry)
@@ -34,7 +33,7 @@
 
 - Automatic registration of all event classes
 - Query registry by event name, version, adapter
-- Schema introspection (fields, types, validations)
+- Query by name, severity, adapter (find, where)
 - Build developer tools (event explorer, documentation generator)
 
 **Result:** Full visibility into all events in the system.
@@ -193,8 +192,8 @@ end
 │                                                                  │
 │  Indexes:                                                        │
 │  - by_name: 'order.created' → Events::OrderCreatedV2            │
-│  - by_adapter: :sentry → [Events::PaymentFailed, ...]           │
-│  - by_severity: :error → [Events::SystemError, ...]             │
+│  - where(adapter: :sentry) → [Events::PaymentFailed, ...]       │
+│  - where(severity: :error) → [Events::SystemError, ...]         │
 │  - by_version: 2 → [Events::OrderCreatedV2, ...]                │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -239,7 +238,6 @@ E11y.configure do |config|
     ]
     
     # Registry features
-    enable_introspection true
     enable_event_explorer true  # Web UI at /e11y/events
   end
 end
@@ -249,7 +247,7 @@ end
 
 ## 📝 Registry API
 
-> **Implementation:** See [ADR-010 Section 5: Event Registry](../ADR-010-developer-experience.md#5-event-registry) for full registry architecture, including event discovery API, introspection, version tracking, and dynamic dispatch.
+> **Implementation:** See [ADR-010 Section 5: Event Registry](../ADR-010-developer-experience.md#5-event-registry) for full registry architecture (find, all_events, where, to_documentation).
 
 ### Query Events
 
@@ -277,10 +275,6 @@ E11y::Registry.where(severity: :error)
 
 E11y::Registry.where(version: 2)
 # => [Events::OrderCreatedV2, Events::OrderPaidV2, ...]
-
-# === Search ===
-E11y::Registry.search('payment')
-# => [Events::PaymentProcessed, Events::PaymentFailed, ...]
 
 # === Filtering ===
 E11y::Registry.filter do |event_class|

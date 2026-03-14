@@ -246,7 +246,7 @@ module E11y
     def initialize_feature_configs
       @rails_instrumentation = RailsInstrumentationConfig.new
       @logger_bridge = LoggerBridgeConfig.new
-      @request_buffer = RequestBufferConfig.new
+      @request_buffer = Config.new
       @active_job = ActiveJobConfig.new
       @sidekiq = SidekiqConfig.new
       @error_handling = ErrorHandlingConfig.new # ✅ C18 Resolution
@@ -455,7 +455,7 @@ module E11y
   end
 
   # Request Buffer configuration
-  class RequestBufferConfig
+  class Config
     attr_accessor :enabled, :flush_on_error, :flush_on_statuses
 
     # Explicit list of adapter names that receive flushed debug events on request failure.
