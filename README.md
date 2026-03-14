@@ -10,7 +10,7 @@
 
 **⚠️ Work in Progress** - Core features implemented, production validation in progress
 
-[Quick Start](#quick-start) • [Why E11y?](#why-e11y) • [Documentation](#documentation)
+[Quick Start](#quick-start) • [Why E11y?](#what-makes-e11y-different) • [Documentation](#documentation)
 
 </div>
 
@@ -194,6 +194,19 @@ config.rails_instrumentation.enabled = true
 - ❌ Datadog: $10k+/year, vendor lock-in  
 - ❌ ELK Stack: DevOps team needed
 - ✅ E11y: One gem, Rails conventions, owned data
+
+---
+
+### 6. Built-in PII Filtering
+
+**Built-in PII filtering** — mask, hash, or redact sensitive fields per event class. No other Ruby observability gem provides this out of the box.
+
+```ruby
+class Events::UserSignedIn < E11y::Event::Base
+  contains_pii :email, strategy: :hash
+  contains_pii :ip_address, strategy: :mask
+end
+```
 
 ---
 
@@ -487,6 +500,7 @@ E11y is optimized for:
 - [PII Filtering](#pii-filtering)
 - [Adaptive Sampling](#adaptive-sampling)
 - [Presets](#presets)
+- [Distributed Tracing](#distributed-tracing)
 - [Rails Integration](#rails-integration)
 - [Testing](#testing)
 - [Configuration](#configuration)
