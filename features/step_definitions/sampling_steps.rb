@@ -240,7 +240,9 @@ module SamplingStepHelpers
   end
 
   def sampling_insert_index(cfg)
-    idx = cfg.pipeline.middlewares.index { |m| m.middleware_class == E11y::Middleware::PIIFilter }
+    # ADR-015: Sampling after RateLimiting; insert after RateLimiting (or after PIIFilter if RateLimiting disabled)
+    idx = cfg.pipeline.middlewares.index { |m| m.middleware_class == E11y::Middleware::RateLimiting }
+    idx = cfg.pipeline.middlewares.index { |m| m.middleware_class == E11y::Middleware::PIIFilter } if idx.nil?
     idx ? idx + 1 : cfg.pipeline.middlewares.size
   end
 

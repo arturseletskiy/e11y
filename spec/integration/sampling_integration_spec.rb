@@ -280,6 +280,7 @@ RSpec.describe "Sampling Middleware Integration", :integration do
       # Setup: Error spike triggered, then spike ends
       # Test: Send events after spike ends
       # Expected: Normal sampling rate (10%) applied
+      # Deterministic: srand(8) yields exactly 10 passes for 100 events at 10% rate
 
       error_event_class = Class.new(E11y::Event::Base) do
         severity :error
@@ -295,17 +296,19 @@ RSpec.describe "Sampling Middleware Integration", :integration do
       memory_adapter.clear!
       E11y::Current.reset
 
-      # Step 1: Trigger error spike
+      # Deterministic sampling: seed yields exactly 10/100 at 10% rate
+      srand(8)
+
+      # Step 1: Trigger error spike (11 rand calls; 100% pass during spike)
       11.times do |i|
         Events::TestError.track(test_id: i, error: "Test error")
       end
 
       # Step 2: Wait for spike to end (spike_duration = 300 seconds)
-      # Use Timecop to fast-forward time
-      Timecop.travel(Time.now + 301) # Just past spike_duration
+      Timecop.travel(Time.now + 301)
 
-      # Step 3: Send info events (should use normal 10% sampling)
-      memory_adapter.clear! # Clear previous events
+      # Step 3: Send info events (next 100 rand calls; exactly 10 pass with seed 8)
+      memory_adapter.clear!
       100.times do |i|
         Events::TestInfo.track(test_id: i, message: "Info message")
       end
@@ -313,9 +316,10 @@ RSpec.describe "Sampling Middleware Integration", :integration do
       events = memory_adapter.find_events("Events::TestInfo")
       passed_count = events.count
 
-      # Should be approximately 10% (allow 5-15% range for statistical variance)
-      expect(passed_count).to be_between(5, 15),
-                              "Expected ~10% sampling (5-15 events) after spike ends, got #{passed_count} events"
+      expect(passed_count).to eq(10),
+                              "Expected exactly 10 events (deterministic srand), got #{passed_count}"
+    ensure
+      srand # Reset to avoid affecting other tests
     end
   end
 

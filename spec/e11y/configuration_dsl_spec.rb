@@ -302,55 +302,55 @@ RSpec.describe E11y::Configuration do
       expect(middleware_classes.size).to eq(9)
     end
 
-    it "orders middlewares per ADR-015: TraceContext → Versioning → Validation → PIIFilter → AuditSigning → Sampling → RateLimiting → Routing → EventSlo" do # rubocop:disable Layout/LineLength
+    it "orders middlewares per ADR-015: TraceContext → Validation → AuditSigning → PIIFilter → RateLimiting → Sampling → Versioning → Routing → EventSlo" do # rubocop:disable Layout/LineLength
       expected_order = [
         E11y::Middleware::TraceContext,
-        E11y::Middleware::Versioning,
         E11y::Middleware::Validation,
-        E11y::Middleware::PIIFilter,
         E11y::Middleware::AuditSigning,
-        E11y::Middleware::Sampling,
+        E11y::Middleware::PIIFilter,
         E11y::Middleware::RateLimiting,
+        E11y::Middleware::Sampling,
+        E11y::Middleware::Versioning,
         E11y::Middleware::Routing,
         E11y::Middleware::EventSlo
       ]
       expect(middleware_classes).to eq(expected_order)
     end
 
-    it "places TraceContext before Versioning" do
-      trace_idx    = middleware_classes.index(E11y::Middleware::TraceContext)
-      version_idx  = middleware_classes.index(E11y::Middleware::Versioning)
-      expect(trace_idx).to be < version_idx
+    it "places TraceContext before Validation" do
+      trace_idx = middleware_classes.index(E11y::Middleware::TraceContext)
+      valid_idx = middleware_classes.index(E11y::Middleware::Validation)
+      expect(trace_idx).to be < valid_idx
     end
 
-    it "places Versioning before Validation" do
-      version_idx  = middleware_classes.index(E11y::Middleware::Versioning)
-      valid_idx    = middleware_classes.index(E11y::Middleware::Validation)
-      expect(version_idx).to be < valid_idx
+    it "places Validation before Versioning" do
+      valid_idx   = middleware_classes.index(E11y::Middleware::Validation)
+      version_idx = middleware_classes.index(E11y::Middleware::Versioning)
+      expect(valid_idx).to be < version_idx
     end
 
-    it "places PIIFilter before AuditSigning" do
-      pii_idx   = middleware_classes.index(E11y::Middleware::PIIFilter)
+    it "places AuditSigning before PIIFilter (sign original data per GDPR Art. 30)" do
       audit_idx = middleware_classes.index(E11y::Middleware::AuditSigning)
-      expect(pii_idx).to be < audit_idx
+      pii_idx   = middleware_classes.index(E11y::Middleware::PIIFilter)
+      expect(audit_idx).to be < pii_idx
     end
 
-    it "places AuditSigning before Sampling" do
-      audit_idx    = middleware_classes.index(E11y::Middleware::AuditSigning)
+    it "places PIIFilter before Sampling" do
+      pii_idx      = middleware_classes.index(E11y::Middleware::PIIFilter)
       sampling_idx = middleware_classes.index(E11y::Middleware::Sampling)
-      expect(audit_idx).to be < sampling_idx
+      expect(pii_idx).to be < sampling_idx
     end
 
-    it "places Sampling before RateLimiting" do
-      sampling_idx = middleware_classes.index(E11y::Middleware::Sampling)
+    it "places RateLimiting before Sampling (ADR-015 #4 before #5)" do
       rate_idx     = middleware_classes.index(E11y::Middleware::RateLimiting)
-      expect(sampling_idx).to be < rate_idx
+      sampling_idx = middleware_classes.index(E11y::Middleware::Sampling)
+      expect(rate_idx).to be < sampling_idx
     end
 
-    it "places RateLimiting before Routing" do
-      rate_idx    = middleware_classes.index(E11y::Middleware::RateLimiting)
+    it "places Versioning before Routing (Versioning last)" do
+      version_idx = middleware_classes.index(E11y::Middleware::Versioning)
       routing_idx = middleware_classes.index(E11y::Middleware::Routing)
-      expect(rate_idx).to be < routing_idx
+      expect(version_idx).to be < routing_idx
     end
 
     it "places Validation before PIIFilter (pre_processing before security zone)" do

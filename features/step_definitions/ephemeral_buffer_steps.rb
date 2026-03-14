@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-# features/step_definitions/request_buffer_steps.rb
+# features/step_definitions/ephemeral_buffer_steps.rb
 #
-# Step definitions for request_buffer.feature.
+# Step definitions for ephemeral_buffer.feature.
 # Exercises the Config and the (stub) flush_event mechanism.
 
 Then("request buffering should be disabled in the configuration") do

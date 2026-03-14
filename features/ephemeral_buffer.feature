@@ -1,4 +1,4 @@
-# features/request_buffer.feature
+# features/ephemeral_buffer.feature
 #
 # Verifies request-scoped debug buffering behaviour.
 # E11y's flagship feature: buffer debug events during a request,

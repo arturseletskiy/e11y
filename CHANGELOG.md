@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### BREAKING: Middleware order changed (ADR-015 compliance)
+
+**Per ADR-015 and ADR-006:**
+- **Versioning** moved to last (before Routing) — Validation, PII, RateLimiting, Sampling now use original class names
+- **AuditSigning** before PIIFilter — audit events signed with original data (GDPR Art. 30 non-repudiation)
+- **RateLimiting** before Sampling — matches ADR #4, #5
+
+**New order:** TraceContext → Validation → AuditSigning → PIIFilter → RateLimiting → Sampling → Versioning → Routing → EventSlo
+
+**Migration:** If you custom-configured pipeline order, ensure Versioning is last before Routing. Audit events now receive unfiltered payload at signing.
+
 ### BREAKING: Registry.all_events → Registry.event_classes
 
 **Renamed for clarity:** Method returns event classes, not event instances or names.

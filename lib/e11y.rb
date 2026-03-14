@@ -375,32 +375,32 @@ module E11y
     #
     # Default pipeline order (per ADR-015):
     # 1. TraceContext  - Add trace_id, span_id, timestamp (zone: :pre_processing)
-    # 2. Versioning    - Normalize event names: OrderPaidEvent → order.paid (zone: :pre_processing)
-    # 3. Validation    - Schema validation (zone: :pre_processing)
-    # 4. PIIFilter     - PII filtering (zone: :security)
-    # 5. AuditSigning  - Audit event signing (zone: :security)
-    # 6. RateLimiting  - Token-bucket rate limiting (zone: :routing)
-    # 7. Sampling      - Adaptive sampling (zone: :routing)
-    # 8. Routing       - Buffer routing (zone: :adapters)
-    # 9. EventSlo      - Event-driven SLO tracking (after adapters, observes dispatch)
+    # 2. Validation   - Schema validation (zone: :pre_processing)
+    # 3. AuditSigning - Sign audit events with ORIGINAL data before PII filter (zone: :security)
+    # 4. PIIFilter    - PII filtering (zone: :security)
+    # 5. RateLimiting - Token-bucket rate limiting (zone: :routing)
+    # 6. Sampling     - Adaptive sampling (zone: :routing)
+    # 7. Versioning   - Normalize event names (LAST before Routing, zone: :adapters)
+    # 8. Routing      - Buffer routing (zone: :adapters)
+    # 9. EventSlo     - Event-driven SLO tracking (after adapters, observes dispatch)
     #
     # @return [void]
     # @see ADR-015 Middleware Execution Order
     def configure_default_pipeline
       # Zone: :pre_processing
       @pipeline.use E11y::Middleware::TraceContext
-      @pipeline.use E11y::Middleware::Versioning # normalise names before validation
       @pipeline.use E11y::Middleware::Validation
 
-      # Zone: :security
-      @pipeline.use E11y::Middleware::PIIFilter
+      # Zone: :security (AuditSigning BEFORE PIIFilter — sign original data per GDPR Art. 30)
       @pipeline.use E11y::Middleware::AuditSigning
+      @pipeline.use E11y::Middleware::PIIFilter
 
-      # Zone: :routing (ADR-015: Sampling before RateLimiting)
-      @pipeline.use E11y::Middleware::Sampling
+      # Zone: :routing (ADR-015: RateLimiting #4, Sampling #5)
       @pipeline.use E11y::Middleware::RateLimiting
+      @pipeline.use E11y::Middleware::Sampling
 
-      # Zone: :adapters
+      # Zone: :adapters (Versioning LAST — normalize names only for adapters)
+      @pipeline.use E11y::Middleware::Versioning
       @pipeline.use E11y::Middleware::Routing
 
       # After adapters: observes dispatch outcome for SLO tracking
