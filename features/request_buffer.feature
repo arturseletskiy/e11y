@@ -1,4 +1,4 @@
-# features/request_scoped_buffer.feature
+# features/request_buffer.feature
 #
 # Verifies request-scoped debug buffering behaviour.
 # E11y's flagship feature: buffer debug events during a request,
@@ -6,7 +6,7 @@
 # README: "Buffer debug logs in memory, flush ONLY if request fails"
 # Result: -90% noise, full context on errors.
 #
-@request_buffer
+@ephemeral_buffer
 Feature: Request-scoped debug buffering
 
   Background:
@@ -14,7 +14,7 @@ Feature: Request-scoped debug buffering
     And the memory adapter is empty
 
   Scenario: Request buffering is disabled by default
-    # Config: RequestBufferConfig.enabled defaults to false
+    # Config: Config.enabled defaults to false
     # This means the "automatically captures" claim in docs is wrong.
     When I GET "/posts"
     Then request buffering should be disabled in the configuration
@@ -48,7 +48,7 @@ Feature: Request-scoped debug buffering
   Scenario: Buffer is cleared after a successful request — no memory leak
     # After a successful request, the per-request buffer must be discarded.
     # A subsequent request should start with a clean buffer.
-    # Verified: Thread.current[:e11y_request_buffer] is nil/empty after request.
+    # Verified: Thread.current[:e11y_ephemeral_buffer] is nil/empty after request.
     Given request buffering is enabled in the configuration
     When I GET "/posts"
     And I GET "/posts" again

@@ -1,22 +1,22 @@
 # frozen_string_literal: true
 
-# features/step_definitions/request_scoped_buffer_steps.rb
+# features/step_definitions/request_buffer_steps.rb
 #
-# Step definitions for request_scoped_buffer.feature.
-# Exercises the RequestBufferConfig and the (stub) flush_event mechanism.
+# Step definitions for request_buffer.feature.
+# Exercises the Config and the (stub) flush_event mechanism.
 
 Then("request buffering should be disabled in the configuration") do
   msg = "Expected request buffering to be disabled by default, but it was enabled. " \
         "README says 'automatically captures' but config defaults to enabled: false."
-  expect(E11y.configuration.request_buffer.enabled).to be(false), msg
+  expect(E11y.configuration.ephemeral_buffer.enabled).to be(false), msg
 end
 
 Given("request buffering is enabled in the configuration") do
-  E11y.configuration.request_buffer.enabled = true
+  E11y.configuration.ephemeral_buffer.enabled = true
 end
 
 Then("request buffering should be enabled in the configuration") do
-  expect(E11y.configuration.request_buffer.enabled).to be(true)
+  expect(E11y.configuration.ephemeral_buffer.enabled).to be(true)
 end
 
 Then("{int} events with severity {string} should be in the adapter") do |count, severity|
@@ -27,14 +27,14 @@ Then("{int} events with severity {string} should be in the adapter") do |count, 
   end
   expect(events.size).to eq(count),
                          "Expected #{count} #{severity}-severity events in adapter, got #{events.size}. " \
-                         "BUG: flush_event in RequestScopedBuffer is a stub — buffered events are never written."
+                         "BUG: flush_event in EphemeralBuffer is a stub — buffered events are never written."
 end
 
 Then("events with severity {string} should be in the adapter") do |severity|
   events = memory_adapter.events.select { |e| e[:severity].to_s == severity }
   expect(events.size).to be >= 1,
                          "Expected at least 1 #{severity}-severity event in adapter after failed request, got 0. " \
-                         "BUG: flush_event stub in lib/e11y/buffers/request_scoped_buffer.rb:226."
+                         "BUG: flush_event stub in lib/e11y/buffers/ephemeral_buffer.rb:226."
 end
 
 Then("those debug events should have been generated during that request") do
@@ -60,7 +60,7 @@ When("I GET {string} again") do |path|
 end
 
 Then("the request buffer should be empty between requests") do
-  buffer = Thread.current[:e11y_request_buffer]
+  buffer = Thread.current[:e11y_ephemeral_buffer]
   msg = "Expected request buffer to be cleared after successful request, but it still has events."
   expect(buffer.nil? || buffer.empty?).to be(true), msg
 end
