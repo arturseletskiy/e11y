@@ -96,7 +96,7 @@ end
 > ```
 
 **Real-world impact:**
-- **Storage costs:** $500/month → $50/month (Loki/CloudWatch)
+- **Storage costs:** High → Low (Loki/CloudWatch, ~90% less log volume)
 - **Log search time:** 30 seconds → 3 seconds (90% less data)
 - **Developer sanity:** Infinite ✨
 
@@ -176,7 +176,7 @@ end
 Built for Rails developers, not platform engineers:
 
 ```ruby
-# 5-minute setup, not 2-week OpenTelemetry migration
+# Fast setup, not 2-week OpenTelemetry migration
 gem "e11y"
 
 E11y.configure do |config|
@@ -328,7 +328,7 @@ end
 - ❌ nil values in production
 - ❌ Manual `Yabeda.increment` everywhere
 - ❌ Manual SLO definitions and calculations
-- ❌ $500/month log storage bills
+- ❌ High log storage bills from storing everything
 
 ---
 
@@ -357,7 +357,7 @@ Rails.logger.error "Payment failed!"
 #   [DEBUG] Cache read... (3 lines)
 #   [ERROR] Payment failed (1 line)
 # Total: 400 lines, 74% noise ❌
-# Cost: $500/month Loki storage ❌
+# Cost: High (all logs stored) ❌
 # Search time: 30 seconds ❌
 ```
 
@@ -377,7 +377,7 @@ E11y.configure { |c| c.request_buffer.enabled = true }
 #   [DEBUG] SQL: SELECT... (context!) ← Flushed!
 #   [DEBUG] Rendered view... (trail!) ← Flushed!
 # Total: 103 lines, 0% noise ✅
-# Cost: $50/month Loki storage ✅ (-90%)
+# Cost: Low (-90% log volume) ✅
 # Search time: 3 seconds ✅ (-90%)
 ```
 
@@ -453,7 +453,7 @@ E11y.configure { |c| c.request_buffer.enabled = true }
 **OpenTelemetry:**
 - ✅ **Pros:** Industry standard, polyglot, vendor-neutral, mature ecosystem
 - ❌ **Cons:** Complex setup (1-2 weeks), no debug buffering, no schema validation, overkill for Rails monolith
-- **E11y advantage:** 5-minute setup, Rails-first, request-scoped buffering, schema validation
+- **E11y advantage:** Fast setup, Rails-first, request-scoped buffering, schema validation
 
 **When to use OpenTelemetry instead:**
 - You have microservices in multiple languages (Go, Java, Python, etc.)
@@ -469,7 +469,7 @@ E11y.configure { |c| c.request_buffer.enabled = true }
 **Grafana Stack:**
 - ✅ **Pros:** Open-source, powerful visualizations, mature, self-hosted
 - ❌ **Cons:** Complex setup (2-3 days), requires DevOps, no Rails integration, no schema validation
-- **E11y advantage:** 5-minute setup, Rails-native, schema validation, no DevOps required
+- **E11y advantage:** Fast setup, Rails-native, schema validation, no DevOps required
 
 **When to use Grafana Stack instead:**
 - You already have Grafana/Loki infrastructure
