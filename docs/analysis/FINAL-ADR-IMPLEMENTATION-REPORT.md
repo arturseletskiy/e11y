@@ -19,30 +19,13 @@
 
 ## 1. Critical Findings
 
-### ADR-001: Architecture
 
-| ID | Description |
-|----|-------------|
-| F-010 | **Middleware order:** ADR requires Versioning last before Routing; in code Versioning is second (before Validation). May affect schema validation, PII rules, rate limits. |
-| F-011 | **Middleware order:** ADR: RateLimit #4, Sampling #5. In code: Sampling before RateLimiting. Order is reversed. |
-
-### ADR-006: Security & Compliance
-
-| ID | Description |
-|----|-------------|
-| F-001 | **Audit events signed after PII filtering:** Audit events must be signed with **original** data (before PII filtering) for non-repudiation (GDPR Art. 30). In code PIIFilter runs before AuditSigning — signature is on filtered data. |
 
 ### ADR-013: Reliability & Error Handling
 
 | ID | Description |
 |----|-------------|
 | F3 | **Adapter DLQ not wired:** `@dlq_filter` and `@dlq_storage` in Base adapter remain `nil` — never initialized from `E11y.config`. As a result `save_to_dlq_if_needed` always returns early, DLQ does not work. |
-
-### ADR-015: Middleware Order
-
-| ID | Description |
-|----|-------------|
-| F-001 | **Versioning position:** Versioning must be last before Routing; in code Versioning is second. Validation, PII, RateLimiting, Sampling may use normalized names instead of original class names. |
 
 ---
 
@@ -108,9 +91,7 @@
 
 ### ADR-001: Architecture (Medium)
 
-| ID | Description |
-|----|----------|
-| F-007 | **Ephemeral buffer:** Resolved — ADR §3.4 and code align: both use `EphemeralBuffer` + `Thread.current[:e11y_ephemeral_buffer]`. No `Current.request_buffer` in ADR or code. |
+
 
 ### ADR-005: Tracing Context
 

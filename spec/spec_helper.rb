@@ -115,6 +115,8 @@ require "climate_control" # For ENV manipulation in tests
 # so E11y::Railtie registers properly and its initializers run on app boot.
 require "rails/railtie" if integration_run
 require "e11y"
+require "e11y/testing/rspec_matchers"
+require "e11y/testing/snapshot_matcher"
 require "webmock/rspec"
 
 # Configure WebMock
@@ -128,6 +130,13 @@ else
 end
 
 RSpec.configure do |config|
+  config.include E11y::Testing::RSpecMatchers
+  config.include(Module.new do
+    def match_snapshot(name)
+      E11y::Testing::SnapshotMatcher.new(name)
+    end
+  end)
+
   # Enable flags like --only-failures and --next-failure
   config.example_status_persistence_file_path = ".rspec_status"
 

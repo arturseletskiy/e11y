@@ -122,15 +122,24 @@ module E11y
 
       # Find events matching pattern
       #
-      # @param pattern [String, Regexp] Pattern to match against event_name
+      # @param pattern [String, Regexp, Class] Event name pattern or event class
       # @return [Array<Hash>] Matching events
       #
       # @example
       #   adapter.find_events(/order/)  # All order.* events
       #   adapter.find_events("order.paid")  # Exact match
+      #   adapter.find_events(Events::OrderPaid)  # By event class
       def find_events(pattern)
-        pattern = Regexp.new(Regexp.escape(pattern)) if pattern.is_a?(String)
-        @events.select { |event| event[:event_name].to_s.match?(pattern) }
+        pattern = event_pattern_for(pattern)
+        @events.select { |event| event_matches?(event, pattern) }
+      end
+
+      # Find first event matching pattern
+      #
+      # @param pattern [String, Regexp, Class] Event name pattern or event class
+      # @return [Hash, nil] First matching event or nil
+      def find_event(pattern)
+        find_events(pattern).first
       end
 
       # Count events by name
@@ -218,6 +227,30 @@ module E11y
       end
 
       private
+
+      def event_pattern_for(pattern)
+        case pattern
+        when Class
+          pattern
+        when String
+          Regexp.new(Regexp.escape(pattern))
+        when Regexp
+          pattern
+        else
+          raise ArgumentError, "Pattern must be Class, String, or Regexp, got #{pattern.class}"
+        end
+      end
+
+      def event_matches?(event, pattern)
+        return event[:event_name].to_s.match?(pattern) if pattern.is_a?(Regexp)
+
+        return false unless pattern.is_a?(Class)
+
+        event[:event_class] == pattern ||
+          event[:event_class]&.name == pattern.name ||
+          event[:event_name].to_s == (pattern.respond_to?(:event_name) ? pattern.event_name : pattern.name) ||
+          event[:event_name].to_s.include?(pattern.name)
+      end
 
       # Enforce max_events limit by dropping oldest events (FIFO)
       #

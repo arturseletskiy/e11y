@@ -12,7 +12,9 @@ loader.inflector.inflect(
   "otel_logs" => "OTelLogs",
   "slo" => "SLO",
   "dlq" => "DLQ",
-  "net_http_patch" => "NetHTTPPatch"
+  "net_http_patch" => "NetHTTPPatch",
+  "rspec_matchers" => "RSpecMatchers",
+  "snapshot_matcher" => "SnapshotMatcher"
 )
 # Don't autoload railtie - it will be required manually when Rails is available
 loader.do_not_eager_load("#{__dir__}/e11y/railtie.rb")
@@ -59,6 +61,14 @@ module E11y
       @configuration ||= Configuration.new
     end
     alias config configuration
+
+    # Test adapter for specs (InMemoryTest in unit tests, InMemory in integration).
+    # Returns :test adapter (unit tests) or :memory adapter (integration tests from dummy config).
+    #
+    # @return [E11y::Adapters::InMemory, E11y::Adapters::InMemoryTest, nil]
+    def test_adapter
+      configuration.adapters[:test] || configuration.adapters[:memory]
+    end
 
     # Track an event
     #
