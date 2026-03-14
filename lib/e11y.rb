@@ -454,9 +454,9 @@ module E11y
     end
   end
 
-  # Request Buffer configuration
+  # Ephemeral Buffer configuration (request/job-scoped debug buffering)
   class Config
-    attr_accessor :enabled, :flush_on_error, :flush_on_statuses
+    attr_accessor :enabled, :flush_on_error, :flush_on_statuses, :job_buffer_limit
 
     # Explicit list of adapter names that receive flushed debug events on request failure.
     #
@@ -472,6 +472,7 @@ module E11y
       @flush_on_error    = true   # Flush buffer on 5xx server errors (default: true)
       @flush_on_statuses = []     # Additional HTTP statuses that trigger a flush (e.g. [403])
       @debug_adapters    = nil    # nil → use fallback_adapters
+      @job_buffer_limit = nil    # nil → use EphemeralBuffer::DEFAULT_BUFFER_LIMIT (jobs only)
     end
   end
 

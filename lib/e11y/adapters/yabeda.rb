@@ -327,7 +327,7 @@ module E11y
 
         metrics = [
           # Request buffer (consolidated)
-          { name: :e11y_request_buffer_total, tags: [:event] },
+          { name: :e11y_ephemeral_buffer_total, tags: [:event] },
           # Retry handler
           { name: :e11y_retry_success, tags: %i[adapter attempts] },
           { name: :e11y_retry_recovered, tags: %i[adapter attempts] },
