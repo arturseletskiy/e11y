@@ -392,16 +392,16 @@ E11y.configure { |c| c.request_buffer.enabled = true }
 
 ### Comparison Matrix
 
-| Solution | Setup Time | Monthly Cost | Request-Scoped Buffering | SLO Tracking | Schema Validation | Auto-Metrics | Data Ownership |
-|----------|-----------|--------------|--------------------------|--------------|-------------------|--------------|----------------|
-| **E11y** | **5–30 min*** | **Infra costs** | **✅ Unique** | **✅ Zero-config** | **✅** | **✅** | **✅ Full** |
-| Datadog APM | 2-4 hours | $500-5,000 | ❌ | ✅ Manual | ❌ | ✅ | ❌ SaaS lock-in |
-| New Relic | 2-4 hours | $99-658/user | ❌ | ✅ Manual | ❌ | ✅ | ❌ SaaS lock-in |
-| Sentry | 1 hour | $26-80/mo | ❌ | ❌ | ❌ | Partial | ❌ SaaS lock-in |
-| Semantic Logger | 30 minutes | Infra costs | ❌ | ❌ | ❌ | ❌ | ✅ Full |
-| OpenTelemetry | 1-2 weeks | Infra costs | ❌ | Manual setup | ❌ | ✅ | ✅ Full |
-| Grafana + Loki | 2-3 days | Infra costs | ❌ | Manual setup | ❌ | Manual | ✅ Full |
-| AppSignal | 1 hour | $23-499/mo | ❌ | ✅ Built-in | ❌ | ✅ | ❌ SaaS lock-in |
+| Solution | Setup Time | Monthly Cost | Request-Scoped Buffering | SLO Tracking | Schema Validation | Auto-Metrics | Built-in PII Filtering | Data Ownership | Ecosystem / Managed Infra |
+|----------|-----------|--------------|--------------------------|--------------|-------------------|--------------|------------------------|----------------|--------------------------|
+| **E11y** | **5–30 min*** | **Infra costs** | **✅ Unique** | **✅ Zero-config** | **✅** | **✅** | **✅ Field masking, hashing, redaction** | **✅ Full** | ⚠️ Ruby/Rails only |
+| Datadog APM | 2-4 hours | $500-5,000 | ❌ | ✅ Manual | ❌ | ✅ | ⚠️ Via agent config (limited) | ❌ SaaS lock-in | ✅ Extensive + fully managed |
+| New Relic | 2-4 hours | $99-658/user | ❌ | ✅ Manual | ❌ | ✅ | ⚠️ Via obfuscation rules | ❌ SaaS lock-in | ✅ Extensive + fully managed |
+| Sentry | 1 hour | $26-80/mo | ❌ | ❌ | ❌ | Partial | ⚠️ Data scrubbing rules | ❌ SaaS lock-in | ✅ Managed (error-focused) |
+| Semantic Logger | 30 minutes | Infra costs | ❌ | ❌ | ❌ | ❌ | ❌ None | ✅ Full | ⚠️ Ruby only, self-hosted |
+| OpenTelemetry | 1-2 weeks | Infra costs | ❌ | Manual setup | ❌ | ✅ | ❌ Manual implementation required | ✅ Full | ✅ Polyglot, vendor-neutral |
+| Grafana + Loki | 2-3 days | Infra costs | ❌ | Manual setup | ❌ | Manual | ❌ None | ✅ Full | ✅ Mature, DevOps-friendly |
+| AppSignal | 1 hour | $23-499/mo | ❌ | ✅ Built-in | ❌ | ✅ | ⚠️ Parameter filtering only | ❌ SaaS lock-in | ✅ Managed (Rails-friendly) |
 
 **Legend:**
 - **Setup Time:** From zero to first meaningful data
@@ -410,7 +410,9 @@ E11y.configure { |c| c.request_buffer.enabled = true }
 - **SLO Tracking:** Automatic Service Level Objectives monitoring
 - **Schema Validation:** Type-safe event schemas
 - **Auto-Metrics:** Metrics generated from events automatically
+- **Built-in PII Filtering:** Automatic masking/hashing of sensitive fields (emails, IPs, credit cards, etc.) — no other Ruby observability gem provides this out of the box
 - **Data Ownership:** Can you host it yourself?
+- **Ecosystem / Managed Infra:** Integration breadth and whether infrastructure is managed for you
 
 *\* 5 min for gem + stdout; 30 min if adding self-hosted Loki/Grafana stack.
 
