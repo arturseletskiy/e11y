@@ -96,7 +96,7 @@ end
 > ```
 
 **Real-world impact:**
-- **Storage costs:** High → Low (Loki/CloudWatch, ~90% less log volume)
+- **Storage costs:** Up to -90% log volume → proportional Loki storage savings
 - **Log search time:** 30 seconds → 3 seconds (90% less data)
 - **Developer sanity:** Infinite ✨
 
@@ -239,7 +239,7 @@ config.rails_instrumentation.enabled = true
 
 ---
 
-## Quick Start in 5 Minutes
+## Quick Start
 
 ### 1. Install
 
@@ -394,7 +394,7 @@ E11y.configure { |c| c.request_buffer.enabled = true }
 
 | Solution | Setup Time | Monthly Cost | Request-Scoped Buffering | SLO Tracking | Schema Validation | Auto-Metrics | Data Ownership |
 |----------|-----------|--------------|--------------------------|--------------|-------------------|--------------|----------------|
-| **E11y** | **5 minutes** | **Infra costs** | **✅ Unique** | **✅ Zero-config** | **✅** | **✅** | **✅ Full** |
+| **E11y** | **5–30 min*** | **Infra costs** | **✅ Unique** | **✅ Zero-config** | **✅** | **✅** | **✅ Full** |
 | Datadog APM | 2-4 hours | $500-5,000 | ❌ | ✅ Manual | ❌ | ✅ | ❌ SaaS lock-in |
 | New Relic | 2-4 hours | $99-658/user | ❌ | ✅ Manual | ❌ | ✅ | ❌ SaaS lock-in |
 | Sentry | 1 hour | $26-80/mo | ❌ | ❌ | ❌ | Partial | ❌ SaaS lock-in |
@@ -411,6 +411,10 @@ E11y.configure { |c| c.request_buffer.enabled = true }
 - **Schema Validation:** Type-safe event schemas
 - **Auto-Metrics:** Metrics generated from events automatically
 - **Data Ownership:** Can you host it yourself?
+
+*\* 5 min for gem + stdout; 30 min if adding self-hosted Loki/Grafana stack.
+
+> Cost estimates assume migration from verbose SaaS logging (Datadog/CloudWatch) to self-hosted Loki. Actual savings depend on your current setup.
 
 ---
 
@@ -565,7 +569,7 @@ E11y is optimized for:
 
 ## Table of Contents
 
-- [Quick Start](#quick-start-in-5-minutes)
+- [Quick Start](#quick-start)
 - [What Makes E11y Different?](#what-makes-e11y-different)
 - [Who Should Use E11y?](#who-should-use-e11y)
 - [Before and After](#before-and-after-e11y)
