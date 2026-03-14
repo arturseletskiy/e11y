@@ -2,17 +2,19 @@
 
 # E11y - Easy Telemetry
 
-**Observability for Rails developers who hate noise**
+**Debug production issues in seconds. Zero setup overhead. Own your data.**
 
 [![Gem Version](https://badge.fury.io/rb/e11y.svg)](https://badge.fury.io/rb/e11y)
 [![CI](https://github.com/arturseletskiy/e11y/actions/workflows/ci.yml/badge.svg)](https://github.com/arturseletskiy/e11y/actions/workflows/ci.yml)
 [![Code Coverage](https://codecov.io/gh/arturseletskiy/e11y/branch/main/graph/badge.svg)](https://codecov.io/gh/arturseletskiy/e11y)
 
-**⚠️ Work in Progress** - Core features implemented, production validation in progress
+[Quick Start](#quick-start) • [How it works](#the-e11y-solution) • [Docs](#documentation)
 
-[Quick Start](#quick-start) • [Why E11y?](#why-e11y) • [Documentation](#documentation)
+> v0.2.0 · Actively developed · Production feedback welcome → [open an issue](https://github.com/arturseletskiy/e11y/issues)
 
 </div>
+
+**Contents:** [Quick Look](#quick-look-2-minutes) · [Quick Start](#quick-start) · [Features](#what-makes-e11y-different) · [vs Alternatives](#e11y-vs-alternatives) · [Docs](#documentation)
 
 ---
 
@@ -60,6 +62,43 @@ You enable debug logs in production to catch that one weird bug.
 
 ---
 
+## Quick Look (2 minutes)
+
+```ruby
+# 1. Configure once
+E11y.configure do |config|
+  config.ephemeral_buffer.enabled = true
+  config.adapters[:logs] = E11y::Adapters::Loki.new(url: ENV["LOKI_URL"])
+end
+
+# 2. Define a business event
+class OrderPaidEvent < E11y::Event::Base
+  schema do
+    required(:order_id).filled(:string)
+    required(:amount).filled(:float, gt?: 0)
+    required(:currency).filled(:string, included_in?: %w[USD EUR GBP])
+    optional(:user_email).maybe(:string)
+  end
+
+  validation_mode :sampled, sample_rate: 0.01   # 1% validation for hot path
+  contains_pii true
+  pii_filtering { hashes :user_email }
+  sample_by_value :amount, greater_than: 1000  # Always sample large orders
+
+  metrics do
+    counter :orders_total, tags: [:currency]
+    histogram :order_amount, value: :amount, tags: [:currency]
+  end
+end
+
+# 3. Track it
+OrderPaidEvent.track(order_id: "123", amount: 99.99, currency: "USD")
+```
+
+→ [Full Quick Start guide (5 min)](#quick-start)
+
+---
+
 ## What Makes E11y Different?
 
 ### 1. Request-Scoped Debug Buffering (Unique to E11y)
@@ -75,7 +114,7 @@ Rails.logger.debug "rendering view"   # → Always written to disk
 
 # E11y approach:
 E11y.configure do |config|
-  config.request_buffer.enabled = true
+  config.ephemeral_buffer.enabled = true
 end
 
 # Debug events buffered in memory during request
@@ -88,15 +127,15 @@ end
 >
 > ```ruby
 > # flush_on_error (default: true) — controls 5xx behaviour
-> config.request_buffer.flush_on_error = false  # disable 5xx flush
+> config.ephemeral_buffer.flush_on_error = false  # disable 5xx flush
 >
 > # flush_on_statuses (default: []) — extra statuses, independent of flush_on_error
-> config.request_buffer.flush_on_statuses = [403]       # also flush on 403 Forbidden
-> config.request_buffer.flush_on_statuses = [401, 403]  # multiple codes
+> config.ephemeral_buffer.flush_on_statuses = [403]       # also flush on 403 Forbidden
+> config.ephemeral_buffer.flush_on_statuses = [401, 403]  # multiple codes
 > ```
 
 **Real-world impact:**
-- **Storage costs:** $500/month → $50/month (Loki/CloudWatch)
+- **Storage costs:** Up to -90% log volume → proportional Loki storage savings
 - **Log search time:** 30 seconds → 3 seconds (90% less data)
 - **Developer sanity:** Infinite ✨
 
@@ -176,7 +215,7 @@ end
 Built for Rails developers, not platform engineers:
 
 ```ruby
-# 5-minute setup, not 2-week OpenTelemetry migration
+# Fast setup, not 2-week OpenTelemetry migration
 gem "e11y"
 
 E11y.configure do |config|
@@ -194,6 +233,19 @@ config.rails_instrumentation.enabled = true
 - ❌ Datadog: $10k+/year, vendor lock-in  
 - ❌ ELK Stack: DevOps team needed
 - ✅ E11y: One gem, Rails conventions, owned data
+
+---
+
+### 6. Built-in PII Filtering
+
+**Built-in PII filtering** — mask, hash, or redact sensitive fields per event class. No other Ruby observability gem provides this out of the box.
+
+```ruby
+class Events::UserSignedIn < E11y::Event::Base
+  contains_pii :email, strategy: :hash
+  contains_pii :ip_address, strategy: :mask
+end
+```
 
 ---
 
@@ -217,7 +269,7 @@ config.rails_instrumentation.enabled = true
 
 - **Non-Rails Ruby** - Focused on Rails conventions first
 - **Microservices polyglot** - OpenTelemetry better for multi-language
-- **Enterprise compliance** - E11y is WIP, audit trails coming soon
+- **Enterprise compliance requirements** — audit trails and compliance reports are not yet available
 - **Auto-instrumentation only** - E11y requires event definitions (by design)
 
 ---
@@ -239,7 +291,7 @@ config.rails_instrumentation.enabled = true
 
 ---
 
-## Quick Start in 5 Minutes
+## Quick Start
 
 ### 1. Install
 
@@ -256,9 +308,9 @@ bundle install
 # config/initializers/e11y.rb
 E11y.configure do |config|
   # Enable request-scoped debug buffering (THE killer feature)
-  config.request_buffer.enabled        = true
-  # config.request_buffer.flush_on_error    = true   # default: flush on 5xx
-  # config.request_buffer.flush_on_statuses = [403]  # also flush on 403
+  config.ephemeral_buffer.enabled        = true
+  # config.ephemeral_buffer.flush_on_error    = true   # default: flush on 5xx
+  # config.ephemeral_buffer.flush_on_statuses = [403]  # also flush on 403
   
   # Configure where events go
   config.adapters[:logs] = E11y::Adapters::Loki.new(
@@ -328,7 +380,7 @@ end
 - ❌ nil values in production
 - ❌ Manual `Yabeda.increment` everywhere
 - ❌ Manual SLO definitions and calculations
-- ❌ $500/month log storage bills
+- ❌ High log storage bills from storing everything
 
 ---
 
@@ -357,7 +409,7 @@ Rails.logger.error "Payment failed!"
 #   [DEBUG] Cache read... (3 lines)
 #   [ERROR] Payment failed (1 line)
 # Total: 400 lines, 74% noise ❌
-# Cost: $500/month Loki storage ❌
+# Cost: High (all logs stored) ❌
 # Search time: 30 seconds ❌
 ```
 
@@ -365,7 +417,7 @@ Rails.logger.error "Payment failed!"
 
 ```ruby
 # Production with E11y:
-E11y.configure { |c| c.request_buffer.enabled = true }
+E11y.configure { |c| c.ephemeral_buffer.enabled = true }
 
 # 99 successful requests:
 #   [INFO] User logged in (99 lines)
@@ -377,7 +429,7 @@ E11y.configure { |c| c.request_buffer.enabled = true }
 #   [DEBUG] SQL: SELECT... (context!) ← Flushed!
 #   [DEBUG] Rendered view... (trail!) ← Flushed!
 # Total: 103 lines, 0% noise ✅
-# Cost: $50/month Loki storage ✅ (-90%)
+# Cost: Low (-90% log volume) ✅
 # Search time: 3 seconds ✅ (-90%)
 ```
 
@@ -392,16 +444,16 @@ E11y.configure { |c| c.request_buffer.enabled = true }
 
 ### Comparison Matrix
 
-| Solution | Setup Time | Monthly Cost | Request-Scoped Buffering | SLO Tracking | Schema Validation | Auto-Metrics | Data Ownership |
-|----------|-----------|--------------|--------------------------|--------------|-------------------|--------------|----------------|
-| **E11y** | **5 minutes** | **Infra costs** | **✅ Unique** | **✅ Zero-config** | **✅** | **✅** | **✅ Full** |
-| Datadog APM | 2-4 hours | $500-5,000 | ❌ | ✅ Manual | ❌ | ✅ | ❌ SaaS lock-in |
-| New Relic | 2-4 hours | $99-658/user | ❌ | ✅ Manual | ❌ | ✅ | ❌ SaaS lock-in |
-| Sentry | 1 hour | $26-80/mo | ❌ | ❌ | ❌ | Partial | ❌ SaaS lock-in |
-| Semantic Logger | 30 minutes | Infra costs | ❌ | ❌ | ❌ | ❌ | ✅ Full |
-| OpenTelemetry | 1-2 weeks | Infra costs | ❌ | Manual setup | ❌ | ✅ | ✅ Full |
-| Grafana + Loki | 2-3 days | Infra costs | ❌ | Manual setup | ❌ | Manual | ✅ Full |
-| AppSignal | 1 hour | $23-499/mo | ❌ | ✅ Built-in | ❌ | ✅ | ❌ SaaS lock-in |
+| Solution | Setup Time | Monthly Cost | Request-Scoped Buffering | SLO Tracking | Schema Validation | Auto-Metrics | Built-in PII Filtering | Data Ownership | Ecosystem / Managed Infra |
+|----------|-----------|--------------|--------------------------|--------------|-------------------|--------------|------------------------|----------------|--------------------------|
+| **E11y** | **5–30 min*** | **Infra costs** | **✅ Unique** | **✅ Zero-config** | **✅** | **✅** | **✅ Field masking, hashing, redaction** | **✅ Full** | ⚠️ Ruby/Rails only |
+| Datadog APM | 2-4 hours | $500-5,000 | ❌ | ✅ Manual | ❌ | ✅ | ⚠️ Via agent config (limited) | ❌ SaaS lock-in | ✅ Extensive + fully managed |
+| New Relic | 2-4 hours | $99-658/user | ❌ | ✅ Manual | ❌ | ✅ | ⚠️ Via obfuscation rules | ❌ SaaS lock-in | ✅ Extensive + fully managed |
+| Sentry | 1 hour | $26-80/mo | ❌ | ❌ | ❌ | Partial | ⚠️ Data scrubbing rules | ❌ SaaS lock-in | ✅ Managed (error-focused) |
+| Semantic Logger | 30 minutes | Infra costs | ❌ | ❌ | ❌ | ❌ | ❌ None | ✅ Full | ⚠️ Ruby only, self-hosted |
+| OpenTelemetry | 1-2 weeks | Infra costs | ❌ | Manual setup | ❌ | ✅ | ❌ Manual implementation required | ✅ Full | ✅ Polyglot, vendor-neutral |
+| Grafana + Loki | 2-3 days | Infra costs | ❌ | Manual setup | ❌ | Manual | ❌ None | ✅ Full | ✅ Mature, DevOps-friendly |
+| AppSignal | 1 hour | $23-499/mo | ❌ | ✅ Built-in | ❌ | ✅ | ⚠️ Parameter filtering only | ❌ SaaS lock-in | ✅ Managed (Rails-friendly) |
 
 **Legend:**
 - **Setup Time:** From zero to first meaningful data
@@ -410,108 +462,19 @@ E11y.configure { |c| c.request_buffer.enabled = true }
 - **SLO Tracking:** Automatic Service Level Objectives monitoring
 - **Schema Validation:** Type-safe event schemas
 - **Auto-Metrics:** Metrics generated from events automatically
+- **Built-in PII Filtering:** Automatic masking/hashing of sensitive fields (emails, IPs, credit cards, etc.) — no other Ruby observability gem provides this out of the box
 - **Data Ownership:** Can you host it yourself?
+- **Ecosystem / Managed Infra:** Integration breadth and whether infrastructure is managed for you
+
+*\* 5 min for gem + stdout; 30 min if adding self-hosted Loki/Grafana stack.
+
+> Cost estimates assume migration from verbose SaaS logging (Datadog/CloudWatch) to self-hosted Loki. Actual savings depend on your current setup.
 
 ---
 
 ### Detailed Comparisons
 
-#### vs. SaaS APM (Datadog, New Relic, Dynatrace)
-
-**Datadog / New Relic:**
-- ✅ **Pros:** Full-stack visibility, mature dashboards, auto-instrumentation
-- ❌ **Cons:** $500-5k/month, vendor lock-in, no debug buffering, no schema validation
-- **E11y advantage:** 10x cheaper, request-scoped buffering (unique), type-safe events, own your data
-
-**When to use Datadog/New Relic instead:**
-- You need frontend RUM (Real User Monitoring)
-- You have polyglot microservices (not just Rails)
-- Budget is unlimited, prefer turnkey solution
-
----
-
-#### vs. Open-Source Logging (Semantic Logger, Lograge)
-
-**Semantic Logger:**
-- ✅ **Pros:** Structured logs (JSON), async writes, Rails integration
-- ❌ **Cons:** No debug buffering, no schema validation, no auto-metrics, logs-only
-- **E11y advantage:** Request-scoped buffering (unique), schema validation, auto-metrics, unified events
-
-**Lograge:**
-- ✅ **Pros:** Reduces Rails log noise (single-line requests)
-- ❌ **Cons:** Filtering only, no buffering, no validation, no metrics
-- **E11y advantage:** Request-scoped buffering (selective, not filtering), schema validation, auto-metrics
-
-**When to use Semantic Logger instead:**
-- You only need structured JSON logs (no events/metrics)
-- You don't need debug buffering or schema validation
-
----
-
-#### vs. OpenTelemetry
-
-**OpenTelemetry:**
-- ✅ **Pros:** Industry standard, polyglot, vendor-neutral, mature ecosystem
-- ❌ **Cons:** Complex setup (1-2 weeks), no debug buffering, no schema validation, overkill for Rails monolith
-- **E11y advantage:** 5-minute setup, Rails-first, request-scoped buffering, schema validation
-
-**When to use OpenTelemetry instead:**
-- You have microservices in multiple languages (Go, Java, Python, etc.)
-- You need distributed tracing across services
-- You have a platform team to manage complexity
-
-**Use both:** E11y events can be sent to OpenTelemetry via `E11y::Adapters::OtelLogs`
-
----
-
-#### vs. Grafana + Loki + Prometheus
-
-**Grafana Stack:**
-- ✅ **Pros:** Open-source, powerful visualizations, mature, self-hosted
-- ❌ **Cons:** Complex setup (2-3 days), requires DevOps, no Rails integration, no schema validation
-- **E11y advantage:** 5-minute setup, Rails-native, schema validation, no DevOps required
-
-**When to use Grafana Stack instead:**
-- You already have Grafana/Loki infrastructure
-- You have a dedicated DevOps team
-- You need custom dashboards across multiple systems
-
-**Use both:** E11y can send events to Loki via `E11y::Adapters::Loki`
-
----
-
-#### vs. Error Tracking (Sentry, Honeybadger, Rollbar)
-
-**Sentry:**
-- ✅ **Pros:** Excellent error tracking, stack traces, breadcrumbs, release tracking
-- ❌ **Cons:** Errors-only, no debug buffering, no schema validation, $26-80/mo
-- **E11y advantage:** Events + errors + metrics unified, request-scoped buffering, schema validation
-
-**When to use Sentry instead:**
-- You only need error tracking (not general observability)
-- You need frontend JavaScript error tracking
-
-**Use both:** E11y can send error events to Sentry via `E11y::Adapters::Sentry`
-
----
-
-#### vs. Rails-First APM (AppSignal, Skylight)
-
-**AppSignal:**
-- ✅ **Pros:** Rails-native, beautiful UI, performance monitoring, $23/mo entry
-- ❌ **Cons:** SaaS lock-in, no debug buffering, no schema validation, limited to supported languages
-- **E11y advantage:** Request-scoped buffering (unique), schema validation, own your data
-
-**Skylight:**
-- ✅ **Pros:** Rails performance profiling, SQL query analysis
-- ❌ **Cons:** Performance-only (no logs/events), SaaS lock-in, $20+/mo
-- **E11y advantage:** Unified events/logs/metrics, request-scoped buffering, own your data
-
-**When to use AppSignal/Skylight instead:**
-- You want zero-config turnkey solution
-- You prefer paying for hosted service over self-hosting
-
-**Use both:** E11y for events/logs/metrics, AppSignal for performance profiling
+See [docs/COMPARISON.md](docs/COMPARISON.md) for detailed per-tool comparisons.
 
 ---
 
@@ -559,644 +522,35 @@ E11y is optimized for:
 **Not optimized for:**
 - Polyglot microservices (use OpenTelemetry)
 - Frontend-heavy SPAs (use Datadog/Sentry for RUM)
-- Enterprise compliance requirements (WIP, coming soon)
-
----
-
-## Table of Contents
-
-- [Quick Start](#quick-start-in-5-minutes)
-- [What Makes E11y Different?](#what-makes-e11y-different)
-- [Who Should Use E11y?](#who-should-use-e11y)
-- [Before and After](#before-and-after-e11y)
-- [E11y vs Alternatives](#e11y-vs-alternatives)
-- [Schema Validation](#schema-validation)
-- [Metrics DSL](#metrics-dsl)
-- [Adapters](#adapters)
-- [PII Filtering](#pii-filtering)
-- [Adaptive Sampling](#adaptive-sampling)
-- [Presets](#presets)
-- [Rails Integration](#rails-integration)
-- [Testing](#testing)
-- [Configuration](#configuration)
-- [Performance](#performance)
-- [Documentation](#documentation)
-
----
-
-## Schema Validation
-
-E11y validates event data using [dry-schema](https://dry-rb.org/gems/dry-schema/).
-
-### Basic Example
-
-```ruby
-class OrderCreatedEvent < E11y::Event::Base
-  schema do
-    required(:order_id).filled(:string)
-    required(:total).filled(:float, gt?: 0)
-    required(:currency).filled(:string, included_in?: %w[USD EUR GBP])
-    optional(:coupon_code).maybe(:string)
-  end
-end
-
-# Valid event
-OrderCreatedEvent.track(order_id: "123", total: 99.99, currency: "USD")
-
-# Invalid event raises E11y::ValidationError
-OrderCreatedEvent.track(order_id: nil, total: -10, currency: "INVALID")
-# => ValidationError: order_id is missing, total must be > 0
-```
-
-### Validation Modes
-
-For high-frequency events, you can configure validation behavior:
-
-```ruby
-class HighFrequencyEvent < E11y::Event::Base
-  # Always validate (default)
-  validation_mode :always
-
-  # Sampled validation (validate 1% of events)
-  validation_mode :sampled, sample_rate: 0.01
-
-  # Never validate (use with caution)
-  validation_mode :never
-end
-```
-
-Use `:always` for user input and critical events. Use `:sampled` for high-frequency internal events. Use `:never` only for trusted, typed input.
-
-### Validation Behavior
-
-By default, invalid events raise `E11y::ValidationError`:
-
-```ruby
-OrderEvent.track(order_id: nil)
-# => E11y::ValidationError
-```
-
-To handle validation errors gracefully:
-
-```ruby
-begin
-  OrderEvent.track(order_id: nil)
-rescue E11y::ValidationError => e
-  Rails.logger.warn "Invalid event: #{e.message}"
-end
-```
-
----
-
-## Metrics DSL
-
-Define Prometheus metrics alongside events.
-
-### Basic Example
-
-```ruby
-class OrderPaidEvent < E11y::Event::Base
-  schema do
-    required(:order_id).filled(:string)
-    required(:amount).filled(:float)
-    required(:currency).filled(:string)
-  end
-  
-  metrics do
-    # Counter: Track number of paid orders
-    counter :orders_total, tags: [:currency]
-    
-    # Histogram: Track order amount distribution
-    histogram :order_amount,
-              value: :amount,
-              tags: [:currency],
-              buckets: [10, 50, 100, 500, 1000]
-    
-    # Gauge: Track active orders
-    gauge :active_orders, value: :active_count
-  end
-end
-
-# One track() call = event + metrics
-OrderPaidEvent.track(order_id: "123", amount: 99.99, currency: "USD")
-# => orders_total{currency="USD"} +1
-# => order_amount{currency="USD"} observe 99.99
-```
-
-### Metric Types
-
-**Counter** - Monotonically increasing value:
-```ruby
-metrics do
-  counter :orders_total, tags: [:currency, :status]
-end
-# => orders_total{currency="USD", status="paid"} 42
-```
-
-**Histogram** - Distribution of values:
-```ruby
-metrics do
-  histogram :order_amount,
-            value: :amount,
-            tags: [:currency],
-            buckets: [10, 50, 100, 500, 1000]
-end
-# => order_amount_bucket{currency="USD", le="100"} 15
-```
-
-**Gauge** - Arbitrary value that can go up or down:
-```ruby
-metrics do
-  gauge :queue_depth, value: :size, tags: [:queue_name]
-end
-# => queue_depth{queue_name="emails"} 37
-```
-
-### How It Works
-
-1. Define metrics in event class
-2. Metrics registered in `E11y::Metrics::Registry` at boot time
-3. When `track()` is called, metrics are automatically updated **if the Yabeda adapter is configured and routed to**
-4. Metrics exported via Yabeda adapter (Prometheus format)
-
-> **Note:** The `metrics do` DSL only registers metric definitions. Metrics are actually updated
-> when an event is written to the `E11y::Adapters::Yabeda` adapter. If you omit the Yabeda adapter
-> from your configuration, `track()` will send events to Loki/Sentry but metric counters will not
-> be incremented. Make sure to add:
-> ```ruby
-> config.adapters[:metrics] = E11y::Adapters::Yabeda.new
-> ```
-
----
-
-## Adapters
-
-E11y supports multiple adapters for different backends.
-
-| Adapter | Purpose | Batching | Use Case |
-|---------|---------|----------|----------|
-| **Loki** | Log aggregation (Grafana) | Yes | Production logs |
-| **Sentry** | Error tracking | Via SDK | Error monitoring |
-| **OpenTelemetry** | OTLP export | Yes | Distributed tracing |
-| **Yabeda** | Prometheus metrics | N/A | Metrics export |
-| **File** | Local logs | Yes | Development, CI |
-| **Stdout** | Console output | No | Development |
-| **InMemory** | Test buffer | No | Testing |
-
-### Configuration
-
-```ruby
-# config/initializers/e11y.rb
-E11y.configure do |config|
-  # Configure adapters
-  config.adapters[:logs] = E11y::Adapters::Loki.new(
-    url: ENV["LOKI_URL"],
-    batch_size: 100,
-    batch_timeout: 5,
-    compress: true
-  )
-  
-  config.adapters[:errors_tracker] = E11y::Adapters::Sentry.new(
-    dsn: ENV["SENTRY_DSN"]
-  )
-  
-  config.adapters[:stdout] = E11y::Adapters::Stdout.new(
-    format: :pretty
-  )
-end
-```
-
-### Adapter Routing by Severity
-
-Events are routed to adapters based on severity. The default mapping:
-
-- `error`, `fatal` → `[:logs, :errors_tracker]`
-- Other severities → `[:logs]`
-
-Override routing explicitly:
-
-```ruby
-class CustomEvent < E11y::Event::Base
-  adapters :logs, :stdout  # Explicit routing
-end
-```
-
-### Custom Adapters
-
-Implement the `write` method:
-
-```ruby
-class MyBackendAdapter < E11y::Adapters::Base
-  def write(event_data)
-    # event_data contains event_name, payload, severity, timestamp, etc.
-    MyBackend.send_event(event_data)
-  end
-end
-
-E11y.configure do |config|
-  config.adapters[:my_backend] = MyBackendAdapter.new
-end
-```
-
----
-
-## PII Filtering
-
-E11y provides PII filtering capabilities for sensitive data.
-
-### Rails Integration
-
-E11y can respect `Rails.application.config.filter_parameters` when configured:
-
-```ruby
-# config/application.rb
-config.filter_parameters += [:password, :email, :ssn, :credit_card]
-
-# E11y will filter these fields when PII filtering middleware is enabled
-```
-
-### Explicit PII Strategies
-
-Configure PII filtering per event:
-
-```ruby
-class PaymentEvent < E11y::Event::Base
-  contains_pii true
-  
-  pii_filtering do
-    masks :card_number     # Replace with "[FILTERED]"
-    hashes :user_email     # SHA256 hash (searchable)
-    allows :amount         # No filtering
-  end
-end
-```
-
-Available strategies:
-- `masks` - Replace with "[FILTERED]"
-- `hashes` - SHA256 hash (preserves searchability)
-- `partials` - Show first/last characters
-- `redacts` - Remove completely
-- `allows` - No filtering
-
----
-
-## Adaptive Sampling
-
-E11y supports adaptive sampling to reduce event volume during high load.
-
-Sampling strategies:
-1. **Error-based** - Increase sampling during error spikes
-2. **Load-based** - Reduce sampling under high throughput
-3. **Value-based** - Always sample high-value events
-
-> **Note:** Rate limiting (`E11y::Middleware::RateLimiting`) is **not included in the default
-> pipeline**. To enable it, add it manually:
-> ```ruby
-> config.pipeline.use E11y::Middleware::RateLimiting
-> ```
-> Enabling `config.rate_limiting.enabled = true` alone has no effect without this step.
-
-### Configuration
-
-```ruby
-E11y.configure do |config|
-  config.pipeline.use E11y::Middleware::Sampling,
-    default_sample_rate: 0.1,
-    
-    # Error-based sampling
-    error_based_adaptive: true,
-    error_spike_config: {
-      window: 60,
-      absolute_threshold: 100,
-      relative_threshold: 3.0,
-      spike_duration: 300
-    },
-    
-    # Load-based sampling
-    load_based_adaptive: true,
-    load_monitor_config: {
-      window: 60,
-      thresholds: {
-        normal: 1_000,
-        high: 10_000,
-        very_high: 50_000,
-        overload: 100_000
-      }
-    }
-end
-```
-
-### Value-Based Sampling
-
-Sample events based on payload values:
-
-```ruby
-class PaymentEvent < E11y::Event::Base
-  sample_by_value :amount, greater_than: 1000  # Always sample large payments
-end
-```
-
----
-
-## Presets
-
-E11y provides presets for common event types.
-
-### HighValueEvent
-
-For financial transactions and critical business events:
-
-```ruby
-class PaymentProcessedEvent < E11y::Event::Base
-  include E11y::Presets::HighValueEvent
-  
-  schema do
-    required(:transaction_id).filled(:string)
-    required(:amount).filled(:decimal)
-  end
-end
-
-# Configured with:
-# - severity: :success
-# - sample_rate: 1.0 (always sampled)
-# - adapters: [:logs, :errors_tracker]
-# - rate_limit: unlimited
-```
-
-### AuditEvent
-
-For compliance and audit trails:
-
-```ruby
-class UserDeletedEvent < E11y::Event::Base
-  include E11y::Presets::AuditEvent
-  
-  schema do
-    required(:user_id).filled(:string)
-    required(:deleted_by).filled(:string)
-  end
-end
-
-# Configured with:
-# - sample_rate: 1.0 (never sampled)
-# - rate_limit: unlimited
-# Note: Set severity based on event criticality
-```
-
-### DebugEvent
-
-For development and troubleshooting:
-
-```ruby
-class SlowQueryEvent < E11y::Event::Base
-  include E11y::Presets::DebugEvent
-  
-  schema do
-    required(:query).filled(:string)
-    required(:duration_ms).filled(:integer)
-  end
-end
-
-# Configured with:
-# - severity: :debug
-# - adapters: [:logs]
-```
-
----
-
-## Distributed Tracing
-
-E11y automatically attaches W3C Trace Context headers to incoming requests via the `TraceContext` middleware and propagates trace/span IDs through the event pipeline.
-
-### Incoming Trace Context
-
-Incoming `traceparent` / `tracestate` headers are extracted automatically:
-
-```ruby
-E11y.configure do |config|
-  config.pipeline.use E11y::Middleware::TraceContext
-end
-```
-
-Events tracked during a request will include `trace_id` and `span_id` from the incoming context.
-
-### Outgoing HTTP Trace Propagation (Manual — v1.0)
-
-> **Note:** Automatic outgoing trace context injection (Faraday / Net::HTTP middleware) is planned for v1.1.
-> Until then, use the helper below to propagate W3C Trace Context manually:
-
-```ruby
-# Helper: build W3C traceparent header from current context
-def traceparent_header
-  return {} unless E11y::Current.trace_id
-
-  span_id = E11y::Current.span_id || SecureRandom.hex(8)
-  { "traceparent" => "00-#{E11y::Current.trace_id}-#{span_id}-01" }
-end
-
-# Faraday — inject on each connection
-conn = Faraday.new(url: "https://api.example.com") do |f|
-  f.headers.merge!(traceparent_header)
-end
-
-# Net::HTTP — inject per request
-request = Net::HTTP::Post.new("/events")
-traceparent_header.each { |k, v| request[k] = v }
-http.request(request)
-```
-
-This ensures downstream services receive a valid `traceparent` header and can correlate logs/traces back to the originating request.
-
----
-
-## Rails Integration
-
-E11y integrates with Rails via Railtie.
-
-### Auto-Instrumented Components
-
-E11y includes event definitions for common Rails components:
-
-| Component | Event Classes | Location |
-|-----------|--------------|----------|
-| **HTTP Requests** | Request, StartProcessing, Redirect, SendFile | `lib/e11y/events/rails/http/` |
-| **ActiveRecord** | Query | `lib/e11y/events/rails/database/` |
-| **ActiveJob** | Enqueued, Started, Completed, Failed, Scheduled | `lib/e11y/events/rails/job/` |
-| **Cache** | Read, Write, Delete | `lib/e11y/events/rails/cache/` |
-| **View** | Render | `lib/e11y/events/rails/view/` |
-
-Enable instrumentation in your configuration as needed.
-
-### Sidekiq Integration
-
-E11y includes Sidekiq instrumentation support. Configure in your initializer:
-
-```ruby
-E11y.configure do |config|
-  config.rails_instrumentation.enabled = true
-end
-```
-
----
-
-## Testing
-
-Use the InMemory adapter for testing.
-
-### Setup
-
-```ruby
-# spec/rails_helper.rb or spec/spec_helper.rb
-RSpec.configure do |config|
-  config.before(:each) do
-    # Configure InMemory adapter for tests
-    # Note: adapters is a Hash keyed by adapter name symbol
-    E11y.configure do |e11y_config|
-      e11y_config.adapters[:test] = E11y::Adapters::InMemory.new
-    end
-  end
-
-  config.after(:each) do
-    # Clear events after each test
-    E11y.configuration.adapters[:test]&.clear!
-  end
-end
-```
-
-### Test Events
-
-```ruby
-RSpec.describe OrdersController do
-  let(:test_adapter) { E11y.configuration.adapters[:test] }
-  
-  it "tracks order creation" do
-    post :create, params: { item: "Book", price: 29.99 }
-    
-    events = test_adapter.events
-    expect(events).to include(
-      a_hash_including(
-        event_name: "OrderCreatedEvent",
-        payload: hash_including(item: "Book", price: 29.99)
-      )
-    )
-  end
-  
-  it "does not track payment for free orders" do
-    post :create, params: { item: "Free Book", price: 0 }
-    
-    payment_events = test_adapter.events.select { |e| e[:event_name] == "PaymentProcessedEvent" }
-    expect(payment_events).to be_empty
-  end
-end
-```
-
-### InMemory Adapter API
-
-```ruby
-test_adapter = E11y::Adapters::InMemory.new
-
-# Get all events
-test_adapter.events  # => Array<Hash>
-
-# Count events
-test_adapter.event_count  # => Integer
-
-# Find last event
-test_adapter.last_event  # => Hash
-
-# Clear all events
-test_adapter.clear!
-```
-
----
-
-## Configuration
-
-### Basic Configuration
-
-```ruby
-# config/initializers/e11y.rb
-E11y.configure do |config|
-  # Service identification
-  config.service_name = "myapp"
-  config.environment = Rails.env
-  
-  # Configure adapters
-  config.adapters[:logs] = E11y::Adapters::Loki.new(
-    url: ENV["LOKI_URL"],
-    batch_size: 100,
-    batch_timeout: 5,
-    compress: true
-  )
-  
-  config.adapters[:errors_tracker] = E11y::Adapters::Sentry.new(
-    dsn: ENV["SENTRY_DSN"]
-  )
-  
-  # Default retention period
-  config.default_retention_period = 30.days
-end
-```
-
-### Middleware Pipeline
-
-Configure middleware for sampling, PII filtering, and more:
-
-```ruby
-E11y.configure do |config|
-  # Sampling middleware
-  config.pipeline.use E11y::Middleware::Sampling,
-    default_sample_rate: 0.1,
-    error_based_adaptive: true,
-    load_based_adaptive: true
-  
-  # PII filtering middleware
-  config.pipeline.use E11y::Middleware::PIIFilter
-  
-  # Trace context middleware
-  config.pipeline.use E11y::Middleware::TraceContext
-end
-```
+- Enterprise compliance requirements (not yet available)
 
 ---
 
 ## Performance
 
-### Design Principles
-
-E11y is designed for performance:
-
-- **Hash-based events** - Events are Hashes, not objects, minimizing allocations
-- **Configurable validation** - Choose validation mode based on performance needs
-- **Batching** - Loki and other adapters support batching to reduce network overhead
-- **Sampling** - Adaptive sampling reduces event volume under high load
-
-See `benchmarks/` directory for detailed performance tests.
-
-### Cardinality Protection
-
-Optional cardinality protection prevents high-cardinality labels from overwhelming metrics systems:
-
-```ruby
-E11y::Adapters::Loki.new(
-  url: "http://loki:3100",
-  enable_cardinality_protection: true,
-  max_label_cardinality: 100
-)
-```
-
-When enabled, high-cardinality labels (e.g., `user_id`, `order_id`) are filtered from metric tags.
+p99 latency <70µs (`:always`), <10µs (`:sampled`), <50µs (`:never`). Full benchmarks → [docs/PERFORMANCE.md](docs/PERFORMANCE.md)
 
 ---
 
 ## Documentation
 
-Additional documentation is available in the `docs/` directory:
+| Topic | Doc |
+|-------|-----|
+| [Schema Validation](docs/SCHEMA_VALIDATION.md) | dry-schema validation, modes, error handling |
+| [Metrics DSL](docs/METRICS_DSL.md) | Counters, histograms, gauges, Yabeda integration |
+| [Adapters](docs/ADAPTERS.md) | Loki, Sentry, OTel, Yabeda, File, Stdout, InMemory |
+| [PII Filtering](docs/PII_FILTERING.md) | Mask, hash, redact sensitive fields |
+| [Adaptive Sampling](docs/ADAPTIVE_SAMPLING.md) | Error-based, load-based, value-based |
+| [Presets](docs/PRESETS.md) | HighValueEvent, AuditEvent, DebugEvent |
+| [Distributed Tracing](docs/DISTRIBUTED_TRACING.md) | W3C Trace Context, manual propagation |
+| [Rails Integration](docs/RAILS_INTEGRATION.md) | Auto-instrumentation, Sidekiq |
+| [Testing](docs/TESTING.md) | InMemoryTest adapter, RSpec setup |
+| [Configuration](docs/CONFIGURATION.md) | Basic config, middleware pipeline |
+| [Performance](docs/PERFORMANCE.md) | Benchmarks, validation modes, cardinality |
+| [Limitations](docs/LIMITATIONS.md) | Rails only, Ruby 3.2+, tradeoffs |
+| [Comparison](docs/COMPARISON.md) | vs Datadog, OTel, Sentry, AppSignal, etc. |
 
-- Architecture Decision Records (ADRs)
-- Use Cases
-- Configuration guides
-- Performance benchmarks
+Also: [ADRs](docs/ADR-INDEX.md), [Use Cases](docs/use_cases/README.md), [QUICK-START](docs/QUICK-START.md)
 
 ---
 

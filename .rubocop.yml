@@ -40,7 +40,7 @@ Metrics/ClassLength:
   Max: 100
   Exclude:
     - 'spec/**/*'
-    - 'lib/e11y/buffers/request_scoped_buffer.rb'
+    - 'lib/e11y/buffers/ephemeral_buffer.rb'
     - 'lib/e11y/registry.rb'
     - 'lib/e11y/adapters/otel_logs.rb'
 

@@ -18,10 +18,9 @@
    - Need to grep codebase to find event classes
    - Hard to document all events
 
-2. **No runtime introspection**
+2. **No runtime discovery**
    - Can't list all registered events at runtime
    - Can't find event class by name
-   - Can't inspect event schema programmatically
 
 3. **Hard to build tooling**
    - Can't build event explorer UI (no registry)
@@ -34,7 +33,7 @@
 
 - Automatic registration of all event classes
 - Query registry by event name, version, adapter
-- Schema introspection (fields, types, validations)
+- Query by name, severity, adapter (find, where)
 - Build developer tools (event explorer, documentation generator)
 
 **Result:** Full visibility into all events in the system.
@@ -53,7 +52,7 @@ $ grep -r "class.*< E11y::Event::Base" app/events/
 # → Manual, error-prone, outdated
 
 # With registry (AUTOMATIC):
-E11y::Registry.all_events
+E11y::Registry.event_classes
 # => [
 #   Events::OrderCreated,
 #   Events::OrderPaid,
@@ -63,7 +62,7 @@ E11y::Registry.all_events
 # ]
 
 # Generate documentation:
-E11y::Registry.all_events.each do |event_class|
+E11y::Registry.event_classes.each do |event_class|
   puts "## #{event_class.event_name}"
   puts "Version: #{event_class.version}"
   puts "Schema: #{event_class.schema_definition}"
@@ -135,7 +134,7 @@ event.severity_level
 # Rails controller for event explorer
 class EventExplorerController < ApplicationController
   def index
-    @events = E11y::Registry.all_events.map do |event_class|
+    @events = E11y::Registry.event_classes.map do |event_class|
       {
         name: event_class.event_name,
         version: event_class.version,
@@ -193,8 +192,8 @@ end
 │                                                                  │
 │  Indexes:                                                        │
 │  - by_name: 'order.created' → Events::OrderCreatedV2            │
-│  - by_adapter: :sentry → [Events::PaymentFailed, ...]           │
-│  - by_severity: :error → [Events::SystemError, ...]             │
+│  - where(adapter: :sentry) → [Events::PaymentFailed, ...]       │
+│  - where(severity: :error) → [Events::SystemError, ...]         │
 │  - by_version: 2 → [Events::OrderCreatedV2, ...]                │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -239,7 +238,6 @@ E11y.configure do |config|
     ]
     
     # Registry features
-    enable_introspection true
     enable_event_explorer true  # Web UI at /e11y/events
   end
 end
@@ -249,13 +247,13 @@ end
 
 ## 📝 Registry API
 
-> **Implementation:** See [ADR-010 Section 5: Event Registry](../ADR-010-developer-experience.md#5-event-registry) for full registry architecture, including event discovery API, introspection, version tracking, and dynamic dispatch.
+> **Implementation:** See [ADR-010 Section 5: Event Registry](../ADR-010-developer-experience.md#5-event-registry) for full registry architecture (find, event_classes, where, to_documentation).
 
 ### Query Events
 
 ```ruby
 # === List All Events ===
-E11y::Registry.all_events
+E11y::Registry.event_classes
 # => [Events::OrderCreated, Events::OrderPaid, ...]
 
 E11y::Registry.count
@@ -277,10 +275,6 @@ E11y::Registry.where(severity: :error)
 
 E11y::Registry.where(version: 2)
 # => [Events::OrderCreatedV2, Events::OrderPaidV2, ...]
-
-# === Search ===
-E11y::Registry.search('payment')
-# => [Events::PaymentProcessed, Events::PaymentFailed, ...]
 
 # === Filtering ===
 E11y::Registry.filter do |event_class|
@@ -427,7 +421,7 @@ namespace :e11y do
     output.puts "Total events: #{E11y::Registry.count}"
     output.puts
     
-    E11y::Registry.all_events.each do |event_class|
+    E11y::Registry.event_classes.each do |event_class|
       output.puts "## #{event_class.event_name}"
       output.puts
       output.puts "**Version:** #{event_class.version}"
@@ -475,7 +469,7 @@ namespace :e11y do
   task validate: :environment do
     errors = []
     
-    E11y::Registry.all_events.each do |event_class|
+    E11y::Registry.event_classes.each do |event_class|
       # Check: has example payload
       if event_class.example_payloads.empty?
         errors << "#{event_class.name} has no example payloads"
@@ -522,7 +516,7 @@ namespace :e11y do
       paths: {}
     }
     
-    E11y::Registry.all_events.each do |event_class|
+    E11y::Registry.event_classes.each do |event_class|
       spec[:paths]["/events/#{event_class.event_name}"] = {
         post: {
           summary: "Track #{event_class.event_name} event",
@@ -557,9 +551,9 @@ end
 
 ```ruby
 RSpec.describe E11y::Registry do
-  describe '.all_events' do
+  describe '.event_classes' do
     it 'returns all registered events' do
-      events = E11y::Registry.all_events
+      events = E11y::Registry.event_classes
       
       expect(events).to include(Events::OrderCreated)
       expect(events).to include(Events::OrderPaid)
@@ -636,7 +630,7 @@ end
 
 - [ ] Enable registry in config
 - [ ] Enable eager loading of event classes
-- [ ] Access registry: `E11y::Registry.all_events`
+- [ ] Access registry: `E11y::Registry.event_classes`
 - [ ] Enable event explorer UI (development only)
 - [ ] Set up documentation generator rake task
 - [ ] Run validation in CI: `rake e11y:validate`

@@ -56,10 +56,10 @@ RSpec.describe E11y::Generators::InstallGenerator, type: :generator do
       end
     end
 
-    it "initializer mentions request_buffer configuration" do
+    it "initializer mentions ephemeral_buffer configuration" do
       run_generator
       assert_file "config/initializers/e11y.rb" do |content|
-        expect(content.force_encoding("UTF-8")).to match(/request_buffer/)
+        expect(content.force_encoding("UTF-8")).to match(/ephemeral_buffer/)
       end
     end
 

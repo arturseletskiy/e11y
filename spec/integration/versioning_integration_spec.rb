@@ -66,10 +66,10 @@ RSpec.describe "Versioning Middleware Integration", :integration do
 
       # Check event in memory adapter
       # Note: After Versioning middleware, event_name is normalized to "order.paid"
-      all_events = memory_adapter.events
+      adapter_events = memory_adapter.events
       valid_names = ["order.paid", "Events::OrderPaid"]
-      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
-      event_names_msg = "Total events: #{all_events.count}, event_names: #{all_events.map do |e|
+      events = adapter_events.select { |e| valid_names.include?(e[:event_name]) }
+      event_names_msg = "Total events: #{adapter_events.count}, event_names: #{adapter_events.map do |e|
         e[:event_name]
       end.uniq.inspect}"
       msg = format("Event should be stored in memory adapter. %s", event_names_msg)
@@ -100,9 +100,9 @@ RSpec.describe "Versioning Middleware Integration", :integration do
 
       Events::OrderPaid.track(order_id: 123)
 
-      all_events = memory_adapter.events
+      adapter_events = memory_adapter.events
       valid_names = ["order.paid", "Events::OrderPaid"]
-      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
+      events = adapter_events.select { |e| valid_names.include?(e[:event_name]) }
       expect(events.count).to eq(1)
       expect(events.first[:event_name]).to eq("order.paid")
     end
@@ -130,10 +130,10 @@ RSpec.describe "Versioning Middleware Integration", :integration do
       Events::OrderPaidV2.track(order_id: 123, amount: 100.0, currency: "USD")
 
       # NOTE: After Versioning middleware, event_name is normalized to "order.paid"
-      all_events = memory_adapter.events
+      adapter_events = memory_adapter.events
       valid_names = ["order.paid", "Events::OrderPaidV2"]
-      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
-      event_names_msg = "Total events: #{all_events.count}, event_names: #{all_events.map do |e|
+      events = adapter_events.select { |e| valid_names.include?(e[:event_name]) }
+      event_names_msg = "Total events: #{adapter_events.count}, event_names: #{adapter_events.map do |e|
         e[:event_name]
       end.uniq.inspect}"
       msg = format("Event should be stored in memory adapter. %s", event_names_msg)
@@ -164,9 +164,9 @@ RSpec.describe "Versioning Middleware Integration", :integration do
 
       Events::OrderPaidV3.track(order_id: 123, amount: 100.0, currency: "USD", tax: 10.0)
 
-      all_events = memory_adapter.events
+      adapter_events = memory_adapter.events
       valid_names = ["order.paid", "Events::OrderPaidV3"]
-      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
+      events = adapter_events.select { |e| valid_names.include?(e[:event_name]) }
       expect(events.count).to eq(1)
 
       event = events.first
@@ -194,9 +194,9 @@ RSpec.describe "Versioning Middleware Integration", :integration do
 
       Events::OrderPaidV2.track(order_id: 123)
 
-      all_events = memory_adapter.events
+      adapter_events = memory_adapter.events
       valid_names = ["order.paid", "Events::OrderPaidV2"]
-      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
+      events = adapter_events.select { |e| valid_names.include?(e[:event_name]) }
       expect(events.count).to eq(1)
       event = events.first
 
@@ -227,8 +227,8 @@ RSpec.describe "Versioning Middleware Integration", :integration do
 
       Events::Payment::OrderPaidV2.track(order_id: 123)
 
-      all_events = memory_adapter.events
-      events = all_events.select { |e| e[:event_name] == "payment.order.paid" || e[:event_name]&.include?("Payment::OrderPaidV2") }
+      adapter_events = memory_adapter.events
+      events = adapter_events.select { |e| e[:event_name] == "payment.order.paid" || e[:event_name]&.include?("Payment::OrderPaidV2") }
       expect(events.count).to eq(1)
       event = events.first
 
@@ -257,9 +257,9 @@ RSpec.describe "Versioning Middleware Integration", :integration do
 
       Events::UserSignupV2.track(user_id: 123)
 
-      all_events = memory_adapter.events
+      adapter_events = memory_adapter.events
       valid_names = ["user.signup", "Events::UserSignupV2"]
-      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
+      events = adapter_events.select { |e| valid_names.include?(e[:event_name]) }
       expect(events.count).to eq(1)
       event = events.first
 
@@ -307,8 +307,8 @@ RSpec.describe "Versioning Middleware Integration", :integration do
       Events::OrderPaidV2.track(order_id: 2, amount: 200.0, currency: "USD")
 
       # Both events should be tracked (both have normalized event_name "order.paid")
-      all_events = memory_adapter.events
-      events_with_order_paid = all_events.select { |e| e[:event_name] == "order.paid" }
+      adapter_events = memory_adapter.events
+      events_with_order_paid = adapter_events.select { |e| e[:event_name] == "order.paid" }
       expect(events_with_order_paid.count).to eq(2), "Both V1 and V2 events should be tracked"
 
       # Find V1 event (no v: field)
@@ -358,8 +358,8 @@ RSpec.describe "Versioning Middleware Integration", :integration do
       Events::OrderPaid.track(order_id: 1)
       Events::OrderPaidV2.track(order_id: 2)
 
-      all_events = memory_adapter.events
-      events_with_order_paid = all_events.select { |e| e[:event_name] == "order.paid" }
+      adapter_events = memory_adapter.events
+      events_with_order_paid = adapter_events.select { |e| e[:event_name] == "order.paid" }
       expect(events_with_order_paid.count).to eq(2), "Both V1 and V2 events should be tracked"
 
       v1_event = events_with_order_paid.find { |e| e[:v].nil? }

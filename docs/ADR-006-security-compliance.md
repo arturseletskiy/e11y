@@ -385,7 +385,7 @@ module E11y
   module Linters
     class PiiDeclarationLinter
       def self.validate_all!
-        E11y::Registry.all_events.each do |event_class|
+        E11y::Registry.event_classes.each do |event_class|
           validate!(event_class)
         end
       end
@@ -476,7 +476,7 @@ namespace :e11y do
       errors = []
       warnings = []
       
-      E11y::Registry.all_events.each do |event_class|
+      E11y::Registry.event_classes.each do |event_class|
         begin
           E11y::Linters::PiiDeclarationLinter.validate!(event_class)
           

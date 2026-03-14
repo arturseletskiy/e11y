@@ -35,10 +35,10 @@ RSpec.describe E11y::Instruments::ActiveJob, :integration do
 
   around do |example|
     # Store original config value
-    original_buffer_enabled = E11y.config.request_buffer.enabled
+    original_buffer_enabled = E11y.config.ephemeral_buffer.enabled
 
     E11y.configure do |config|
-      config.request_buffer.enabled = false # Disable buffer for simpler tests
+      config.ephemeral_buffer.enabled = false # Disable buffer for simpler tests
     end
 
     example.run
@@ -47,7 +47,7 @@ RSpec.describe E11y::Instruments::ActiveJob, :integration do
 
     # Restore original config to avoid affecting other tests
     E11y.configure do |config|
-      config.request_buffer.enabled = original_buffer_enabled
+      config.ephemeral_buffer.enabled = original_buffer_enabled
     end
   end
 
@@ -217,12 +217,12 @@ RSpec.describe E11y::Instruments::ActiveJob, :integration do
     describe "Error handling: E11y errors don't fail jobs" do
       before do
         E11y.configure do |config|
-          config.request_buffer.enabled = true
+          config.ephemeral_buffer.enabled = true
         end
       end
 
-      it "swallows E11y::Buffers::RequestScopedBuffer errors" do
-        allow(E11y::Buffers::RequestScopedBuffer).to receive(:start!).and_raise(StandardError, "Buffer error")
+      it "swallows E11y::Buffers::EphemeralBuffer errors" do
+        allow(E11y::Buffers::EphemeralBuffer).to receive(:initialize!).and_raise(StandardError, "Buffer error")
 
         # Job should succeed despite E11y buffer failure
         expect do
@@ -230,8 +230,8 @@ RSpec.describe E11y::Instruments::ActiveJob, :integration do
         end.not_to raise_error
       end
 
-      it "swallows E11y::Buffers::RequestScopedBuffer.flush! errors" do
-        allow(E11y::Buffers::RequestScopedBuffer).to receive(:flush!).and_raise(StandardError, "Flush error")
+      it "swallows E11y::Buffers::EphemeralBuffer.flush_on_error errors" do
+        allow(E11y::Buffers::EphemeralBuffer).to receive(:flush_on_error).and_raise(StandardError, "Flush error")
 
         # Job should succeed despite E11y flush failure
         expect do

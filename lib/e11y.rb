@@ -147,7 +147,7 @@ module E11y
     #
     # @return [Integer]
     def buffer_size
-      buffer = Thread.current[:e11y_request_buffer]
+      buffer = Thread.current[:e11y_ephemeral_buffer]
       buffer.respond_to?(:size) ? buffer.size : 0
     end
 
@@ -172,7 +172,7 @@ module E11y
     # @return [E11y::Registry]
     #
     # @example
-    #   E11y.registry.all_events
+    #   E11y.registry.event_classes
     #   E11y.registry.find("order.created")
     def registry
       Registry.instance
@@ -214,7 +214,7 @@ module E11y
   class Configuration
     attr_accessor :adapters, :log_level, :logger, :enabled, :environment, :service_name, :default_retention_period,
                   :routing_rules, :fallback_adapters, :enable_http_tracing
-    attr_reader :adapter_mapping, :pipeline, :rails_instrumentation, :logger_bridge, :request_buffer, :active_job,
+    attr_reader :adapter_mapping, :pipeline, :rails_instrumentation, :logger_bridge, :ephemeral_buffer, :active_job,
                 :sidekiq, :error_handling, :dlq_storage, :dlq_filter
 
     def initialize
@@ -246,7 +246,7 @@ module E11y
     def initialize_feature_configs
       @rails_instrumentation = RailsInstrumentationConfig.new
       @logger_bridge = LoggerBridgeConfig.new
-      @request_buffer = RequestBufferConfig.new
+      @ephemeral_buffer = Config.new
       @active_job = ActiveJobConfig.new
       @sidekiq = SidekiqConfig.new
       @error_handling = ErrorHandlingConfig.new # ✅ C18 Resolution
@@ -454,9 +454,9 @@ module E11y
     end
   end
 
-  # Request Buffer configuration
-  class RequestBufferConfig
-    attr_accessor :enabled, :flush_on_error, :flush_on_statuses
+  # Ephemeral Buffer configuration (request/job-scoped debug buffering)
+  class Config
+    attr_accessor :enabled, :flush_on_error, :flush_on_statuses, :job_buffer_limit
 
     # Explicit list of adapter names that receive flushed debug events on request failure.
     #
@@ -464,7 +464,7 @@ module E11y
     # Set this to limit debug flushes to adapters that can handle the extra load.
     #
     # @example Only flush debug events to Loki (not Sentry)
-    #   config.request_buffer.debug_adapters = [:loki_logger]
+    #   config.ephemeral_buffer.debug_adapters = [:loki_logger]
     attr_accessor :debug_adapters
 
     def initialize
@@ -472,6 +472,7 @@ module E11y
       @flush_on_error    = true   # Flush buffer on 5xx server errors (default: true)
       @flush_on_statuses = []     # Additional HTTP statuses that trigger a flush (e.g. [403])
       @debug_adapters    = nil    # nil → use fallback_adapters
+      @job_buffer_limit = nil # nil → use EphemeralBuffer::DEFAULT_BUFFER_LIMIT (jobs only)
     end
   end
 

@@ -133,14 +133,14 @@ RSpec.describe "Validation Middleware Integration", :integration do
       end.not_to raise_error
 
       # Event should be stored (after Versioning middleware, event_name may be normalized)
-      all_events = memory_adapter.events
+      adapter_events = memory_adapter.events
       matches_valid = lambda do |e|
         e[:event_name]&.include?("ValidOrder") || e[:event_name]&.include?("valid.order") ||
           e[:event_class] == valid_event_class
       end
-      events = all_events.select(&matches_valid)
-      event_names = all_events.map { |e| e[:event_name] }.uniq.inspect
-      msg = "Event should be stored. Total events: #{all_events.count}, event_names: #{event_names}"
+      events = adapter_events.select(&matches_valid)
+      event_names = adapter_events.map { |e| e[:event_name] }.uniq.inspect
+      msg = "Event should be stored. Total events: #{adapter_events.count}, event_names: #{event_names}"
       expect(events.count).to eq(1), msg
       expect(events.first[:payload][:order_id]).to eq(123)
       expect(events.first[:payload][:amount]).to eq(100.50)
@@ -166,14 +166,14 @@ RSpec.describe "Validation Middleware Integration", :integration do
       end.not_to raise_error
 
       # After Versioning middleware, event_name may be normalized
-      all_events = memory_adapter.events
+      adapter_events = memory_adapter.events
       matches_user = lambda do |e|
         e[:event_name]&.include?("UserSignup") || e[:event_name]&.include?("user.signup") ||
           e[:event_class] == event_class
       end
-      events = all_events.select(&matches_user)
-      event_names = all_events.map { |e| e[:event_name] }.uniq.inspect
-      msg = "Event should be stored. Total events: #{all_events.count}, event_names: #{event_names}"
+      events = adapter_events.select(&matches_user)
+      event_names = adapter_events.map { |e| e[:event_name] }.uniq.inspect
+      msg = "Event should be stored. Total events: #{adapter_events.count}, event_names: #{event_names}"
       expect(events.count).to eq(1), msg
     end
 
@@ -203,14 +203,14 @@ RSpec.describe "Validation Middleware Integration", :integration do
       end.not_to raise_error
 
       # After Versioning middleware, event_name may be normalized
-      all_events = memory_adapter.events
+      adapter_events = memory_adapter.events
       matches_order = lambda do |e|
         e[:event_name]&.include?("OrderWithDiscount") || e[:event_name]&.include?("order.with.discount") ||
           e[:event_class] == event_class
       end
-      events = all_events.select(&matches_order)
-      event_names = all_events.map { |e| e[:event_name] }.uniq.inspect
-      msg = "Both events should be stored. Total events: #{all_events.count}, event_names: #{event_names}"
+      events = adapter_events.select(&matches_order)
+      event_names = adapter_events.map { |e| e[:event_name] }.uniq.inspect
+      msg = "Both events should be stored. Total events: #{adapter_events.count}, event_names: #{event_names}"
       expect(events.count).to eq(2), msg
     end
   end
@@ -308,15 +308,15 @@ RSpec.describe "Validation Middleware Integration", :integration do
       end.not_to raise_error
 
       # Event should be stored (after Versioning middleware, event_name may be normalized)
-      all_events = memory_adapter.events
+      adapter_events = memory_adapter.events
       # Try to find by class name or normalized event_name
       matches_schema_less = lambda do |e|
         e[:event_name]&.include?("SchemaLessEvent") || e[:event_name]&.include?("schema.less.event") ||
           e[:event_class] == schema_less_event_class
       end
-      events = all_events.select(&matches_schema_less)
-      event_names = all_events.map { |e| e[:event_name] }.uniq.inspect
-      msg = "Event should be stored. Total events: #{all_events.count}, event_names: #{event_names}"
+      events = adapter_events.select(&matches_schema_less)
+      event_names = adapter_events.map { |e| e[:event_name] }.uniq.inspect
+      msg = "Event should be stored. Total events: #{adapter_events.count}, event_names: #{event_names}"
       expect(events.count).to eq(1), msg
     end
 
@@ -345,14 +345,14 @@ RSpec.describe "Validation Middleware Integration", :integration do
       end.not_to raise_error
 
       # After Versioning middleware, event_name may be normalized
-      all_events = memory_adapter.events
+      adapter_events = memory_adapter.events
       matches_flexible = lambda do |e|
         e[:event_name]&.include?("FlexibleEvent") || e[:event_name]&.include?("flexible.event") ||
           e[:event_class] == schema_less_event_class
       end
-      events = all_events.select(&matches_flexible)
-      event_names = all_events.map { |e| e[:event_name] }.uniq.inspect
-      msg = "All 3 events should be stored. Total events: #{all_events.count}, event_names: #{event_names}"
+      events = adapter_events.select(&matches_flexible)
+      event_names = adapter_events.map { |e| e[:event_name] }.uniq.inspect
+      msg = "All 3 events should be stored. Total events: #{adapter_events.count}, event_names: #{event_names}"
       expect(events.count).to eq(3), msg
     end
   end
@@ -390,9 +390,9 @@ RSpec.describe "Validation Middleware Integration", :integration do
       end.not_to raise_error
 
       # Check that valid event was stored
-      all_events_after_valid = memory_adapter.events
-      msg = "Valid event should be stored immediately. Total events: #{all_events_after_valid.count}"
-      expect(all_events_after_valid.count).to eq(1), msg
+      adapter_events_after_valid = memory_adapter.events
+      msg = "Valid event should be stored immediately. Total events: #{adapter_events_after_valid.count}"
+      expect(adapter_events_after_valid.count).to eq(1), msg
 
       # Invalid V2 event (missing currency)
       expect do
@@ -400,13 +400,13 @@ RSpec.describe "Validation Middleware Integration", :integration do
       end.to raise_error(E11y::ValidationError)
 
       # Only valid event should be stored (invalid event should not be stored)
-      all_events = memory_adapter.events
-      events = all_events.select do |e|
+      adapter_events = memory_adapter.events
+      events = adapter_events.select do |e|
         e[:event_name] == "order.paid" || e[:event_name]&.include?("OrderPaidV2") || e[:event_class] == v2_event_class
       end
-      event_names = all_events.map { |e| e[:event_name] }.uniq.inspect
-      event_classes = all_events.map { |e| e[:event_class]&.name }.uniq.inspect
-      msg = "Only valid V2 event should be stored. Total: #{all_events.count}, event_names: #{event_names}, " \
+      event_names = adapter_events.map { |e| e[:event_name] }.uniq.inspect
+      event_classes = adapter_events.map { |e| e[:event_class]&.name }.uniq.inspect
+      msg = "Only valid V2 event should be stored. Total: #{adapter_events.count}, event_names: #{event_names}, " \
             "event_classes: #{event_classes}"
       expect(events.count).to eq(1), msg
     end
@@ -468,17 +468,17 @@ RSpec.describe "Validation Middleware Integration", :integration do
       end.to raise_error(E11y::ValidationError)
 
       # Only valid events should be stored (after Versioning middleware, event_name is normalized to "order.paid")
-      all_events = memory_adapter.events
+      adapter_events = memory_adapter.events
       # Both V1 and V2 events have normalized event_name "order.paid" after Versioning middleware
       valid_classes = [v1_event_class, v2_event_class]
       matches_order_paid = lambda do |e|
         e[:event_name] == "order.paid" || e[:event_name]&.include?("OrderPaid") ||
           valid_classes.include?(e[:event_class])
       end
-      events_with_order_paid = all_events.select(&matches_order_paid)
-      event_names = all_events.map { |e| e[:event_name] }.uniq.inspect
-      event_classes = all_events.map { |e| e[:event_class]&.name }.uniq.inspect
-      msg = "Both V1 and V2 valid events should be stored. Total: #{all_events.count}, event_names: #{event_names}, " \
+      events_with_order_paid = adapter_events.select(&matches_order_paid)
+      event_names = adapter_events.map { |e| e[:event_name] }.uniq.inspect
+      event_classes = adapter_events.map { |e| e[:event_class]&.name }.uniq.inspect
+      msg = "Both V1 and V2 valid events should be stored. Total: #{adapter_events.count}, event_names: #{event_names}, " \
             "event_classes: #{event_classes}"
       expect(events_with_order_paid.count).to eq(2), msg
     end

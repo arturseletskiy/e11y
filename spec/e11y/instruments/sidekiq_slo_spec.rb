@@ -14,8 +14,8 @@ RSpec.describe E11y::Instruments::Sidekiq::ServerMiddleware, "SLO Integration" d
   before do
     E11y.reset!
     E11y::Metrics.reset_backend!
-    allow(E11y::Buffers::RequestScopedBuffer).to receive(:start!)
-    allow(E11y::Buffers::RequestScopedBuffer).to receive(:flush!)
+    allow(E11y::Buffers::EphemeralBuffer).to receive(:initialize!)
+    allow(E11y::Buffers::EphemeralBuffer).to receive(:flush_on_error)
   end
 
   after do

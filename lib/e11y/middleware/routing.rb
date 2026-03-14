@@ -62,10 +62,10 @@ module E11y
 
         # 0. Request-scoped buffer: buffer debug events instead of writing when enabled
         # Skip when event is from a flush (avoid re-buffering)
-        if !event_data[:from_request_buffer_flush] &&
+        if !event_data[:from_ephemeral_buffer_flush] &&
            event_data[:severity] == :debug &&
-           E11y.config.request_buffer&.enabled &&
-           E11y::Buffers::RequestScopedBuffer.active? && E11y::Buffers::RequestScopedBuffer.add_event(event_data)
+           E11y.config.ephemeral_buffer&.enabled &&
+           E11y::Buffers::EphemeralBuffer.active? && E11y::Buffers::EphemeralBuffer.add_event(event_data)
           # Buffered — skip adapter writes, pass through
           return @app&.call(event_data)
         end

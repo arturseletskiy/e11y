@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### BREAKING: Registry.all_events → Registry.event_classes
+
+**Renamed for clarity:** Method returns event classes, not event instances or names.
+
+**Migration:** `E11y::Registry.all_events` → `E11y::Registry.event_classes`
+
+### BREAKING: RequestScopedBuffer → EphemeralBuffer
+
+**Renamed for accuracy:** The buffer works for both HTTP requests and background jobs. "Ephemeral" reflects its temporary lifecycle.
+
+**Migration:**
+- `E11y::Buffers::RequestScopedBuffer` → `E11y::Buffers::EphemeralBuffer`
+- `config.request_buffer` → `config.ephemeral_buffer`
+- `Thread.current[:e11y_request_buffer]` → `Thread.current[:e11y_ephemeral_buffer]`
+- Yabeda metric `e11y_request_buffer_total` → `e11y_ephemeral_buffer_total`
+
+**Search and replace:** `RequestScopedBuffer` → `EphemeralBuffer`, `request_buffer` → `ephemeral_buffer`
+
 ### Added
 
 ### Changed

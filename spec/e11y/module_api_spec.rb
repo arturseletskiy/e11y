@@ -174,26 +174,26 @@ RSpec.describe E11y, "module API" do
   # .buffer_size
   # ---------------------------------------------------------------------------
   describe ".buffer_size" do
-    after { Thread.current[:e11y_request_buffer] = nil }
+    after { Thread.current[:e11y_ephemeral_buffer] = nil }
 
     it "returns 0 when no buffer is set" do
-      Thread.current[:e11y_request_buffer] = nil
+      Thread.current[:e11y_ephemeral_buffer] = nil
       expect(described_class.buffer_size).to eq(0)
     end
 
     it "returns 0 when buffer does not respond to size" do
-      Thread.current[:e11y_request_buffer] = Object.new
+      Thread.current[:e11y_ephemeral_buffer] = Object.new
       expect(described_class.buffer_size).to eq(0)
     end
 
     it "returns the size of the buffer when it responds to size" do
-      Thread.current[:e11y_request_buffer] = [1, 2, 3]
+      Thread.current[:e11y_ephemeral_buffer] = [1, 2, 3]
       expect(described_class.buffer_size).to eq(3)
     end
 
     it "reflects changes to the buffer in real time" do
       buffer = []
-      Thread.current[:e11y_request_buffer] = buffer
+      Thread.current[:e11y_ephemeral_buffer] = buffer
       expect(described_class.buffer_size).to eq(0)
       buffer << "event1"
       expect(described_class.buffer_size).to eq(1)

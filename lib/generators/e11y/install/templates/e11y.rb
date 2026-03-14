@@ -27,7 +27,7 @@ E11y.configure do |config|
   # ─── Request-scoped debug buffering ──────────────────────────────────────────
   # Debug events are buffered per-request and flushed only when a 5xx error occurs.
   #
-  # config.request_buffer.enabled = true
+  # config.ephemeral_buffer.enabled = true
 
   # ─── PII filtering ───────────────────────────────────────────────────────────
   # Define per-event via pii_filtering do ... end in event classes.

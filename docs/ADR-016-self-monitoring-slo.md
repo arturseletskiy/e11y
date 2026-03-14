@@ -780,160 +780,61 @@ end
 
 ## 6. Health Checks
 
-### 6.1. Health Check API
+The gem runs in the host application's main process. E11y does not provide a separate health endpoint — the host application decides how and where to expose health (e.g. its own `/health` or `/ready`).
+
+### 6.1. API: E11y.health and E11y.healthy?
 
 ```ruby
-# lib/e11y/health_check.rb
-module E11y
-  class HealthCheck
-    def self.status
-      {
-        status: overall_status,
-        timestamp: Time.now.iso8601,
-        checks: {
-          latency: check_latency,
-          reliability: check_reliability,
-          resources: check_resources,
-          adapters: check_adapters,
-          buffer: check_buffer
-        },
-        slo: {
-          latency: SelfMonitoring::SLOCalculator.calculate_latency_slo,
-          reliability: SelfMonitoring::SLOCalculator.calculate_reliability_slo,
-          resources: SelfMonitoring::SLOCalculator.calculate_resource_slo
-        }
-      }
-    end
-    
-    def self.healthy?
-      status[:status] == :healthy
-    end
-    
-    private
-    
-    def self.overall_status
-      checks = [
-        check_latency[:status],
-        check_reliability[:status],
-        check_resources[:status],
-        check_adapters[:status],
-        check_buffer[:status]
-      ]
-      
-      return :unhealthy if checks.include?(:unhealthy)
-      return :degraded if checks.include?(:degraded)
-      :healthy
-    end
-    
-    def self.check_latency
-      slo = SelfMonitoring::SLOCalculator.calculate_latency_slo(window: 5.minutes)
-      
-      {
-        status: slo[:slo_met] ? :healthy : :degraded,
-        current_p99: slo[:current_p99],
-        target_p99: slo[:target_p99],
-        message: slo[:slo_met] ? 'Latency within SLO' : 'Latency exceeds SLO'
-      }
-    end
-    
-    def self.check_reliability
-      slo = SelfMonitoring::SLOCalculator.calculate_reliability_slo(window: 5.minutes)
-      
-      {
-        status: slo[:slo_met] ? :healthy : :unhealthy,
-        current_success_rate: slo[:current_success_rate],
-        target_success_rate: slo[:target_success_rate],
-        message: slo[:slo_met] ? 'Reliability within SLO' : 'Reliability below SLO'
-      }
-    end
-    
-    def self.check_resources
-      slo = SelfMonitoring::SLOCalculator.calculate_resource_slo
-      
-      cpu_ok = slo[:cpu][:slo_met]
-      memory_ok = slo[:memory][:slo_met]
-      buffer_ok = slo[:buffer][:slo_met]
-      
-      status = (cpu_ok && memory_ok && buffer_ok) ? :healthy : :degraded
-      
-      {
-        status: status,
-        cpu_percent: slo[:cpu][:current],
-        memory_mb: slo[:memory][:current],
-        buffer_percent: slo[:buffer][:current],
-        message: status == :healthy ? 'Resources within limits' : 'Resource usage high'
-      }
-    end
-    
-    def self.check_adapters
-      # Check circuit breaker states
-      adapters = E11y.config.adapters.all
-      
-      failed_adapters = adapters.select do |name, adapter|
-        adapter.circuit_breaker&.open?
-      end
-      
-      {
-        status: failed_adapters.empty? ? :healthy : :degraded,
-        total_adapters: adapters.size,
-        failed_adapters: failed_adapters.keys,
-        message: failed_adapters.empty? ? 'All adapters healthy' : "#{failed_adapters.size} adapters failed"
-      }
-    end
-    
-    def self.check_buffer
-      buffer = E11y::Buffer.instance
-      utilization = (buffer.size.to_f / buffer.max_size * 100).round(2)
-      
-      status = case utilization
-      when 0..80 then :healthy
-      when 81..90 then :degraded
-      else :unhealthy
-      end
-      
-      {
-        status: status,
-        current_size: buffer.size,
-        max_size: buffer.max_size,
-        utilization_percent: utilization,
-        message: "Buffer #{utilization}% full"
-      }
-    end
-  end
-end
+# Module methods on E11y
+E11y.health    # => Hash with details
+E11y.healthy?  # => true/false
 ```
 
-### 6.2. Health Check Endpoint
+**Structure of `E11y.health`:**
 
 ```ruby
-# config/routes.rb (for Web UI)
-E11y::WebUI::Engine.routes.draw do
-  # ... existing routes ...
-  
-  get '/health', to: 'health#show'
-  get '/health/detailed', to: 'health#detailed'
-end
+{
+  status: :healthy | :degraded | :unhealthy,
+  timestamp: "2026-03-13T12:00:00Z",  # ISO8601
+  adapters: {
+    loki:   { healthy: true,  circuit_breaker: :closed },
+    sentry: { healthy: false, circuit_breaker: :open }
+  }
+}
+```
 
-# app/controllers/e11y/web_ui/health_controller.rb
-module E11y
-  module WebUI
-    class HealthController < ApplicationController
-      def show
-        status = E11y::HealthCheck.status
-        
-        render json: {
-          status: status[:status],
-          timestamp: status[:timestamp]
-        }, status: status[:status] == :healthy ? 200 : 503
-      end
-      
-      def detailed
-        status = E11y::HealthCheck.status
-        
-        render json: status, status: status[:status] == :healthy ? 200 : 503
-      end
-    end
-  end
+- **`status`** — overall telemetry status (see below).
+- **`adapters`** — per registered adapter:
+  - **`healthy`** — result of `adapter.healthy?` (backend reachability: Loki pings, Sentry validates DSN, etc.).
+  - **`circuit_breaker`** — `:closed` | `:open` | `:half_open` (adapter circuit breaker state).
+
+### 6.2. What Does "Telemetry Healthy" Mean?
+
+**Telemetry is healthy** = we can deliver events to at least one backend.
+
+| status      | Condition |
+|-------------|-----------|
+| **:healthy**   | All adapters have `healthy? == true` and `circuit_breaker == :closed`. |
+| **:degraded**  | At least one adapter is unhealthy or circuit open, but at least one is healthy + closed. |
+| **:unhealthy** | No adapter is healthy + closed — nowhere to deliver events. |
+
+**`E11y.healthy?`** returns `true` only when `status == :healthy`.
+
+### 6.3. Integration into Host Application Health
+
+```ruby
+# config/routes.rb
+get "/health", to: "health#show"
+
+# app/controllers/health_controller.rb
+def show
+  e11y = E11y.health
+  overall = e11y[:status] == :healthy ? :ok : :degraded
+
+  render json: {
+    app: check_app,
+    e11y: e11y
+  }, status: overall == :ok ? 200 : 503
 end
 ```
 

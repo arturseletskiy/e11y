@@ -196,8 +196,9 @@ Given("the trace decisions cache is filled with {int} dummy entries to trigger c
 
   decisions = sampling.instance_variable_get(:@trace_decisions)
   mutex     = sampling.instance_variable_get(:@trace_decisions_mutex)
+  old_time  = Process.clock_gettime(Process::CLOCK_MONOTONIC) - 60 # Old timestamp so LRU evicts these first
   mutex.synchronize do
-    count.times { |i| decisions["dummy-trace-#{i}"] = i.even? }
+    count.times { |i| decisions["dummy-trace-#{i}"] = { decision: i.even?, last_access: old_time } }
   end
 end
 
@@ -213,9 +214,7 @@ Then("all {int} {string} events should have the same sampling outcome") do |coun
   actual = events.size
   expect(actual).to be_in([0, count]),
                     "Expected all #{count} #{class_name} events to have the same outcome " \
-                    "(either all 0 or all #{count}), got #{actual}. " \
-                    "Known bug: cleanup_trace_decisions in sampling.rb randomly evicts 50% of cache " \
-                    "keys, breaking trace-level consistency."
+                    "(either all 0 or all #{count}), got #{actual}."
 end
 
 # ---------------------------------------------------------------------------

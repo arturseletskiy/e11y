@@ -433,6 +433,7 @@ module E11y
         'enqueue.active_job' => Events::Rails::Job::Enqueued,
         'enqueue_at.active_job' => Events::Rails::Job::Scheduled,
         'perform_start.active_job' => Events::Rails::Job::Started,
+        # perform.active_job: Completed on success; Failed when payload has exception
         'perform.active_job' => Events::Rails::Job::Completed
       }.freeze
       
@@ -698,18 +699,6 @@ end
       
       # Trace propagation
       propagate_trace_context true
-      
-      # Job-scoped buffer (like request-scoped buffer for HTTP)
-      use_job_buffer true
-      
-      job_buffer do
-        buffer_severities [:debug]
-        flush_on do
-          error true       # Flush debug events if job fails
-          success false    # Discard debug events if job succeeds
-        end
-        max_events 1000
-      end
     end
     
     # ========================================
@@ -721,9 +710,6 @@ end
       track_request_start true
       track_request_complete true
       track_request_failure true
-      
-      # Request-scoped buffer
-      use_request_buffer true
     end
   end
 end
@@ -877,6 +863,8 @@ end
 
 ## 5. Sidekiq Integration
 
+**Implementation Note:** Sidekiq middleware emits `Events::Rails::Job::Enqueued`, `Started`, `Completed`, `Failed` for **raw Sidekiq jobs only** (`include Sidekiq::Worker`). When Sidekiq is the queue adapter for ActiveJob, jobs use `ActiveJob::QueueAdapters::SidekiqAdapter::JobWrapper`; we skip event emission in Sidekiq middleware to avoid double emission — ActiveJob events come from RailsInstrumentation (ASN).
+
 ### 5.1. Server Middleware (Job Execution)
 
 ```ruby
@@ -899,9 +887,11 @@ module E11y
             queue: queue
           )
           
-          # Start job-scoped buffer (optional, configurable)
-          if E11y.config.instruments.sidekiq.use_job_buffer
-            E11y::JobBuffer.start!
+          # Start request-scoped buffer (same as HTTP; config.ephemeral_buffer.enabled)
+          if E11y.config.ephemeral_buffer&.enabled
+            limit = E11y.config.ephemeral_buffer.job_buffer_limit ||
+                    E11y::Buffers::EphemeralBuffer::DEFAULT_BUFFER_LIMIT
+            E11y::EphemeralBuffer.initialize!(buffer_limit: limit)
           end
           
           # Track job start
@@ -926,8 +916,8 @@ module E11y
               queue: queue
             )
             
-            # Flush job buffer (success case)
-            E11y::JobBuffer.flush! if E11y.config.instruments.sidekiq.use_job_buffer
+            # Discard buffer on success (same as HTTP)
+            E11y::EphemeralBuffer.discard if E11y.config.ephemeral_buffer&.enabled
             
             result
           rescue => error
@@ -942,8 +932,8 @@ module E11y
               backtrace: error.backtrace&.first(10)
             )
             
-            # Flush job buffer on error (includes debug events)
-            E11y::JobBuffer.flush_on_error! if E11y.config.instruments.sidekiq.use_job_buffer
+            # Flush buffer on error (includes debug events)
+            E11y::EphemeralBuffer.flush_on_error if E11y.config.ephemeral_buffer&.enabled
             
             raise
           ensure
@@ -997,89 +987,22 @@ module E11y
 end
 ```
 
-### 5.3. Job-Scoped Buffer (Optional Feature)
+### 5.3. Buffer for Jobs
 
-**Design Decision:** Similar to request-scoped buffer, jobs can have their own buffer for debug events.
+**Design Decision:** Jobs reuse the same `EphemeralBuffer` as HTTP requests. Same semantics: buffer debug events, flush on error, discard on success. Optional job-specific config allows tuning for longer-running jobs.
 
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.instruments.sidekiq do
-    # Enable job-scoped buffer (like request-scoped buffer)
-    use_job_buffer true
-    
-    job_buffer do
-      # Buffer debug events during job execution
-      buffer_severities [:debug]
-      
-      # Flush conditions
-      flush_on do
-        error true           # Flush debug events if job fails
-        success false        # Discard debug events if job succeeds
-        interval 5.seconds   # Or flush every 5 seconds
-      end
-      
-      # Max buffer size per job
-      max_events 1000
-    end
-  end
-end
-```
-
-**How it works:**
-
-```ruby
-class InvoiceGenerationWorker
-  include Sidekiq::Worker
+  # Shared buffer for HTTP and jobs
+  config.ephemeral_buffer.enabled = true
   
-  def perform(order_id)
-    # Debug events are buffered
-    Events::Debug::FetchOrder.track(order_id: order_id)
-    
-    order = Order.find(order_id)
-    
-    Events::Debug::ValidateOrder.track(order_id: order_id, valid: order.valid?)
-    
-    if order.invalid?
-      # Job fails → debug events are flushed to adapters
-      raise "Invalid order"
-    end
-    
-    # Job succeeds → debug events are discarded
-    Events::InvoiceGenerated.track(order_id: order_id)
-  end
+  # Optional: job-specific overrides (jobs can run longer → more debug events)
+  config.ephemeral_buffer.job_buffer_limit = 500  # nil = use default (100)
 end
 ```
 
-**Job Buffer Lifecycle:**
-
-```mermaid
-sequenceDiagram
-    participant Worker as Sidekiq Worker
-    participant JobBuffer as Job Buffer
-    participant MainBuffer as Main Buffer
-    participant Adapters as Adapters
-    
-    Worker->>JobBuffer: Start job buffer
-    
-    Note over Worker: Job execution starts
-    
-    Worker->>JobBuffer: Track debug event
-    JobBuffer->>JobBuffer: Buffer (not flushed)
-    
-    Worker->>MainBuffer: Track info event
-    MainBuffer->>Adapters: Flush immediately (normal flow)
-    
-    alt Job succeeds
-        Worker->>JobBuffer: flush! (success)
-        JobBuffer->>JobBuffer: Discard debug events
-        Note over JobBuffer: Debug events never sent
-    else Job fails
-        Worker->>JobBuffer: flush_on_error!
-        JobBuffer->>MainBuffer: Move debug events to main buffer
-        MainBuffer->>Adapters: Flush all events (including debug)
-    end
-```
+**Rationale:** Single buffer implementation, single config. Jobs may need higher `job_buffer_limit` when they process many items and emit more debug events than a typical HTTP request.
 
 ---
 
@@ -1122,6 +1045,13 @@ sequenceDiagram
 
 ## 6. ActiveJob Integration
 
+**Implementation Note:** Job lifecycle events (`Enqueued`, `Started`, `Completed`, `Failed`) come from **RailsInstrumentation** (ASN), not from ActiveJob callbacks. ActiveJob callbacks handle trace context propagation, request-scoped buffer, and SLO tracking only. This design:
+- Uses ASN as single source for all queue adapters (Sidekiq, Resque, Solid Queue, etc.)
+- Avoids duplicate emission when ActiveJob uses Sidekiq as adapter
+- Keeps callbacks focused on context/buffer/SLO
+
+**perform.active_job routing:** When payload contains `exception`, RailsInstrumentation routes to `Events::Rails::Job::Failed` (with `error_class`, `error_message`); otherwise to `Completed`.
+
 ### 6.1. Callbacks Integration
 
 ```ruby
@@ -1151,9 +1081,11 @@ module E11y
             job_class: self.class.name
           )
           
-          # Start job-scoped buffer (optional, configurable)
-          if E11y.config.instruments.active_job.use_job_buffer
-            E11y::JobBuffer.start!
+          # Start request-scoped buffer (same as HTTP; config.ephemeral_buffer.enabled)
+          if E11y.config.ephemeral_buffer&.enabled
+            limit = E11y.config.ephemeral_buffer.job_buffer_limit ||
+                    E11y::Buffers::EphemeralBuffer::DEFAULT_BUFFER_LIMIT
+            E11y::EphemeralBuffer.initialize!(buffer_limit: limit)
           end
           
           Events::Rails::Job::Started.track(
@@ -1174,8 +1106,8 @@ module E11y
               duration: (Time.now - start_time) * 1000
             )
             
-            # Flush job buffer (success case)
-            E11y::JobBuffer.flush! if E11y.config.instruments.active_job.use_job_buffer
+            # Discard buffer on success (same as HTTP)
+            E11y::EphemeralBuffer.discard if E11y.config.ephemeral_buffer&.enabled
           rescue => error
             Events::Rails::Job::Failed.track(
               job_class: self.class.name,
@@ -1185,8 +1117,8 @@ module E11y
               error_message: error.message
             )
             
-            # Flush job buffer on error (includes debug events)
-            E11y::JobBuffer.flush_on_error! if E11y.config.instruments.active_job.use_job_buffer
+            # Flush buffer on error (includes debug events)
+            E11y::EphemeralBuffer.flush_on_error if E11y.config.ephemeral_buffer&.enabled
             
             raise
           ensure
@@ -1365,15 +1297,14 @@ end
 
 ## 8. Middleware Integration
 
-### 8.0. Three Buffer Types (Summary)
+### 8.0. Buffer Types (Summary)
 
-**E11y has 3 independent buffer types:**
+**E11y uses a single EphemeralBuffer for both HTTP and jobs:**
 
-| Buffer Type | Purpose | Lifecycle | Use Case |
-|-------------|---------|-----------|----------|
-| **Main Buffer** | All events (info+) | Global, flush every 200ms | Normal event tracking |
-| **Request Buffer** | Debug events in HTTP requests | Per-request, flush on error | HTTP request debugging |
-| **Job Buffer** | Debug events in background jobs | Per-job, flush on error | Background job debugging |
+| Buffer | Purpose | Lifecycle | Config |
+|--------|---------|-----------|--------|
+| **Request Buffer** | Debug events (HTTP + jobs) | Per-request/job, flush on error, discard on success | `config.ephemeral_buffer.enabled`, `job_buffer_limit` |
+| **Main Buffer** | All events (info+) | Global, flush every 200ms | — |
 
 **Diagram:**
 
@@ -1381,20 +1312,20 @@ end
 graph TB
     subgraph "HTTP Request"
         HTTPEvent[Event tracked] --> Decision1{Severity?}
-        Decision1 -->|:debug| RequestBuffer[Request Buffer]
+        Decision1 -->|:debug| [Request Buffer]
         Decision1 -->|:info+| MainBuffer[Main Buffer]
         
-        RequestBuffer --> OnError1{Request failed?}
+         --> OnError1{Request failed?}
         OnError1 -->|Yes| MainBuffer
         OnError1 -->|No| Discard1[Discard]
     end
     
     subgraph "Background Job"
         JobEvent[Event tracked] --> Decision2{Severity?}
-        Decision2 -->|:debug| JobBuffer[Job Buffer]
+        Decision2 -->|:debug| 
         Decision2 -->|:info+| MainBuffer2[Main Buffer]
         
-        JobBuffer --> OnError2{Job failed?}
+         --> OnError2{Job failed?}
         OnError2 -->|Yes| MainBuffer2
         OnError2 -->|No| Discard2[Discard]
     end
@@ -1405,8 +1336,7 @@ graph TB
         Interval --> Adapters[Flush to Adapters]
     end
     
-    style RequestBuffer fill:#fff3cd
-    style JobBuffer fill:#d4edda
+    style  fill:#fff3cd
     style MainBuffer fill:#d1ecf1
     style MainBuffer2 fill:#d1ecf1
 ```
@@ -1415,16 +1345,9 @@ graph TB
 
 ```ruby
 E11y.configure do |config|
-  # Main buffer (always enabled)
-  config.buffer.flush_interval = 200.milliseconds
-  config.buffer.max_size = 10_000
-  
-  # Request-scoped buffer (HTTP only)
-  config.instruments.rack_middleware.use_request_buffer = true
-  
-  # Job-scoped buffer (Sidekiq + ActiveJob)
-  config.instruments.sidekiq.use_job_buffer = true
-  config.instruments.active_job.use_job_buffer = true
+  # Request-scoped buffer (shared for HTTP and jobs)
+  config.ephemeral_buffer.enabled = true
+  config.ephemeral_buffer.job_buffer_limit = 500  # Optional: higher limit for jobs (nil = default 100)
 end
 ```
 
@@ -1458,12 +1381,8 @@ module E11y
           user_agent: request.user_agent
         )
         
-        # Start request-scoped buffer (for debug events)
-        # Note: This is ONLY for HTTP requests, not for jobs
-        # Jobs have their own JobBuffer (see Sidekiq/ActiveJob sections)
-        if E11y.config.instruments.rack_middleware.use_request_buffer
-          E11y::RequestBuffer.start!
-        end
+        # Start request-scoped buffer (for debug events; shared with jobs)
+        E11y::EphemeralBuffer.initialize! if E11y.config.ephemeral_buffer&.enabled
         
         # Track request start
         start_time = Time.now
@@ -1501,17 +1420,13 @@ module E11y
             error_message: error.message
           )
           
-          # Flush request buffer (includes debug events on error)
-          if E11y.config.instruments.rack_middleware.use_request_buffer
-            E11y::RequestBuffer.flush_on_error!
-          end
+          # Flush buffer on error (includes debug events)
+          E11y::EphemeralBuffer.flush_on_error if E11y.config.ephemeral_buffer&.enabled
           
           raise
         ensure
-          # Flush request buffer (success case)
-          if E11y.config.instruments.rack_middleware.use_request_buffer && !error
-            E11y::RequestBuffer.flush!
-          end
+          # Discard buffer on success (not on error; already flushed in rescue)
+          E11y::EphemeralBuffer.discard if !$ERROR_INFO && E11y.config.ephemeral_buffer&.enabled
           
           # Reset context
           Current.reset
@@ -1563,7 +1478,7 @@ module E11y
       # E11y.stats
       def E11y.stats
         {
-          events_tracked: Registry.all_events.sum { |e| e.track_count },
+          events_tracked: Registry.event_classes.sum { |e| e.track_count },
           events_in_buffer: Buffer.size,
           adapters: Adapters::Registry.all.map { |a| 
             { name: a.name, healthy: a.healthy? }
@@ -1588,7 +1503,7 @@ module E11y
       
       # E11y.events
       def E11y.events
-        Registry.all_events.map(&:name).sort
+        Registry.event_classes.map(&:name).sort
       end
       
       # E11y.adapters
@@ -1606,7 +1521,7 @@ module E11y
       # E11y.reset!
       def E11y.reset!
         Buffer.clear!
-        RequestBuffer.clear!
+        .clear!
         puts "✅ Buffers cleared"
       end
     end
@@ -1861,18 +1776,16 @@ end
 
 ### Q4: Does request-scoped buffer work for Sidekiq/ActiveJob?
 
-**No, they have their own job-scoped buffer!**
+**Yes. HTTP and jobs share the same EphemeralBuffer.**
 
-- **Request Buffer** → HTTP requests only (Rack middleware)
-- **Job Buffer** → Sidekiq + ActiveJob (separate buffer per job)
+- **Request Buffer** → HTTP requests and jobs (same buffer, same semantics)
 - **Main Buffer** → Global buffer for all info+ events
 
-All 3 buffers are independent and configurable:
+Config:
 
 ```ruby
-config.instruments.rack_middleware.use_request_buffer = true   # HTTP
-config.instruments.sidekiq.use_job_buffer = true              # Sidekiq
-config.instruments.active_job.use_job_buffer = true           # ActiveJob
+config.ephemeral_buffer.enabled = true
+config.ephemeral_buffer.job_buffer_limit = 500  # Optional: higher limit for jobs (nil = default 100)
 ```
 
 ### Q5: How do I customize built-in Rails events?

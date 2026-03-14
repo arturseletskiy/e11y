@@ -33,18 +33,18 @@ module E11y
     class << self
       # Track a counter metric (monotonically increasing value).
       #
-      # Accepts dotted names (e.g., "e11y.request_buffer.flushed") and normalizes to
+      # Accepts dotted names (e.g., "e11y.ephemeral_buffer.flushed") and normalizes to
       # underscores. DLQ metrics get _total suffix. Labels[:events] is used as value if present.
       # Safe: no-op when backend unavailable, rescues errors.
       #
-      # @param name [Symbol, String] Metric name (e.g., :http_requests_total or "e11y.request_buffer.flushed")
+      # @param name [Symbol, String] Metric name (e.g., :http_requests_total or "e11y.ephemeral_buffer.flushed")
       # @param labels [Hash] Metric labels (e.g., { method: 'GET', status: 200 })
       # @param value [Integer] Increment value (default: 1, overridden by labels[:events] if present)
       # @return [void]
       #
       # @example
       #   E11y::Metrics.increment(:e11y_events_tracked, event_type: 'order.created')
-      #   E11y::Metrics.increment("e11y.request_buffer.flushed_on_error", value: 5)
+      #   E11y::Metrics.increment("e11y.ephemeral_buffer.flushed_on_error", value: 5)
       def increment(name, labels = {}, value: 1, **labels_kw)
         return unless backend
 
@@ -117,7 +117,7 @@ module E11y
       # Normalize metric name: dots to underscores, DLQ metrics get _total suffix.
       #
       # @param name [Symbol, String] Raw metric name
-      # @return [Symbol] Normalized name for Prometheus (e.g., e11y_request_buffer_flushed_on_error)
+      # @return [Symbol] Normalized name for Prometheus (e.g., e11y_ephemeral_buffer_flushed_on_error)
       def normalize_metric_name(name)
         s = name.to_s.tr(".", "_")
         s = "#{s}_total" if s.include?("e11y_dlq_") && !s.end_with?("_total")

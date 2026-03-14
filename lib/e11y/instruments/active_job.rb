@@ -83,9 +83,9 @@ module E11y
 
         # Setup job-scoped buffer
         def setup_job_buffer_active_job
-          return unless E11y.config.request_buffer&.enabled
+          return unless E11y.config.ephemeral_buffer&.enabled
 
-          E11y::Buffers::RequestScopedBuffer.initialize!
+          E11y::Buffers::EphemeralBuffer.initialize!
         rescue StandardError => e
           # C18: Don't fail job if buffer setup fails
           warn "[E11y] Failed to start job buffer: #{e.message}"
@@ -93,9 +93,9 @@ module E11y
 
         # Handle job error (C18: Non-Failing Event Tracking)
         def handle_job_error_active_job(_error)
-          return unless E11y.config.request_buffer&.enabled
+          return unless E11y.config.ephemeral_buffer&.enabled
 
-          E11y::Buffers::RequestScopedBuffer.flush_on_error
+          E11y::Buffers::EphemeralBuffer.flush_on_error
         rescue StandardError => e
           # C18: Don't fail job if buffer flush fails
           warn "[E11y] Failed to flush job buffer on error: #{e.message}"
@@ -104,9 +104,9 @@ module E11y
         # Cleanup job-scoped context
         def cleanup_job_context_active_job
           # Flush buffer on success (not on error, already flushed in rescue)
-          if !$ERROR_INFO && E11y.config.request_buffer&.enabled
+          if !$ERROR_INFO && E11y.config.ephemeral_buffer&.enabled
             begin
-              E11y::Buffers::RequestScopedBuffer.discard
+              E11y::Buffers::EphemeralBuffer.discard
             rescue StandardError => e
               # C18: Don't fail job if buffer flush fails
               warn "[E11y] Failed to flush job buffer: #{e.message}"

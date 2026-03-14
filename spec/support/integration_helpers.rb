@@ -148,7 +148,7 @@ module IntegrationHelpers
   #   events = find_events_by_class(memory_adapter, Events::TestEvent)
   #   events = find_events_by_class(memory_adapter, "Events::TestEvent", normalized_name: "test.event")
   def find_events_by_class(memory_adapter, event_class, normalized_name: nil)
-    all_events = memory_adapter.events
+    events = memory_adapter.events
 
     # Get class name for matching
     class_name = event_class.is_a?(Class) ? event_class.name : event_class.to_s
@@ -161,7 +161,7 @@ module IntegrationHelpers
     # 2. Original event_name (class name, if Versioning middleware is NOT enabled)
     # 3. event_class object match
     # 4. event_class name match
-    all_events.select do |e|
+    events.select do |e|
       e[:event_name] == normalized_name ||
         e[:event_name] == class_name ||
         e[:event_name]&.include?(normalized_name) ||

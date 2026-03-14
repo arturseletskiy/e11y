@@ -1938,7 +1938,7 @@ end
 
 ```ruby
 # ✅ v1.1: Auto-generated registry (zero config!)
-# E11y.registry.all_events → returns all event classes with schemas
+# E11y.registry.event_classes → returns all event classes with schemas
 
 # Export registry to JSON (for docs, tooling)
 rake e11y:registry:export

@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
 require "spec_helper"
-require "e11y/buffers/request_scoped_buffer"
+require "e11y/buffers/ephemeral_buffer"
 require "e11y/adapters/in_memory"
 
-RSpec.describe E11y::Buffers::RequestScopedBuffer do
+RSpec.describe E11y::Buffers::EphemeralBuffer do
   # Reset thread-local storage before each test
   before do
     described_class.reset_all
@@ -405,7 +405,7 @@ RSpec.describe E11y::Buffers::RequestScopedBuffer do
         config.adapters[:log_adapter] = adapter_a
         config.adapters[:debug_log_adapter] = adapter_b
         config.fallback_adapters = [:log_adapter]
-        config.request_buffer.debug_adapters = [:debug_log_adapter]
+        config.ephemeral_buffer.debug_adapters = [:debug_log_adapter]
       end
       described_class.initialize!
     end
@@ -429,7 +429,7 @@ RSpec.describe E11y::Buffers::RequestScopedBuffer do
       E11y.configure do |config|
         config.adapters[:fallback] = fallback_adapter
         config.fallback_adapters = [:fallback]
-        # request_buffer.debug_adapters NOT set — should default to nil
+        # ephemeral_buffer.debug_adapters NOT set — should default to nil
       end
       described_class.initialize!
     end
