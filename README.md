@@ -230,7 +230,7 @@ end
 
 - **Non-Rails Ruby** - Focused on Rails conventions first
 - **Microservices polyglot** - OpenTelemetry better for multi-language
-- **Enterprise compliance** - E11y is WIP, audit trails coming soon
+- **Enterprise compliance requirements** — audit trails and compliance reports are not yet available
 - **Auto-instrumentation only** - E11y requires event definitions (by design)
 
 ---
@@ -483,7 +483,7 @@ E11y is optimized for:
 **Not optimized for:**
 - Polyglot microservices (use OpenTelemetry)
 - Frontend-heavy SPAs (use Datadog/Sentry for RUM)
-- Enterprise compliance requirements (WIP, coming soon)
+- Enterprise compliance requirements (not yet available)
 
 ---
 
