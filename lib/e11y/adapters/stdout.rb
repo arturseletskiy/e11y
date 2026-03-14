@@ -41,10 +41,11 @@ module E11y
       #
       # @param config [Hash] Configuration options
       # @option config [Boolean] :colorize (true) Enable colored output
-      # @option config [Boolean] :pretty_print (true) Enable pretty-printed JSON
-      # @option config [Symbol] :format (:pretty) Output format: :compact (single-line) or :pretty (multi-line)
+      # @option config [Boolean] :pretty_print (true) Enable pretty-printed JSON (when format: :json)
+      # @option config [Symbol] :format (:json) Output format: :json (JSON), :compact (single-line JSON), :rich (ADR-010 §3 structured)
       def initialize(config = {})
         @colorize = config.fetch(:colorize, true)
+        @format = config.fetch(:format, :json)
         @pretty_print = resolve_pretty_print(config)
         super
       end
@@ -101,10 +102,10 @@ module E11y
       # @param event_data [Hash] Event data
       # @return [String] Formatted output
       def format_event(event_data)
-        if @pretty_print
-          JSON.pretty_generate(event_data)
-        else
-          event_data.to_json
+        case @format
+        when :rich then format_event_rich(event_data)
+        when :compact then event_data.to_json
+        else @pretty_print ? JSON.pretty_generate(event_data) : event_data.to_json
         end
       end
 
@@ -117,6 +118,57 @@ module E11y
         color_code = SEVERITY_COLORS[severity] || ""
         "#{color_code}#{output}#{COLOR_RESET}"
       end
+
+      # Rich format: ADR-010 §3 — structured output with header, event name, payload, metadata
+      def format_event_rich(event_data)
+        lines = []
+        lines << format_header(event_data)
+        lines << format_event_name_line(event_data)
+        lines << format_payload_section(event_data[:payload]) if event_data[:payload]&.any?
+        lines << format_metadata_section(event_data) if event_data[:trace_id] || event_data[:span_id]
+        lines << "─" * 80
+        lines.join("\n")
+      end
+
+      def format_header(event_data)
+        ts = event_data[:timestamp]
+        ts = Time.parse(ts) if ts.is_a?(String)
+        time_str = ts&.strftime("%H:%M:%S.%L") || "??:??:??.???"
+        sev = event_data[:severity].to_s.upcase.ljust(8)
+        "#{time_str} #{sev}"
+      end
+
+      def format_event_name_line(event_data)
+        name = event_data[:event_name].to_s
+        "  → #{name}"
+      end
+
+      def format_payload_section(payload)
+        lines = ["  Payload:"]
+        payload.each do |k, v|
+          lines << "    #{k}: #{format_value_rich(v)}"
+        end
+        lines.join("\n")
+      end
+
+      def format_metadata_section(event_data)
+        meta = { trace_id: event_data[:trace_id], span_id: event_data[:span_id] }.compact
+        return "" if meta.empty?
+
+        meta.map { |k, v| "    #{k}: #{v}" }.unshift("  Metadata:").join("\n")
+      end
+
+      def format_value_rich(value)
+        case value
+        when String then "\"#{value.length > 50 ? "#{value[0...50]}..." : value}\""
+        when Array then "[#{value.size} items]"
+        when Hash then "{#{value.size} keys}"
+        else value.inspect
+        end
+      end
     end
+
+    # Alias for ADR-010 §3 (Console Output) — Console and Stdout are the same adapter
+    Console = Stdout
   end
 end

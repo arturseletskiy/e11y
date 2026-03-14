@@ -3438,11 +3438,11 @@ Events::UserLogin.track(
 
 **Metadata Flags:**
 - `:pii_filtered` - Event already went through PII filtering (set by PII filter middleware)
-- `:replayed` - Event is being replayed from DLQ (set by DLQ replay service)
+- `:dlq_replayed` - Event is being replayed from DLQ (set by DLQ replay service)
 
 **When to Skip PII Filtering:**
 1. Event has `:pii_filtered => true` (already processed)
-2. Event has `:replayed => true` (replay scenario)
+2. Event has `:dlq_replayed => true` (replay scenario)
 3. Both flags present → skip PII filtering entirely
 
 ### 5.6.3. PiiFilter Middleware with Replay Detection
@@ -3489,7 +3489,7 @@ module E11y
         metadata = event_data[:metadata] || {}
         
         # Check for replay flag
-        return true if metadata[:replayed]
+        return true if metadata[:dlq_replayed]
         
         # Check for already-filtered flag
         return true if metadata[:pii_filtered]
@@ -3519,7 +3519,7 @@ module E11y
         
         # ✅ CRITICAL: Mark as replayed (skip transformations)
         event_data[:metadata] ||= {}
-        event_data[:metadata][:replayed] = true
+        event_data[:metadata][:dlq_replayed] = true
         event_data[:metadata][:pii_filtered] = true  # Already filtered!
         event_data[:metadata][:replayed_at] = Time.now.utc.iso8601
         event_data[:metadata][:original_event_id] = event_data[:event_id]
@@ -3572,7 +3572,7 @@ E11y.configure do |config|
   config.dlq.replay do
     # Metadata flags for replayed events
     set_metadata_flags do
-      replayed true
+      dlq_replayed true
       pii_filtered true
       replay_timestamp true
       original_event_id true

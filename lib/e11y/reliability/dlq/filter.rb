@@ -5,65 +5,56 @@ module E11y
     module DLQ
       # DLQ Filter determines which failed events should be saved to DLQ.
       #
-      # Supports:
-      # - Always save patterns (e.g., payment.*, audit.*)
-      # - Always discard patterns (e.g., debug.*, test.*)
-      # - Severity-based filtering (e.g., always save :error, :fatal)
+      # Uses Event DSL (use_dlq) when event class is registered.
+      # Audit events (Presets::AuditEvent) have use_dlq true by default.
       #
-      # @example Configuration
-      #   filter = Filter.new(
-      #     always_save_patterns: [/^payment\./, /^audit\./],
-      #     always_discard_patterns: [/^debug\./, /^test\./],
-      #     save_severities: [:error, :fatal]
-      #   )
+      # Priority order:
+      # 1. Event class use_dlq == false → discard
+      # 2. Event class use_dlq == true → save
+      # 3. Severity-based (save_severities)
+      # 4. Default behavior
       #
-      #   filter.should_save?(event_data)  # => true/false
+      # @example Event DSL
+      #   class Events::AuditLogin < E11y::Events::BaseAuditEvent
+      #     # use_dlq true from preset
+      #   end
+      #
+      #   class Events::DebugTrace < E11y::Event::Base
+      #     use_dlq false
+      #   end
       #
       # @see ADR-013 §4.3 (DLQ Filter)
       # @see UC-021 §3.2 (DLQ Filter Configuration)
       class Filter
-        # @param always_save_patterns [Array<Regexp>] Event patterns to always save
-        # @param always_discard_patterns [Array<Regexp>] Event patterns to always discard
         # @param save_severities [Array<Symbol>] Severities to always save (:error, :fatal)
-        # @param default_behavior [Symbol] Default behavior when no rule matches (:save or :discard)
+        # @param default_behavior [Symbol] Default when no Event DSL rule (:save or :discard)
         def initialize(
-          always_save_patterns: [],
-          always_discard_patterns: [],
           save_severities: %i[error fatal],
           default_behavior: :save
         )
-          @always_save_patterns = always_save_patterns
-          @always_discard_patterns = always_discard_patterns
           @save_severities = save_severities
           @default_behavior = default_behavior
         end
 
         # Check if event should be saved to DLQ.
         #
-        # Priority order:
-        # 1. Always discard patterns (highest priority)
-        # 2. Always save patterns
-        # 3. Severity-based rules
-        # 4. Default behavior
-        #
         # @param event_data [Hash] Event data
-        # @param error [StandardError, nil] The error that caused the DLQ save (optional, for context)
+        # @param error [StandardError, nil] The error that caused the DLQ save (optional)
         # @return [Boolean] true if event should be saved to DLQ
         # rubocop:disable Metrics/MethodLength
-        # DLQ filter requires 4-priority decision tree with metrics tracking for each branch
         def should_save?(event_data, _error = nil)
-          event_name = event_data[:event_name].to_s
+          event_class = resolve_event_class(event_data[:event_name])
           severity = event_data[:severity]
 
-          # Priority 1: Always discard (highest priority)
-          if matches_patterns?(event_name, @always_discard_patterns)
-            increment_filter_metric("discarded", "always_discard_pattern")
+          # Priority 1: Event DSL use_dlq == false
+          if event_class&.respond_to?(:use_dlq) && event_class.use_dlq == false
+            increment_filter_metric("discarded", "use_dlq")
             return false
           end
 
-          # Priority 2: Always save
-          if matches_patterns?(event_name, @always_save_patterns)
-            increment_filter_metric("saved", "always_save_pattern")
+          # Priority 2: Event DSL use_dlq == true
+          if event_class&.respond_to?(:use_dlq) && event_class.use_dlq == true
+            increment_filter_metric("saved", "use_dlq")
             return true
           end
 
@@ -84,13 +75,9 @@ module E11y
         end
         # rubocop:enable Metrics/MethodLength
 
-        # Get filter statistics.
-        #
         # @return [Hash] Filter configuration stats
         def stats
           {
-            always_save_patterns: @always_save_patterns.map(&:inspect),
-            always_discard_patterns: @always_discard_patterns.map(&:inspect),
             save_severities: @save_severities,
             default_behavior: @default_behavior
           }
@@ -98,19 +85,13 @@ module E11y
 
         private
 
-        # Check if event name matches any of the patterns.
-        #
-        # @param event_name [String] Event name
-        # @param patterns [Array<Regexp>] Patterns to match
-        # @return [Boolean] true if event matches any pattern
-        def matches_patterns?(event_name, patterns)
-          patterns.any? { |pattern| pattern.match?(event_name) }
+        def resolve_event_class(event_name)
+          return nil unless event_name
+          return nil unless defined?(E11y::Registry) && E11y::Registry.respond_to?(:find)
+
+          E11y::Registry.find(event_name.to_s)
         end
 
-        # Increment consolidated DLQ filter decision metric.
-        #
-        # @param action [String] "saved" or "discarded"
-        # @param reason [String] always_discard_pattern, always_save_pattern, severity, default
         def increment_filter_metric(action, reason)
           return unless defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:increment)
 

@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+# rubocop:disable RSpec/SpecFilePathFormat -- rspec_matchers matches RSpecMatchers constant
 RSpec.describe E11y::Testing::RSpecMatchers do
   let(:event_class) do
     Class.new(E11y::Event::Base) do
@@ -48,7 +49,10 @@ RSpec.describe E11y::Testing::RSpecMatchers do
 
     it "fails .once when tracked twice" do
       expect do
-        expect { write_event; write_event }.to have_tracked_event(event_class).once
+        expect do
+          write_event
+          write_event
+        end.to have_tracked_event(event_class).once
       end.to raise_error(RSpec::Expectations::ExpectationNotMetError, /exactly 1 times/)
     end
 
@@ -75,3 +79,4 @@ RSpec.describe E11y::Testing::RSpecMatchers do
     end
   end
 end
+# rubocop:enable RSpec/SpecFilePathFormat

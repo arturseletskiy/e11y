@@ -39,6 +39,7 @@ module E11y
     #   test_adapter = E11y::Adapters::InMemory.new(max_events: nil)
     #
     # @see ADR-004 §9.1 (In-Memory Test Adapter)
+    # rubocop:disable Metrics/ClassLength
     class InMemory < Base
       # Default maximum number of events to store
       DEFAULT_MAX_EVENTS = 1000
@@ -230,26 +231,24 @@ module E11y
 
       def event_pattern_for(pattern)
         case pattern
-        when Class
-          pattern
-        when String
-          Regexp.new(Regexp.escape(pattern))
-        when Regexp
-          pattern
-        else
-          raise ArgumentError, "Pattern must be Class, String, or Regexp, got #{pattern.class}"
+        when Class then pattern
+        when String, Regexp then pattern.is_a?(String) ? Regexp.new(Regexp.escape(pattern)) : pattern
+        else raise ArgumentError, "Pattern must be Class, String, or Regexp, got #{pattern.class}"
         end
       end
 
       def event_matches?(event, pattern)
         return event[:event_name].to_s.match?(pattern) if pattern.is_a?(Regexp)
+        return event_matches_class?(event, pattern) if pattern.is_a?(Class)
 
-        return false unless pattern.is_a?(Class)
+        false
+      end
 
-        event[:event_class] == pattern ||
-          event[:event_class]&.name == pattern.name ||
-          event[:event_name].to_s == (pattern.respond_to?(:event_name) ? pattern.event_name : pattern.name) ||
-          event[:event_name].to_s.include?(pattern.name)
+      def event_matches_class?(event, klass)
+        event[:event_class] == klass ||
+          event[:event_class]&.name == klass.name ||
+          event[:event_name].to_s == (klass.respond_to?(:event_name) ? klass.event_name : klass.name) ||
+          event[:event_name].to_s.include?(klass.name)
       end
 
       # Enforce max_events limit by dropping oldest events (FIFO)
@@ -265,5 +264,6 @@ module E11y
         @dropped_count += excess
       end
     end
+    # rubocop:enable Metrics/ClassLength
   end
 end

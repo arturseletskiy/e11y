@@ -14,6 +14,7 @@ loader.inflector.inflect(
   "dlq" => "DLQ",
   "net_http_patch" => "NetHTTPPatch",
   "rspec_matchers" => "RSpecMatchers",
+  "have_tracked_event_matcher" => "HaveTrackedEventMatcher",
   "snapshot_matcher" => "SnapshotMatcher"
 )
 # Don't autoload railtie - it will be required manually when Rails is available

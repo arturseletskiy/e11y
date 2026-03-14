@@ -1501,7 +1501,7 @@ module E11y
           # Re-dispatch event through normal pipeline
           E11y::Pipeline.dispatch(
             entry[:event_data],
-            metadata: entry[:metadata].merge(replayed: true)
+            metadata: entry[:metadata].merge(dlq_replayed: true)
           )
           
           # Delete from DLQ after successful replay
@@ -1665,7 +1665,7 @@ module E11y
           # Re-dispatch
           E11y::Pipeline.dispatch(
             entry[:event_data],
-            metadata: entry[:metadata].merge(replayed: true)
+            metadata: entry[:metadata].merge(dlq_replayed: true)
           )
           
           # Delete from DLQ
@@ -1781,6 +1781,31 @@ module E11y
   end
 end
 ```
+
+### 4.4.1. DLQ Filter: Event DSL (Implemented)
+
+The DLQ filter uses **Event DSL** with a single `use_dlq` flag:
+
+```ruby
+# Audit events (Presets::AuditEvent) have use_dlq true by default
+class Events::UserDeleted < E11y::Events::BaseAuditEvent
+  # use_dlq true from preset — always saved to DLQ
+end
+
+# Explicit opt-in for critical business events
+class Events::PaymentFailed < E11y::Event::Base
+  use_dlq true
+end
+
+# Explicit opt-out for noise
+class Events::DebugTrace < E11y::Event::Base
+  use_dlq false
+end
+
+# Default (nil): severity-based (error/fatal saved) + default_behavior
+```
+
+**Priority order:** 1) `use_dlq false` → 2) `use_dlq true` → 3) severity → 4) default.
 
 ### 4.5. DLQ Configuration
 

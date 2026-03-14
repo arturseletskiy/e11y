@@ -94,7 +94,7 @@ module E11y
     def self.configure_for_console
       E11y.configure do |config|
         config.adapters.clear
-        config.adapters[:stdout] = E11y::Adapters::Stdout.new(colorize: true)
+        config.adapters[:stdout] = E11y::Adapters::Stdout.new(colorize: true, format: :rich)
 
         # Show all severities
         # TODO: Implement severity_threshold config

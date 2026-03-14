@@ -661,32 +661,40 @@ RSpec.describe E11y::Adapters::Base do
         expect(filter.should_save?(event_data, error)).to be(true)
       end
 
-      it "returns true with 1 arg when event matches always_save_patterns" do
-        filter_with_pattern = E11y::Reliability::DLQ::Filter.new(
-          always_save_patterns: [/^payment\./]
-        )
-        expect(filter_with_pattern.should_save?(event_data)).to be(true)
+      it "returns true with 1 arg when event class has use_dlq true" do
+        save_class = Class.new(E11y::Event::Base) do
+          def self.event_name
+            "payment.failed"
+          end
+          use_dlq true
+        end
+        allow(E11y::Registry).to receive(:find).with("payment.failed").and_return(save_class)
+
+        filter_with_save = E11y::Reliability::DLQ::Filter.new(save_severities: [], default_behavior: :discard)
+        expect(filter_with_save.should_save?(event_data)).to be(true)
       end
 
-      it "returns false with 2 args when event matches always_discard_patterns" do
-        filter_with_discard = E11y::Reliability::DLQ::Filter.new(
-          always_discard_patterns: [/^payment\./]
-        )
+      it "returns false with 2 args when event class has use_dlq false" do
+        discard_class = Class.new(E11y::Event::Base) do
+          def self.event_name
+            "payment.failed"
+          end
+          use_dlq false
+        end
+        allow(E11y::Registry).to receive(:find).with("payment.failed").and_return(discard_class)
+
+        filter_with_discard = E11y::Reliability::DLQ::Filter.new
         expect(filter_with_discard.should_save?(event_data, error)).to be(false)
       end
     end
 
     describe "#save_to_dlq_if_needed called with dlq_filter configured" do
-      let(:adapter_with_dlq_filter) do
-        dlq_filter = E11y::Reliability::DLQ::Filter.new(
-          always_save_patterns: [/^payment\./],
-          default_behavior: :save
-        )
+      let(:dlq_filter) { E11y::Reliability::DLQ::Filter.new }
 
-        adapter = test_adapter_class.new
-        adapter.instance_variable_set(:@dlq_filter, dlq_filter)
-        adapter.instance_variable_set(:@dlq_storage, nil)
-        adapter
+      let(:adapter_with_dlq_filter) { test_adapter_class.new }
+
+      before do
+        allow(E11y.config).to receive_messages(dlq_filter: dlq_filter, dlq_storage: nil)
       end
 
       it "does not raise when save_to_dlq_if_needed is called with (event_data, error, reason)" do
@@ -696,7 +704,6 @@ RSpec.describe E11y::Adapters::Base do
       end
 
       it "calls should_save? with 2 args — no ArgumentError" do
-        dlq_filter = adapter_with_dlq_filter.instance_variable_get(:@dlq_filter)
         allow(dlq_filter).to receive(:should_save?).and_call_original
 
         adapter_with_dlq_filter.send(:save_to_dlq_if_needed, event_data, error, :retry_exhausted)
@@ -729,7 +736,7 @@ RSpec.describe E11y::Adapters::Base do
             retry: { max_attempts: 1, base_delay_ms: 1 }
           }
         )
-        adapter.instance_variable_set(:@dlq_filter, dlq_filter)
+        allow(E11y.config).to receive_messages(dlq_filter: dlq_filter, dlq_storage: nil)
 
         E11y.config.error_handling.fail_on_error = false
 
@@ -758,11 +765,10 @@ RSpec.describe E11y::Adapters::Base do
       storage
     end
 
-    let(:adapter) do
-      a = test_adapter_class.new(reliability_enabled: true)
-      a.instance_variable_set(:@dlq_filter, dlq_filter)
-      a.instance_variable_set(:@dlq_storage, dlq_storage)
-      a
+    let(:adapter) { test_adapter_class.new(reliability_enabled: true) }
+
+    before do
+      allow(E11y.config).to receive_messages(dlq_filter: dlq_filter, dlq_storage: dlq_storage)
     end
 
     it "passes the Exception object (not String) as metadata[:error]" do

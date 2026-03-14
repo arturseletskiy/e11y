@@ -4,10 +4,10 @@ RSpec.describe E11y::Testing::SnapshotMatcher do
   let(:snapshot_path) { "spec/snapshots/events/test_event.yml" }
 
   around do |example|
-    File.delete(snapshot_path) if File.exist?(snapshot_path)
+    FileUtils.rm_f(snapshot_path)
     example.run
   ensure
-    File.delete(snapshot_path) if File.exist?(snapshot_path)
+    FileUtils.rm_f(snapshot_path)
   end
 
   it "creates snapshot on first run and matches on subsequent run" do

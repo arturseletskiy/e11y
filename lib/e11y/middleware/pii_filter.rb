@@ -62,6 +62,9 @@ module E11y
       # rubocop:disable Lint/DuplicateBranch
       # Unknown tiers intentionally fallback to no filtering (same as tier1)
       def call(event_data)
+        # F-004/C07: Skip PII filtering for DLQ-replayed events (already filtered; avoid double-hashing)
+        return @app.call(event_data) if event_data[:dlq_replayed]
+
         # Determine filtering tier
         tier = determine_tier(event_data)
 

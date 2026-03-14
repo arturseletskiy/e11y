@@ -520,11 +520,8 @@ RSpec.describe "Reliability Features Integration", :integration do
     end
 
     before do
-      # Wire DLQ components directly into the adapter (same pattern as existing tests)
-      failing_adapter.instance_variable_set(:@dlq_storage, c02_dlq_storage)
-
+      allow(E11y.config).to receive_messages(dlq_filter: nil, dlq_storage: c02_dlq_storage)
       # Disable global fail_on_error so handle_reliability_error saves to DLQ and returns false
-      # instead of re-raising the error (which would prevent test assertions from running).
       allow(E11y.config.error_handling).to receive(:fail_on_error).and_return(false)
     end
 
@@ -536,12 +533,11 @@ RSpec.describe "Reliability Features Integration", :integration do
       # The key regression test: before the fix, passing (event_data, error) to
       # should_save? which only accepted 1 argument raised ArgumentError at the
       # save_to_dlq_if_needed call site in base.rb.
-      # With the fix (error = nil default param), this must not raise.
       filter = E11y::Reliability::DLQ::Filter.new(
         save_severities: %i[error fatal],
         default_behavior: :save
       )
-      failing_adapter.instance_variable_set(:@dlq_filter, filter)
+      allow(E11y.config).to receive_messages(dlq_filter: filter, dlq_storage: c02_dlq_storage)
 
       event_data = {
         event_name: "payment.failed",
@@ -572,8 +568,7 @@ RSpec.describe "Reliability Features Integration", :integration do
         "fake-id"
       }
 
-      failing_adapter.instance_variable_set(:@dlq_filter, filter)
-      failing_adapter.instance_variable_set(:@dlq_storage, stub_storage)
+      allow(E11y.config).to receive_messages(dlq_filter: filter, dlq_storage: stub_storage)
 
       event_data = {
         event_name: "payment.failed",
@@ -603,8 +598,7 @@ RSpec.describe "Reliability Features Integration", :integration do
         "fake-id"
       }
 
-      failing_adapter.instance_variable_set(:@dlq_filter, filter)
-      failing_adapter.instance_variable_set(:@dlq_storage, stub_storage)
+      allow(E11y.config).to receive_messages(dlq_filter: filter, dlq_storage: stub_storage)
 
       event_data = {
         event_name: "user.login",
@@ -620,12 +614,15 @@ RSpec.describe "Reliability Features Integration", :integration do
       expect(stub_storage).not_to have_received(:save)
     end
 
-    it "saves when always_save_patterns match, even with error argument" do
-      filter = E11y::Reliability::DLQ::Filter.new(
-        always_save_patterns: [/^audit\./],
-        save_severities: [],
-        default_behavior: :discard
-      )
+    it "saves when event class has use_dlq true (e.g. audit preset)" do
+      audit_class = Class.new(E11y::Events::BaseAuditEvent) do
+        def self.event_name
+          "audit.login_attempt"
+        end
+      end
+      allow(E11y::Registry).to receive(:find).with("audit.login_attempt").and_return(audit_class)
+
+      filter = E11y::Reliability::DLQ::Filter.new(save_severities: [], default_behavior: :discard)
       stub_storage = instance_double(E11y::Reliability::DLQ::FileStorage)
       saved_entries = []
       allow(stub_storage).to receive(:save) { |ev, metadata: {}| # rubocop:disable Lint/UnusedBlockArgument
@@ -633,8 +630,7 @@ RSpec.describe "Reliability Features Integration", :integration do
         "fake-id"
       }
 
-      failing_adapter.instance_variable_set(:@dlq_filter, filter)
-      failing_adapter.instance_variable_set(:@dlq_storage, stub_storage)
+      allow(E11y.config).to receive_messages(dlq_filter: filter, dlq_storage: stub_storage)
 
       event_data = {
         event_name: "audit.login_attempt",
@@ -643,35 +639,37 @@ RSpec.describe "Reliability Features Integration", :integration do
       }
       error = RuntimeError.new("delivery failed")
 
-      # always_save_patterns should win over empty save_severities and discard default
       failing_adapter.send(:save_to_dlq_if_needed, event_data, error, :retry_exhausted)
 
       expect(saved_entries.count).to eq(1)
       expect(saved_entries.first[:event_name]).to eq("audit.login_attempt")
     end
 
-    it "discards when always_discard_patterns match despite error" do
-      filter = E11y::Reliability::DLQ::Filter.new(
-        always_discard_patterns: [/^debug\./],
-        save_severities: %i[error fatal],
-        default_behavior: :save
-      )
+    it "discards when event class has use_dlq false despite error severity" do
+      discard_class = Class.new(E11y::Event::Base) do
+        def self.event_name
+          "debug.trace"
+        end
+        use_dlq false
+      end
+      allow(E11y::Registry).to receive(:find).with("debug.trace").and_return(discard_class)
+
+      filter = E11y::Reliability::DLQ::Filter.new(save_severities: %i[error fatal], default_behavior: :save)
       stub_storage = instance_double(E11y::Reliability::DLQ::FileStorage)
       allow(stub_storage).to receive(:save).and_return("fake-id")
 
-      failing_adapter.instance_variable_set(:@dlq_filter, filter)
-      failing_adapter.instance_variable_set(:@dlq_storage, stub_storage)
+      allow(E11y.config).to receive_messages(dlq_filter: filter, dlq_storage: stub_storage)
 
       event_data = {
         event_name: "debug.trace",
-        severity: :error, # even :error severity, but always_discard wins
+        severity: :error,
         timestamp: Time.now
       }
       error = RuntimeError.new("delivery failed")
 
       failing_adapter.send(:save_to_dlq_if_needed, event_data, error, :retry_exhausted)
 
-      expect(stub_storage).not_to have_received(:save), "always_discard_patterns should win over severity"
+      expect(stub_storage).not_to have_received(:save), "use_dlq false should win over severity"
     end
   end
 
@@ -911,16 +909,15 @@ RSpec.describe "Reliability Features Integration", :integration do
       }
     end
 
-    before do
-      # Wire a permissive filter so save_to_dlq_if_needed will call storage.save
-      filter = E11y::Reliability::DLQ::Filter.new(
+    let(:permissive_dlq_filter) do
+      E11y::Reliability::DLQ::Filter.new(
         save_severities: %i[error fatal],
         default_behavior: :save
       )
-      adapter.instance_variable_set(:@dlq_filter, filter)
+    end
 
-      # Stub global fail_on_error → false so handle_reliability_error saves to DLQ
-      # and returns false rather than re-raising (which would prevent our assertions).
+    before do
+      allow(E11y.config).to receive_messages(dlq_filter: permissive_dlq_filter, dlq_storage: nil)
       allow(E11y.config.error_handling).to receive(:fail_on_error).and_return(false)
     end
 
@@ -936,7 +933,7 @@ RSpec.describe "Reliability Features Integration", :integration do
         captured_metadata = metadata
         "fake-uuid"
       end
-      adapter.instance_variable_set(:@dlq_storage, stub_storage)
+      allow(E11y.config).to receive_messages(dlq_filter: permissive_dlq_filter, dlq_storage: stub_storage)
 
       adapter.write_with_reliability(event_data)
 
@@ -953,7 +950,7 @@ RSpec.describe "Reliability Features Integration", :integration do
       real_dlq = E11y::Reliability::DLQ::FileStorage.new(
         file_path: File.join(temp_dlq_dir, "dlq.jsonl")
       )
-      adapter.instance_variable_set(:@dlq_storage, real_dlq)
+      allow(E11y.config).to receive_messages(dlq_filter: permissive_dlq_filter, dlq_storage: real_dlq)
 
       adapter.write_with_reliability(event_data)
 
@@ -973,7 +970,7 @@ RSpec.describe "Reliability Features Integration", :integration do
     it "write_with_reliability returns false (does not raise) when fail_on_error: false" do
       stub_storage = double("DLQStorage")
       allow(stub_storage).to receive(:save).and_return("fake-uuid")
-      adapter.instance_variable_set(:@dlq_storage, stub_storage)
+      allow(E11y.config).to receive_messages(dlq_filter: permissive_dlq_filter, dlq_storage: stub_storage)
 
       result = nil
       expect do
@@ -985,14 +982,10 @@ RSpec.describe "Reliability Features Integration", :integration do
     end
 
     it "write_with_reliability raises when global fail_on_error: true" do
-      # Override the stub from the before block: set fail_on_error to true
       allow(E11y.config.error_handling).to receive(:fail_on_error).and_return(true)
-
-      # No DLQ storage needed — we expect a raise before storage is consulted
-      # (handle_reliability_error calls save_to_dlq_if_needed BEFORE the raise check)
       stub_storage = double("DLQStorage")
       allow(stub_storage).to receive(:save).and_return("fake-uuid")
-      adapter.instance_variable_set(:@dlq_storage, stub_storage)
+      allow(E11y.config).to receive_messages(dlq_filter: permissive_dlq_filter, dlq_storage: stub_storage)
 
       expect do
         adapter.write_with_reliability(event_data)

@@ -30,7 +30,7 @@ module E11y
     #
     # @example Critical Event Bypass (C02)
     #   # Payment events bypass rate limiting → DLQ if limited
-    #   config.dlq_filter.always_save_patterns = [/^payment\./]
+    #   config.dlq_filter.should_save?(event_data) # Event DSL: use_dlq
     #
     #   # Result: Rate-limited payment events go to DLQ, not dropped
     #
@@ -141,9 +141,8 @@ module E11y
         dlq_filter = E11y.config.dlq_filter
         return false unless dlq_filter
 
-        # Check if event matches always_save_patterns
-        event_name = event_data[:event_name]
-        dlq_filter.always_save_patterns&.any? { |pattern| pattern.match?(event_name) }
+        # Use DLQ filter (Event DSL: use_dlq, severity, default)
+        dlq_filter.should_save?(event_data)
       end
 
       # Save rate-limited critical event to DLQ (C02 Resolution)

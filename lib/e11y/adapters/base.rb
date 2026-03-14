@@ -479,10 +479,6 @@ module E11y
           adapter_name: self.class.name,
           config: circuit_breaker_config
         )
-
-        # Setup DLQ components (will be initialized from E11y.config later)
-        @dlq_filter = nil
-        @dlq_storage = nil
       end
 
       # Handle reliability error (retry exhausted / circuit breaker open).
@@ -519,18 +515,22 @@ module E11y
       # rubocop:enable Naming/PredicateMethod
 
       # Save event to DLQ if filter allows.
+      # Uses E11y.config.dlq_filter and E11y.config.dlq_storage (F3 — wired from config).
       #
       # @api private
       def save_to_dlq_if_needed(event_data, error, reason)
-        return unless @dlq_filter&.should_save?(event_data, error)
+        dlq_filter = E11y.config.respond_to?(:dlq_filter) ? E11y.config.dlq_filter : nil
+        dlq_storage = E11y.config.respond_to?(:dlq_storage) ? E11y.config.dlq_storage : nil
+        return unless dlq_filter&.should_save?(event_data, error)
+        return unless dlq_storage
 
-        @dlq_storage&.save(event_data, metadata: {
-                             error: error,
-                             error_class: error.class.name,
-                             reason: reason,
-                             adapter: self.class.name,
-                             timestamp: Time.now.utc.iso8601
-                           })
+        dlq_storage.save(event_data, metadata: {
+                           error: error,
+                           error_class: error.class.name,
+                           reason: reason,
+                           adapter: self.class.name,
+                           timestamp: Time.now.utc.iso8601
+                         })
       rescue StandardError => e
         # C18: Don't fail if DLQ save fails
         E11y.logger&.warn("[E11y] Failed to save event to DLQ: #{e.message}")

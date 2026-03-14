@@ -31,8 +31,6 @@ end
 # Testing tools
 group :test do
   gem "climate_control", "~> 1.2" # ENV manipulation for tests
-  gem "factory_bot", "~> 6.2"
-  gem "faker", "~> 3.2"
   gem "memory_profiler", "~> 1.0"
   gem "rspec-benchmark", "~> 0.6"
   gem "timecop", "~> 0.9"

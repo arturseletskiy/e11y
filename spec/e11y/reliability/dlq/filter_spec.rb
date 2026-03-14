@@ -15,10 +15,10 @@ RSpec.describe E11y::Reliability::DLQ::Filter do
       expect(filter.stats[:default_behavior]).to eq(:save)
     end
 
-    it "accepts custom always_save_patterns" do
-      custom_filter = described_class.new(always_save_patterns: [/^payment\./])
+    it "accepts custom save_severities" do
+      custom_filter = described_class.new(save_severities: [:error])
 
-      expect(custom_filter.stats[:always_save_patterns]).to include("/^payment\\./")
+      expect(custom_filter.stats[:save_severities]).to eq([:error])
     end
   end
 
@@ -31,59 +31,55 @@ RSpec.describe E11y::Reliability::DLQ::Filter do
       }
     end
 
-    context "with always_discard_patterns (highest priority)" do
-      let(:filter) do
-        described_class.new(
-          always_discard_patterns: [/^debug\./, /^test\./],
-          always_save_patterns: [/^test\./], # Lower priority
-          save_severities: [:error] # Lower priority
-        )
+    context "with Event DSL use_dlq false (highest priority)" do
+      before do
+        discard_class = Class.new(E11y::Event::Base) do
+          def self.event_name
+            "debug.verbose"
+          end
+          use_dlq false
+        end
+        allow(E11y::Registry).to receive(:find).with("debug.verbose").and_return(discard_class)
+        allow(E11y::Registry).to receive(:find).with("payment.failed").and_return(nil)
       end
 
-      it "discards matching events even if other rules say save" do
+      it "discards when event class has use_dlq false" do
         event = event_data.merge(event_name: "debug.verbose", severity: :error)
 
         expect(filter.should_save?(event)).to be false
       end
 
-      it "discards test events" do
-        event = event_data.merge(event_name: "test.event")
-
-        expect(filter.should_save?(event)).to be false
-      end
-
-      it "allows non-matching events to proceed to next rule" do
+      it "allows unregistered events to proceed to severity rule" do
         event = event_data.merge(event_name: "payment.failed", severity: :error)
 
         expect(filter.should_save?(event)).to be true
       end
     end
 
-    context "with always_save_patterns (priority 2)" do
-      let(:filter) do
-        described_class.new(
-          always_save_patterns: [/^payment\./, /^audit\./],
-          save_severities: [], # Don't save by severity
-          default_behavior: :discard # Don't save by default
-        )
+    context "with Event DSL use_dlq true (priority 2)" do
+      before do
+        save_class = Class.new(E11y::Event::Base) do
+          def self.event_name
+            "payment.processed"
+          end
+          use_dlq true
+        end
+        allow(E11y::Registry).to receive(:find).with("payment.processed").and_return(save_class)
+        allow(E11y::Registry).to receive(:find).with("user.login").and_return(nil)
       end
 
-      it "saves payment events" do
-        event = event_data.merge(event_name: "payment.processed")
+      it "saves when event class has use_dlq true" do
+        filter_discard = described_class.new(save_severities: [], default_behavior: :discard)
+        event = event_data.merge(event_name: "payment.processed", severity: :info)
 
-        expect(filter.should_save?(event)).to be true
+        expect(filter_discard.should_save?(event)).to be true
       end
 
-      it "saves audit events" do
-        event = event_data.merge(event_name: "audit.log.created")
-
-        expect(filter.should_save?(event)).to be true
-      end
-
-      it "discards non-matching events (fallback to default)" do
+      it "falls back to default for unregistered events" do
+        filter_discard = described_class.new(save_severities: [], default_behavior: :discard)
         event = event_data.merge(event_name: "user.login")
 
-        expect(filter.should_save?(event)).to be false
+        expect(filter_discard.should_save?(event)).to be false
       end
     end
 
@@ -94,6 +90,8 @@ RSpec.describe E11y::Reliability::DLQ::Filter do
           default_behavior: :discard
         )
       end
+
+      before { allow(E11y::Registry).to receive(:find).and_return(nil) }
 
       it "saves error events" do
         event = event_data.merge(severity: :error)
@@ -115,13 +113,16 @@ RSpec.describe E11y::Reliability::DLQ::Filter do
     end
 
     it "accepts optional error argument (prevents BUG-001 crash)" do
+      allow(E11y::Registry).to receive(:find).and_return(nil)
       error = StandardError.new("Adapter failed")
-      # Should not raise ArgumentError — base.rb calls with 2 args
+
       expect { filter.should_save?(event_data, error) }.not_to raise_error
       expect(filter.should_save?(event_data, error)).to be true
     end
 
     context "with default_behavior (lowest priority)" do
+      before { allow(E11y::Registry).to receive(:find).and_return(nil) }
+
       it "saves by default when :save" do
         filter_save = described_class.new(default_behavior: :save)
         event = event_data.merge(event_name: "random.event", severity: :info)
@@ -142,31 +143,40 @@ RSpec.describe E11y::Reliability::DLQ::Filter do
   end
 
   describe "priority order" do
-    let(:complex_filter) do
-      described_class.new(
-        always_discard_patterns: [/^debug\./],
-        always_save_patterns: [/^payment\./],
-        save_severities: [:error],
-        default_behavior: :discard
-      )
+    let(:complex_filter) { described_class.new(save_severities: [:error], default_behavior: :discard) }
+
+    before do
+      discard_class = Class.new(E11y::Event::Base) do
+        def self.event_name
+          "debug.payment.test"
+        end
+        use_dlq false
+      end
+      save_class = Class.new(E11y::Event::Base) do
+        def self.event_name
+          "payment.success"
+        end
+        use_dlq true
+      end
+      allow(E11y::Registry).to receive(:find).with("debug.payment.test").and_return(discard_class)
+      allow(E11y::Registry).to receive(:find).with("payment.success").and_return(save_class)
+      allow(E11y::Registry).to receive(:find).with("user.action").and_return(nil)
+      allow(E11y::Registry).to receive(:find).with("random.event").and_return(nil)
     end
 
-    it "prioritizes always_discard over always_save" do
-      # This should be discarded despite matching always_save pattern
+    it "prioritizes use_dlq false over severity" do
       event = { event_name: "debug.payment.test", severity: :error }
 
       expect(complex_filter.should_save?(event)).to be false
     end
 
-    it "prioritizes always_save over severity" do
-      # This should be saved despite not being :error severity
+    it "prioritizes use_dlq true over severity" do
       event = { event_name: "payment.success", severity: :info }
 
       expect(complex_filter.should_save?(event)).to be true
     end
 
     it "prioritizes severity over default" do
-      # This should be saved despite default_behavior: :discard
       event = { event_name: "user.action", severity: :error }
 
       expect(complex_filter.should_save?(event)).to be true
@@ -182,19 +192,13 @@ RSpec.describe E11y::Reliability::DLQ::Filter do
   describe "#stats" do
     let(:filter) do
       described_class.new(
-        always_save_patterns: [/^payment\./],
-        always_discard_patterns: [/^debug\./],
         save_severities: %i[error fatal],
         default_behavior: :save
       )
     end
 
     it "returns filter configuration" do
-      stats = filter.stats
-
-      expect(stats).to include(
-        always_save_patterns: ["/^payment\\./"],
-        always_discard_patterns: ["/^debug\\./"],
+      expect(filter.stats).to include(
         save_severities: %i[error fatal],
         default_behavior: :save
       )
@@ -214,28 +218,44 @@ RSpec.describe E11y::Reliability::DLQ::Filter do
       allow(E11y::Metrics).to receive(:increment)
     end
 
-    it "increments e11y_dlq_filter_decisions_total with action discarded and reason always_discard_pattern" do
-      filter = described_class.new(always_discard_patterns: [/^test\./])
+    it "increments e11y_dlq_filter_decisions_total with action discarded and reason use_dlq" do
+      discard_class = Class.new(E11y::Event::Base) do
+        def self.event_name
+          "test.event"
+        end
+        use_dlq false
+      end
+      allow(E11y::Registry).to receive(:find).with("test.event").and_return(discard_class)
+
       filter.should_save?(event_data)
 
       expect(E11y::Metrics).to have_received(:increment).with(
         :e11y_dlq_filter_decisions_total,
-        { action: "discarded", reason: "always_discard_pattern" }
+        { action: "discarded", reason: "use_dlq" }
       )
     end
 
-    it "increments e11y_dlq_filter_decisions_total with action saved and reason always_save_pattern" do
-      filter = described_class.new(always_save_patterns: [/^payment\./], save_severities: [], default_behavior: :discard)
-      filter.should_save?(event_data.merge(event_name: "payment.processed"))
+    it "increments e11y_dlq_filter_decisions_total with action saved and reason use_dlq" do
+      save_class = Class.new(E11y::Event::Base) do
+        def self.event_name
+          "payment.processed"
+        end
+        use_dlq true
+      end
+      allow(E11y::Registry).to receive(:find).with("payment.processed").and_return(save_class)
+
+      filter_discard = described_class.new(save_severities: [], default_behavior: :discard)
+      filter_discard.should_save?(event_data.merge(event_name: "payment.processed"))
 
       expect(E11y::Metrics).to have_received(:increment).with(
         :e11y_dlq_filter_decisions_total,
-        { action: "saved", reason: "always_save_pattern" }
+        { action: "saved", reason: "use_dlq" }
       )
     end
 
     it "increments e11y_dlq_filter_decisions_total with action saved and reason severity" do
-      filter = described_class.new(save_severities: %i[error fatal], default_behavior: :discard)
+      allow(E11y::Registry).to receive(:find).and_return(nil)
+
       filter.should_save?(event_data.merge(severity: :error))
 
       expect(E11y::Metrics).to have_received(:increment).with(
@@ -245,7 +265,8 @@ RSpec.describe E11y::Reliability::DLQ::Filter do
     end
 
     it "increments e11y_dlq_filter_decisions_total with action saved and reason default" do
-      filter = described_class.new(default_behavior: :save)
+      allow(E11y::Registry).to receive(:find).and_return(nil)
+
       filter.should_save?(event_data.merge(event_name: "random.event"))
 
       expect(E11y::Metrics).to have_received(:increment).with(
@@ -255,8 +276,10 @@ RSpec.describe E11y::Reliability::DLQ::Filter do
     end
 
     it "increments e11y_dlq_filter_decisions_total with action discarded and reason default" do
-      filter = described_class.new(save_severities: [], default_behavior: :discard)
-      filter.should_save?(event_data.merge(event_name: "random.event"))
+      allow(E11y::Registry).to receive(:find).and_return(nil)
+
+      filter_discard = described_class.new(save_severities: [], default_behavior: :discard)
+      filter_discard.should_save?(event_data.merge(event_name: "random.event"))
 
       expect(E11y::Metrics).to have_received(:increment).with(
         :e11y_dlq_filter_decisions_total,
@@ -265,7 +288,13 @@ RSpec.describe E11y::Reliability::DLQ::Filter do
     end
 
     it "does not call E11y::Metrics.increment when Metrics does not respond to increment" do
-      filter = described_class.new(always_discard_patterns: [/^test\./])
+      discard_class = Class.new(E11y::Event::Base) do
+        def self.event_name
+          "test.event"
+        end
+        use_dlq false
+      end
+      allow(E11y::Registry).to receive(:find).with("test.event").and_return(discard_class)
       allow(E11y::Metrics).to receive(:respond_to?).with(:increment).and_return(false)
 
       expect(filter.should_save?(event_data)).to be false
@@ -274,74 +303,47 @@ RSpec.describe E11y::Reliability::DLQ::Filter do
   end
 
   describe "real-world scenarios" do
-    context "with production configuration" do
-      let(:prod_filter) do
-        described_class.new(
-          always_save_patterns: [
-            /^payment\./,
-            /^audit\./,
-            /^order\.failed/,
-            /^security\./
-          ],
-          always_discard_patterns: [
-            /^debug\./,
-            /^test\./,
-            /\.heartbeat$/
-          ],
-          save_severities: %i[error fatal],
-          default_behavior: :save
-        )
+    context "with audit events (preset has use_dlq true)" do
+      let(:audit_event_class) do
+        Class.new(E11y::Events::BaseAuditEvent) do
+          def self.event_name
+            "audit.user.deleted"
+          end
+        end
       end
 
-      it "saves critical business events" do
-        expect(prod_filter.should_save?(
-                 event_name: "payment.failed", severity: :error
-               )).to be true
-
-        expect(prod_filter.should_save?(
-                 event_name: "audit.user.deleted", severity: :info
-               )).to be true
-
-        expect(prod_filter.should_save?(
-                 event_name: "order.failed", severity: :warn
-               )).to be true
+      before do
+        allow(E11y::Registry).to receive(:find).with("audit.user.deleted").and_return(audit_event_class)
+        allow(E11y::Registry).to receive(:find).with("user.login").and_return(nil)
+        allow(E11y::Registry).to receive(:find).with("unknown.error").and_return(nil)
       end
 
-      it "discards noise" do
-        expect(prod_filter.should_save?(
-                 event_name: "debug.sql.query", severity: :debug
-               )).to be false
+      it "saves audit events via preset" do
+        event = { event_name: "audit.user.deleted", severity: :info }
 
-        expect(prod_filter.should_save?(
-                 event_name: "service.heartbeat", severity: :info
-               )).to be false
+        expect(filter.should_save?(event)).to be true
       end
 
-      it "saves errors by default" do
-        expect(prod_filter.should_save?(
-                 event_name: "unknown.error", severity: :error
-               )).to be true
+      it "saves errors by severity for unregistered events" do
+        event = { event_name: "unknown.error", severity: :error }
+
+        expect(filter.should_save?(event)).to be true
       end
     end
 
     context "with development configuration" do
       let(:dev_filter) do
         described_class.new(
-          always_save_patterns: [],
-          always_discard_patterns: [],
           save_severities: %i[error fatal],
           default_behavior: :discard
         )
       end
 
-      it "only saves errors in development" do
-        expect(dev_filter.should_save?(
-                 event_name: "user.login", severity: :info
-               )).to be false
+      before { allow(E11y::Registry).to receive(:find).and_return(nil) }
 
-        expect(dev_filter.should_save?(
-                 event_name: "api.timeout", severity: :error
-               )).to be true
+      it "only saves errors in development" do
+        expect(dev_filter.should_save?(event_name: "user.login", severity: :info)).to be false
+        expect(dev_filter.should_save?(event_name: "api.timeout", severity: :error)).to be true
       end
     end
   end

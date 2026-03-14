@@ -19,14 +19,6 @@
 
 ## 1. Critical Findings
 
-
-
-### ADR-013: Reliability & Error Handling
-
-| ID | Description |
-|----|-------------|
-| F3 | **Adapter DLQ not wired:** `@dlq_filter` and `@dlq_storage` in Base adapter remain `nil` — never initialized from `E11y.config`. As a result `save_to_dlq_if_needed` always returns early, DLQ does not work. |
-
 ---
 
 ## 2. High Findings
@@ -42,7 +34,6 @@
 | ID | Description |
 |----|-------------|
 | F-003 | **BaggageProtection middleware missing (§5.5, C08):** Middleware to block PII in OpenTelemetry Baggage not implemented. |
-| F-004 | **No PII skip for DLQ replayed events (§5.6, C07):** PIIFilter does not check `metadata[:replayed]`; replay does not set `:replayed`. Double-hashing on replay. |
 
 ### ADR-007: OpenTelemetry Integration
 
@@ -62,14 +53,6 @@
 | F-007 | **Event Explorer, Timeline, Inspector, Trace Viewer** not implemented. |
 | F-011 | **PipelineInspector not implemented:** ADR §6.1 — E11y::Debug::PipelineInspector.trace_event. No Debug module. |
 
-### ADR-011: Testing Strategy
-
-| ID | Description |
-|----|-------------|
-| F-002 | **RSpec matchers not implemented:** `have_tracked_event`, `track_event`, etc. No `lib/e11y/testing/rspec_matchers.rb`. |
-| F-004 | **No spec/support/e11y.rb, no E11y.test_adapter.** Test setup scattered across spec_helper and dummy config. |
-| F-006 | **Snapshot testing not implemented:** `match_snapshot`, `spec/snapshots/` missing. |
-
 ### ADR-014: Event-Driven SLO
 
 | ID | Description |
@@ -82,16 +65,11 @@
 | ID | Description |
 |----|-------------|
 | F1 | **e11y_events_tracked_total not implemented:** UCs and ADR reference it; SLO reliability depends on success/total. |
-| F2 | **e11y_dlq_size not implemented:** UC-021, ADR-013, Grafana dashboard reference it. Gauge not registered. |
 | F3 | **SLO targets not implemented:** ADR §4 — config/e11y_slo.yml, SLOCalculator, latency/reliability/resource SLO. Missing. |
 
 ---
 
 ## 3. Medium Findings
-
-### ADR-001: Architecture (Medium)
-
-
 
 ### ADR-005: Tracing Context
 
@@ -125,10 +103,7 @@
 | ID | Description |
 |----|-------------|
 | 1 | No `instruments` namespace; flat config (`rails_instrumentation`, `sidekiq`, `active_job`, `logger_bridge`). |
-| 2 | ~~Sidekiq middleware does not emit Events::Rails::Job::*~~ **RESOLVED:** Sidekiq emits Enqueued/Started/Completed/Failed for raw jobs; ActiveJob-wrapped skipped (ASN). |
-| 3 | ~~ActiveJob callbacks do not emit Events::Rails::Job::*~~ **By design:** Events come via RailsInstrumentation (ASN); callbacks handle trace/buffer/SLO. ADR updated. |
 | 4 | Trace propagation: C17 hybrid (`e11y_parent_trace_id`) vs ADR same-trace (`e11y_trace_id`). |
-| 5 | ~~Single buffer~~ **By design:** One EphemeralBuffer for HTTP and jobs. `config.ephemeral_buffer.job_buffer_limit` for jobs. ADR updated. |
 | 6 | Logger Bridge: no dual_logging config; dual logging always on. |
 | 7 | Logger Bridge: no track_severities, ignore_patterns, sample_rate, enrich_with_context. |
 | 8 | 3-phase migration not configurable; cannot disable mirroring. |
@@ -147,17 +122,9 @@
 | ID | Description |
 |----|-------------|
 | F-002 | 5-min setup claim not achievable: no single config block. |
-| F-003 | Console vs Stdout naming: ADR — Console, code — Stdout. |
-| F-004 | Console output format: ADR §3 — rich format; Stdout — JSON.pretty_generate only. |
 | F-012 | No pipeline trace debugging. |
 | F-013 | Rake tasks missing: e11y:list, e11y:validate, e11y:docs:generate, e11y:stats. |
 | F-014 | Documentation generator not implemented. |
-
-### ADR-011: Testing Strategy
-
-| ID | Description |
-|----|-------------|
-| F-005 | No FactoryBot event factories. |
 
 ### ADR-012: Event Evolution
 
@@ -165,14 +132,13 @@
 |----|-------------|
 | F-* | UC-020 uses event_version vs ADR v:; UC-020 shows OrderPaidV1 vs ADR no-suffix for V1. |
 | F-* | Event Registry: no VersionExtractor, all_versions, version_usage, versioned_events; different register API. |
-| F-* | DLQ/C15: no skip_validation config; replay does not set metadata[:replayed]. |
+| F-* | DLQ/C15: no skip_validation config; replay does not set metadata[:dlq_replayed]. |
 
 ### ADR-013: Reliability
 
 | ID | Description |
 |----|-------------|
 | F1 | UC-021 says Circuit Breaker "in UC-011" — UC-011 does not mention Circuit Breaker. |
-| F2 | DLQ::Filter does not export always_save_patterns; rate limiter expects this method. |
 
 ### ADR-014: Event-Driven SLO
 
@@ -190,7 +156,6 @@
 | F4 | **BufferMonitor not wired** — API exists, ring/adaptive buffers do not call it. |
 | F5 | **PerformanceMonitor partial** — only track_adapter_latency; ADR §3.1 requires track_latency, track_middleware_latency, track_flush_latency. |
 | F6 | **ResourceMonitor not implemented** — ADR §3.3: memory, GC, CPU metrics missing. |
-| F7 | ~~HealthCheck~~ **ADR updated:** E11y.health and E11y.healthy? instead of HealthCheck class; no endpoint (gem runs in process). |
 | F8 | **Metric name mismatch** — BufferMonitor uses `e11y_buffer_overflows_total`; Yabeda — `e11y_buffer_overflow_total`. BufferMonitor not wired. |
 
 ---
@@ -234,39 +199,3 @@
 
 **Status:** Mostly implemented. Event::Base — hash-based, class methods only. Ring buffer, Adaptive buffer — aligned. Backpressure: drop_oldest, drop_newest, block.
 
----
-
-## 5. Priority Recommendations
-
-### Critical
-
-1. **ADR-013 F3:** Wire `@dlq_filter` and `@dlq_storage` from `E11y.config` in Base adapter.
-2. **ADR-001/015:** Align and fix middleware order (Versioning last, RateLimit before Sampling).
-
-### High Priority
-
-1. **ADR-006:** BaggageProtection middleware (C08); PII skip for DLQ replayed (C07).
-2. **ADR-016:** e11y_events_tracked_total, e11y_dlq_size, SLO targets.
-3. **ADR-010:** Dev vs prod config, DevLog adapter, Web UI (or reconsider scope in ADR).
-4. **ADR-011:** RSpec matchers, spec/support/e11y.rb, snapshot testing.
-5. **ADR-007:** OpenTelemetryCollector adapter, span creation, trace context integration.
-
-### Medium Priority
-
-1. **ADR-002:** Layer 2 (Safe Allowlist) or update ADR.
-2. **ADR-005:** sampled, baggage, trace-consistent sampling.
-3. **ADR-008:** Logger Bridge config, job buffer config, 3-phase migration.
-4. **ADR-009:** Stratified sampling integration, OTLP cardinality, Loki default.
-5. **ADR-010:** Registry API, Console helpers, Rake tasks.
-6. **ADR-014:** slo.yml custom_slos, SLO linters.
-
----
-
-## 6. Note
-
-**Verbal agreements:** Some discrepancies may be the result of verbally agreed decisions. Clarify with the team before making changes.
-
----
-
-**Status:** Complete  
-**Source reports (consolidated):** ADR-001, 002, 003, 004, 005, 006, 007, 008, 009, 010, 011, 012, 013, 014, 016, 017, 018

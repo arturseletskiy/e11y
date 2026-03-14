@@ -341,6 +341,7 @@ module E11y
           { name: :e11y_adapter_send_duration_seconds, type: :histogram, tags: [:adapter], buckets: [0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0] },
           { name: :e11y_adapter_writes_total, tags: %i[adapter status error_class] },
           # DLQ
+          { name: :e11y_dlq_size, type: :gauge, tags: [] },
           { name: :e11y_dlq_filter_decisions_total, tags: %i[action reason] },
           { name: :e11y_dlq_saved_total, tags: [:event_name] },
           { name: :e11y_dlq_parse_error_total, tags: [:error] },

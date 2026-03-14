@@ -773,6 +773,32 @@ module E11y
           @audit_event == true
         end
 
+        # === DLQ Filter DSL (ADR-013, UC-021) ===
+
+        # Declare whether this event should be saved to DLQ on failure.
+        #
+        # @param value [Boolean, nil] true = save, false = discard, nil = use severity + default
+        # @example
+        #   class Events::PaymentFailed < E11y::Event::Base
+        #     use_dlq true
+        #   end
+        #
+        #   class Events::DebugTrace < E11y::Event::Base
+        #     use_dlq false
+        #   end
+        def use_dlq(value = nil)
+          if value.nil?
+            return superclass.use_dlq if !instance_variable_defined?(:@use_dlq) && superclass.respond_to?(:use_dlq)
+            @use_dlq
+          else
+            @use_dlq = value
+          end
+        end
+
+        def use_dlq?
+          use_dlq == true
+        end
+
         # Configure cryptographic signing for audit event
         #
         # By default, all audit events are signed with HMAC-SHA256.

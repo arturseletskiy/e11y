@@ -27,15 +27,12 @@ module E11y
         @normalized = normalize_event(actual)
         @snapshot_path = File.join(SNAPSHOTS_DIR, "#{@snapshot_name}.yml")
 
-        if update_snapshots?
+        if update_snapshots? || !File.exist?(@snapshot_path)
           write_snapshot(@normalized)
           true
-        elsif File.exist?(@snapshot_path)
+        else
           @expected = YAML.load_file(@snapshot_path)
           @normalized == @expected
-        else
-          write_snapshot(@normalized)
-          true
         end
       end
 
@@ -77,7 +74,7 @@ module E11y
       end
 
       def update_snapshots?
-        ENV["UPDATE_SNAPSHOTS"] == "1" || ENV["UPDATE_SNAPSHOTS"] == "true"
+        %w[1 true].include?(ENV.fetch("UPDATE_SNAPSHOTS", nil))
       end
 
       def write_snapshot(data)
