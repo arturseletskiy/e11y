@@ -40,7 +40,7 @@ RSpec.describe E11y::Adapters::Yabeda, :integration do
           status: "pending"
         }
 
-        initial_value = Yabeda.e11y.orders_total_yabeda_spec.get(currency: "USD", status: "pending")
+        initial_value = Yabeda.e11y.orders_total_yabeda_spec.get(currency: "USD", status: "pending") || 0
         adapter.write(event)
         new_value = Yabeda.e11y.orders_total_yabeda_spec.get(currency: "USD", status: "pending")
         expect(new_value).to eq(initial_value + 1)

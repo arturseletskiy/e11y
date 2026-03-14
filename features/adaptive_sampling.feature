@@ -66,9 +66,8 @@ Feature: Adaptive Sampling
     Then the memory adapter should contain exactly 20 "Events::OrderForSpike" events
 
   # -----------------------------------------------------------------------
-  # Scenario 8 (@wip): Same trace_id gets consistent sampling decision
-  # Bug: cleanup_trace_decisions randomly evicts 50% of cache keys,
-  # potentially evicting an active trace and breaking consistency.
+  # Scenario 8: Same trace_id gets consistent sampling decision (LRU eviction
+  # preserves active traces; only stale entries are evicted)
   # -----------------------------------------------------------------------
   Scenario: Events from the same trace_id receive consistent sampling decisions
     Given the Sampling middleware is reconfigured with trace_aware true and default_sample_rate 0.5

@@ -472,7 +472,7 @@ module E11y
       @flush_on_error    = true   # Flush buffer on 5xx server errors (default: true)
       @flush_on_statuses = []     # Additional HTTP statuses that trigger a flush (e.g. [403])
       @debug_adapters    = nil    # nil → use fallback_adapters
-      @job_buffer_limit = nil    # nil → use EphemeralBuffer::DEFAULT_BUFFER_LIMIT (jobs only)
+      @job_buffer_limit = nil # nil → use EphemeralBuffer::DEFAULT_BUFFER_LIMIT (jobs only)
     end
   end
 

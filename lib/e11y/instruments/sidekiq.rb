@@ -23,6 +23,60 @@ module E11y
     #
     # @see ADR-008 §9 (Sidekiq Integration)
     module Sidekiq
+      # Shared helper: detect raw Sidekiq jobs (not ActiveJob-wrapped)
+      module RawSidekiqJob
+        def raw_sidekiq_job?(job)
+          job_class = job["class"].to_s
+          return false if job_class.include?("ActiveJob::QueueAdapters::SidekiqAdapter")
+          return false if job["wrapped"].present?
+
+          true
+        end
+      end
+
+      # Emits job lifecycle events (Started, Completed, Failed) for ServerMiddleware
+      module JobEventEmitter
+        def emit_job_started(job, queue)
+          Events::Rails::Job::Started.track(
+            event_name: "sidekiq.perform_start",
+            duration: 0,
+            job_class: job["class"],
+            job_id: job["jid"],
+            queue: queue
+          )
+        rescue StandardError => e
+          warn "[E11y] Failed to emit job Started: #{e.message}"
+        end
+
+        def emit_job_completed(job, queue, start_time)
+          duration_ms = ((Time.now - start_time) * 1000).round(2)
+          Events::Rails::Job::Completed.track(
+            event_name: "sidekiq.perform",
+            duration: duration_ms,
+            job_class: job["class"],
+            job_id: job["jid"],
+            queue: queue
+          )
+        rescue StandardError => e
+          warn "[E11y] Failed to emit job Completed: #{e.message}"
+        end
+
+        def emit_job_failed(job, queue, start_time, error)
+          duration_ms = ((Time.now - start_time) * 1000).round(2)
+          Events::Rails::Job::Failed.track(
+            event_name: "sidekiq.perform",
+            duration: duration_ms,
+            job_class: job["class"],
+            job_id: job["jid"],
+            queue: queue,
+            error_class: error.class.name,
+            error_message: error.message
+          )
+        rescue StandardError => e
+          warn "[E11y] Failed to emit job Failed: #{e.message}"
+        end
+      end
+
       # Client-side middleware: Inject trace context when enqueueing job
       #
       # **C17 Hybrid Tracing**: Propagates parent_trace_id to job metadata.
@@ -31,6 +85,8 @@ module E11y
       # **Job lifecycle events**: Emits Events::Rails::Job::Enqueued for raw Sidekiq jobs only.
       # ActiveJob jobs are handled by RailsInstrumentation (ASN).
       class ClientMiddleware
+        include RawSidekiqJob
+
         def call(worker_class, job, queue, _redis_pool)
           # Inject current trace context into job metadata as parent trace
           # Job will generate NEW trace_id but keep parent link (C17)
@@ -44,14 +100,6 @@ module E11y
         end
 
         private
-
-        def raw_sidekiq_job?(job)
-          job_class = job["class"].to_s
-          return false if job_class.include?("ActiveJob::QueueAdapters::SidekiqAdapter")
-          return false if job["wrapped"].present?
-
-          true
-        end
 
         def emit_job_enqueued(worker_class, job, queue)
           Events::Rails::Job::Enqueued.track(
@@ -74,45 +122,46 @@ module E11y
       # **Job lifecycle events**: Emits Events::Rails::Job::Started/Completed/Failed for raw Sidekiq jobs only.
       # ActiveJob jobs (when Sidekiq is the queue adapter) are handled by RailsInstrumentation (ASN).
       class ServerMiddleware
-        def call(worker, job, queue)
-          # C18: Disable fail_on_error for jobs (observability should not block business logic)
-          original_fail_on_error = E11y.config.error_handling.fail_on_error
-          E11y.config.error_handling.fail_on_error = false
+        include RawSidekiqJob
+        include JobEventEmitter
+
+        def call(_worker, job, queue)
+          original_fail_on_error = disable_fail_on_error
+          start_time = Time.now
+          job_status = :success
 
           setup_job_context(job)
           setup_job_buffer
 
-          # Track job start time for SLO
-          start_time = Time.now
-          job_status = :success
-
-          # Emit Started for raw Sidekiq jobs only (ActiveJob jobs emit via ASN)
           emit_job_started(job, queue) if raw_sidekiq_job?(job)
-
-          # Execute job (business logic)
           yield
         rescue StandardError => e
           job_status = :failed
-          # Emit Failed for raw Sidekiq jobs
-          emit_job_failed(job, queue, start_time, e) if raw_sidekiq_job?(job)
-          # Check if this is E11y error (circuit breaker, retry exhausted, etc.)
-          handle_job_error(e)
-
-          raise # Always re-raise original exception
+          on_job_exception(job, queue, start_time, e)
+          raise
         ensure
-          # Emit Completed for raw Sidekiq jobs (only on success; Failed already emitted in rescue)
-          emit_job_completed(job, queue, start_time) if raw_sidekiq_job?(job) && job_status == :success
-
-          # Track SLO metrics
-          track_job_slo(job, queue, job_status, start_time)
-
-          cleanup_job_context
-
-          # Restore original setting
-          E11y.config.error_handling.fail_on_error = original_fail_on_error
+          finalize_job(job, queue, start_time, job_status, original_fail_on_error)
         end
 
         private
+
+        def disable_fail_on_error
+          original = E11y.config.error_handling.fail_on_error
+          E11y.config.error_handling.fail_on_error = false
+          original
+        end
+
+        def on_job_exception(job, queue, start_time, error)
+          emit_job_failed(job, queue, start_time, error) if raw_sidekiq_job?(job)
+          handle_job_error(error)
+        end
+
+        def finalize_job(job, queue, start_time, job_status, original_fail_on_error)
+          emit_job_completed(job, queue, start_time) if raw_sidekiq_job?(job) && job_status == :success
+          track_job_slo(job, queue, job_status, start_time)
+          cleanup_job_context
+          E11y.config.error_handling.fail_on_error = original_fail_on_error
+        end
 
         # Setup job-scoped context (C17 Hybrid Tracing)
         def setup_job_context(job)
@@ -207,60 +256,6 @@ module E11y
         rescue StandardError => e
           # C18: Don't fail if SLO tracking fails
           warn "[E11y] SLO tracking error: #{e.message}"
-        end
-
-        # True if this is a raw Sidekiq job (not ActiveJob-wrapped).
-        # ActiveJob jobs use Sidekiq via JobWrapper; we skip event emission for them
-        # because RailsInstrumentation (ASN) handles ActiveJob events.
-        #
-        # @param job [Hash] Sidekiq job hash
-        # @return [Boolean]
-        def raw_sidekiq_job?(job)
-          job_class = job["class"].to_s
-          return false if job_class.include?("ActiveJob::QueueAdapters::SidekiqAdapter")
-          return false if job["wrapped"].present?
-
-          true
-        end
-
-        def emit_job_started(job, queue)
-          Events::Rails::Job::Started.track(
-            event_name: "sidekiq.perform_start",
-            duration: 0,
-            job_class: job["class"],
-            job_id: job["jid"],
-            queue: queue
-          )
-        rescue StandardError => e
-          warn "[E11y] Failed to emit job Started: #{e.message}"
-        end
-
-        def emit_job_completed(job, queue, start_time)
-          duration_ms = ((Time.now - start_time) * 1000).round(2)
-          Events::Rails::Job::Completed.track(
-            event_name: "sidekiq.perform",
-            duration: duration_ms,
-            job_class: job["class"],
-            job_id: job["jid"],
-            queue: queue
-          )
-        rescue StandardError => e
-          warn "[E11y] Failed to emit job Completed: #{e.message}"
-        end
-
-        def emit_job_failed(job, queue, start_time, error)
-          duration_ms = ((Time.now - start_time) * 1000).round(2)
-          Events::Rails::Job::Failed.track(
-            event_name: "sidekiq.perform",
-            duration: duration_ms,
-            job_class: job["class"],
-            job_id: job["jid"],
-            queue: queue,
-            error_class: error.class.name,
-            error_message: error.message
-          )
-        rescue StandardError => e
-          warn "[E11y] Failed to emit job Failed: #{e.message}"
         end
       end
     end

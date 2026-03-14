@@ -267,15 +267,21 @@ module E11y
       # @return [Boolean] true if trace should be sampled
       def trace_sampling_decision(trace_id, event_class, event_data = nil)
         @trace_decisions_mutex.synchronize do
+          # Use monotonic clock (Float) to avoid Time object allocation — prevents memory leak in hot path
+          now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
           # Check if decision already made for this trace
-          return @trace_decisions[trace_id] if @trace_decisions.key?(trace_id)
+          if (entry = @trace_decisions[trace_id])
+            entry[:last_access] = now # LRU touch
+            return entry[:decision]
+          end
 
           # Make new sampling decision
           sample_rate = determine_sample_rate(event_class, event_data)
           decision = rand < sample_rate
 
-          # Cache decision (TTL handled by periodic cleanup)
-          @trace_decisions[trace_id] = decision
+          # Cache decision with LRU metadata (evict oldest on cleanup)
+          @trace_decisions[trace_id] = { decision: decision, last_access: now }
 
           # Cleanup old decisions periodically (every 1000 traces)
           cleanup_trace_decisions if @trace_decisions.size > 1000
@@ -286,13 +292,15 @@ module E11y
 
       # Cleanup old trace decisions to prevent memory leaks
       #
-      # Removes random 50% of cached decisions when cache grows too large.
-      # This is a simple heuristic - traces typically complete in <10 seconds,
-      # so old decisions are likely stale.
+      # Evicts oldest 50% by last_access (LRU). Active traces stay in cache
+      # because they are touched on each lookup, preserving trace-level consistency.
       def cleanup_trace_decisions
-        # Remove random 50% of decisions
-        keys_to_remove = @trace_decisions.keys.sample(@trace_decisions.size / 2)
-        keys_to_remove.each { |key| @trace_decisions.delete(key) }
+        return if @trace_decisions.size <= 100
+
+        size_to_remove = @trace_decisions.size / 2
+        sorted = @trace_decisions.to_a.sort_by { |_, v| v[:last_access] }
+        keys_to_remove = sorted.first(size_to_remove).map(&:first)
+        keys_to_remove.each { |k| @trace_decisions.delete(k) }
       end
     end
     # rubocop:enable Metrics/ClassLength
