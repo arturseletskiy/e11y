@@ -1193,6 +1193,28 @@ When enabled, high-cardinality labels (e.g., `user_id`, `order_id`) are filtered
 
 ---
 
+## Limitations & Tradeoffs
+
+E11y trades generality for Rails-specific ergonomics. Know what you're getting:
+
+| Limitation | Detail |
+|------------|--------|
+| **Rails only** | No Sinatra, Hanami, or pure-Ruby support. Railtie is required. |
+| **Ruby 3.2+** | Older projects can't use it without upgrading Ruby. |
+| **Rails 7.0–8.0** | Rails 8.1 excluded (sqlite3 bug in test environment). |
+| **Self-hosted infra** | Loki adapter requires running Loki + Grafana. Managed options available (Grafana Cloud free tier). |
+| **Memory overhead** | Debug buffer holds events in RAM per request. Under heavy load with large payloads, monitor heap usage. |
+| **No distributed tracing UI** | OTel adapter emits spans, but e11y has no built-in trace visualization. Use Grafana Tempo or Jaeger. |
+| **Pre-1.0** | API may change between minor versions until v1.0. Pin your Gemfile. |
+
+**When e11y is NOT the right choice:**
+- You need distributed tracing across microservices → use OpenTelemetry with a proper backend
+- Your team already has Datadog/New Relic and is happy with it → switching cost outweighs gains
+- You run Sinatra or non-Rails Ruby → e11y won't work today
+- You need SLA-backed support → e11y is OSS, community support only
+
+---
+
 ## Documentation
 
 Additional documentation is available in the `docs/` directory:
