@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### BREAKING: Registry.all_events → Registry.event_classes
+
+**Renamed for clarity:** Method returns event classes, not event instances or names.
+
+**Migration:** `E11y::Registry.all_events` → `E11y::Registry.event_classes`
+
 ### BREAKING: RequestScopedBuffer → EphemeralBuffer
 
 **Renamed for accuracy:** The buffer works for both HTTP requests and background jobs. "Ephemeral" reflects its temporary lifecycle.

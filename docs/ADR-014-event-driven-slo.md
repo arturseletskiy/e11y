@@ -802,7 +802,7 @@ module E11y
         def self.validate!
           errors = []
           
-          E11y::Registry.all_events.each do |event_class|
+          E11y::Registry.event_classes.each do |event_class|
             # Check: Has slo declaration?
             has_slo_enabled = event_class.slo_enabled?
             has_slo_disabled = event_class.slo_disabled?
@@ -838,7 +838,7 @@ module E11y
         def self.validate!
           errors = []
           
-          E11y::Registry.all_events.each do |event_class|
+          E11y::Registry.event_classes.each do |event_class|
             next unless event_class.slo_enabled?
             
             # Check: Has slo_status_from block?
@@ -911,7 +911,7 @@ module E11y
           end
           
           # Check reverse: Events with slo enabled but NOT in slo.yml
-          E11y::Registry.all_events.each do |event_class|
+          E11y::Registry.event_classes.each do |event_class|
             next unless event_class.slo_enabled?
             
             slo_name = event_class.slo_config.contributes_to

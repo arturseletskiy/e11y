@@ -7,7 +7,7 @@ module E11y
   # The registry is always-on (no configuration needed) and is safe for concurrent use.
   #
   # @example Discover all events
-  #   E11y::Registry.all_events
+  #   E11y::Registry.event_classes
   #   # => [Events::OrderCreated, Events::PaymentFailed, ...]
   #
   # @example Find an event class by name
@@ -52,8 +52,8 @@ module E11y
       # Return all registered event classes. Delegates to singleton instance.
       #
       # @return [Array<Class>]
-      def all_events
-        instance.all_events
+      def event_classes
+        instance.event_classes
       end
 
       # Filter events by criteria. Delegates to singleton instance.
@@ -163,7 +163,7 @@ module E11y
     # The returned array is a copy — mutating it does not affect the registry.
     #
     # @return [Array<Class>]
-    def all_events
+    def event_classes
       @mutex.synchronize { @registry.values.flatten.dup }
     end
 
@@ -179,7 +179,7 @@ module E11y
     # @param criteria [Hash]
     # @return [Array<Class>]
     def where(**criteria)
-      all_events.select do |klass|
+      event_classes.select do |klass|
         criteria.all? do |key, value|
           case key
           when :severity
@@ -236,7 +236,7 @@ module E11y
     # @return [Array<Hash>] Each entry contains `:name`, `:class`, `:version`,
     #   `:severity`, and `:schema_keys` (absent when not applicable).
     def to_documentation
-      all_events.map do |klass|
+      event_classes.map do |klass|
         {
           name: klass.respond_to?(:event_name) ? klass.event_name : klass.name,
           class: klass.name,

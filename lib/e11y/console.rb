@@ -51,7 +51,7 @@ module E11y
 
       # List all registered event classes
       def events
-        Registry.all_events.map { |e| e.respond_to?(:event_name) ? e.event_name : e.name }
+        Registry.event_classes.map { |e| e.respond_to?(:event_name) ? e.event_name : e.name }
       end
 
       # List all registered adapters

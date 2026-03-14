@@ -15,12 +15,11 @@
 2. [Architecture Overview](#2-architecture-overview)
 3. [Event Metrics](#3-event-metrics)
 4. [Cardinality Protection](#4-cardinality-protection)
-   - 4.1. [Four-Layer Defense](#41-four-layer-defense)
+   - 4.1. [Three-Layer Defense](#41-three-layer-defense)
    - 4.2. [Layer 1: Universal Denylist](#42-layer-1-universal-denylist)
-   - 4.3. [Layer 2: Safe Allowlist](#43-layer-2-safe-allowlist)
-   - 4.4. [Layer 3: Per-Metric Limits](#44-layer-3-per-metric-cardinality-limits)
-   - 4.5. [Layer 4: Dynamic Actions](#45-layer-4-dynamic-actions)
-   - 4.6. [Relabeling Rules](#46-relabeling-rules)
+   - 4.3. [Layer 2: Per-Metric Limits](#43-layer-2-per-metric-cardinality-limits)
+   - 4.4. [Layer 3: Dynamic Actions](#44-layer-3-dynamic-actions)
+   - 4.5. [Relabeling Rules](#45-relabeling-rules)
 5. [Yabeda Integration](#5-yabeda-integration)
 6. [Self-Monitoring](#6-self-monitoring)
 7. [Configuration](#7-configuration)
@@ -142,7 +141,7 @@ end
 # Adapter automatically:
 # 1. Finds matching metrics from Registry
 # 2. Extracts labels from event data
-# 3. Applies 3-layer cardinality protection
+# 3. Applies 3-layer cardinality protection (denylist, per-metric limits, dynamic actions)
 # 4. Updates Yabeda metrics
 ```
 
@@ -237,7 +236,7 @@ end
 
 **Primary Goals:**
 - ✅ Auto-create metrics from events (event-level DSL)
-- ✅ Prevent cardinality explosions (4-layer defense)
+- ✅ Prevent cardinality explosions (3-layer defense)
 - ✅ Zero manual metric definitions
 - ✅ Prometheus-friendly
 - ✅ Cost-effective (<10k time series per metric)
@@ -308,7 +307,7 @@ graph TB
     subgraph "Protection (3-Layer)"
         L1[Layer 1: Denylist]
         L2[Layer 2: Per-Metric Limits]
-        L3[Layer 3: Monitoring]
+        L3[Layer 3: Dynamic Actions]
     end
     
     EventClass -->|defines| MetricsDSL
@@ -355,8 +354,7 @@ sequenceDiagram
     loop For each metric
         Middleware->>Protection: extract_labels(event_data)
         Protection->>Protection: Check denylist (order_id? ❌)
-        Protection->>Protection: Check allowlist (status? ✅)
-        Protection->>Protection: Check cardinality (3 unique values ✅)
+        Protection->>Protection: Check cardinality (status: 3 unique values ✅)
         Protection-->>Middleware: safe_labels: {status: 'paid'}
         
         Middleware->>Yabeda: counter.increment(safe_labels)
@@ -523,7 +521,7 @@ Layers are applied **sequentially** (not simultaneously):
 
 1. **Layer 1 (Universal Denylist):** If label in denylist → DROP, stop processing
 2. **Layer 2 (Per-Metric Limits):** Track unique values per label, drop if exceeded
-3. **Layer 3 (Monitoring):** Log warnings when limits exceeded
+3. **Layer 3 (Dynamic Actions):** Configurable action on overflow (drop, alert, relabel)
 
 **Example Flow:**
 
@@ -533,13 +531,12 @@ Label: user_id
 
 Label: status
 → Layer 1: in FORBIDDEN_LABELS? ❌ No → continue
-→ Layer 2: in SAFE_LABELS? ✅ Yes → KEEP ✅ (skip Layer 3-4)
+→ Layer 2: cardinality < limit? ✅ Yes (3 values) → KEEP ✅
 
 Label: custom_field
 → Layer 1: in FORBIDDEN_LABELS? ❌ No → continue
-→ Layer 2: in SAFE_LABELS? ❌ No → continue
-→ Layer 3: cardinality < limit? ❌ No (150 > 100) → continue
-→ Layer 4: action=drop → DROP ❌
+→ Layer 2: cardinality < limit? ❌ No (150 > 100) → continue
+→ Layer 3: action=drop → DROP ❌
 ```
 
 ```mermaid
@@ -547,16 +544,13 @@ graph TB
     Input[Event Labels] --> L1{Layer 1<br/>Denylist}
     
     L1 -->|In denylist| Drop1[❌ Drop Label]
-    L1 -->|Not in denylist| L2{Layer 2<br/>Allowlist}
+    L1 -->|Not in denylist| L2{Layer 2<br/>Per-Metric Limit}
     
-    L2 -->|In allowlist| Keep[✅ Keep Label]
-    L2 -->|Not in allowlist| L3{Layer 3<br/>Cardinality Limit}
+    L2 -->|Under limit| Keep[✅ Keep Label]
+    L2 -->|Over limit| L3{Layer 3<br/>Dynamic Action}
     
-    L3 -->|Under limit| Keep
-    L3 -->|Over limit| L4{Layer 4<br/>Dynamic Action}
-    
-    L4 -->|drop| Drop2[❌ Drop Label]
-    L4 -->|alert| Alert[🚨 Alert + Drop]
+    L3 -->|drop| Drop2[❌ Drop Label]
+    L3 -->|alert| Alert[🚨 Alert + Drop]
     
     Drop1 --> Log1[Log: denylist_hit]
     Drop2 --> Log2[Log: cardinality_exceeded]
@@ -565,9 +559,8 @@ graph TB
     Keep --> Metric[Export to Yabeda]
     
     style L1 fill:#f8d7da
-    style L2 fill:#d4edda
-    style L3 fill:#fff3cd
-    style L4 fill:#d1ecf1
+    style L2 fill:#fff3cd
+    style L3 fill:#d1ecf1
     style Drop1 fill:#f8d7da
     style Drop2 fill:#f8d7da
     style Keep fill:#d4edda
@@ -656,53 +649,7 @@ graph LR
     style File fill:#d4edda
 ```
 
-### 4.3. Layer 2: Safe Allowlist
-
-**Decision:** Pre-approved low-cardinality labels.
-
-```ruby
-module E11y
-  module Metrics
-    class CardinalityProtection
-      # Safe labels (low cardinality, always allowed)
-      SAFE_LABELS = [
-        # Status/state
-        :status, :state, :result, :outcome,
-        
-        # Types/categories
-        :type, :kind, :category, :class_name,
-        
-        # Methods/operations
-        :method, :action, :operation, :command,
-        
-        # Environments
-        :env, :environment, :region, :zone, :datacenter,
-        
-        # Services
-        :service, :component, :adapter, :backend,
-        
-        # Severities
-        :severity, :level, :priority,
-        
-        # HTTP
-        :http_method, :http_status, :http_status_class,  # (200 → '2xx')
-        
-        # Protocols
-        :protocol, :version,
-        
-        # Success/failure
-        :success, :error_type, :error_class
-      ].freeze
-      
-      def in_allowlist?(label_name)
-        SAFE_LABELS.include?(label_name.to_sym)
-      end
-    end
-  end
-end
-```
-
-### 4.4. Layer 3: Per-Metric Cardinality Limits
+### 4.3. Layer 2: Per-Metric Cardinality Limits
 
 **Decision:** Track unique values per label, enforce limits.
 
@@ -766,7 +713,7 @@ tracker.check_and_track('orders_total', :status, 'cancelled')  # ❌ false (limi
 tracker.check_and_track('orders_total', :status, 'paid')  # ✅ true (seen before)
 ```
 
-### 4.5. Layer 4: Dynamic Actions
+### 4.4. Layer 3: Dynamic Actions
 
 **Decision:** Configurable actions when limits exceeded.
 
@@ -805,8 +752,8 @@ Events::ApiCall.track(
   customer_id: 'cust_12345'  # ← 101st unique value, exceeds limit
 )
 
-# Layer 3: cardinality exceeded (100 limit)
-# Layer 4: action=drop → customer_id dropped
+# Layer 2: cardinality exceeded (100 limit)
+# Layer 3: action=drop → customer_id dropped
 
 # Result metric:
 # api_calls_total{endpoint="/api/users"} 1
@@ -846,7 +793,7 @@ graph TB
 
 **Note:** For v1.0, we keep it simple with just **drop** and **alert**. Advanced strategies (hash bucketing, aggregation) can be added in v1.1+ if needed.
 
-### 4.6. Relabeling Rules
+### 4.5. Relabeling Rules
 
 **Decision:** Transform high-cardinality labels to low-cardinality.
 
@@ -1136,7 +1083,7 @@ RSpec.describe E11y::Metrics::CardinalityProtection do
     end
   end
   
-  describe 'Layer 3: Cardinality Limits' do
+  describe 'Layer 2: Cardinality Limits' do
     it 'enforces per-metric limits' do
       protection = CardinalityProtection.new(
         limits: { orders_total: { status: 3 } }
@@ -1219,16 +1166,12 @@ Processing order:
    ↓ If in denylist → DROP, stop
    ↓ If not in denylist → continue to Layer 2
 
-2. Layer 2 (Allowlist)
-   ↓ If in allowlist → KEEP, skip Layer 3-4
-   ↓ If not in allowlist → continue to Layer 3
-
-3. Layer 3 (Cardinality Limit)
+2. Layer 2 (Per-Metric Limit)
    ↓ If under limit → KEEP, stop
-   ↓ If over limit → continue to Layer 4
+   ↓ If over limit → continue to Layer 3
 
-4. Layer 4 (Dynamic Action)
-   ↓ Apply configured action: hash/drop/aggregate/alert
+3. Layer 3 (Dynamic Action)
+   ↓ Apply configured action: drop/alert/relabel
 ```
 
 **Example:**
@@ -1241,15 +1184,14 @@ Processing order:
 
 # status:
 #   Layer 1: not in FORBIDDEN_LABELS → continue
-#   Layer 2: in SAFE_LABELS → ✅ KEEP (skip Layer 3-4)
+#   Layer 2: cardinality under limit → ✅ KEEP
 
 # tier:
 #   Layer 1: not in FORBIDDEN_LABELS → continue
-#   Layer 2: not in SAFE_LABELS → continue
-#   Layer 3: cardinality = 150 > limit (100) → continue
-#   Layer 4: action=hash → ✅ KEEP as "bucket_7"
+#   Layer 2: cardinality = 150 > limit (100) → continue
+#   Layer 3: action=drop → ❌ DROP
 
-# Result: { status: 'paid', tier_bucket: 'bucket_7' }
+# Result: { status: 'paid' }
 ```
 
 ---

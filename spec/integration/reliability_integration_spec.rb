@@ -436,13 +436,13 @@ RSpec.describe "Reliability Features Integration", :integration do
       dlq_storage.save(event2, metadata: { error: StandardError.new("Error 2") })
 
       # Query all events
-      all_events = dlq_storage.list(limit: 10)
-      expect(all_events.count).to eq(2)
+      dlq_events = dlq_storage.list(limit: 10)
+      expect(dlq_events.count).to eq(2)
 
       # Query by event_name (if supported)
       # Note: Query implementation may vary
-      expect(all_events.any? { |e| e[:event_name] == "user.login" }).to be true
-      expect(all_events.any? { |e| e[:event_name] == "user.logout" }).to be true
+      expect(dlq_events.any? { |e| e[:event_name] == "user.login" }).to be true
+      expect(dlq_events.any? { |e| e[:event_name] == "user.logout" }).to be true
     end
 
     it "cleans up old events based on retention" do

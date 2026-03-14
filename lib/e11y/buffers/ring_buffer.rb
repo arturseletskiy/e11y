@@ -165,7 +165,7 @@ module E11y
       # @return [Array<Hash>] All buffered events
       #
       # @example
-      #   all_events = buffer.flush_all
+      #   events = buffer.flush_all
       #   # => [event1, event2, ...]
       def flush_all
         pop(@size.value)

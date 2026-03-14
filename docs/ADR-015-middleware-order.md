@@ -14,7 +14,7 @@
 3. [Correct Order](#3-correct-order)
    - 3.1. Pipeline Flow
    - 3.2. Why Each Middleware Needs Original Class Name
-   - 3.3. Audit Event Pipeline Separation (C01 Resolution) ⚠️ CRITICAL
+   - 3.3. Audit Events in Single Pipeline (C01 Resolution) ⚠️ CRITICAL
      - 3.3.1. The Problem: PII Filtering Breaks Audit Trail
      - 3.3.2. Decision: Two Pipeline Configurations
      - 3.3.3. Declaring Audit Events
@@ -244,17 +244,17 @@ Loki receives:
 - [ ] PII rules are configured **per original class** (if differ)
 - [ ] Sampling rules are configured **per original class** (if differ)
 - [ ] Metrics track **both** normalized name and version
-- [ ] Audit events use separate pipeline (C01 - see §3.3)
+- [ ] Audit events skip PII filtering via conditional logic (C01 - see §3.3, single pipeline)
 - [ ] Audit events stored in encrypted adapter (C01 requirement)
 
 ---
 
-## 3.3. Audit Event Pipeline Separation (C01 Resolution)
+## 3.3. Audit Events in Single Pipeline (C01 Resolution)
 
 > **⚠️ CRITICAL: C01 Conflict Resolution - PII Filtering × Audit Trail Signing**  
 > **See:** [CONFLICT-ANALYSIS.md C01](researches/CONFLICT-ANALYSIS.md#c01-pii-filtering--audit-trail-signing) for detailed analysis  
 > **Problem:** PII filtering before signing breaks non-repudiation (auditors can't verify original event)  
-> **Solution:** Separate pipeline for audit events that skips PII filtering, signs original data
+> **Solution:** Single pipeline for all events. Audit events get conditional skip in PIIFilter via `contains_pii false` in AuditEvent preset (Tier 1 = pass-through). No separate pipeline — no need.
 
 ### 3.3.1. The Problem: PII Filtering Breaks Audit Trail
 
@@ -278,39 +278,29 @@ Storage
 - **Audit trail:** Must maintain cryptographic chain of custody
 - **Forensics:** Must be able to reconstruct exact event that occurred
 
-### 3.3.2. Decision: Two Pipeline Configurations
+### 3.3.2. Decision: One Pipeline with Conditional Skip
 
-**Standard Events (Non-Audit):**
+**All events go through a single pipeline.** Audit events get conditional skip in middleware:
+
 ```
 1. TraceContext    → Add trace_id, span_id, timestamp
 2. Validation      → Schema validation (original class)
-3. PIIFiltering    → Filter PII EARLY ✅
-4. RateLimiting    → Rate limit check
-5. Sampling        → Adaptive sampling
+3. PIIFiltering    → Audit: skip (contains_pii false → Tier 1). Standard: filter PII ✅
+4. RateLimiting    → Audit: can skip (event_data[:audit_event]). Standard: rate limit
+5. Sampling        → Audit: sample_rate 1.0 (preset). Standard: adaptive
 6. Versioning      → Normalize event_name (LAST)
-7. Routing         → Route to buffer
+7. Routing         → Route to buffer / audit buffer
 ```
 
-**Audit Events (Legal Compliance):**
-```
-1. TraceContext    → Add trace_id, span_id, timestamp
-2. Validation      → Schema validation (original class)
-3. AuditSigning    → Sign ORIGINAL data (includes PII!) ✅
-4. Versioning      → Normalize event_name (LAST)
-5. Routing         → Route to audit buffer
-   
-❌ NO PII filtering for audit events!
-❌ NO rate limiting for audit events!
-❌ NO sampling for audit events!
-```
+**AuditEvent preset:** `contains_pii false` → PIIFilter Tier 1 = pass-through, original data preserved for signing.
 
 ### 3.3.3. Declaring Audit Events
 
 **Event Class Flag:**
 ```ruby
-# Audit event - uses audit pipeline
+# Audit event - conditional skip in pipeline
 class Events::PermissionChanged < E11y::Event::Base
-  audit_event true  # ← Trigger audit pipeline
+  include E11y::Presets::AuditEvent  # audit_event true, contains_pii false
   # Auto-set: retention = E11y.config.audit_retention (configurable!)
   #           rate_limiting = false (LOCKED!)
   #           sampling = false (LOCKED!)
@@ -330,9 +320,9 @@ class Events::PermissionChanged < E11y::Event::Base
   version 1
 end
 
-# Standard event - uses standard pipeline
+# Standard event - full pipeline
 class Events::PageView < E11y::Event::Base
-  audit_event false  # ← Use standard pipeline (default)
+  # audit_event false (default)
   
   schema do
     required(:user_id).filled(:string)
@@ -355,21 +345,15 @@ end
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  # Standard pipeline (default for most events)
+  # Single pipeline for all events (audit and standard)
   config.pipeline.use E11y::Middleware::TraceContext      # 1
   config.pipeline.use E11y::Middleware::Validation        # 2
-  config.pipeline.use E11y::Middleware::PIIFiltering      # 3
+  config.pipeline.use E11y::Middleware::PIIFiltering      # 3  # Audit: skip (contains_pii false)
   config.pipeline.use E11y::Middleware::RateLimiting      # 4
   config.pipeline.use E11y::Middleware::Sampling          # 5
-  config.pipeline.use E11y::Middleware::Versioning        # 6
-  config.pipeline.use E11y::Middleware::Routing           # 7
-  
-  # Audit pipeline override (for audit_event: true)
-  config.audit_pipeline.use E11y::Middleware::TraceContext      # 1
-  config.audit_pipeline.use E11y::Middleware::Validation        # 2
-  config.audit_pipeline.use E11y::Middleware::AuditSigning      # 3 (NEW!)
-  config.audit_pipeline.use E11y::Middleware::Versioning        # 4
-  config.audit_pipeline.use E11y::Middleware::AuditRouting      # 5
+  config.pipeline.use E11y::Middleware::AuditSigning      # 6  # Pass-through for non-audit
+  config.pipeline.use E11y::Middleware::Versioning        # 7  # Last before Routing
+  config.pipeline.use E11y::Middleware::Routing           # 8
   
   # Audit event configuration
   config.audit_events do
@@ -610,7 +594,7 @@ end
 | Aspect | Pro | Con | Mitigation |
 |--------|-----|-----|------------|
 | **Non-repudiation** | ✅ Signature on original data | ⚠️ PII in audit events | Use encrypted storage adapter |
-| **Legal compliance** | ✅ Meets audit requirements | ⚠️ Two pipelines to maintain | Clear documentation |
+| **Legal compliance** | ✅ Meets audit requirements | ⚠️ Conditional logic in middleware | Clear documentation |
 | **PII protection** | ✅ Standard events filtered | ⚠️ Audit events not filtered | Restrict access to audit logs |
 | **Performance** | ✅ No PII filter overhead | ⚠️ Signing + encryption overhead | Audit events are rare (<1%) |
 
@@ -1041,7 +1025,7 @@ end
 ```
 
 **Related Conflicts:**
-- **C01:** Audit events skip PII filtering (see §3.3)
+- **C01:** Audit events skip PII filtering via contains_pii false (see §3.3)
 - **C08:** Baggage PII protection (see ADR-007)
 
 ---

@@ -1478,7 +1478,7 @@ module E11y
       # E11y.stats
       def E11y.stats
         {
-          events_tracked: Registry.all_events.sum { |e| e.track_count },
+          events_tracked: Registry.event_classes.sum { |e| e.track_count },
           events_in_buffer: Buffer.size,
           adapters: Adapters::Registry.all.map { |a| 
             { name: a.name, healthy: a.healthy? }
@@ -1503,7 +1503,7 @@ module E11y
       
       # E11y.events
       def E11y.events
-        Registry.all_events.map(&:name).sort
+        Registry.event_classes.map(&:name).sort
       end
       
       # E11y.adapters

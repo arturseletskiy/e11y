@@ -172,7 +172,7 @@ module E11y
     # @return [E11y::Registry]
     #
     # @example
-    #   E11y.registry.all_events
+    #   E11y.registry.event_classes
     #   E11y.registry.find("order.created")
     def registry
       Registry.instance
