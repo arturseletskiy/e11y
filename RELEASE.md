@@ -192,7 +192,7 @@ See [CHANGELOG.md](https://github.com/arturseletskiy/e11y/blob/main/CHANGELOG.md
 - Event System with dry-schema validation
 - Pipeline Architecture (middleware-based)
 - 7 Adapters: Stdout, File, InMemory, Loki, Sentry, OpenTelemetry, Yabeda
-- 3 Buffer Types: RingBuffer, RequestScopedBuffer, AdaptiveBuffer
+- 3 Buffer Types: RingBuffer, EphemeralBuffer, AdaptiveBuffer
 - Reliability: Retry, Circuit Breaker, Dead Letter Queue
 
 ### SLO Tracking (Phase 3)

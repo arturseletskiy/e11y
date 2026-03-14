@@ -298,12 +298,12 @@ E11y.configure do |config|
   )
 
   # === Request-scoped buffering ===
-  config.request_buffer.enabled = true
+  config.ephemeral_buffer.enabled = true
   # flush_on_error (default: true) — flush buffer on any 5xx server error
-  # config.request_buffer.flush_on_error = false  # disable 5xx auto-flush
+  # config.ephemeral_buffer.flush_on_error = false  # disable 5xx auto-flush
   # flush_on_statuses (default: []) — extra statuses, independent of flush_on_error
-  # config.request_buffer.flush_on_statuses = [403]       # also flush on 403 Forbidden
-  # config.request_buffer.flush_on_statuses = [401, 403]  # multiple codes
+  # config.ephemeral_buffer.flush_on_statuses = [403]       # also flush on 403 Forbidden
+  # config.ephemeral_buffer.flush_on_statuses = [401, 403]  # multiple codes
 
   # === Rails auto-instrumentation (HTTP, ActiveRecord, ActiveJob, Cache) ===
   config.rails_instrumentation.enabled = true
@@ -333,18 +333,18 @@ end
 
 ### Buffer flush — manual trigger
 
-`RequestScopedBuffer.flush_on_error` is a public method — you can call it directly in custom
+`EphemeralBuffer.flush_on_error` is a public method — you can call it directly in custom
 rescue handlers or background jobs:
 
 ```ruby
 # Custom error handler (e.g. Grape API, custom Rack app)
 rescue => e
-  E11y::Buffers::RequestScopedBuffer.flush_on_error
+  E11y::Buffers::EphemeralBuffer.flush_on_error
   raise
 end
 
 # Or flush to a specific adapter target (not yet implemented — placeholder)
-E11y::Buffers::RequestScopedBuffer.flush_on_error(target: :errors_tracker)
+E11y::Buffers::EphemeralBuffer.flush_on_error(target: :errors_tracker)
 ```
 
 ### Severity → Adapter mapping
@@ -495,7 +495,7 @@ Events::PaymentFailed.track(reason: 'timeout')  # ← :error  (from name "Failed
 
 ### Rails / Rack
 
-`E11y::Middleware::Request` is automatically inserted by the Railtie when `request_buffer.enabled` is true.
+`E11y::Middleware::Request` is automatically inserted by the Railtie when `ephemeral_buffer.enabled` is true.
 
 ### Sidekiq
 
@@ -797,16 +797,16 @@ E11y.circuit_breaker_state         # => :closed/:open/:half_open
 
 ```ruby
 # Is the buffer enabled?
-E11y.config.request_buffer.enabled  # => true
+E11y.config.ephemeral_buffer.enabled  # => true
 
 # Is Rails instrumentation enabled?
 E11y.config.rails_instrumentation.enabled  # => true
 
 # Is 5xx auto-flush enabled?
-E11y.config.request_buffer.flush_on_error    # => true (default)
+E11y.config.ephemeral_buffer.flush_on_error    # => true (default)
 
 # Any extra statuses configured?
-E11y.config.request_buffer.flush_on_statuses # => [] (default) or [403] etc.
+E11y.config.ephemeral_buffer.flush_on_statuses # => [] (default) or [403] etc.
 
 # Note: flush_on_error and flush_on_statuses are independent.
 # flush_on_error=true  → flush on any 5xx.
@@ -843,7 +843,7 @@ E11y.config.adapters[:logs].healthy?
 - [ ] Run `rails g e11y:install` (or create `config/initializers/e11y.rb` manually)
 - [ ] Configure adapters: `config.adapters[:logs] = E11y::Adapters::Loki.new(...)`
 - [ ] For metrics: add `gem 'yabeda'`, set `config.adapters[:metrics] = E11y::Adapters::Yabeda.new`
-- [ ] Enable request buffering: `config.request_buffer.enabled = true`
+- [ ] Enable request buffering: `config.ephemeral_buffer.enabled = true`
 - [ ] Enable Rails instrumentation: `config.rails_instrumentation.enabled = true`
 - [ ] Define first event class in `app/events/`
 - [ ] Use `EventName.track(...)` in a controller or service

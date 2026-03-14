@@ -66,12 +66,12 @@ Modern Rails applications need:
 - ✅ Zero-allocation event tracking (class methods only)
 - ✅ <1ms p99 latency @ 1000 events/sec
 - ✅ <100MB memory footprint
-- ✅ Rails 8.0+ exclusive
+- ✅ Rails 7.0+ (7.x, 8.x)
 - ✅ Open-source extensibility
 
 **Non-Goals:**
 - ❌ Plain Ruby support (Rails only)
-- ❌ Backwards compatibility with Rails 7.x
+- ❌ Rails 6.x and earlier
 - ❌ Hot configuration reload
 - ❌ Distributed tracing coordination (only propagation)
 
@@ -452,9 +452,9 @@ graph TB
     end
     
     subgraph "Thread-Local Storage"
-        TL1[Current.trace_id<br/>Current.request_buffer]
-        TL2[Current.trace_id<br/>Current.request_buffer]
-        TL3[Current.trace_id<br/>Current.request_buffer]
+        TL1[Current.trace_id<br/>EphemeralBuffer<br/>Thread.current]
+        TL2[Current.trace_id<br/>EphemeralBuffer<br/>Thread.current]
+        TL3[Current.trace_id<br/>EphemeralBuffer<br/>Thread.current]
     end
     
     subgraph "Shared Resources"
@@ -805,7 +805,7 @@ class RoutingMiddleware < E11y::Middleware
     
     if severity == :debug
       # Route to request-scoped buffer
-      RequestBuffer.add(event_data)
+      EphemeralBuffer.add_event(event_data)
     else
       # Route to main buffer
       MainBuffer.add(event_data)
@@ -1239,73 +1239,45 @@ end
 
 ### 3.4. Request-Scoped Buffer
 
-**Design Decision:** Thread-local storage using ActiveSupport::CurrentAttributes.
+**Design Decision:** Thread-local storage via `EphemeralBuffer` with `Thread.current[:e11y_ephemeral_buffer]`. Context (trace_id, request_id) in `E11y::Current` (ActiveSupport::CurrentAttributes); buffer is separate.
 
 ```ruby
 module E11y
   class Current < ActiveSupport::CurrentAttributes
-    # Thread-local attributes
+    # Thread-local context attributes (no buffer here)
     attribute :trace_id
     attribute :user_id
     attribute :request_id
-    attribute :request_buffer  # Debug events buffer
     attribute :sampled  # Sampling decision
-    
-    def request_buffer
-      attributes[:request_buffer] ||= []
-    end
-    
-    def add_debug_event(event_data)
-      request_buffer << event_data if request_buffer.size < Config.request_buffer_limit
-    end
-    
-    def flush_debug_events
-      events = request_buffer.dup
-      request_buffer.clear
-      events
-    end
   end
-  
-  # Request-scoped buffer manager
-  class RequestBuffer
-    class << self
-      def add(event_data)
-        Current.add_debug_event(event_data)
+
+  module Buffers
+    class EphemeralBuffer
+      THREAD_KEY_BUFFER = :e11y_ephemeral_buffer
+
+      def self.initialize!(request_id: nil, buffer_limit: nil)
+        Thread.current[THREAD_KEY_BUFFER] = []
       end
-      
-      def flush
-        Current.flush_debug_events
+
+      def self.add_event(event_data)
+        buf = Thread.current[THREAD_KEY_BUFFER]
+        return false unless buf
+        buf << event_data if buf.size < (buffer_limit || Config.buffer (job_buffer_limit))
       end
-      
-      def setup_rails_integration
-        # Hook into Rails request cycle
-        ActiveSupport::Notifications.subscribe('process_action.action_controller') do |*args|
-          event = ActiveSupport::Notifications::Event.new(*args)
-          
-          # Flush on error
-          if event.payload[:exception]
-            flush_to_adapters
-          else
-            # Discard on success
-            flush
-          end
-        end
+
+      def self.flush_on_error
+        # Flush buffered events to adapters
       end
-      
-      private
-      
-      def flush_to_adapters
-        events = flush
-        
-        # Send debug events to adapters
-        events.each do |event_data|
-          MainBuffer.add(event_data)
-        end
+
+      def self.discard
+        Thread.current[THREAD_KEY_BUFFER] = nil
       end
     end
   end
 end
 ```
+
+Rails integration: `Middleware::Request` and Sidekiq/ActiveJob instruments call `EphemeralBuffer.initialize!`, `flush_on_error`, `discard` at request/job boundaries.
 
 ---
 
@@ -1608,7 +1580,7 @@ Pipeline.process(event_data)
    └─ next
   ↓
 7. RoutingMiddleware
-   ├─ severity == :debug? → RequestBuffer
+   ├─ severity == :debug? → EphemeralBuffer
    └─ severity == :info+? → MainBuffer
   ↓
 Buffer → Adapters (receive normalized event_name)
@@ -1757,8 +1729,8 @@ end
 **Components:**
 
 1. **Thread-local (no sync needed):**
-   - Request-scoped buffer (Current.request_buffer)
-   - Context (Current.trace_id, etc.)
+   - Request-scoped buffer (EphemeralBuffer + Thread.current[:e11y_ephemeral_buffer])
+   - Context (Current.trace_id, request_id, etc.)
 
 2. **Concurrent (thread-safe):**
    - Main ring buffer (Concurrent::AtomicFixnum)
@@ -2040,7 +2012,7 @@ Gem::Specification.new do |spec|
   spec.required_ruby_version = '>= 3.3.0'
   
   # Required
-  spec.add_dependency 'rails', '>= 8.0.0'
+  spec.add_dependency 'rails', '>= 7.0'
   spec.add_dependency 'dry-schema', '~> 1.13'
   spec.add_dependency 'dry-configurable', '~> 1.1'
   spec.add_dependency 'concurrent-ruby', '~> 1.2'
