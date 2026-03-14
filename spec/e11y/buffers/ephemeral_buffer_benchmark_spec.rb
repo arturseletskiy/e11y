@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
 require "spec_helper"
-require "e11y/buffers/request_scoped_buffer"
+require "e11y/buffers/ephemeral_buffer"
 
-# Benchmark and stress tests for RequestScopedBuffer
+# Benchmark and stress tests for EphemeralBuffer
 #
 # These tests verify thread-local isolation and request lifecycle performance.
-RSpec.describe E11y::Buffers::RequestScopedBuffer, :benchmark do
+RSpec.describe E11y::Buffers::EphemeralBuffer, :benchmark do
   before { described_class.reset_all }
   after { described_class.reset_all }
 
@@ -29,7 +29,7 @@ RSpec.describe E11y::Buffers::RequestScopedBuffer, :benchmark do
         elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
         throughput = event_count / elapsed
 
-        puts "\n📊 RequestScopedBuffer Throughput Benchmark:"
+        puts "\n📊 EphemeralBuffer Throughput Benchmark:"
         puts "  Events processed: #{event_count}"
         puts "  Time elapsed: #{elapsed.round(3)}s"
         puts "  Throughput: #{throughput.round(0)} events/sec"
@@ -64,7 +64,7 @@ RSpec.describe E11y::Buffers::RequestScopedBuffer, :benchmark do
         p99 = latencies[(latencies.size * 0.99).to_i]
         max = latencies.last
 
-        puts "\n📊 RequestScopedBuffer Latency Benchmark:"
+        puts "\n📊 EphemeralBuffer Latency Benchmark:"
         puts "  P50: #{p50.round(2)}μs"
         puts "  P95: #{p95.round(2)}μs"
         puts "  P99: #{p99.round(2)}μs"
@@ -87,7 +87,7 @@ RSpec.describe E11y::Buffers::RequestScopedBuffer, :benchmark do
         flushed_count = described_class.flush_on_error
         elapsed_ms = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time) * 1000
 
-        puts "\n📊 RequestScopedBuffer Flush Performance:"
+        puts "\n📊 EphemeralBuffer Flush Performance:"
         puts "  Events flushed: #{flushed_count}"
         puts "  Flush time: #{elapsed_ms.round(3)}ms"
         puts "  Flush rate: #{(flushed_count / elapsed_ms * 1000).round(0)} events/sec"
@@ -132,7 +132,7 @@ RSpec.describe E11y::Buffers::RequestScopedBuffer, :benchmark do
 
         thread_sizes = threads.map(&:value)
 
-        puts "\n📊 RequestScopedBuffer Thread Isolation Stress Test:"
+        puts "\n📊 EphemeralBuffer Thread Isolation Stress Test:"
         puts "  Concurrent threads: #{thread_count}"
         puts "  Events per thread: #{events_per_request}"
         puts "  Thread buffer sizes: #{thread_sizes.tally.inspect}"
@@ -169,7 +169,7 @@ RSpec.describe E11y::Buffers::RequestScopedBuffer, :benchmark do
           described_class.reset_all
         end
 
-        puts "\n📊 RequestScopedBuffer Request Lifecycle Stress Test:"
+        puts "\n📊 EphemeralBuffer Request Lifecycle Stress Test:"
         puts "  Total requests: #{request_count}"
         puts "  Successful: #{success_requests}"
         puts "  Errors: #{error_requests}"
@@ -198,7 +198,7 @@ RSpec.describe E11y::Buffers::RequestScopedBuffer, :benchmark do
           end
         end
 
-        puts "\n📊 RequestScopedBuffer Buffer Limit Stress Test:"
+        puts "\n📊 EphemeralBuffer Buffer Limit Stress Test:"
         puts "  Buffer limit: 100"
         puts "  Events attempted: 200"
         puts "  Successful: #{successful}"
@@ -227,7 +227,7 @@ RSpec.describe E11y::Buffers::RequestScopedBuffer, :benchmark do
         expect(described_class.size).to eq(0)
         expect(described_class.error_occurred?).to be true
 
-        puts "\n📊 RequestScopedBuffer Auto-Flush Stress Test:"
+        puts "\n📊 EphemeralBuffer Auto-Flush Stress Test:"
         puts "  Debug events before error: 50"
         puts "  Buffer size after error: #{described_class.size}"
         puts "  Auto-flush triggered: ✅"
@@ -255,7 +255,7 @@ RSpec.describe E11y::Buffers::RequestScopedBuffer, :benchmark do
 
         # Only debug events should have been buffered
         # Error/fatal would have triggered flush
-        puts "\n📊 RequestScopedBuffer Mixed Severity Stress Test:"
+        puts "\n📊 EphemeralBuffer Mixed Severity Stress Test:"
         puts "  Severities tested: #{severities.join(', ')}"
         puts "  Events per severity: #{events_per_severity}"
         puts "  Debug events attempted: #{events_per_severity}"
@@ -295,7 +295,7 @@ RSpec.describe E11y::Buffers::RequestScopedBuffer, :benchmark do
       event_size = 200 # bytes (estimate)
       expected_memory_kb = (1000 * event_size) / 1024
 
-      puts "\n📊 RequestScopedBuffer Memory Efficiency:"
+      puts "\n📊 EphemeralBuffer Memory Efficiency:"
       puts "  Events buffered: 1000"
       puts "  Expected memory: ~#{expected_memory_kb}KB"
       puts "  Actual memory: #{memory_used_kb}KB"
@@ -331,7 +331,7 @@ RSpec.describe E11y::Buffers::RequestScopedBuffer, :benchmark do
       throughput = (test_concurrency * events_per_request) / elapsed
       projected_throughput = throughput * (production_concurrency.to_f / test_concurrency)
 
-      puts "\n📊 RequestScopedBuffer Scalability Projection:"
+      puts "\n📊 EphemeralBuffer Scalability Projection:"
       puts "  Test concurrency: #{test_concurrency} requests"
       puts "  Production concurrency: #{production_concurrency} requests"
       puts "  Events per request: #{events_per_request}"
