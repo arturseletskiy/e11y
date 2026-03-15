@@ -226,7 +226,7 @@ module E11y
     attr_accessor :adapters, :log_level, :logger, :enabled, :environment, :service_name, :default_retention_period,
                   :routing_rules, :fallback_adapters, :enable_http_tracing
     attr_reader :adapter_mapping, :pipeline, :rails_instrumentation, :logger_bridge, :ephemeral_buffer, :active_job,
-                :sidekiq, :error_handling, :dlq_storage, :dlq_filter
+                :sidekiq, :error_handling, :dlq_storage, :dlq_filter, :security, :tracing
 
     def initialize
       initialize_basic_config
@@ -266,6 +266,8 @@ module E11y
       @rate_limiting = RateLimitingConfig.new
       @slo_tracking = SLOTrackingConfig.new # ✅ L3.14.1
       @cardinality_protection = CardinalityProtectionConfig.new
+      @security = SecurityConfig.new
+      @tracing = TracingConfig.new
     end
 
     public
@@ -343,6 +345,26 @@ module E11y
       block_given? ? @cardinality_protection.instance_eval(&) : @cardinality_protection
     end
 
+    # Security config — call with block for DSL, without for plain access.
+    #
+    # @example config.security.baggage_protection do
+    #   enabled true
+    #   allowed_keys %w[trace_id span_id request_id]
+    #   block_mode :warn
+    # end
+    def security(&)
+      block_given? ? @security.instance_eval(&) : @security
+    end
+
+    # Tracing config — source of trace context (ADR-007 §8).
+    #
+    # @example config.tracing do
+    #   source :opentelemetry  # Use OTel SDK when available
+    # end
+    def tracing(&)
+      block_given? ? @tracing.instance_eval(&) : @tracing
+    end
+
     # Register an adapter instance by name (convenience alias for config.adapters[name] = instance).
     #
     # @param name [Symbol, String] Adapter name (e.g. :loki, :sentry)
@@ -403,6 +425,7 @@ module E11y
       @pipeline.use E11y::Middleware::Validation
 
       # Zone: :security (AuditSigning BEFORE PIIFilter — sign original data per GDPR Art. 30)
+      @pipeline.use E11y::Middleware::BaggageProtection # ADR-006 §5.5: OTel Baggage PII protection
       @pipeline.use E11y::Middleware::AuditSigning
       @pipeline.use E11y::Middleware::PIIFilter
 
@@ -686,6 +709,74 @@ module E11y
       def ignore(value = nil)
         value.nil? ? @ignore : @ignore = value
       end
+    end
+  end
+
+  # Tracing config (ADR-007 §8 — trace context source)
+  #
+  # @example config.tracing do
+  #   source :opentelemetry
+  # end
+  class TracingConfig
+    def initialize
+      @source = :e11y
+    end
+
+    def source(value = nil)
+      return @source if value.nil?
+
+      @source = value.to_sym
+    end
+  end
+
+  # Security config (ADR-006 §5.5 — Baggage PII protection)
+  #
+  # @example
+  #   config.security.baggage_protection do
+  #     enabled true
+  #     allowed_keys %w[trace_id span_id environment version service_name request_id]
+  #     block_mode :warn
+  #   end
+  class SecurityConfig
+    attr_reader :baggage_protection
+
+    def initialize
+      @baggage_protection = BaggageProtectionConfig.new
+    end
+
+    def baggage_protection(&)
+      block_given? ? @baggage_protection.instance_eval(&) : @baggage_protection
+    end
+  end
+
+  # Baggage protection config — blocks PII from OpenTelemetry Baggage (C08).
+  class BaggageProtectionConfig
+    DEFAULT_ALLOWED_KEYS = %w[
+      trace_id span_id environment version service_name deployment_id request_id
+    ].freeze
+
+    def initialize
+      @enabled = true
+      @allowed_keys = DEFAULT_ALLOWED_KEYS.dup
+      @block_mode = :silent
+    end
+
+    def enabled(value = nil)
+      return @enabled if value.nil?
+
+      @enabled = value
+    end
+
+    def allowed_keys(keys = nil)
+      return @allowed_keys if keys.nil?
+
+      @allowed_keys = Array(keys).map(&:to_s)
+    end
+
+    def block_mode(mode = nil)
+      return @block_mode if mode.nil?
+
+      @block_mode = mode.to_sym
     end
   end
 

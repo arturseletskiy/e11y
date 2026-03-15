@@ -130,9 +130,8 @@
 
 | ID | Description |
 |----|-------------|
-| F-* | UC-020 uses event_version vs ADR v:; UC-020 shows OrderPaidV1 vs ADR no-suffix for V1. |
-| F-* | Event Registry: no VersionExtractor, all_versions, version_usage, versioned_events; different register API. |
-| F-* | DLQ/C15: no skip_validation config; replay does not set metadata[:dlq_replayed]. |
+| F-* | ~~UC-020 uses event_version vs ADR v:; OrderPaidV1 vs no-suffix~~ ✅ **Resolved:** UC-020 aligned to v:, V1=OrderPaid. |
+| F-* | ~~Event Registry: no VersionExtractor, all_versions, versioned_events~~ ✅ **Resolved:** VersionExtractor added; Registry.all_versions, versioned_events implemented. |
 
 ### ADR-013: Reliability
 

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "e11y/opentelemetry/semantic_conventions"
+
 # Check if OpenTelemetry SDK is available
 begin
   require "opentelemetry/sdk"
@@ -146,13 +148,14 @@ module E11y
 
       # Setup OTel Logger Provider
       def setup_logger_provider
-        @logger_provider = OpenTelemetry::SDK::Logs::LoggerProvider.new
+        resource = build_resource
+        @logger_provider = ::OpenTelemetry::SDK::Logs::LoggerProvider.new(resource: resource)
 
         # Add OTLP exporter when endpoint configured (sends to OTel Collector)
         if @endpoint
           require "opentelemetry-exporter-otlp-logs"
-          exporter = OpenTelemetry::Exporter::OTLP::Logs::LogsExporter.new(endpoint: @endpoint)
-          processor = OpenTelemetry::SDK::Logs::Export::BatchLogRecordProcessor.new(exporter)
+          exporter = ::OpenTelemetry::Exporter::OTLP::Logs::LogsExporter.new(endpoint: @endpoint)
+          processor = ::OpenTelemetry::SDK::Logs::Export::BatchLogRecordProcessor.new(exporter)
           @logger_provider.add_log_record_processor(processor)
         end
 
@@ -162,8 +165,48 @@ module E11y
         )
       rescue LoadError => e
         warn "[E11y::OTelLogs] OTLP export requested but opentelemetry-exporter-otlp-logs not available: #{e.message}"
-        @logger_provider ||= OpenTelemetry::SDK::Logs::LoggerProvider.new
+        resource = build_resource
+        @logger_provider ||= ::OpenTelemetry::SDK::Logs::LoggerProvider.new(resource: resource)
         @logger = @logger_provider.logger(name: "e11y", version: E11y::VERSION)
+      end
+
+      # Build OTel Resource with full attributes (ADR-007 §7, F5).
+      #
+      # @return [::OpenTelemetry::SDK::Resources::Resource]
+      def build_resource
+        attrs = {}
+
+        # Service (required)
+        attrs["service.name"] = @service_name || E11y.config&.service_name || "e11y"
+        attrs["service.version"] = E11y::VERSION
+
+        # Deployment
+        attrs["deployment.environment"] = E11y.config&.environment || ENV["RAILS_ENV"] || ENV["RACK_ENV"] || "development"
+
+        # Host
+        attrs["host.name"] = hostname
+
+        # Process
+        attrs["process.pid"] = Process.pid
+
+        # Merge with OTel default (process.runtime, telemetry.sdk) when available
+        base = ::OpenTelemetry::SDK::Resources::Resource
+        resource = base.create(attrs)
+        resource = base.default.merge(resource) if base.respond_to?(:default)
+        resource
+      rescue StandardError
+        # Fallback: minimal resource
+        ::OpenTelemetry::SDK::Resources::Resource.create(
+          "service.name" => @service_name || "e11y",
+          "service.version" => E11y::VERSION
+        )
+      end
+
+      def hostname
+        require "socket"
+        Socket.gethostname
+      rescue StandardError
+        ENV["HOSTNAME"] || "unknown"
       end
 
       # Build params for Logger#on_emit from E11y event
@@ -204,6 +247,7 @@ module E11y
       # Build OTel attributes from E11y payload
       #
       # Applies:
+      # - Semantic conventions (ADR-007 §4, F4) — maps known keys to OTel semantic names
       # - Cardinality protection (C04 Resolution)
       # - Optional baggage allowlist filter (C08 Resolution — pass an Array to enable)
       #
@@ -221,7 +265,7 @@ module E11y
         attributes["event.version"] = event_data[:v] if event_data[:v]
         attributes["service.name"] = @service_name if @service_name
 
-        # Add payload (with cardinality protection)
+        # Map payload via semantic conventions (F4) or event.* prefix
         payload = event_data[:payload] || {}
         payload.each do |key, value|
           # C04: Cardinality protection - limit attributes
@@ -230,7 +274,12 @@ module E11y
           # C08: Optional allowlist — skip unless allowed
           next unless baggage_allowed?(key)
 
-          attributes["event.#{key}"] = value
+          # F4: Map to semantic convention key when applicable
+          otel_key = E11y::OpenTelemetry::SemanticConventions.map_key(
+            event_data[:event_name],
+            key
+          )
+          attributes[otel_key] = value
         end
 
         attributes

@@ -320,6 +320,72 @@ RSpec.describe E11y::Registry do
   end
 
   # -------------------------------------------------------------------------
+  # #all_versions (ADR-012 §6.2)
+  # -------------------------------------------------------------------------
+  describe "#all_versions" do
+    it "returns empty array for unknown event" do
+      expect(registry.all_versions("unknown.event")).to eq([])
+    end
+
+    it "returns single version for unversioned event" do
+      klass = Class.new(E11y::Event::Base) do
+        contains_pii false
+        event_name "ev.single"
+      end
+      registry.register(klass)
+      result = registry.all_versions("ev.single")
+      expect(result).to eq([{ version: 1, class: klass }])
+    end
+
+    it "returns all versions sorted by version" do
+      v1 = Class.new(E11y::Event::Base) do
+        contains_pii false
+        event_name "ev.multi"
+        version 1
+      end
+      v2 = Class.new(E11y::Event::Base) do
+        contains_pii false
+        event_name "ev.multi"
+        version 2
+      end
+      registry.register(v1)
+      registry.register(v2)
+      result = registry.all_versions("ev.multi")
+      expect(result).to eq([{ version: 1, class: v1 }, { version: 2, class: v2 }])
+    end
+  end
+
+  # -------------------------------------------------------------------------
+  # #versioned_events (ADR-012 §6.2)
+  # -------------------------------------------------------------------------
+  describe "#versioned_events" do
+    it "returns empty array when no versioned events" do
+      klass = Class.new(E11y::Event::Base) do
+        contains_pii false
+        event_name "ev.alone"
+      end
+      registry.register(klass)
+      expect(registry.versioned_events).to eq([])
+    end
+
+    it "returns event names with 2+ versions" do
+      v1 = Class.new(E11y::Event::Base) do
+        contains_pii false
+        event_name "ev.versioned"
+        version 1
+      end
+      v2 = Class.new(E11y::Event::Base) do
+        contains_pii false
+        event_name "ev.versioned"
+        version 2
+      end
+      registry.register(v1)
+      registry.register(v2)
+      expect(registry.versioned_events).to include("ev.versioned")
+    end
+  end
+
+  # -------------------------------------------------------------------------
   # #to_documentation
   # -------------------------------------------------------------------------
   describe "#to_documentation" do

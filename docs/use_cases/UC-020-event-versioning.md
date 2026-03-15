@@ -195,7 +195,7 @@ end
 │ Event Registry (tracks all versions)                            │
 │                                                                  │
 │  event_name: 'order.paid'                                       │
-│    ├─ V1: OrderPaidV1                                           │
+│    ├─ V1: OrderPaid (no suffix per ADR-012)                     │
 │    ├─ V2: OrderPaidV2 (current)                                 │
 │    └─ V3: OrderPaidV3 (future)                                  │
 │                                                                  │
@@ -209,7 +209,7 @@ end
 │  {                                                               │
 │    "@timestamp": "2026-01-12T10:30:00Z",                        │
 │    "event_name": "order.paid",                                  │
-│    "event_version": 2,        ← Version included!               │
+│    "v": 2,                     ← Version (ADR-012 uses v: for V2+)               │
 │    "payload": {                                                  │
 │      "order_id": "123",                                          │
 │      "amount": 99.99,                                            │
@@ -231,9 +231,8 @@ E11y.configure do |config|
   config.versioning do
     enabled true
     
-    # Include version in event payload
+    # Include version in event payload (ADR-012: field name is v: for V2+)
     include_version_in_payload true
-    version_field :event_version  # Field name
     
     # Deprecation warnings
     warn_on_deprecated_version true
@@ -475,9 +474,9 @@ end
 
 **4. Use semantic versioning for major changes**
 ```ruby
-# ✅ GOOD: Major version for major changes
-class OrderPaidV1 < E11y::Event::Base
-  version 1  # Initial version
+# ✅ GOOD: V1 no suffix (ADR-012), V2+ with suffix
+class OrderPaid < E11y::Event::Base
+  version 1  # Initial version (no V1 suffix)
 end
 
 class OrderPaidV2 < E11y::Event::Base
@@ -599,7 +598,7 @@ class OrderPaid < E11y::Event::Base  # V1
     # Track deprecation usage
     Events::DeprecatedEventUsed.track(
       event_class: 'OrderPaid',
-      event_version: 1,
+      version: 1,
       service: ENV['SERVICE_NAME']
     )
   end

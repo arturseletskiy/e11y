@@ -93,6 +93,21 @@ module E11y
         instance.to_documentation
       end
 
+      # Return all versions of an event (ADR-012 §6.2).
+      #
+      # @param event_name [String] Event name
+      # @return [Array<Hash>] [{ version: N, class: Klass }, ...] sorted by version
+      def all_versions(event_name)
+        instance.all_versions(event_name)
+      end
+
+      # Return event names that have multiple versions (ADR-012 §6.2).
+      #
+      # @return [Array<String>]
+      def versioned_events
+        instance.versioned_events
+      end
+
       # Reset the singleton instance (primarily for test isolation).
       #
       # After calling this, the next call to `.instance` creates a fresh registry.
@@ -229,6 +244,28 @@ module E11y
     # @return [Integer]
     def size
       @mutex.synchronize { @registry.size }
+    end
+
+    # Return all versions of an event (ADR-012 §6.2).
+    #
+    # @param event_name [String] Event name
+    # @return [Array<Hash>] [{ version: N, class: Klass }, ...] sorted by version
+    def all_versions(event_name)
+      entries = @mutex.synchronize { @registry[event_name.to_s]&.dup }
+      return [] if entries.nil? || entries.empty?
+
+      entries
+        .map { |klass| { version: klass.respond_to?(:version) ? klass.version : 1, class: klass } }
+        .sort_by { |h| h[:version] }
+    end
+
+    # Return event names that have multiple versions (ADR-012 §6.2).
+    #
+    # @return [Array<String>]
+    def versioned_events
+      @mutex.synchronize do
+        @registry.select { |_name, entries| entries.size >= 2 }.keys
+      end
     end
 
     # Generate a documentation-friendly hash for every registered event class.
