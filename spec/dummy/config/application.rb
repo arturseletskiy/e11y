@@ -64,10 +64,10 @@ unless $e11y_dummy_configured
     end
 
     # Enable instrumentation
-    config.rails_instrumentation.enabled = true
-    config.active_job.enabled = true
-    config.sidekiq.enabled = true if defined?(Sidekiq)
-    config.logger_bridge.enabled = false
+    config.rails_instrumentation_enabled = true
+    config.active_job_enabled = true
+    config.sidekiq_enabled = true if defined?(Sidekiq)
+    config.logger_bridge_enabled = false
 
     # Reconfigure pipeline for tests: 100% sampling (capture all events)
     # NOTE: This must happen BEFORE Rails.application.initialize! is called

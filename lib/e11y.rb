@@ -245,9 +245,12 @@ module E11y
   #   end
   class Configuration
     attr_accessor :adapters, :log_level, :logger, :enabled, :environment, :service_name, :default_retention_period,
-                  :routing_rules, :fallback_adapters, :enable_http_tracing
-    attr_reader :adapter_mapping, :pipeline, :rails_instrumentation, :logger_bridge, :ephemeral_buffer, :active_job,
-                :sidekiq, :error_handling, :dlq_storage, :dlq_filter, :security, :tracing, :opentelemetry
+                  :routing_rules, :fallback_adapters, :enable_http_tracing,
+                  :rails_instrumentation_enabled, :rails_instrumentation_custom_mappings, :rails_instrumentation_ignore_events,
+                  :logger_bridge_enabled, :logger_bridge_track_severities, :logger_bridge_ignore_patterns,
+                  :sidekiq_enabled, :active_job_enabled
+    attr_reader :adapter_mapping, :pipeline, :ephemeral_buffer, :error_handling, :dlq_storage, :dlq_filter, :security,
+                :tracing, :opentelemetry
 
     def initialize
       initialize_basic_config
@@ -276,11 +279,15 @@ module E11y
     end
 
     def initialize_feature_configs
-      @rails_instrumentation = RailsInstrumentationConfig.new
-      @logger_bridge = LoggerBridgeConfig.new
+      @rails_instrumentation_enabled = false
+      @rails_instrumentation_custom_mappings = {}
+      @rails_instrumentation_ignore_events = []
+      @logger_bridge_enabled = false
+      @logger_bridge_track_severities = nil
+      @logger_bridge_ignore_patterns = []
+      @sidekiq_enabled = false
+      @active_job_enabled = false
       @ephemeral_buffer = Config.new
-      @active_job = ActiveJobConfig.new
-      @sidekiq = SidekiqConfig.new
       @error_handling = ErrorHandlingConfig.new # ✅ C18 Resolution
       @dlq_storage = nil # Set by user (e.g., DLQ::FileAdapter instance)
       @dlq_filter = nil # Set by user (e.g., DLQ::Filter instance)
@@ -479,56 +486,6 @@ module E11y
     end
   end
 
-  # Rails Instrumentation configuration
-  class RailsInstrumentationConfig
-    attr_accessor :enabled, :custom_mappings, :ignore_events
-
-    def initialize
-      @enabled = false # Disabled by default, enabled by Railtie
-      @custom_mappings = {}
-      @ignore_events = []
-    end
-
-    # Override event class for specific ASN pattern (Devise-style)
-    # @param pattern [String] ActiveSupport::Notifications pattern
-    # @param event_class [Class] E11y event class
-    # @return [void]
-    def event_class_for(pattern, event_class)
-      @custom_mappings[pattern] = event_class
-    end
-
-    # Ignore specific ASN event
-    # @param pattern [String] ActiveSupport::Notifications pattern
-    # @return [void]
-    def ignore_event(pattern)
-      @ignore_events << pattern
-    end
-  end
-
-  # Logger Bridge configuration
-  #
-  # Controls Rails.logger integration:
-  # - When enabled = true: wraps Rails.logger and sends logs to E11y
-  # - When enabled = false: no integration (default)
-  #
-  # @example Enable logger bridge
-  #   E11y.configure do |config|
-  #     config.logger_bridge.enabled = true
-  #     config.logger_bridge.track_severities = [:info, :warn, :error, :fatal]
-  #     config.logger_bridge.ignore_patterns = [/Started GET/, /Completed \d+ OK/]
-  #   end
-  #
-  # @see lib/e11y/logger/bridge.rb
-  class LoggerBridgeConfig
-    attr_accessor :enabled, :track_severities, :ignore_patterns
-
-    def initialize
-      @enabled = false # Opt-in: disabled by default
-      @track_severities = nil # nil = all severities
-      @ignore_patterns = []
-    end
-  end
-
   # Ephemeral Buffer configuration (request/job-scoped debug buffering)
   class Config
     attr_accessor :enabled, :flush_on_error, :flush_on_statuses, :job_buffer_limit
@@ -548,38 +505,6 @@ module E11y
       @flush_on_statuses = []     # Additional HTTP statuses that trigger a flush (e.g. [403])
       @debug_adapters    = nil    # nil → use fallback_adapters
       @job_buffer_limit = nil # nil → use EphemeralBuffer::DEFAULT_BUFFER_LIMIT (jobs only)
-    end
-  end
-
-  # ActiveJob configuration
-  #
-  # Controls ActiveJob integration (callbacks for event tracking).
-  # When enabled, E11y will automatically track job lifecycle events:
-  # - job.enqueued
-  # - job.started
-  # - job.completed
-  # - job.failed
-  #
-  # @see lib/e11y/instruments/active_job.rb
-  class ActiveJobConfig
-    attr_accessor :enabled
-
-    def initialize
-      @enabled = false # Disabled by default, enabled by Railtie
-    end
-  end
-
-  # Sidekiq configuration
-  #
-  # Controls Sidekiq middleware integration for trace propagation and context setup.
-  # Automatically enabled by Railtie when Sidekiq is detected.
-  #
-  # @see ADR-008 §9 (Sidekiq Integration)
-  class SidekiqConfig
-    attr_accessor :enabled
-
-    def initialize
-      @enabled = false # Disabled by default, enabled by Railtie when Sidekiq is present
     end
   end
 

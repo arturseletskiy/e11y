@@ -10,15 +10,14 @@ module E11y
     # **Unidirectional Flow:** ASN → E11y
     #
     # @example Basic usage
-    #   # Automatically enabled by E11y::Railtie if config.rails_instrumentation.enabled = true
+    #   # Automatically enabled by E11y::Railtie if config.rails_instrumentation_enabled = true
     #   E11y::Instruments::RailsInstrumentation.setup!
     #
     # @example Custom event mapping
     #   E11y.configure do |config|
-    #     config.rails_instrumentation do
-    #       event_class_for 'sql.active_record', MyApp::CustomQueryEvent
-    #       ignore_event 'cache_read.active_support'
-    #     end
+    #     config.rails_instrumentation_enabled = true
+    #     config.rails_instrumentation_custom_mappings['sql.active_record'] = MyApp::CustomQueryEvent
+    #     config.rails_instrumentation_ignore_events << 'cache_read.active_support'
     #   end
     #
     # @see ADR-008 §4.1 (Unidirectional Flow ASN → E11y)
@@ -51,7 +50,7 @@ module E11y
       #
       # @return [void]
       def self.setup!
-        return unless E11y.config.rails_instrumentation&.enabled
+        return unless E11y.config.rails_instrumentation_enabled
 
         # Subscribe to each configured event pattern
         event_mapping.each do |asn_pattern, e11y_event_class_name|
@@ -136,7 +135,7 @@ module E11y
           mapping = DEFAULT_RAILS_EVENT_MAPPING.dup
 
           # Apply custom mappings from config (Devise-style overrides)
-          custom_mappings = E11y.config.rails_instrumentation&.custom_mappings || {}
+          custom_mappings = E11y.config.rails_instrumentation_custom_mappings || {}
           custom_mappings.each do |pattern, event_class|
             mapping[pattern] = event_class.name
           end
@@ -149,7 +148,7 @@ module E11y
       # @param pattern [String] ASN event pattern
       # @return [Boolean] true if should be ignored
       def self.ignored?(pattern)
-        ignore_list = E11y.config.rails_instrumentation&.ignore_events || []
+        ignore_list = E11y.config.rails_instrumentation_ignore_events || []
         ignore_list.include?(pattern)
       end
 

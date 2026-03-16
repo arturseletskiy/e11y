@@ -49,21 +49,21 @@ RSpec.describe E11y::Instruments::RailsInstrumentation do
 
   describe ".setup!" do
     it "returns early if rails_instrumentation not enabled" do
-      allow(E11y.config).to receive(:rails_instrumentation).and_return(nil)
+      allow(E11y.config).to receive(:rails_instrumentation_enabled).and_return(false)
       expect(described_class).not_to receive(:event_mapping)
       described_class.setup!
     end
 
-    it "returns early if rails_instrumentation.enabled is false" do
-      config = double(enabled: false)
-      allow(E11y.config).to receive(:rails_instrumentation).and_return(config)
+    it "returns early if rails_instrumentation_enabled is false" do
+      allow(E11y.config).to receive(:rails_instrumentation_enabled).and_return(false)
       expect(described_class).not_to receive(:event_mapping)
       described_class.setup!
     end
 
     it "subscribes to configured events when enabled" do
-      config = double(enabled: true, custom_mappings: {}, ignore_events: [])
-      allow(E11y.config).to receive(:rails_instrumentation).and_return(config)
+      allow(E11y.config).to receive(:rails_instrumentation_enabled).and_return(true)
+      allow(E11y.config).to receive(:rails_instrumentation_custom_mappings).and_return({})
+      allow(E11y.config).to receive(:rails_instrumentation_ignore_events).and_return([])
       allow(described_class).to receive(:ignored?).and_return(false)
 
       expect(described_class).to receive(:subscribe_to_event).at_least(:once)
@@ -72,8 +72,9 @@ RSpec.describe E11y::Instruments::RailsInstrumentation do
     end
 
     it "skips ignored events" do
-      config = double(enabled: true, custom_mappings: {}, ignore_events: ["sql.active_record"])
-      allow(E11y.config).to receive(:rails_instrumentation).and_return(config)
+      allow(E11y.config).to receive(:rails_instrumentation_enabled).and_return(true)
+      allow(E11y.config).to receive(:rails_instrumentation_custom_mappings).and_return({})
+      allow(E11y.config).to receive(:rails_instrumentation_ignore_events).and_return(["sql.active_record"])
 
       expect(described_class).not_to receive(:subscribe_to_event).with("sql.active_record", anything)
       described_class.instance_variable_set(:@event_mapping, nil) # Reset cache
@@ -87,8 +88,7 @@ RSpec.describe E11y::Instruments::RailsInstrumentation do
     end
 
     it "returns DEFAULT_RAILS_EVENT_MAPPING when no custom mappings" do
-      config = double(custom_mappings: {})
-      allow(E11y.config).to receive(:rails_instrumentation).and_return(config)
+      allow(E11y.config).to receive(:rails_instrumentation_custom_mappings).and_return({})
 
       mapping = described_class.event_mapping
       expect(mapping).to include(described_class::DEFAULT_RAILS_EVENT_MAPPING)
@@ -96,16 +96,14 @@ RSpec.describe E11y::Instruments::RailsInstrumentation do
 
     it "applies custom mappings from config" do
       custom_event_class = double(name: "CustomEventClass")
-      config = double(custom_mappings: { "custom.event" => custom_event_class })
-      allow(E11y.config).to receive(:rails_instrumentation).and_return(config)
+      allow(E11y.config).to receive(:rails_instrumentation_custom_mappings).and_return("custom.event" => custom_event_class)
 
       mapping = described_class.event_mapping
       expect(mapping["custom.event"]).to eq("CustomEventClass")
     end
 
     it "caches the mapping" do
-      config = double(custom_mappings: {})
-      allow(E11y.config).to receive(:rails_instrumentation).and_return(config)
+      allow(E11y.config).to receive(:rails_instrumentation_custom_mappings).and_return({})
 
       mapping1 = described_class.event_mapping
       mapping2 = described_class.event_mapping
@@ -113,8 +111,7 @@ RSpec.describe E11y::Instruments::RailsInstrumentation do
     end
 
     it "handles nil custom_mappings" do
-      config = double(custom_mappings: nil)
-      allow(E11y.config).to receive(:rails_instrumentation).and_return(config)
+      allow(E11y.config).to receive(:rails_instrumentation_custom_mappings).and_return(nil)
 
       expect { described_class.event_mapping }.not_to raise_error
     end
@@ -122,29 +119,25 @@ RSpec.describe E11y::Instruments::RailsInstrumentation do
 
   describe ".ignored?" do
     it "returns false when pattern not in ignore list" do
-      config = double(ignore_events: ["other.event"])
-      allow(E11y.config).to receive(:rails_instrumentation).and_return(config)
+      allow(E11y.config).to receive(:rails_instrumentation_ignore_events).and_return(["other.event"])
 
       expect(described_class.ignored?("sql.active_record")).to be false
     end
 
     it "returns true when pattern in ignore list" do
-      config = double(ignore_events: ["sql.active_record"])
-      allow(E11y.config).to receive(:rails_instrumentation).and_return(config)
+      allow(E11y.config).to receive(:rails_instrumentation_ignore_events).and_return(["sql.active_record"])
 
       expect(described_class.ignored?("sql.active_record")).to be true
     end
 
     it "handles nil ignore_events" do
-      config = double(ignore_events: nil)
-      allow(E11y.config).to receive(:rails_instrumentation).and_return(config)
+      allow(E11y.config).to receive(:rails_instrumentation_ignore_events).and_return(nil)
 
       expect(described_class.ignored?("sql.active_record")).to be false
     end
 
     it "handles empty ignore_events array" do
-      config = double(ignore_events: [])
-      allow(E11y.config).to receive(:rails_instrumentation).and_return(config)
+      allow(E11y.config).to receive(:rails_instrumentation_ignore_events).and_return([])
 
       expect(described_class.ignored?("sql.active_record")).to be false
     end

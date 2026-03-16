@@ -64,10 +64,10 @@ module E11y
       next unless E11y.config.enabled
 
       # Setup instruments (each can be enabled/disabled separately)
-      E11y::Railtie.setup_rails_instrumentation if E11y.config.rails_instrumentation&.enabled
-      E11y::Railtie.setup_logger_bridge if E11y.config.logger_bridge&.enabled
-      E11y::Railtie.setup_sidekiq if defined?(::Sidekiq) && E11y.config.sidekiq&.enabled
-      E11y::Railtie.setup_active_job if defined?(::ActiveJob) && E11y.config.active_job&.enabled
+      E11y::Railtie.setup_rails_instrumentation if E11y.config.rails_instrumentation_enabled
+      E11y::Railtie.setup_logger_bridge if E11y.config.logger_bridge_enabled
+      E11y::Railtie.setup_sidekiq if defined?(::Sidekiq) && E11y.config.sidekiq_enabled
+      E11y::Railtie.setup_active_job if defined?(::ActiveJob) && E11y.config.active_job_enabled
     end
 
     # Outgoing HTTP trace propagation (UC-009)

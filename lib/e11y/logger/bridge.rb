@@ -9,7 +9,7 @@ module E11y
     #
     # Transparent wrapper around Rails.logger that:
     # 1. Delegates all calls to the original logger (preserves Rails behavior)
-    # 2. Tracks log calls as E11y events (when logger_bridge.enabled = true)
+    # 2. Tracks log calls as E11y events (when logger_bridge_enabled = true)
     #
     # **Why SimpleDelegator instead of full replacement:**
     # - ✅ Simpler: No need to reimplement entire Logger API
@@ -18,12 +18,12 @@ module E11y
     # - ✅ Rails Way: Extends functionality without replacing core components
     #
     # @example Basic usage
-    #   # Automatically enabled by E11y::Railtie if config.logger_bridge.enabled = true
+    #   # Automatically enabled by E11y::Railtie if config.logger_bridge_enabled = true
     #   Rails.logger = E11y::Logger::Bridge.new(Rails.logger)
     #
     # @example Manual setup
     #   E11y.configure do |config|
-    #     config.logger_bridge.enabled = true  # Wrap Rails.logger and send logs to E11y
+    #     config.logger_bridge_enabled = true  # Wrap Rails.logger and send logs to E11y
     #   end
     #
     # @see ADR-008 §7 (Rails.logger Migration)
@@ -35,7 +35,7 @@ module E11y
       #
       # @return [void]
       def self.setup!
-        return unless E11y.config.logger_bridge&.enabled
+        return unless E11y.config.logger_bridge_enabled
         return unless defined?(::Rails)
 
         # Wrap Rails.logger (preserves original behavior)
@@ -54,9 +54,8 @@ module E11y
           ::Logger::FATAL => :fatal,
           ::Logger::UNKNOWN => :warn
         }
-        cfg = E11y.config.logger_bridge
-        @track_severities_set = build_track_severities_set(cfg&.track_severities)
-        @ignore_patterns = build_compiled_patterns(cfg&.ignore_patterns)
+        @track_severities_set = build_track_severities_set(E11y.config.logger_bridge_track_severities)
+        @ignore_patterns = build_compiled_patterns(E11y.config.logger_bridge_ignore_patterns)
       end
 
       # Intercept logger methods to track to E11y
