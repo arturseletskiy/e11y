@@ -4,11 +4,88 @@
 # Docs: https://github.com/arturseletskiy/e11y
 
 E11y.configure do |config|
-  # Minimal setup: stdout adapter (events print to console).
-  # Add Loki, Sentry, etc. when ready — see docs for adapter config.
-  config.adapters[:logs] = E11y::Adapters::Stdout.new(colorize: true)
+  # =============================================================================
+  # BASIC
+  # =============================================================================
+  config.service_name = ENV["SERVICE_NAME"] || Rails.application.class.module_parent_name.underscore
+  config.environment = Rails.env.to_s
+  config.enabled = !Rails.env.test?
+  config.default_retention_period = 30.days
+  config.log_level = :info
 
-  # Optional: uncomment to add more adapters
-  # config.adapters[:errors_tracker] = E11y::Adapters::Sentry.new(dsn: ENV["SENTRY_DSN"])
+  # =============================================================================
+  # ADAPTERS
+  # =============================================================================
+  config.adapters[:logs] = E11y::Adapters::Stdout.new(colorize: true)
   # config.adapters[:logs] = E11y::Adapters::Loki.new(url: ENV.fetch("LOKI_URL", "http://localhost:3100"))
+  # config.adapters[:errors_tracker] = E11y::Adapters::Sentry.new(dsn: ENV["SENTRY_DSN"])
+
+  # =============================================================================
+  # RAILS INTEGRATION
+  # =============================================================================
+  config.rails_instrumentation_enabled = true
+  config.sidekiq_enabled = defined?(Sidekiq)
+  config.active_job_enabled = true
+  config.logger_bridge_enabled = false
+  # config.logger_bridge_track_severities = nil  # nil = all severities
+  # config.logger_bridge_ignore_patterns = [/Started GET/, /Completed \d+ OK/]
+
+  # =============================================================================
+  # EPHEMERAL BUFFER (request/job-scoped debug events)
+  # =============================================================================
+  config.ephemeral_buffer_enabled = false
+  # config.ephemeral_buffer_flush_on_error = true
+  # config.ephemeral_buffer_flush_on_statuses = []
+  # config.ephemeral_buffer_debug_adapters = nil
+  # config.ephemeral_buffer_job_buffer_limit = nil
+
+  # =============================================================================
+  # ERROR HANDLING
+  # =============================================================================
+  config.error_handling_fail_on_error = true
+
+  # =============================================================================
+  # SLO TRACKING
+  # =============================================================================
+  config.slo_tracking_enabled = true
+  # config.slo_tracking_http_ignore_statuses = [404, 401]
+  # config.slo_tracking_latency_percentiles = [50, 95, 99]
+  # config.add_slo_controller "OrdersController", action: "create" do
+  #   slo_target 0.999
+  #   latency_target 200  # ms
+  # end
+  # config.add_slo_job "ProcessPaymentJob" do
+  #   ignore false  # set true to exclude from SLO tracking
+  # end
+
+  # =============================================================================
+  # RATE LIMITING
+  # =============================================================================
+  config.rate_limiting_enabled = false
+  # config.rate_limiting_global_limit = 10_000
+  # config.rate_limiting_global_window = 1.0
+  # config.rate_limiting_per_event_limit = 1_000
+  # config.add_rate_limit_per_event "payment.*", limit: 500, window: 60
+
+  # =============================================================================
+  # SECURITY (Baggage PII protection)
+  # =============================================================================
+  config.security_baggage_protection_enabled = true
+  # config.security_baggage_protection_allowed_keys = %w[trace_id span_id environment version service_name]
+  # config.security_baggage_protection_block_mode = :silent  # :silent, :warn, :raise
+
+  # =============================================================================
+  # TRACING (OpenTelemetry)
+  # =============================================================================
+  # config.tracing_source = :e11y
+  # config.tracing_default_sample_rate = 0.1
+  # config.tracing_respect_parent_sampling = true
+  # config.opentelemetry_span_creation_patterns = ["order.*", "payment.*"]
+
+  # =============================================================================
+  # CARDINALITY PROTECTION (metrics label limits)
+  # =============================================================================
+  # config.cardinality_protection_max_cardinality_limit = 1000
+  # config.cardinality_protection_denylist = []
+  # config.cardinality_protection_overflow_strategy = :relabel
 end
