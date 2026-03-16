@@ -244,4 +244,26 @@ RSpec.describe E11y, "module API" do
       expect(result[:errors_tracker]).to eq(:half_open)
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # .trace
+  # ---------------------------------------------------------------------------
+  describe ".trace" do
+    let(:event_class) do
+      Class.new(E11y::Event::Base) do
+        schema { required(:id).filled(:string) }
+        def self.name
+          "Events::Test"
+        end
+      end
+    end
+
+    it "delegates to PipelineInspector.trace_event" do
+      expect(E11y::Debug::PipelineInspector).to receive(:trace_event)
+        .with(event_class, hash_including(id: "1"))
+        .and_return({})
+
+      described_class.trace(event_class, id: "1")
+    end
+  end
 end

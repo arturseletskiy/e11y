@@ -77,6 +77,20 @@ module E11y
       configuration.adapters[:test] || configuration.adapters[:memory]
     end
 
+    # Trace an event through the pipeline (debug utility).
+    # Delegates to PipelineInspector.trace_event. Loads the inspector on demand.
+    #
+    # @param event_class [Class] event class (e.g., Events::OrderCreated)
+    # @param payload [Hash] keyword arguments for the event payload
+    # @return [Hash] event_data after pipeline
+    #
+    # @example
+    #   E11y.trace(Events::OrderCreated, order_id: "123", amount: 99.99)
+    def trace(event_class, **payload)
+      require "e11y/debug/pipeline_inspector"
+      E11y::Debug::PipelineInspector.trace_event(event_class, **payload)
+    end
+
     # Track an event
     #
     # Accepts either an event instance or an event class with an optional payload.
