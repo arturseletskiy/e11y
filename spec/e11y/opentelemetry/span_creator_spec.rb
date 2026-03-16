@@ -4,7 +4,7 @@ require "e11y/opentelemetry/span_creator"
 
 RSpec.describe E11y::OpenTelemetry::SpanCreator do
   before do
-    allow(E11y.config.opentelemetry).to receive(:span_creation_patterns).and_return(["order.*", "payment.*", "http.*"])
+    allow(E11y.config).to receive(:opentelemetry_span_creation_patterns).and_return(["order.*", "payment.*", "http.*"])
   end
 
   describe ".create_span_from_event" do
@@ -31,7 +31,7 @@ RSpec.describe E11y::OpenTelemetry::SpanCreator do
       end
 
       it "creates span for error events regardless of patterns" do
-        allow(E11y.config.opentelemetry).to receive(:span_creation_patterns).and_return([])
+        allow(E11y.config).to receive(:opentelemetry_span_creation_patterns).and_return([])
 
         event_data = {
           event_name: "error.occurred",
@@ -45,7 +45,7 @@ RSpec.describe E11y::OpenTelemetry::SpanCreator do
       end
 
       it "creates span for fatal events regardless of patterns" do
-        allow(E11y.config.opentelemetry).to receive(:span_creation_patterns).and_return([])
+        allow(E11y.config).to receive(:opentelemetry_span_creation_patterns).and_return([])
 
         event_data = {
           event_name: "system.crash",
@@ -59,7 +59,7 @@ RSpec.describe E11y::OpenTelemetry::SpanCreator do
       end
 
       it "returns nil for non-matching events when patterns empty" do
-        allow(E11y.config.opentelemetry).to receive(:span_creation_patterns).and_return([])
+        allow(E11y.config).to receive(:opentelemetry_span_creation_patterns).and_return([])
 
         event_data = {
           event_name: "user.viewed",
@@ -72,7 +72,7 @@ RSpec.describe E11y::OpenTelemetry::SpanCreator do
       end
 
       it "returns nil for empty event_name when not error/fatal" do
-        allow(E11y.config.opentelemetry).to receive(:span_creation_patterns).and_return(["*"])
+        allow(E11y.config).to receive(:opentelemetry_span_creation_patterns).and_return(["*"])
 
         event_data = {
           event_name: "",

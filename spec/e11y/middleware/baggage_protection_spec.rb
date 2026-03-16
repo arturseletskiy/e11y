@@ -20,22 +20,14 @@ RSpec.describe E11y::Middleware::BaggageProtection do
   end
 
   let(:config_double) do
-    dbl = instance_double(E11y::Configuration, security: security_config, enabled: true)
+    dbl = instance_double(
+      E11y::Configuration,
+      security_baggage_protection_enabled: true,
+      security_baggage_protection_allowed_keys: %w[trace_id span_id request_id],
+      security_baggage_protection_block_mode: :silent
+    )
     allow(dbl).to receive(:built_pipeline).and_return(->(e) { e })
     dbl
-  end
-
-  let(:security_config) do
-    instance_double(E11y::SecurityConfig, baggage_protection: baggage_config)
-  end
-
-  let(:baggage_config) do
-    instance_double(
-      E11y::BaggageProtectionConfig,
-      enabled: true,
-      allowed_keys: %w[trace_id span_id request_id],
-      block_mode: :silent
-    )
   end
 
   let(:logger) { instance_double(Logger, debug: nil, warn: nil) }
@@ -60,9 +52,9 @@ RSpec.describe E11y::Middleware::BaggageProtection do
     # OTel integration tests moved to spec/integration/baggage_protection_integration_spec.rb
     # to avoid hide_const("OpenTelemetry") and config_double conflicts in full suite.
 
-    context "when config.security.baggage_protection.enabled is false" do
+    context "when config.security_baggage_protection_enabled is false" do
       before do
-        allow(baggage_config).to receive(:enabled).and_return(false)
+        allow(config_double).to receive(:security_baggage_protection_enabled).and_return(false)
       end
 
       it "does not install protection and passes event through" do

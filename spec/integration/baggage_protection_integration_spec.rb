@@ -22,19 +22,15 @@ RSpec.describe "BaggageProtection OpenTelemetry Integration", :integration do
   before do
     # Use real config for integration; ensure baggage_protection allows only safe keys
     E11y.configure do |config|
-      config.security.baggage_protection do
-        enabled true
-        allowed_keys %w[trace_id span_id request_id]
-        block_mode :silent
-      end
+      config.security_baggage_protection_enabled = true
+      config.security_baggage_protection_allowed_keys = %w[trace_id span_id request_id]
+      config.security_baggage_protection_block_mode = :silent
     end
   end
 
   it "blocks PII keys from OpenTelemetry Baggage" do
-    cfg = E11y.config.security.baggage_protection
-    expect(cfg).to be, "config.security.baggage_protection is nil"
-    expect(cfg.enabled).to be(true), "config.security.baggage_protection.enabled is #{cfg.enabled.inspect}"
-    expect(cfg.allowed_keys).not_to include("user_email"), "user_email in allowed_keys: #{cfg.allowed_keys}"
+    expect(E11y.config.security_baggage_protection_enabled).to be(true)
+    expect(E11y.config.security_baggage_protection_allowed_keys).not_to include("user_email")
 
     middleware.call(event_data)
 

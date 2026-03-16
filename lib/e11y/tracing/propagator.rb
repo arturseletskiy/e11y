@@ -86,10 +86,10 @@ module E11y
 
       # Filter baggage to allowed keys only (ADR-006 §5.5, PII protection).
       def self.filter_baggage_for_propagation(baggage_hash)
-        cfg = E11y.config&.security&.baggage_protection
+        cfg = E11y.config
         return baggage_hash if cfg.nil?
 
-        cfg.filter_baggage(baggage_hash)
+        cfg.filter_baggage_for_propagation(baggage_hash)
       end
 
       # Parse a W3C traceparent header string.

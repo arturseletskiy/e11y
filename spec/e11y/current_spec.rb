@@ -182,17 +182,17 @@ RSpec.describe E11y::Current do
       end
 
       context "when baggage_protection enabled (ADR-006 §5.5)" do
-        let(:baggage_config) do
-          config = instance_double(E11y::BaggageProtectionConfig)
-          allow(config).to receive(:enabled).and_return(true)
-          allow(config).to receive(:allowed_keys).and_return(%w[trace_id experiment tenant])
-          allow(config).to receive(:block_mode).and_return(:silent)
-          config
+        let(:config_double) do
+          instance_double(
+            E11y::Configuration,
+            security_baggage_protection_enabled: true,
+            security_baggage_protection_allowed_keys: %w[trace_id experiment tenant],
+            security_baggage_protection_block_mode: :silent
+          )
         end
 
         before do
-          security = instance_double(E11y::SecurityConfig, baggage_protection: baggage_config)
-          allow(E11y).to receive(:config).and_return(instance_double(E11y::Configuration, security: security))
+          allow(E11y).to receive(:config).and_return(config_double)
         end
 
         it "blocks disallowed keys (user_email) in silent mode" do
@@ -206,7 +206,7 @@ RSpec.describe E11y::Current do
         end
 
         it "raises when block_mode is :raise" do
-          allow(baggage_config).to receive(:block_mode).and_return(:raise)
+          allow(config_double).to receive(:security_baggage_protection_block_mode).and_return(:raise)
           expect { described_class.add_baggage("user_email", "x") }.to raise_error(
             E11y::BaggagePiiError,
             /Blocked PII from E11y baggage/
@@ -214,7 +214,7 @@ RSpec.describe E11y::Current do
         end
 
         it "warns when block_mode is :warn" do
-          allow(baggage_config).to receive(:block_mode).and_return(:warn)
+          allow(config_double).to receive(:security_baggage_protection_block_mode).and_return(:warn)
           expect(E11y.logger).to receive(:warn).with(/Blocked PII from E11y baggage.*user_email/)
           described_class.add_baggage("user_email", "x")
           expect(described_class.baggage).to be_nil
@@ -223,9 +223,8 @@ RSpec.describe E11y::Current do
 
       context "when baggage_protection disabled" do
         before do
-          config = instance_double(E11y::BaggageProtectionConfig, enabled: false)
-          security = instance_double(E11y::SecurityConfig, baggage_protection: config)
-          allow(E11y).to receive(:config).and_return(instance_double(E11y::Configuration, security: security))
+          config_double = instance_double(E11y::Configuration, security_baggage_protection_enabled: false)
+          allow(E11y).to receive(:config).and_return(config_double)
         end
 
         it "allows any key" do

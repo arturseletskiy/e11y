@@ -111,49 +111,56 @@ RSpec.describe E11y::Configuration do
   end
 
   # ---------------------------------------------------------------------------
-  # cardinality_protection block DSL
+  # security, tracing, opentelemetry, cardinality_protection flat accessors
   # ---------------------------------------------------------------------------
-  describe "#cardinality_protection block DSL" do
-    it "yields the CardinalityProtectionConfig to the block via instance_eval" do
-      yielded_self = nil
-      config.cardinality_protection { yielded_self = self }
-      expect(yielded_self).to be_a(E11y::CardinalityProtectionConfig)
+  describe "#security_baggage_protection_* flat accessors" do
+    it "sets security_baggage_protection_enabled and allowed_keys" do
+      config.security_baggage_protection_enabled = true
+      config.security_baggage_protection_allowed_keys = %w[trace_id span_id request_id]
+      config.security_baggage_protection_block_mode = :warn
+      expect(config.security_baggage_protection_enabled).to be(true)
+      expect(config.security_baggage_protection_allowed_keys).to eq(%w[trace_id span_id request_id])
+      expect(config.security_baggage_protection_block_mode).to eq(:warn)
     end
 
-    it "configures max_cardinality via DSL method" do
-      E11y.configure do |c|
-        c.cardinality_protection do
-          max_cardinality 500
-        end
-      end
-      expect(E11y.config.cardinality_protection.max_cardinality_limit).to eq(500)
+    it "filter_baggage_for_propagation returns only allowed keys when enabled" do
+      config.security_baggage_protection_enabled = true
+      config.security_baggage_protection_allowed_keys = %w[trace_id experiment]
+      hash = { "trace_id" => "abc", "experiment" => "exp-1", "user_email" => "x@y.com" }
+      expect(config.filter_baggage_for_propagation(hash)).to eq("trace_id" => "abc", "experiment" => "exp-1")
     end
 
-    it "configures denylist via DSL method" do
-      E11y.configure do |c|
-        c.cardinality_protection do
-          denylist %i[user_id email]
-        end
-      end
-      # denylist is a DSL setter (requires 1 arg), read via ivar
-      stored = E11y.config.cardinality_protection.instance_variable_get(:@denylist)
-      expect(stored).to eq(%i[user_id email])
+    it "filter_baggage_for_propagation returns full hash when disabled" do
+      config.security_baggage_protection_enabled = false
+      hash = { "user_email" => "x@y.com" }
+      expect(config.filter_baggage_for_propagation(hash)).to eq(hash)
     end
+  end
 
-    it "configures overflow_strategy via DSL method" do
-      E11y.configure do |c|
-        c.cardinality_protection do
-          overflow_strategy :drop
-        end
-      end
-      # overflow_strategy is a DSL setter (requires 1 arg), read via ivar
-      stored = E11y.config.cardinality_protection.instance_variable_get(:@overflow_strategy)
-      expect(stored).to eq(:drop)
+  describe "#tracing_* flat accessors" do
+    it "sets tracing_source and tracing_default_sample_rate" do
+      config.tracing_source = :opentelemetry
+      config.tracing_default_sample_rate = 0.5
+      expect(config.tracing_source).to eq(:opentelemetry)
+      expect(config.tracing_default_sample_rate).to eq(0.5)
     end
+  end
 
-    it "returns the CardinalityProtectionConfig when called without a block" do
-      result = config.cardinality_protection
-      expect(result).to be_a(E11y::CardinalityProtectionConfig)
+  describe "#opentelemetry_span_creation_patterns" do
+    it "sets opentelemetry_span_creation_patterns" do
+      config.opentelemetry_span_creation_patterns = ["order.*", "payment.*"]
+      expect(config.opentelemetry_span_creation_patterns).to eq(["order.*", "payment.*"])
+    end
+  end
+
+  describe "#cardinality_protection_* flat accessors" do
+    it "sets cardinality_protection_max_cardinality_limit, denylist, overflow_strategy" do
+      config.cardinality_protection_max_cardinality_limit = 500
+      config.cardinality_protection_denylist = %i[user_id email]
+      config.cardinality_protection_overflow_strategy = :drop
+      expect(config.cardinality_protection_max_cardinality_limit).to eq(500)
+      expect(config.cardinality_protection_denylist).to eq(%i[user_id email])
+      expect(config.cardinality_protection_overflow_strategy).to eq(:drop)
     end
   end
 

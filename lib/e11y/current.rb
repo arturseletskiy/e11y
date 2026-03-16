@@ -48,18 +48,18 @@ module E11y
     attribute :request_path
 
     # Add baggage key-value (propagated via tracestate / job metadata).
-    # Respects config.security.baggage_protection: blocks PII keys per allowed_keys (ADR-006 §5.5).
+    # Respects config.security_baggage_protection_*: blocks PII keys per allowed_keys (ADR-006 §5.5).
     #
     # @param key [String, Symbol]
     # @param value [Object] Converted to string
     # @raise [E11y::BaggagePiiError] when block_mode is :raise and key not allowed
     def self.add_baggage(key, value)
-      cfg = E11y.config&.security&.baggage_protection
-      if cfg&.enabled
-        allowed = (cfg.allowed_keys || E11y::BaggageProtectionConfig::DEFAULT_ALLOWED_KEYS).map(&:to_s)
+      cfg = E11y.config
+      if cfg&.security_baggage_protection_enabled
+        allowed = (cfg.security_baggage_protection_allowed_keys || E11y::BAGGAGE_PROTECTION_DEFAULT_ALLOWED_KEYS).map(&:to_s)
         unless allowed.include?(key.to_s)
           message = "[E11y] Blocked PII from E11y baggage: key=#{key.inspect}"
-          case (cfg.block_mode || :silent)
+          case cfg.security_baggage_protection_block_mode || :silent
           when :silent then E11y.logger&.debug(message)
           when :warn then E11y.logger&.warn(message)
           when :raise then raise E11y::BaggagePiiError, "#{message}. Only allowed keys: #{allowed.join(', ')}"

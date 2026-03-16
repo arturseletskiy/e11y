@@ -12,9 +12,7 @@ module E11y
     #
     # @example Configuration
     #   E11y.configure do |config|
-    #     config.opentelemetry do
-    #       span_creation_patterns ["order.*", "payment.*"]
-    #     end
+    #     config.opentelemetry_span_creation_patterns = ["order.*", "payment.*"]
     #   end
     #
     # @see ADR-007 §6 Traces Signal Export
@@ -115,7 +113,7 @@ module E11y
         def should_create_span?(event_data)
           return true if event_data[:severity].in?(%i[error fatal])
 
-          patterns = E11y.config&.opentelemetry&.span_creation_patterns || []
+          patterns = E11y.config&.opentelemetry_span_creation_patterns || []
           event_name = event_data[:event_name].to_s
           return false if event_name.empty?
 

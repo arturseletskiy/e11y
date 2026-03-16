@@ -251,10 +251,9 @@ RSpec.describe E11y::Tracing::Propagator do
     it "filters to allowed keys only when baggage_protection enabled" do
       E11y::Current.baggage = { "experiment" => "exp-42", "user_email" => "user@example.com" }
 
-      cfg = instance_double(E11y::BaggageProtectionConfig)
-      allow(cfg).to receive(:filter_baggage).and_return("experiment" => "exp-42")
-      security = instance_double(E11y::SecurityConfig, baggage_protection: cfg)
-      allow(E11y).to receive(:config).and_return(instance_double(E11y::Configuration, security: security))
+      cfg = instance_double(E11y::Configuration)
+      allow(cfg).to receive(:filter_baggage_for_propagation).and_return("experiment" => "exp-42")
+      allow(E11y).to receive(:config).and_return(cfg)
 
       result = described_class.filter_baggage_for_propagation(E11y::Current.baggage)
       expect(result).to eq("experiment" => "exp-42")

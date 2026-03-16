@@ -33,7 +33,7 @@ RSpec.describe E11y::Middleware::OtelSpan do
       end
 
       it "invokes SpanCreator for matching events" do
-        allow(E11y.config.opentelemetry).to receive(:span_creation_patterns).and_return(["test.*"])
+        allow(E11y.config).to receive(:opentelemetry_span_creation_patterns).and_return(["test.*"])
 
         expect(E11y::OpenTelemetry::SpanCreator).to receive(:create_span_from_event).with(event_data).and_call_original
 
@@ -42,7 +42,7 @@ RSpec.describe E11y::Middleware::OtelSpan do
       end
 
       it "passes event through even when SpanCreator returns nil" do
-        allow(E11y.config.opentelemetry).to receive(:span_creation_patterns).and_return([])
+        allow(E11y.config).to receive(:opentelemetry_span_creation_patterns).and_return([])
 
         result = middleware.call(event_data)
         expect(result).to eq(event_data)

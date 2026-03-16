@@ -10,11 +10,9 @@ module E11y
     #
     # @example Configuration
     #   E11y.configure do |config|
-    #     config.security.baggage_protection do
-    #       enabled true
-    #       allowed_keys %w[trace_id span_id environment version service_name request_id]
-    #       block_mode :warn  # :silent, :warn, :raise
-    #     end
+    #     config.security_baggage_protection_enabled = true
+    #     config.security_baggage_protection_allowed_keys = %w[trace_id span_id request_id]
+    #     config.security_baggage_protection_block_mode = :warn  # :silent, :warn, :raise
     #   end
     #
     # @see ADR-006 §5.5 OpenTelemetry Baggage PII Protection
@@ -36,21 +34,18 @@ module E11y
 
       def should_protect?
         return false unless defined?(OpenTelemetry::Baggage)
-        return false unless config&.enabled
+        return false unless E11y.config&.security_baggage_protection_enabled
 
         true
-      end
-
-      def config
-        E11y.config&.security&.baggage_protection
       end
 
       def protect_baggage!
         return if @protected
 
         @protected = true
-        allowed_keys = (config.allowed_keys || E11y::BaggageProtectionConfig::DEFAULT_ALLOWED_KEYS).map(&:to_s)
-        block_mode = config.block_mode || :silent
+        cfg = E11y.config
+        allowed_keys = (cfg&.security_baggage_protection_allowed_keys || E11y::BAGGAGE_PROTECTION_DEFAULT_ALLOWED_KEYS).map(&:to_s)
+        block_mode = cfg&.security_baggage_protection_block_mode || :silent
         logger = E11y.logger
 
         interceptor = build_interceptor(allowed_keys, block_mode, logger)

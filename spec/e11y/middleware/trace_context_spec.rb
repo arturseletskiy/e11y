@@ -183,7 +183,7 @@ RSpec.describe E11y::Middleware::TraceContext do
     end
 
     describe "OpenTelemetry source (ADR-007 §8, F3)", :integration do
-      it "uses trace_id and span_id from OTel SDK when config.tracing.source is :opentelemetry" do
+      it "uses trace_id and span_id from OTel SDK when config.tracing_source is :opentelemetry" do
         begin
           require "opentelemetry/sdk"
         rescue LoadError
@@ -191,7 +191,7 @@ RSpec.describe E11y::Middleware::TraceContext do
         end
 
         E11y::Current.reset
-        allow(E11y.config.tracing).to receive(:source).and_return(:opentelemetry)
+        allow(E11y.config).to receive(:tracing_source).and_return(:opentelemetry)
 
         # Use real OTel span when SDK produces valid context
         tracer = OpenTelemetry.tracer_provider.tracer("e11y-test", "1.0")
@@ -217,7 +217,7 @@ RSpec.describe E11y::Middleware::TraceContext do
       it "falls back to E11y::Current when OTel source but no active span" do
         E11y::Current.reset
         E11y::Current.trace_id = "fallback-trace"
-        allow(E11y.config.tracing).to receive(:source).and_return(:opentelemetry)
+        allow(E11y.config).to receive(:tracing_source).and_return(:opentelemetry)
 
         # No OTel span active
         result = middleware.call(event_data)

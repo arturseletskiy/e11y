@@ -105,7 +105,7 @@ module E11y
 
       # Get current trace ID from configured source (ADR-007 §8).
       #
-      # When config.tracing.source is :opentelemetry and OTel SDK has an active span,
+      # When config.tracing_source is :opentelemetry and OTel SDK has an active span,
       # uses trace_id from OpenTelemetry::Trace.current_span.
       # Otherwise: E11y::Current > Thread.current
       #
@@ -130,7 +130,7 @@ module E11y
       end
 
       def tracing_source_opentelemetry?
-        E11y.config&.tracing&.source == :opentelemetry
+        E11y.config&.tracing_source == :opentelemetry
       end
 
       def otel_trace_context

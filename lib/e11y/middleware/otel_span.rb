@@ -4,7 +4,7 @@ module E11y
   module Middleware
     # OtelSpan middleware — creates OpenTelemetry spans from events (ADR-007 §6, F2).
     #
-    # When config.opentelemetry.span_creation_patterns is set, creates OTel spans
+    # When config.opentelemetry_span_creation_patterns is set, creates OTel spans
     # for matching events. Errors/fatal always create spans.
     #
     # @see E11y::OpenTelemetry::SpanCreator

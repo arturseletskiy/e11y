@@ -7,8 +7,8 @@ module E11y
     class Sampler
       class << self
         def should_sample?(context = {})
-          cfg = E11y.config&.tracing
-          respect = cfg&.respect_parent_sampling != false
+          cfg = E11y.config
+          respect = cfg&.tracing_respect_parent_sampling != false
 
           return context[:sampled] if respect && context.key?(:sampled)
 
@@ -20,14 +20,14 @@ module E11y
 
         def determine_sample_rate(context, cfg)
           return 1.0 if context[:error]
-          return 1.0 if cfg&.always_sample_if&.call(context)
+          return 1.0 if cfg&.tracing_always_sample_if&.call(context)
 
-          if context[:event_name] && cfg&.per_event_sample_rates
-            rate = cfg.per_event_sample_rates[context[:event_name].to_s]
+          if context[:event_name] && cfg&.tracing_per_event_sample_rates
+            rate = cfg.tracing_per_event_sample_rates[context[:event_name].to_s]
             return rate if rate
           end
 
-          (cfg&.default_sample_rate || 0.1).to_f
+          (cfg&.tracing_default_sample_rate || 0.1).to_f
         end
       end
     end
