@@ -34,7 +34,7 @@
 
 - **Retry Policy:** Exponential backoff with jitter
 - **Dead Letter Queue:** Failed events stored for later analysis/replay
-- **Circuit Breaker:** Prevent cascading failures (already covered in UC-011)
+- **Circuit Breaker:** Prevent cascading failures (see [ADR-013 §5](../ADR-013-reliability-error-handling.md#5-circuit-breaker))
 - **Observability:** Metrics for failures, retries, DLQ size
 
 **Result:** Zero data loss, resilient to transient failures.

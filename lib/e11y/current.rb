@@ -37,14 +37,45 @@ module E11y
   class Current < ActiveSupport::CurrentAttributes
     attribute :trace_id
     attribute :span_id
-    attribute :parent_trace_id # ✅ NEW: Link to parent trace (C17 Resolution)
+    attribute :parent_trace_id # Link to parent trace (C17 Resolution)
     attribute :sampled # Trace-consistent sampling (ADR-005 §7)
+    attribute :baggage # Key-value metadata for cross-service propagation (ADR-005 §3)
     attribute :request_id
     attribute :user_id
     attribute :ip_address
     attribute :user_agent
     attribute :request_method
     attribute :request_path
+
+    # Add baggage key-value (propagated via tracestate / job metadata).
+    # Respects config.security.baggage_protection: blocks PII keys per allowed_keys (ADR-006 §5.5).
+    #
+    # @param key [String, Symbol]
+    # @param value [Object] Converted to string
+    # @raise [E11y::BaggagePiiError] when block_mode is :raise and key not allowed
+    def self.add_baggage(key, value)
+      cfg = E11y.config&.security&.baggage_protection
+      if cfg&.enabled
+        allowed = (cfg.allowed_keys || E11y::BaggageProtectionConfig::DEFAULT_ALLOWED_KEYS).map(&:to_s)
+        unless allowed.include?(key.to_s)
+          message = "[E11y] Blocked PII from E11y baggage: key=#{key.inspect}"
+          case (cfg.block_mode || :silent)
+          when :silent then E11y.logger&.debug(message)
+          when :warn then E11y.logger&.warn(message)
+          when :raise then raise E11y::BaggagePiiError, "#{message}. Only allowed keys: #{allowed.join(', ')}"
+          end
+          return
+        end
+      end
+      self.baggage = (baggage || {}).merge(key.to_s => value.to_s)
+    end
+
+    # Get baggage value by key.
+    # @param key [String, Symbol]
+    # @return [String, nil]
+    def self.get_baggage(key)
+      baggage&.[](key.to_s)
+    end
 
     # Returns current attributes as a hash for sampling context (symbol keys, nil values omitted).
     # Callers may merge job-specific keys (job_class, queue) when in job context.
@@ -56,6 +87,7 @@ module E11y
         span_id: span_id,
         parent_trace_id: parent_trace_id,
         sampled: sampled,
+        baggage: baggage,
         request_id: request_id,
         user_id: user_id,
         ip_address: ip_address,

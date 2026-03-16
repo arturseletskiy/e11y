@@ -650,13 +650,13 @@ module E11y
           end
         end
 
-        # Determine the PII filtering tier for this event.
-        # @return [Symbol] :tier1, :tier2, or :tier3
-        def pii_tier
+        # PII filtering mode for this event.
+        # @return [Symbol] :no_pii, :rails_filters, or :explicit_pii
+        def pii_filtering_mode
           case contains_pii
-          when false then :tier1
-          when true then :tier3
-          else :tier2 # Default if not explicitly declared
+          when false then :no_pii
+          when true then :explicit_pii
+          else :rails_filters # Default if not explicitly declared
           end
         end
 
@@ -733,6 +733,29 @@ module E11y
           # @param fields [Array<Symbol>] Field names to allow
           def allows(*fields)
             fields.each { |field| @config[:fields][field] = { strategy: :allow } }
+          end
+
+          # Per-field config with exclude_adapters (Tier 3 per-adapter filtering).
+          #
+          # @param field [Symbol] Field name
+          # @yield Block with strategy, exclude_adapters
+          # @example
+          #   field :email do
+          #     strategy :hash
+          #     exclude_adapters [:file_audit]  # Audit gets original (GDPR)
+          #   end
+          def field(field_name, &block)
+            return unless block_given?
+
+            opts = { strategy: :allow }
+            dsl = Class.new do
+              attr_reader :opts
+              def initialize(opts); @opts = opts; end
+              def strategy(s); @opts[:strategy] = s; end
+              def exclude_adapters(adapters); @opts[:exclude_adapters] = Array(adapters).map(&:to_sym); end
+            end.new(opts)
+            dsl.instance_eval(&block)
+            @config[:fields][field_name] = opts
           end
         end
 

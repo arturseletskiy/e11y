@@ -38,7 +38,7 @@ RSpec.describe "E11y Memory Profile", :memory do # rubocop:disable RSpec/Describ
       let(:event_class) do
         Class.new(E11y::Event::Base) do
           def self.name = "MemoryTestAlwaysEvent"
-          contains_pii false # force tier1 — no Rails filter in unit context
+          contains_pii false # force no_pii — no Rails filter in unit context
           schema { required(:value).filled(:integer) }
         end
       end

@@ -368,7 +368,7 @@ end
 
 ### PII Filtering
 
-**Auto (Tier 2):** E11y automatically applies `Rails.application.config.filter_parameters`.
+**Auto (:rails_filters):** E11y automatically applies `Rails.application.config.filter_parameters`.
 
 ```ruby
 # config/application.rb
@@ -378,7 +378,7 @@ config.filter_parameters += [:password, :email, :ssn]
 Events::UserRegistered.track(email: 'user@example.com', password: 'secret')
 ```
 
-**Event-level DSL (Tier 3):**
+**Event-level DSL (:explicit_pii):**
 
 ```ruby
 class Events::PaymentCreated < E11y::Event::Base
@@ -654,7 +654,7 @@ adapter.clear!       # reset
 
 ### PII Filtering — what works today
 
-**Auto (Tier 2) — Rails filter_parameters:**
+**Auto (:rails_filters) — Rails filter_parameters:**
 
 ```ruby
 # config/application.rb
@@ -662,7 +662,7 @@ config.filter_parameters += [:password, :email, :ssn, :credit_card]
 # E11y applies this list automatically — no extra config needed
 ```
 
-**Event-level (Tier 3):**
+**Event-level (:explicit_pii):**
 
 ```ruby
 class Events::UserRegistered < E11y::Event::Base

@@ -82,8 +82,8 @@ RSpec.describe E11y::Middleware::BaggageProtection do
   end
 
   describe "BaggagePiiError" do
-    it "is a StandardError" do
-      expect(E11y::Middleware::BaggagePiiError).to be < StandardError
+    it "is a StandardError (E11y::BaggagePiiError)" do
+      expect(E11y::BaggagePiiError).to be < StandardError
     end
   end
 end

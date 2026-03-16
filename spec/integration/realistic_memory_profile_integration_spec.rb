@@ -91,7 +91,7 @@ RSpec.describe "Realistic Memory Profile", :integration do
 
   # -------------------------------------------------------------------------
   # Scenario B: PII event with nested filtering, metrics, SLO
-  # OrderCreated: contains_pii true → tier2 → ActionDispatch::ParameterFilter,
+  # OrderCreated: contains_pii true → rails_filters → ActionDispatch::ParameterFilter,
   # pii_filtering allows list, Yabeda counter + SLO status classification.
   # -------------------------------------------------------------------------
   describe "Events::OrderCreated (contains_pii true, PII filter, metrics, SLO)" do

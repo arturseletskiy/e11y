@@ -4,17 +4,17 @@ require "active_support/parameter_filter"
 
 module E11y
   module Middleware
-    # PII Filter Middleware - 3-Tier Strategy
+    # PII Filter Middleware
     #
     # Filters Personally Identifiable Information (PII) from event payloads
-    # before they reach adapters. Implements ADR-006 3-tier security model.
+    # before they reach adapters. Implements ADR-006 security model.
     #
-    # **Three-Tier Strategy:**
-    # - Tier 1: No PII (`contains_pii false`) - Skip filtering (0ms overhead)
-    # - Tier 2: Default - Rails filters only (~0.05ms overhead)
-    # - Tier 3: Explicit PII (`contains_pii true`) - Deep filtering (~0.2ms overhead)
+    # **Filtering modes:**
+    # - :no_pii — Skip filtering (contains_pii false, 0ms overhead)
+    # - :rails_filters — Rails filter_parameters only (~0.05ms overhead)
+    # - :explicit_pii — Field strategies, optionally per-adapter via exclude_adapters (~0.2ms)
     #
-    # @example Basic Usage (Tier 2 - Default)
+    # @example Basic Usage (:rails_filters - default)
     #   class Events::OrderCreated < E11y::Event::Base
     #     schema do
     #       required(:order_id).filled(:string)
@@ -22,12 +22,12 @@ module E11y
     #     end
     #   end
     #
-    # @example Tier 1: No PII (High Performance)
+    # @example :no_pii (skip filtering)
     #   class Events::HealthCheck < E11y::Event::Base
-    #     contains_pii false  # Skip all filtering
+    #     contains_pii false
     #   end
     #
-    # @example Tier 3: Explicit PII (Deep Filtering)
+    # @example :explicit_pii (field strategies)
     #   class Events::UserRegistered < E11y::Event::Base
     #     contains_pii true
     #
@@ -42,7 +42,6 @@ module E11y
     # @see UC-007 PII Filtering
     # @see E11y::PII::Patterns
     # rubocop:disable Metrics/ClassLength
-    # PII filter is a cohesive security component with 3-tier filtering strategy
     class PIIFilter < Base
       middleware_zone :security
 
@@ -55,30 +54,24 @@ module E11y
         @config = config
       end
 
-      # Process event and filter PII based on tier
+      # Process event and filter PII based on filtering mode
       #
       # @param event_data [Hash] Event data with payload
       # @return [Hash] Processed event data
       # rubocop:disable Lint/DuplicateBranch
-      # Unknown tiers intentionally fallback to no filtering (same as tier1)
       def call(event_data)
-        # F-004/C07: Skip PII filtering for DLQ-replayed events (already filtered; avoid double-hashing)
         return @app.call(event_data) if event_data[:dlq_replayed]
 
-        # Determine filtering tier
-        tier = determine_tier(event_data)
+        mode = filtering_mode(event_data)
 
-        case tier
-        when :tier1
-          # Tier 1: No PII - Skip filtering (0ms overhead)
+        case mode
+        when :no_pii
           @app.call(event_data)
-        when :tier2
-          # Tier 2: Rails filters only (~0.05ms overhead)
+        when :rails_filters
           filtered_data = apply_rails_filters(event_data)
           @app.call(filtered_data)
-        when :tier3
-          # Tier 3: Deep filtering (~0.2ms overhead)
-          filtered_data = apply_deep_filtering(event_data)
+        when :explicit_pii
+          filtered_data = apply_explicit_pii_filtering(event_data)
           @app.call(filtered_data)
         else
           @app.call(event_data)
@@ -88,16 +81,11 @@ module E11y
 
       private
 
-      # Determine PII filtering tier for event
-      #
-      # @param event_data [Hash] Event data
-      # @return [Symbol] :tier1, :tier2, or :tier3
-      def determine_tier(event_data)
+      def filtering_mode(event_data)
         event_class = event_data[:event_class]
-        return :tier2 unless event_class.respond_to?(:pii_tier)
+        return :rails_filters unless event_class.respond_to?(:pii_filtering_mode)
 
-        # Return tier directly from event class
-        event_class.pii_tier
+        event_class.pii_filtering_mode
       end
 
       # Apply Rails filter_parameters (Tier 2)
@@ -114,56 +102,75 @@ module E11y
         filtered_data
       end
 
-      # Apply deep PII filtering (Tier 3)
-      #
-      # @param event_data [Hash] Event data
-      # @return [Hash] Filtered event data
-      def apply_deep_filtering(event_data)
+      # :explicit_pii — field strategies, optionally payload_rewrites when exclude_adapters present.
+      def apply_explicit_pii_filtering(event_data)
         event_class = event_data[:event_class]
         return event_data unless event_class
 
-        # Clone to avoid modifying original
-        filtered_data = deep_dup(event_data)
-
-        # Get PII filtering config from event class
         pii_config = event_class.pii_filtering_config if event_class.respond_to?(:pii_filtering_config)
-        return filtered_data unless pii_config
+        return event_data unless pii_config
 
-        # Apply field-level strategies
-        filtered_data[:payload] = apply_field_strategies(
-          filtered_data[:payload],
-          pii_config
-        )
+        # 1. Base payload (most restrictive)
+        base_payload = apply_field_strategies(deep_dup(event_data[:payload]), pii_config, nil)
+        base_payload = apply_pattern_filtering(base_payload, pii_config, [])
 
-        # Apply pattern-based filtering (respects allows, uses VALUE_PATTERNS only)
-        filtered_data[:payload] = apply_pattern_filtering(
-          filtered_data[:payload],
-          pii_config,
-          []
-        )
+        filtered_data = deep_dup(event_data)
+        filtered_data[:payload] = base_payload
+
+        # 2. payload_rewrites: per-adapter overrides for exclude_adapters fields only
+        has_exclude_adapters = pii_config[:fields]&.any? { |_, v| v[:exclude_adapters]&.any? }
+        if has_exclude_adapters
+          filtered_data[:payload_rewrites] = build_payload_rewrites(event_data, pii_config)
+        end
 
         filtered_data
+      end
+
+      # Build payload_rewrites: { adapter_name => { field => original_value } }
+      # Only fields with exclude_adapters.include?(adapter) get original value.
+      def build_payload_rewrites(event_data, pii_config)
+        adapters = AdapterResolver.resolve(event_data)
+        return {} unless adapters.any?
+
+        original_payload = event_data[:payload] || {}
+        rewrites = {}
+
+        adapters.each do |adapter_name|
+          adapter_rewrites = {}
+          pii_config[:fields]&.each do |field, opts|
+            next unless opts[:exclude_adapters]&.include?(adapter_name)
+
+            key = original_payload.key?(field) ? field : field.to_s
+            adapter_rewrites[key] = original_payload[key] if original_payload.key?(key)
+          end
+          rewrites[adapter_name] = adapter_rewrites if adapter_rewrites.any?
+        end
+        rewrites
       end
 
       # Apply field-level filtering strategies
       #
       # @param payload [Hash] Payload to filter
       # @param config [Hash] PII configuration
+      # @param adapter_name [Symbol, nil] When set, use :skip for fields with exclude_adapters.include?(adapter_name)
       # @return [Hash] Filtered payload
       # rubocop:disable Metrics/MethodLength
-      # Field strategies require case/when for each PII filtering strategy type
-      def apply_field_strategies(payload, config)
+      def apply_field_strategies(payload, config, adapter_name = nil)
         return payload unless config
 
         filtered = {}
 
         payload.each do |key, value|
-          # Normalize key to symbol for config lookup (config uses symbol keys)
           normalized_key = key.is_a?(Symbol) ? key : key.to_sym
-          strategy = config.dig(:fields, normalized_key, :strategy) || :allow
+          field_config = config.dig(:fields, normalized_key) || {}
+          strategy = field_config[:strategy] || :allow
+
+          # Per-adapter: use :skip for excluded adapters (e.g. audit gets original)
+          if adapter_name && field_config[:exclude_adapters]&.include?(adapter_name)
+            strategy = :allow
+          end
 
           # rubocop:disable Lint/DuplicateBranch
-          # Unknown strategies intentionally fallback to allow (same as :allow)
           filtered[key] = case strategy
                           when :mask
                             "[FILTERED]"
@@ -173,7 +180,7 @@ module E11y
                             partial_mask(value)
                           when :redact
                             nil
-                          when :allow
+                          when :allow, :skip
                             value
                           else
                             value
@@ -186,15 +193,6 @@ module E11y
       # rubocop:enable Metrics/MethodLength
 
       # Apply pattern-based filtering to string values
-      #
-      # Uses VALUE_PATTERNS only (excludes PASSWORD_FIELDS) so field-name patterns
-      # are not applied to values (avoids corrupting "process_token_renewal_completed").
-      # Skips filtering when value is under an allowed key (e.g. allows :card_number).
-      #
-      # @param data [Object] Data to filter (recursively)
-      # @param pii_config [Hash] PII config with :fields (strategy per key)
-      # @param path [Array<Symbol>] Key path from payload root
-      # @return [Object] Filtered data
       def apply_pattern_filtering(data, pii_config = nil, path = [])
         case data
         when Hash then apply_pattern_filtering_hash(data, pii_config, path)
@@ -219,7 +217,7 @@ module E11y
       def path_under_allowed_key?(path, pii_config)
         return false unless pii_config && pii_config[:fields]
 
-        allowed_keys = pii_config[:fields].select { |_k, v| v[:strategy] == :allow }.keys
+        allowed_keys = pii_config[:fields].select { |_k, v| [:allow, :skip].include?(v[:strategy]) }.keys
         path.any? { |p| allowed_keys.include?(p) }
       end
 

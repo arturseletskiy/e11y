@@ -15,20 +15,6 @@
 | **Medium** | 45 |
 | **Total** | 74 |
 
----
-
-## 1. Critical Findings
-
----
-
-## 2. High Findings
-
-### ADR-005: Tracing Context
-
-| ID | Description |
-|----|-------------|
-| F-023 | Trace-consistent sampling (§7) not implemented. |
-
 
 
 
@@ -60,25 +46,13 @@
 
 ## 3. Medium Findings
 
-### ADR-005: Tracing Context
-
-| ID | Description |
-|----|----------|
-| F-002 | UC-006 §2.0 shows "same trace_id preserved" in jobs; contradicts ADR §8.3 C17 hybrid model. |
-| F-008 | E11y::Current has no `sampled` attribute. |
-| F-009 | E11y::Current has no `baggage`. |
-| F-014 | tracestate for baggage on outgoing; not implemented. |
-| F-016 | Propagator uses fixed "01" for sampled; ignores E11y::Current.sampled. |
-| F-017 | e11y_sampled in job metadata; Sidekiq middleware does not propagate. |
-| F-024 | Sampler class not present. |
-| F-025 | Sampled not propagated in HTTP or jobs. |
 
 ### ADR-006: Security & Compliance
 
 | ID | Description |
 |----|-------------|
 | F-005 | **PII Declaration Linter not implemented:** E11y::Linters::PiiDeclarationLinter, rake e11y:lint:pii. |
-| F-007 | **Per-adapter PII vs global middleware:** ADR §3.0.6 — PII per adapter; in code PIIFilter is global middleware. |
+
 
 ### ADR-008: Rails Integration
 
@@ -108,11 +82,6 @@
 | F-013 | Rake tasks missing: e11y:list, e11y:validate, e11y:docs:generate, e11y:stats. |
 | F-014 | Documentation generator not implemented. |
 
-### ADR-013: Reliability
-
-| ID | Description |
-|----|-------------|
-| F1 | UC-021 says Circuit Breaker "in UC-011" — UC-011 does not mention Circuit Breaker. |
 
 ### ADR-014: Event-Driven SLO
 

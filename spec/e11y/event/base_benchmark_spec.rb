@@ -9,7 +9,7 @@ RSpec.describe E11y::Event::Base, ".track performance", :benchmark do # rubocop:
         "BenchmarkEvent"
       end
 
-      contains_pii false # force tier1 — no Rails filter in unit context
+      contains_pii false # force no_pii — no Rails filter in unit context
 
       schema do
         required(:user_id).filled(:integer)

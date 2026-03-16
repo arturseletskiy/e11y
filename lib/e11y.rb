@@ -42,6 +42,9 @@ module E11y
   class ZoneViolationError < Error; end
   class InvalidPipelineError < Error; end
 
+  # Raised when PII key is blocked in baggage (ADR-006 §5.5). Used by BaggageProtection and E11y::Current.add_baggage.
+  class BaggagePiiError < Error; end
+
   class << self
     # Configure E11y
     #
@@ -823,10 +826,11 @@ module E11y
     end
   end
 
-  # Baggage protection config — blocks PII from OpenTelemetry Baggage (C08).
+  # Baggage protection config — blocks PII from OpenTelemetry Baggage and E11y::Current.baggage (C08).
   class BaggageProtectionConfig
     DEFAULT_ALLOWED_KEYS = %w[
       trace_id span_id environment version service_name deployment_id request_id
+      experiment experiment_id tenant feature_flag
     ].freeze
 
     def initialize
@@ -851,6 +855,19 @@ module E11y
       return @block_mode if mode.nil?
 
       @block_mode = mode.to_sym
+    end
+
+    # Filter baggage hash to only allowed keys (for tracestate/job propagation).
+    # Used by Propagator and Sidekiq/ActiveJob when injecting E11y::Current.baggage.
+    #
+    # @param hash [Hash, nil] Baggage key-value pairs
+    # @return [Hash] Only allowed keys (empty if disabled or nil input)
+    def filter_baggage(hash)
+      return {} if hash.nil? || !hash.is_a?(Hash)
+      return hash unless @enabled
+
+      allowed = (@allowed_keys || DEFAULT_ALLOWED_KEYS).map(&:to_s)
+      hash.select { |k, _| allowed.include?(k.to_s) }
     end
   end
 

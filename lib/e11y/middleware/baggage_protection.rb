@@ -67,7 +67,7 @@ module E11y
               case block_mode
               when :silent then logger&.debug(message)
               when :warn then logger&.warn(message)
-              when :raise then raise BaggagePiiError, "#{message}. Only allowed keys: #{allowed_keys.join(', ')}"
+              when :raise then raise E11y::BaggagePiiError, "#{message}. Only allowed keys: #{allowed_keys.join(', ')}"
               end
               return ctx
             end
@@ -77,7 +77,5 @@ module E11y
       end
     end
 
-    # Raised when PII key is blocked in :raise mode.
-    class BaggagePiiError < StandardError; end
   end
 end

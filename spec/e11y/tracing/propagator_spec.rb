@@ -135,6 +135,26 @@ RSpec.describe E11y::Tracing::Propagator do
       end
     end
 
+    context "when baggage is present (F-014)" do
+      before do
+        E11y::Current.trace_id = "0af7651916cd43dd8448eb211c80319c"
+        E11y::Current.span_id  = "00f067aa0ba902b7"
+        E11y::Current.baggage = { "experiment" => "exp-42", "tenant" => "acme" }
+      end
+
+      it "adds tracestate header with baggage" do
+        headers = {}
+        described_class.inject(headers)
+        expect(headers["tracestate"]).to eq("experiment=exp-42,tenant=acme")
+      end
+
+      it "does not override existing tracestate" do
+        headers = { "tracestate" => "existing=value" }
+        described_class.inject(headers)
+        expect(headers["tracestate"]).to eq("existing=value")
+      end
+    end
+
     context "when no trace context is available" do
       it "returns headers unchanged" do
         headers = { "Accept" => "application/json" }
@@ -190,6 +210,60 @@ RSpec.describe E11y::Tracing::Propagator do
     it "includes parent_span_id in parsed result" do
       result = described_class.parse("00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01")
       expect(result[:parent_span_id]).to eq("00f067aa0ba902b7")
+    end
+  end
+
+  describe ".parse_tracestate" do
+    it "parses key=value pairs" do
+      result = described_class.parse_tracestate("experiment=exp-42,tenant=acme")
+      expect(result).to eq("experiment" => "exp-42", "tenant" => "acme")
+    end
+
+    it "returns empty hash for nil" do
+      expect(described_class.parse_tracestate(nil)).to eq({})
+    end
+
+    it "returns empty hash for empty string" do
+      expect(described_class.parse_tracestate("")).to eq({})
+    end
+
+    it "handles single entry" do
+      expect(described_class.parse_tracestate("key=value")).to eq("key" => "value")
+    end
+  end
+
+  describe ".build_tracestate" do
+    it "builds key=value string from hash" do
+      result = described_class.build_tracestate("experiment" => "exp-42", "tenant" => "acme")
+      expect(result).to eq("experiment=exp-42,tenant=acme")
+    end
+
+    it "returns empty string for empty hash" do
+      expect(described_class.build_tracestate({})).to eq("")
+    end
+
+    it "returns empty string for nil" do
+      expect(described_class.build_tracestate(nil)).to eq("")
+    end
+  end
+
+  describe ".filter_baggage_for_propagation" do
+    it "filters to allowed keys only when baggage_protection enabled" do
+      E11y::Current.baggage = { "experiment" => "exp-42", "user_email" => "user@example.com" }
+
+      cfg = instance_double(E11y::BaggageProtectionConfig)
+      allow(cfg).to receive(:filter_baggage).and_return("experiment" => "exp-42")
+      security = instance_double(E11y::SecurityConfig, baggage_protection: cfg)
+      allow(E11y).to receive(:config).and_return(instance_double(E11y::Configuration, security: security))
+
+      result = described_class.filter_baggage_for_propagation(E11y::Current.baggage)
+      expect(result).to eq("experiment" => "exp-42")
+    end
+
+    it "returns full hash when config is nil" do
+      allow(E11y).to receive(:config).and_return(nil)
+      hash = { "user_email" => "x" }
+      expect(described_class.filter_baggage_for_propagation(hash)).to eq(hash)
     end
   end
 end

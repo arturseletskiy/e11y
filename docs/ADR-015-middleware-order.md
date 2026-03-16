@@ -254,7 +254,7 @@ Loki receives:
 > **⚠️ CRITICAL: C01 Conflict Resolution - PII Filtering × Audit Trail Signing**  
 > **See:** [CONFLICT-ANALYSIS.md C01](researches/CONFLICT-ANALYSIS.md#c01-pii-filtering--audit-trail-signing) for detailed analysis  
 > **Problem:** PII filtering before signing breaks non-repudiation (auditors can't verify original event)  
-> **Solution:** Single pipeline for all events. Audit events get conditional skip in PIIFilter via `contains_pii false` in AuditEvent preset (Tier 1 = pass-through). No separate pipeline — no need.
+> **Solution:** Single pipeline for all events. Audit events get conditional skip in PIIFilter via `contains_pii false` in AuditEvent preset (:no_pii = pass-through). No separate pipeline — no need.
 
 ### 3.3.1. The Problem: PII Filtering Breaks Audit Trail
 
@@ -285,14 +285,14 @@ Storage
 ```
 1. TraceContext    → Add trace_id, span_id, timestamp
 2. Validation      → Schema validation (original class)
-3. PIIFiltering    → Audit: skip (contains_pii false → Tier 1). Standard: filter PII ✅
+3. PIIFiltering    → Audit: skip (contains_pii false → :no_pii). Standard: filter PII ✅
 4. RateLimiting    → Audit: can skip (event_data[:audit_event]). Standard: rate limit
 5. Sampling        → Audit: sample_rate 1.0 (preset). Standard: adaptive
 6. Versioning      → Normalize event_name (LAST)
 7. Routing         → Route to buffer / audit buffer
 ```
 
-**AuditEvent preset:** `contains_pii false` → PIIFilter Tier 1 = pass-through, original data preserved for signing.
+**AuditEvent preset:** `contains_pii false` → PIIFilter :no_pii = pass-through, original data preserved for signing.
 
 ### 3.3.3. Declaring Audit Events
 

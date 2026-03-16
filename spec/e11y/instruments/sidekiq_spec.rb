@@ -28,6 +28,14 @@ RSpec.describe E11y::Instruments::Sidekiq do
         E11y::Current.reset
       end
 
+      it "injects e11y_baggage when baggage is set" do
+        E11y::Current.baggage = { "experiment" => "exp-42" }
+        middleware.call(nil, job, nil, nil) {} # rubocop:todo Lint/EmptyBlock
+        expect(job["e11y_baggage"]).to eq("experiment" => "exp-42")
+      ensure
+        E11y::Current.reset
+      end
+
       it "does not inject metadata if E11y::Current is empty" do
         empty_job = {}
         middleware.call(nil, empty_job, nil, nil) {} # rubocop:todo Lint/EmptyBlock
@@ -122,6 +130,14 @@ RSpec.describe E11y::Instruments::Sidekiq do
       it "sets request_id from job jid" do
         middleware.call(worker, job, queue) do
           expect(E11y::Current.request_id).to eq("job123")
+        end
+      end
+
+      it "restores baggage from e11y_baggage in job metadata" do
+        job["e11y_baggage"] = { "experiment" => "exp-42" }
+
+        middleware.call(worker, job, queue) do
+          expect(E11y::Current.baggage).to eq("experiment" => "exp-42")
         end
       end
     end

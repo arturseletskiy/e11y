@@ -126,10 +126,18 @@ module E11y
       end
 
       # Extract trace context from request headers (W3C Trace Context or custom).
+      # Also extracts tracestate into E11y::Current.baggage (F-014).
       # @param request [Rack::Request] Rack request
       # @return [Hash] { trace_id:, sampled: (from traceparent, or nil if new trace) }
       def extract_trace_context(request)
         traceparent = request.get_header("HTTP_TRACEPARENT")
+        tracestate = request.get_header("HTTP_TRACESTATE")
+
+        if tracestate && E11y::Current.respond_to?(:baggage=)
+          baggage = E11y::Tracing::Propagator.parse_tracestate(tracestate)
+          E11y::Current.baggage = baggage if baggage.any?
+        end
+
         if traceparent
           parsed = E11y::Tracing::Propagator.parse(traceparent)
           return { trace_id: parsed[:trace_id], sampled: parsed[:sampled] } if parsed

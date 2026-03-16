@@ -87,8 +87,17 @@ module E11y
           adapter = E11y.configuration.adapters[adapter_name]
           next unless adapter
 
+          # Per-adapter payload: merge payload_rewrites only when present (explicit_pii exclude_adapters)
+          data_to_write = if event_data[:payload_rewrites] && event_data[:payload_rewrites][adapter_name]
+                            payload = event_data[:payload]&.dup || {}
+                            payload.merge!(event_data[:payload_rewrites][adapter_name])
+                            event_data.merge(payload: payload)
+                          else
+                            event_data
+                          end
+
           begin
-            adapter.write(event_data)
+            adapter.write(data_to_write)
           rescue StandardError => e
             # Log routing error but don't fail pipeline
             warn "E11y routing error for adapter #{adapter_name}: #{e.message}"

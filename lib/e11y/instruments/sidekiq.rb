@@ -93,6 +93,10 @@ module E11y
           job["e11y_parent_trace_id"] = E11y::Current.trace_id if E11y::Current.trace_id
           job["e11y_parent_span_id"] = E11y::Current.span_id if E11y::Current.span_id
           job["e11y_sampled"] = E11y::Current.sampled if E11y::Current.respond_to?(:sampled) && !E11y::Current.sampled.nil?
+          if E11y::Current.respond_to?(:baggage) && E11y::Current.baggage&.any?
+            filtered = E11y::Tracing::Propagator.filter_baggage_for_propagation(E11y::Current.baggage)
+            job["e11y_baggage"] = filtered if filtered.any?
+          end
 
           # Emit Enqueued for raw Sidekiq jobs only (ActiveJob emits via ASN)
           emit_job_enqueued(worker_class, job, queue) if raw_sidekiq_job?(job)
@@ -178,6 +182,7 @@ module E11y
           E11y::Current.span_id = span_id
           E11y::Current.parent_trace_id = parent_trace_id
           E11y::Current.request_id = job["jid"]
+          E11y::Current.baggage = job["e11y_baggage"] if job.key?("e11y_baggage") && job["e11y_baggage"].is_a?(Hash)
 
           # Restore or compute sampling decision (ADR-005 §7)
           if job.key?("e11y_sampled")

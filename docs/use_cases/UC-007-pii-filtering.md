@@ -108,7 +108,7 @@ end
 
 ### 3. Pattern-Based Filtering (Beyond Rails)
 
-**Tier 3 events** (`contains_pii true`) apply `E11y::PII::Patterns::VALUE_PATTERNS` to string values (email, SSN, credit card regexes). Field-level strategies (masks, hashes, partials) are defined in `pii_filtering do`.
+**:explicit_pii events** (`contains_pii true`) apply `E11y::PII::Patterns::VALUE_PATTERNS` to string values (email, SSN, credit card regexes). Field-level strategies (masks, hashes, partials) are defined in `pii_filtering do`. Per-adapter overrides use `exclude_adapters`; PIIFilter produces `payload_rewrites`, Routing merges per adapter.
 
 ---
 
@@ -458,7 +458,7 @@ end
 
 ### Declaration Syntax: `contains_pii`
 
-**Option 1: No PII (Tier 1 - Skip Filtering)**
+**Option 1: No PII (:no_pii — Skip Filtering)**
 
 ```ruby
 class Events::HealthCheck < E11y::Event::Base
@@ -471,13 +471,13 @@ class Events::HealthCheck < E11y::Event::Base
   contains_pii false
   
   # Result:
-  # - Tier 1 filtering (0ms overhead)
+  # - :no_pii filtering (0ms overhead)
   # - All fields logged as-is
   # - No pattern scanning
 end
 ```
 
-**Option 2: Default (Tier 2 - Rails Filters Only)**
+**Option 2: Default (:rails_filters — Rails Filters Only)**
 
 ```ruby
 class Events::OrderCreated < E11y::Event::Base
@@ -487,12 +487,12 @@ class Events::OrderCreated < E11y::Event::Base
     optional(:api_key).filled(:string)  # Rails will filter this
   end
   
-  # No declaration → Tier 2 (Rails filters applied)
+  # No declaration → :rails_filters (Rails filters applied)
   # Keys like :password, :token, :api_key automatically filtered
 end
 ```
 
-**Option 3: Explicit PII (Tier 3 - Deep Filtering)**
+**Option 3: Explicit PII (:explicit_pii — Deep Filtering)**
 
 ```ruby
 class Events::UserRegistered < E11y::Event::Base
@@ -699,7 +699,7 @@ end
 
 ### Default Behavior (No Declaration)
 
-If `contains_pii` is not specified, E11y defaults to **Tier 2** (Rails filters only):
+If `contains_pii` is not specified, E11y defaults to **:rails_filters** (Rails filters only):
 
 ```ruby
 class Events::OrderPaid < E11y::Event::Base
@@ -709,7 +709,7 @@ class Events::OrderPaid < E11y::Event::Base
   end
   
   # No contains_pii declaration
-  # → Tier 2: Rails filters applied automatically
+  # → :rails_filters: Rails filters applied automatically
   # → Keys like :password, :token, :api_key filtered
   # → No linter validation
 end
