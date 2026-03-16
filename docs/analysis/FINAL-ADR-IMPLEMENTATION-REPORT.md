@@ -32,8 +32,9 @@
 
 | ID | Description |
 |----|-------------|
-| F-008 | **slo.yml custom_slos not implemented:** ADR §5 — config/slo.yml with custom_slos. Not implemented. |
+| F-008 | **slo.yml custom_slos not implemented:** ADR §5 — config/slo.yml with custom_slos. — **RESOLVED** (ConfigLoader + DashboardGenerator support custom_slos) |
 | F-011 | **Three SLO linters not implemented:** ADR §7 — ExplicitDeclaration, SloStatusFrom, ConfigConsistency. Not implemented. |
+| F-012 | **App-wide SLO aggregation (ADR §9) not implemented.** — **RESOLVED** (DashboardGenerator builds app_wide.aggregated_slo panel) |
 
 ### ADR-016: Self-Monitoring SLO
 
@@ -81,8 +82,6 @@
 | F-013 | Rake tasks missing: e11y:list, e11y:validate, e11y:docs:generate, e11y:stats. |
 | F-014 | Documentation generator not implemented. |
 
-| F-012 | App-wide SLO aggregation (ADR §9) not implemented. |
-
 ### ADR-016: Self-Monitoring SLO
 
 | ID | Description |
@@ -107,11 +106,8 @@
 
 | ID | Description |
 |----|-------------|
-| F3 | **slo.yml not implemented** — ADR §4. Per-endpoint SLO only via DSL. |
 | F4 | **Multi-window burn rate alerts** — ADR §5. No BurnRateCalculator, alert generation. |
-| F5 | **ConfigValidator** — ADR §6. No rake e11y:slo:validate. |
 | F6 | **ErrorBudget** — ADR §7. Not implemented. |
-| F7 | **Grafana dashboard generator** — ADR §8.1. Not implemented. |
 
 ### ADR-004: Adapter Architecture
 

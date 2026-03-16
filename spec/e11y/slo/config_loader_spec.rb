@@ -12,6 +12,23 @@ RSpec.describe E11y::SLO::ConfigLoader do
       expect(result).to be_nil
     end
 
+    it "returns {} for empty file" do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "slo.yml")
+        File.write(path, "")
+        result = described_class.load(search_paths: [dir])
+        expect(result).to eq({})
+      end
+    end
+
+    it "raises Psych::SyntaxError for invalid YAML" do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "slo.yml")
+        File.write(path, "invalid: yaml: : :")
+        expect { described_class.load(search_paths: [dir]) }.to raise_error(Psych::SyntaxError)
+      end
+    end
+
     it "loads and parses YAML when file exists" do
       Dir.mktmpdir do |dir|
         path = File.join(dir, "slo.yml")

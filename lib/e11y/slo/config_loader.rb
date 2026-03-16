@@ -4,6 +4,7 @@ require "yaml"
 
 module E11y
   module SLO
+    # Loads SLO configuration from slo.yml files in configurable search paths.
     class ConfigLoader
       class << self
         def load(search_paths: default_search_paths)

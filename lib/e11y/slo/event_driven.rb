@@ -144,6 +144,14 @@ module E11y
         def slo_config
           @slo_config
         end
+
+        def slo_enabled?
+          slo_config&.enabled? == true
+        end
+
+        def slo_disabled?
+          slo_config ? !slo_config.enabled? : false
+        end
       end
     end
   end

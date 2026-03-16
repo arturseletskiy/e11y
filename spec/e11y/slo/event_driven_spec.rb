@@ -109,6 +109,21 @@ RSpec.describe E11y::SLO::EventDriven do
     end
   end
 
+  describe "slo_enabled? and slo_disabled?" do
+    it "slo_enabled_event_class.slo_enabled? returns true" do
+      expect(slo_enabled_event_class.slo_enabled?).to be true
+    end
+
+    it "slo_disabled_event_class.slo_disabled? returns true" do
+      expect(slo_disabled_event_class.slo_disabled?).to be true
+    end
+
+    it "no_slo_event_class.slo_enabled? returns false, slo_disabled? returns false" do
+      expect(no_slo_event_class.slo_enabled?).to be false
+      expect(no_slo_event_class.slo_disabled?).to be false
+    end
+  end
+
   describe "ADR-014 Compliance" do
     it "follows explicit opt-in pattern" do
       # SLO must be explicitly enabled
