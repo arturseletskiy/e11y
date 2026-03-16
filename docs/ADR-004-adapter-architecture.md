@@ -12,7 +12,7 @@
 - ✅ §4.3: Loki Adapter - Implemented (34 tests)
 - ✅ §4.4: Sentry Adapter - Implemented (39 tests)
 - ❌ §4.5: Elasticsearch Adapter - Cancelled (not needed now)
-- ✅ §5: Adapter Registry - Implemented (26 tests)
+- ✅ §5: Adapter storage (config.adapters)
 - ✅ §9.1: InMemory Test Adapter - Implemented (51 tests)
 - ✅ AuditEncrypted Adapter - Updated to new contract (13 tests)
 
@@ -31,7 +31,7 @@
    - 4.3. [Loki Adapter](#43-loki-adapter)
    - 4.4. [Sentry Adapter](#44-sentry-adapter)
    - 4.5. [Elasticsearch Adapter](#45-elasticsearch-adapter)
-5. [Adapter Registry](#5-adapter-registry)
+5. [Adapter Storage (config.adapters)](#5-adapter-storage-configadapters)
 6. [Connection Management](#6-connection-management)
 7. [Error Handling & Retry](#7-error-handling--retry)
 8. [Performance & Batching](#8-performance--batching)
@@ -1064,17 +1064,17 @@ end
 
 ---
 
-## 5. Adapter Registry
+## 5. Adapter Storage (config.adapters)
 
-### 5.1. Registry Architecture
+### 5.1. Architecture
 
 ```mermaid
 graph TB
     subgraph "Configuration Phase (Boot Time)"
-        Config[Configuration] --> Register[Registry.register]
-        Register --> Instance1[Loki Instance]
-        Register --> Instance2[Sentry Instance]
-        Register --> Instance3[File Instance]
+        Config[Configuration] --> Adapters[config.adapters]
+        Adapters --> Instance1[Loki Instance]
+        Adapters --> Instance2[Sentry Instance]
+        Adapters --> Instance3[File Instance]
         
         Instance1 --> Pool1[Connection Pool]
         Instance2 --> Pool2[Connection Pool]
@@ -1082,79 +1082,33 @@ graph TB
     end
     
     subgraph "Runtime Phase"
-        Event[Event.track] --> Resolve[Registry.resolve]
+        Event[Event.track] --> Resolve[config.adapters[name]]
         Resolve -->|:loki| Instance1
         Resolve -->|:sentry| Instance2
         Resolve -->|:file| Instance3
     end
     
-    style Register fill:#d1ecf1
+    style Adapters fill:#d1ecf1
     style Resolve fill:#fff3cd
     style Pool1 fill:#d4edda
     style Pool2 fill:#d4edda
     style Pool3 fill:#d4edda
 ```
 
-### 5.2. Registry Implementation
+### 5.2. config.adapters (Adapter Storage)
+
+Adapters are stored in `E11y.configuration.adapters` (Hash). Routing middleware resolves by name: `config.adapters[adapter_name]`.
 
 ```ruby
-module E11y
-  module Adapters
-    class Registry
-      class << self
-        def register(name, adapter_instance)
-          validate_adapter!(adapter_instance)
-          
-          adapters[name] = adapter_instance
-          
-          # Register cleanup hook
-          at_exit { adapter_instance.close }
-        end
-        
-        def resolve(name)
-          adapters.fetch(name) do
-            raise AdapterNotFoundError, "Adapter not found: #{name}"
-          end
-        end
-        
-        def resolve_all(names)
-          names.map { |name| resolve(name) }
-        end
-        
-        def all
-          adapters.values
-        end
-        
-        def names
-          adapters.keys
-        end
-        
-        def clear!
-          adapters.each_value(&:close)
-          adapters.clear
-        end
-        
-        private
-        
-        def adapters
-          @adapters ||= {}
-        end
-        
-        def validate_adapter!(adapter)
-          unless adapter.respond_to?(:write)
-            raise ArgumentError, "Adapter must respond to #write"
-          end
-          
-          unless adapter.respond_to?(:write_batch)
-            raise ArgumentError, "Adapter must respond to #write_batch"
-          end
-        end
-      end
-    end
-    
-    class AdapterNotFoundError < StandardError; end
-  end
+# Registration (config phase)
+E11y.configure do |config|
+  config.adapters[:loki] = E11y::Adapters::Loki.new(url: ENV["LOKI_URL"])
+  config.adapters[:sentry] = E11y::Adapters::Sentry.new(dsn: ENV["SENTRY_DSN"])
 end
+
+# Resolution (runtime, in Routing middleware)
+adapter = E11y.configuration.adapters[:loki]
+adapter.write(event_data)
 ```
 
 ### 5.3. Usage in Events
@@ -2189,64 +2143,40 @@ end
 require 'e11y'
 
 E11y.configure do |config|
-  # Register Loki for centralized logging
-  E11y::Adapters::Registry.register(
-    :loki,
-    E11y::Adapters::Loki.new(
-      url: ENV['LOKI_URL'] || 'http://loki:3100',
-      labels: {
-        app: 'my_app',
-        env: Rails.env,
-        host: Socket.gethostname
-      },
-      batch_size: 100,
-      batch_timeout: 5,
-      compress: true,
-      tenant_id: ENV['LOKI_TENANT_ID']
-    )
+  # Loki for centralized logging
+  config.adapters[:loki] = E11y::Adapters::Loki.new(
+    url: ENV['LOKI_URL'] || 'http://loki:3100',
+    labels: { app: 'my_app', env: Rails.env, host: Socket.gethostname },
+    batch_size: 100,
+    batch_timeout: 5,
+    compress: true,
+    tenant_id: ENV['LOKI_TENANT_ID']
   )
 
-  # Register Sentry for error tracking
-  E11y::Adapters::Registry.register(
-    :sentry,
-    E11y::Adapters::Sentry.new(
-      dsn: ENV['SENTRY_DSN'],
-      environment: Rails.env,
-      severity_threshold: :warn,
-      breadcrumbs: true
-    )
+  # Sentry for error tracking
+  config.adapters[:sentry] = E11y::Adapters::Sentry.new(
+    dsn: ENV['SENTRY_DSN'],
+    environment: Rails.env,
+    severity_threshold: :warn,
+    breadcrumbs: true
   )
 
-  # Register File adapter for local development
-  E11y::Adapters::Registry.register(
-    :file,
-    E11y::Adapters::File.new(
-      path: Rails.root.join('log', 'e11y.log'),
-      rotation: :daily,
-      max_size: 100 * 1024 * 1024, # 100MB
-      compress: true
-    )
+  # File adapter for local development
+  config.adapters[:file] = E11y::Adapters::File.new(
+    path: Rails.root.join('log', 'e11y.log'),
+    rotation: :daily,
+    max_size: 100 * 1024 * 1024,
+    compress: true
   )
 
-  # Register Stdout for console output
-  E11y::Adapters::Registry.register(
-    :stdout,
-    E11y::Adapters::Stdout.new(
-      pretty: Rails.env.development?,
-      colorize: true
-    )
+  # Stdout for console output
+  config.adapters[:stdout] = E11y::Adapters::Stdout.new(
+    pretty: Rails.env.development?,
+    colorize: true
   )
 
-  # Register InMemory for testing
-  if Rails.env.test?
-    E11y::Adapters::Registry.register(
-      :test,
-      E11y::Adapters::InMemory.new(
-        max_events: 1000,
-        max_batches: 100
-      )
-    )
-  end
+  # InMemory for testing
+  config.adapters[:test] = E11y::Adapters::InMemory.new(max_events: 1000, max_batches: 100) if Rails.env.test?
 end
 ```
 
@@ -2307,7 +2237,7 @@ Events::PaymentFailed.track(
 ```ruby
 # spec/events/order_placed_spec.rb
 RSpec.describe Events::OrderPlaced do
-  let(:adapter) { E11y::Adapters::Registry.resolve(:test) }
+  let(:adapter) { E11y.config.adapters[:test] }
 
   before do
     adapter.clear!
@@ -2342,7 +2272,7 @@ end
 
 ```ruby
 # Check adapter capabilities before using
-loki = E11y::Adapters::Registry.resolve(:loki)
+loki = E11y.config.adapters[:loki]
 puts loki.capabilities
 # => {
 #   batching: true,
@@ -2366,8 +2296,8 @@ end
 # config/initializers/health_check.rb
 HealthCheck.setup do |config|
   config.add_custom_check('e11y_adapters') do
-    adapters = E11y::Adapters::Registry.all
-    unhealthy = adapters.reject { |name, adapter| adapter.healthy? }
+    adapters = E11y.config.adapters
+    unhealthy = adapters.select { |_name, adapter| !adapter.respond_to?(:healthy?) || !adapter.healthy? }
 
     if unhealthy.any?
       "Unhealthy adapters: #{unhealthy.keys.join(', ')}"

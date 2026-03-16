@@ -1236,17 +1236,10 @@ module E11y
         # Extract message
         msg = message || (block_given? ? block.call : nil)
         
-        # Track via E11y
-        Events::RailsLogger.track(
-          severity: severity,
-          message: msg.to_s,
-          caller_location: extract_caller_location
-        )
+        # Track via E11y (filtered by track_severities, ignore_patterns)
+        event_class_for_severity(severity).track(message: msg.to_s, caller_location: extract_caller_location)
         
-        # Also log to original logger (dual logging)
-        if @original_logger && E11y.config.logger_bridge.dual_logging
-          @original_logger.public_send(severity, msg)
-        end
+        # Always delegate to original logger (SimpleDelegator super)
       end
       
       def extract_caller_location
@@ -1262,36 +1255,26 @@ module E11y
 end
 ```
 
-### 7.2. Migration Strategy
+### 7.2. Configuration
 
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.logger_bridge do
-    enabled true
-    
-    # Dual logging (E11y + original Rails.logger)
-    dual_logging true  # Keep writing to log/production.log
-    
-    # Which severities to track
-    track_severities [:info, :warn, :error, :fatal]
-    
-    # Skip noisy log messages
-    ignore_patterns [
-      /Started GET/,
-      /Completed \d+ OK/,
-      /CACHE/
-    ]
-    
-    # Sample high-volume logs
-    sample_rate 0.1  # 10% of logs
-    
-    # Enrich with Rails context
-    enrich_with_context true
-    context_fields [:controller, :action, :request_id]
-  end
+  config.logger_bridge.enabled = true
+  
+  # Which severities to track (nil = all)
+  config.logger_bridge.track_severities = [:info, :warn, :error, :fatal]
+  
+  # Skip noisy log messages (regex or string)
+  config.logger_bridge.ignore_patterns = [
+    /Started GET/,
+    /Completed \d+ OK/,
+    /CACHE/
+  ]
 end
 ```
+
+**Context:** Events are enriched with `trace_id`, `request_id`, `span_id`, `user_id` from `E11y::Current` via `Event::Base.build_context` — no separate config needed.
 
 ---
 
@@ -1480,8 +1463,8 @@ module E11y
         {
           events_tracked: Registry.event_classes.sum { |e| e.track_count },
           events_in_buffer: Buffer.size,
-          adapters: Adapters::Registry.all.map { |a| 
-            { name: a.name, healthy: a.healthy? }
+          adapters: config.adapters.map { |name, a|
+            { name: name, healthy: a.respond_to?(:healthy?) ? a.healthy? : true }
           },
           rate_limiter: {
             current_rate: RateLimiter.current_rate,
@@ -1508,12 +1491,12 @@ module E11y
       
       # E11y.adapters
       def E11y.adapters
-        Adapters::Registry.all.map do |adapter|
+        config.adapters.map do |name, adapter|
           {
-            name: adapter.name,
+            name: name,
             class: adapter.class.name,
-            healthy: adapter.healthy?,
-            capabilities: adapter.capabilities
+            healthy: adapter.respond_to?(:healthy?) ? adapter.healthy? : true,
+            capabilities: adapter.respond_to?(:capabilities) ? adapter.capabilities : {}
           }
         end
       end

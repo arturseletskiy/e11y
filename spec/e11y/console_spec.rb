@@ -91,15 +91,18 @@ RSpec.describe E11y::Console do
     end
 
     describe "#adapters" do
-      it "returns array" do
+      it "returns array from config.adapters" do
         adapters = E11y.adapters
         expect(adapters).to be_an(Array)
       end
 
-      it "calls Registry.all" do
-        allow(E11y::Adapters::Registry).to receive(:all).and_return([])
+      it "returns adapters from config" do
+        stdout = instance_double(E11y::Adapters::Stdout, class: E11y::Adapters::Stdout, healthy?: true, capabilities: {})
+        allow(E11y.config).to receive(:adapters).and_return({ stdout: stdout })
         result = E11y.adapters
-        expect(result).to eq([])
+        expect(result).to contain_exactly(
+          hash_including(name: :stdout, class: "E11y::Adapters::Stdout", healthy: true)
+        )
       end
     end
 

@@ -2587,8 +2587,8 @@ module E11y
       end
       
       def check_all_adapters
-        E11y::Adapters::Registry.all.each do |adapter|
-          circuit_breaker = CircuitBreaker.for(adapter.name)
+        E11y.config.adapters.each do |name, adapter|
+          circuit_breaker = CircuitBreaker.for(name)
           
           # Only check adapters with open/half-open circuits
           next if circuit_breaker.healthy?
@@ -2597,11 +2597,11 @@ module E11y
             adapter.health_check
             
             E11y::Metrics.increment('e11y.health_check.success', {
-              adapter: adapter.name
+              adapter: name
             })
           rescue => error
             E11y::Metrics.increment('e11y.health_check.failure', {
-              adapter: adapter.name,
+              adapter: name,
               error: error.class.name
             })
           end

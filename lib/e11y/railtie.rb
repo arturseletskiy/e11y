@@ -22,7 +22,7 @@ module E11y
   #   # config/initializers/e11y.rb
   #   E11y.configure do |config|
   #     config.service_name = "my-app"
-  #     config.adapters.register :loki, E11y::Adapters::Loki.new(url: ENV['LOKI_URL'])
+  #     config.adapters[:loki] = E11y::Adapters::Loki.new(url: ENV['LOKI_URL'])
   #   end
   #
   # @see ADR-008 §3 (Railtie & Initialization)

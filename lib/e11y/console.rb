@@ -54,14 +54,14 @@ module E11y
         Registry.event_classes.map { |e| e.respond_to?(:event_name) ? e.event_name : e.name }
       end
 
-      # List all registered adapters
+      # List all registered adapters (from config.adapters)
       def adapters
-        Adapters::Registry.all.map do |adapter|
+        config.adapters.map do |name, adapter|
           {
-            name: adapter.name,
+            name: name,
             class: adapter.class.name,
-            healthy: adapter.healthy?,
-            capabilities: adapter.capabilities
+            healthy: adapter.respond_to?(:healthy?) ? adapter.healthy? : true,
+            capabilities: adapter.respond_to?(:capabilities) ? adapter.capabilities : {}
           }
         end
       end
@@ -75,8 +75,8 @@ module E11y
       private
 
       def adapters_info
-        Adapters::Registry.all.map do |a|
-          { name: a.name, class: a.class.name, healthy: a.healthy? }
+        config.adapters.map do |name, adapter|
+          { name: name, class: adapter.class.name, healthy: adapter.respond_to?(:healthy?) ? adapter.healthy? : true }
         end
       end
 

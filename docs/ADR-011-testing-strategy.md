@@ -621,10 +621,10 @@ RSpec.configure do |config|
   config.alias_example_group_to :describe_event, type: :event
 end
 
-# Convenience method to access test adapter
+# Convenience method to access test adapter (uses config.adapters[:test] or [:memory])
 module E11y
   def self.test_adapter
-    Adapters::Registry.get(:test)
+    configuration.adapters[:test] || configuration.adapters[:memory]
   end
 end
 ```

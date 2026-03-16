@@ -107,11 +107,8 @@ module Dummy
     config.cache_classes = false # Set to false to allow reloading during tests
     config.consider_all_requests_local = true
     config.action_controller.perform_caching = false
-    # Use false to ensure exceptions are raised (not handled) in tests
-    # Rails 7.0: false is the correct value
-    # Rails 7.1+: false is deprecated (should use :none) but still works
-    # NOTE: :none doesn't work in Rails 7.0 (it's treated as truthy, causing exceptions to be swallowed)
-    config.action_dispatch.show_exceptions = false
+    # Exceptions caught → 500 response (same for Rails 7.x and 8.x)
+    config.action_dispatch.show_exceptions = :all
     config.action_controller.allow_forgery_protection = false
     config.active_support.deprecation = :stderr
     config.active_support.test_order = :random

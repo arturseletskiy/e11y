@@ -79,16 +79,15 @@ end
 # config/initializers/e11y.rb
 require 'e11y'
 
-# Register Sentry adapter
-E11y::Adapters::Registry.register(
-  :sentry,
-  E11y::Adapters::Sentry.new(
+# Configure Sentry adapter
+E11y.configure do |config|
+  config.adapters[:sentry] = E11y::Adapters::Sentry.new(
     dsn: ENV['SENTRY_DSN'],
     environment: Rails.env,
     severity_threshold: :warn,  # Send :warn, :error, :fatal to Sentry
     breadcrumbs: true           # Track all events as breadcrumbs
   )
-)
+end
 
 # Use in events
 class Events::PaymentFailed < E11y::Event::Base
@@ -699,16 +698,15 @@ The implemented `E11y::Adapters::Sentry` provides:
 
 **Usage Example:**
 ```ruby
-# Register adapter
-E11y::Adapters::Registry.register(
-  :sentry,
-  E11y::Adapters::Sentry.new(
+# Configure adapter
+E11y.configure do |config|
+  config.adapters[:sentry] = E11y::Adapters::Sentry.new(
     dsn: ENV['SENTRY_DSN'],
     environment: 'production',
     severity_threshold: :warn,
     breadcrumbs: true
   )
-)
+end
 
 # Track error event
 Events::PaymentFailed.track(

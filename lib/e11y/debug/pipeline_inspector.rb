@@ -5,6 +5,11 @@ require "active_support/core_ext/numeric/time"
 module E11y
   module Debug
     # Debug utility to trace events through the pipeline with per-middleware logging.
+    #
+    # Runs the full pipeline including adapter writes. For debugging, use Stdout or
+    # InMemory adapter. Stub adapters in tests if needed.
+    #
+    # @see E11y.trace
     class PipelineInspector
       # Wraps a middleware to log enter/exit for pipeline tracing.
       class TracingWrapper
@@ -38,6 +43,12 @@ module E11y
       end
 
       class << self
+        # Traces an event through the pipeline with per-middleware logging.
+        # Note: adapters WILL receive the event.
+        #
+        # @param event_class [Class] Event class
+        # @param payload [Hash] Event payload
+        # @return [Hash] event_data after pipeline
         def trace_event(event_class, **payload)
           event_name = event_class.respond_to?(:event_name) ? event_class.event_name : event_class.name
           puts "\n🔍 Tracing Event Pipeline: #{event_name}\n\n"

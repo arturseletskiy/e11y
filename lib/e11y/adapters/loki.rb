@@ -41,11 +41,8 @@ module E11y
     #     batch_timeout: 5
     #   )
     #
-    # @example With Registry
-    #   E11y::Adapters::Registry.register(
-    #     :loki_logger,
-    #     E11y::Adapters::Loki.new(url: ENV["LOKI_URL"])
-    #   )
+    # @example Configuration
+    #   config.adapters[:loki] = E11y::Adapters::Loki.new(url: ENV["LOKI_URL"])
     #
     # @example With Cardinality Protection (C04 Resolution - Enterprise)
     #   # Enable for high-traffic environments to prevent label explosion

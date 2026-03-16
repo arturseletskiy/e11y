@@ -26,7 +26,6 @@
 | F-005 | **DevLog adapter missing:** ADR §4.0 — file-based JSONL adapter (stored_events, find_event, search, clear!, stats). Not implemented. |
 | F-006 | **Web UI missing:** ADR §4.1–4.5 — WebUI Engine, EventsController, mount at /e11y. Not implemented. |
 | F-007 | **Event Explorer, Timeline, Inspector, Trace Viewer** not implemented. |
-| F-011 | **PipelineInspector not implemented:** ADR §6.1 — E11y::Debug::PipelineInspector.trace_event. No Debug module. |
 
 ### ADR-016: Self-Monitoring SLO
 
@@ -44,9 +43,6 @@
 |----|-------------|
 | 1 | No `instruments` namespace; flat config (`rails_instrumentation`, `sidekiq`, `active_job`, `logger_bridge`). |
 | 4 | Trace propagation: C17 hybrid (`e11y_parent_trace_id`) vs ADR same-trace (`e11y_trace_id`). |
-| 6 | Logger Bridge: no dual_logging config; dual logging always on. |
-| 7 | Logger Bridge: no track_severities, ignore_patterns, sample_rate, enrich_with_context. |
-| 8 | 3-phase migration not configurable; cannot disable mirroring. |
 
 ### ADR-009: Cost Optimization
 
@@ -56,15 +52,6 @@
 | F2 | **Cardinality protection not unified for OTLP —** no CardinalityFilter middleware; OTel uses max_attributes truncation. |
 | F3 | **Loki cardinality opt-in** — defaults to false; ADR §8 requires default. |
 | F4 | **Compression not implemented** — pipeline-level compression not started. |
-
-### ADR-010: Developer Experience
-
-| ID | Description |
-|----|-------------|
-| F-002 | 5-min setup claim not achievable: no single config block. |
-| F-012 | No pipeline trace debugging. |
-| F-013 | Rake tasks missing: e11y:list, e11y:validate, e11y:docs:generate, e11y:stats. |
-| F-014 | Documentation generator not implemented. |
 
 ### ADR-016: Self-Monitoring SLO
 
@@ -93,21 +80,8 @@
 | F4 | **Multi-window burn rate alerts** — ADR §5. No BurnRateCalculator, alert generation. |
 | F6 | **ErrorBudget** — ADR §7. Not implemented. |
 
-### ADR-004: Adapter Architecture
-
-| ID | Description |
-|----|-------------|
-| F1 | **Registry vs config.adapters** — ADR §5 describes Registry; routing uses `config.adapters` (Hash). Two mechanisms. |
-| F2 | **Registry validation** — requires `healthy?`; ADR only write/write_batch. |
 
 *Implemented:* Base contract, Stdout, File, Loki, Sentry, InMemory, Retention-Based Routing. Elasticsearch cancelled.
-
-### ADR-017: Multi-Rails Compatibility
-
-| ID | Description |
-|----|-------------|
-| F-001 | **ADR-001 vs ADR-017 conflict** — ADR-001: Rails 8.0+ exclusive. ADR-017 adds 7.0, 7.1. Implementation follows ADR-017. |
-| F-003 | **Version-specific code** — ADR example exception handling with `Rails.version` not found; dummy app uses show_exceptions=false. |
 
 ### ADR-018: Memory Optimization
 

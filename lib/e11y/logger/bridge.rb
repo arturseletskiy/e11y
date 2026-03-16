@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "delegate"
+require "set"
 
 module E11y
   module Logger
@@ -53,6 +54,9 @@ module E11y
           ::Logger::FATAL => :fatal,
           ::Logger::UNKNOWN => :warn
         }
+        cfg = E11y.config.logger_bridge
+        @track_severities_set = build_track_severities_set(cfg&.track_severities)
+        @ignore_patterns = build_compiled_patterns(cfg&.ignore_patterns)
       end
 
       # Intercept logger methods to track to E11y
@@ -130,11 +134,16 @@ module E11y
         msg = message || (block_given? ? yield : nil)
         return if msg.nil? || (msg.respond_to?(:empty?) && msg.empty?)
 
+        msg_str = msg.to_s
+
+        return if @track_severities_set && !@track_severities_set.include?(severity)
+        return if @ignore_patterns.any? { |re| re.match?(msg_str) }
+
         # Track to E11y using severity-specific class
         require "e11y/events/rails/log"
         event_class = event_class_for_severity(severity)
         event_class.track(
-          message: msg.to_s,
+          message: msg_str,
           caller_location: extract_caller_location
         )
       rescue StandardError => e
@@ -159,6 +168,20 @@ module E11y
         end
       end
       # rubocop:enable Lint/DuplicateBranch
+
+      def build_track_severities_set(severities)
+        return nil if severities.nil? || (severities.respond_to?(:empty?) && severities.empty?)
+
+        Set.new(Array(severities).map(&:to_sym))
+      end
+
+      def build_compiled_patterns(patterns)
+        return [] if patterns.nil? || !patterns.respond_to?(:any?) || !patterns.any?
+
+        Array(patterns).map do |p|
+          p.is_a?(Regexp) ? p : Regexp.new(Regexp.escape(p.to_s))
+        end.freeze
+      end
 
       # Extract caller location (first caller outside E11y)
       # @return [String, nil] Caller location string

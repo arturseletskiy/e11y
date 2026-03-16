@@ -509,15 +509,19 @@ module E11y
   #
   # @example Enable logger bridge
   #   E11y.configure do |config|
-  #     config.logger_bridge.enabled = true  # Wrap Rails.logger + send to E11y
+  #     config.logger_bridge.enabled = true
+  #     config.logger_bridge.track_severities = [:info, :warn, :error, :fatal]
+  #     config.logger_bridge.ignore_patterns = [/Started GET/, /Completed \d+ OK/]
   #   end
   #
   # @see lib/e11y/logger/bridge.rb
   class LoggerBridgeConfig
-    attr_accessor :enabled
+    attr_accessor :enabled, :track_severities, :ignore_patterns
 
     def initialize
       @enabled = false # Opt-in: disabled by default
+      @track_severities = nil # nil = all severities
+      @ignore_patterns = []
     end
   end
 

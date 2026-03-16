@@ -17,7 +17,7 @@ Gem::Specification.new do |spec|
     • Schema-validated events - catch bugs before production with dry-schema
 
     DEVELOPER EXPERIENCE:
-    • 5-minute setup (not 2-week migration)
+    • Minimal setup — one config block, works with stdout out of the box
     • Auto-metrics from events (no manual Yabeda.increment)
     • Rails-first design (follows Rails conventions)
     • Pluggable adapters (Loki, Sentry, OpenTelemetry, custom backends)

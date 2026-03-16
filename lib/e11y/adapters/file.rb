@@ -26,11 +26,8 @@ module E11y
     #
     #   adapter.write(event_name: "user.login", severity: :info)
     #
-    # @example With Registry
-    #   E11y::Adapters::Registry.register(
-    #     :file_logger,
-    #     E11y::Adapters::File.new(path: "log/events.log")
-    #   )
+    # @example Configuration
+    #   config.adapters[:file] = E11y::Adapters::File.new(path: "log/events.log")
     # rubocop:disable Metrics/ClassLength
     # File adapter contains file rotation and buffering logic as cohesive unit
     class File < Base
