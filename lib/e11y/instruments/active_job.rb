@@ -103,7 +103,9 @@ module E11y
         def setup_job_buffer_active_job
           return unless E11y.config.ephemeral_buffer_enabled
 
-          E11y::Buffers::EphemeralBuffer.initialize!
+          limit = E11y.config.ephemeral_buffer_job_buffer_limit ||
+                  E11y::Buffers::EphemeralBuffer::DEFAULT_BUFFER_LIMIT
+          E11y::Buffers::EphemeralBuffer.initialize!(buffer_limit: limit)
         rescue StandardError => e
           # C18: Don't fail job if buffer setup fails
           warn "[E11y] Failed to start job buffer: #{e.message}"

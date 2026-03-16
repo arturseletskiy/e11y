@@ -429,7 +429,7 @@ RSpec.describe E11y::Buffers::EphemeralBuffer do
       E11y.configure do |config|
         config.adapters[:fallback] = fallback_adapter
         config.fallback_adapters = [:fallback]
-        # ephemeral_buffer.debug_adapters NOT set — should default to nil
+        # ephemeral_buffer_debug_adapters NOT set — should default to nil
       end
       described_class.initialize!
     end
