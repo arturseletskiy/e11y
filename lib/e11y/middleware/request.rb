@@ -192,7 +192,7 @@ module E11y
       # @api private
       # SLO tracking requires extracting controller/action, calculating duration, and error handling
       def track_http_request_slo(env, status, start_time)
-        return unless E11y.config.slo_tracking&.enabled
+        return unless E11y.config.respond_to?(:slo_tracking_enabled) && E11y.config.slo_tracking_enabled
 
         duration_ms = ((Time.now - start_time) * 1000).round(2)
 

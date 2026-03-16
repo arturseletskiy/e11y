@@ -16,6 +16,7 @@ docs/research
 /test/tmp/
 /test/version_tmp/
 /tmp/
+/spec/tmp/
 .bundle/
 vendor/bundle
 

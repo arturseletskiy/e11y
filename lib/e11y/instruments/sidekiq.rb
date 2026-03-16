@@ -260,7 +260,7 @@ module E11y
         # @return [void]
         # @api private
         def track_job_slo(job, queue, status, start_time)
-          return unless E11y.config.slo_tracking&.enabled
+          return unless E11y.config.respond_to?(:slo_tracking_enabled) && E11y.config.slo_tracking_enabled
 
           duration_ms = ((Time.now - start_time) * 1000).round(2)
 
