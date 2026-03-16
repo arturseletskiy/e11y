@@ -153,6 +153,17 @@ RSpec.describe E11y::Configuration do
     end
   end
 
+  describe "#dlq_storage and #dlq_filter (top-level)" do
+    it "sets dlq_storage and dlq_filter" do
+      storage = E11y::Reliability::DLQ::FileStorage.new(file_path: "/tmp/e11y_dlq_test.jsonl")
+      filter = E11y::Reliability::DLQ::Filter.new
+      config.dlq_storage = storage
+      config.dlq_filter = filter
+      expect(config.dlq_storage).to equal(storage)
+      expect(config.dlq_filter).to equal(filter)
+    end
+  end
+
   describe "#cardinality_protection_* flat accessors" do
     it "sets cardinality_protection_max_cardinality_limit, denylist, overflow_strategy" do
       config.cardinality_protection_max_cardinality_limit = 500

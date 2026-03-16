@@ -267,8 +267,9 @@ module E11y
                   :tracing_source, :tracing_default_sample_rate, :tracing_respect_parent_sampling,
                   :tracing_per_event_sample_rates, :tracing_always_sample_if,
                   :opentelemetry_span_creation_patterns,
-                  :cardinality_protection_max_cardinality_limit, :cardinality_protection_denylist, :cardinality_protection_overflow_strategy
-    attr_reader :adapter_mapping, :pipeline, :dlq_storage, :dlq_filter
+                  :cardinality_protection_max_cardinality_limit, :cardinality_protection_denylist, :cardinality_protection_overflow_strategy,
+                  :dlq_storage, :dlq_filter
+    attr_reader :adapter_mapping, :pipeline
 
     def initialize
       initialize_basic_config
