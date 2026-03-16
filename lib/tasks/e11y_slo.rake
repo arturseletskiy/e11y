@@ -2,6 +2,7 @@
 
 namespace :e11y do
   namespace :slo do
+    desc "Validate slo.yml configuration"
     task validate: :environment do
       require "e11y/slo/config_loader"
       require "e11y/slo/config_validator"
@@ -14,12 +15,23 @@ namespace :e11y do
 
       errors = E11y::SLO::ConfigValidator.validate(config)
       if errors.empty?
+        require "e11y/linters/slo/explicit_declaration_linter"
+        require "e11y/linters/slo/slo_status_from_linter"
+        require "e11y/linters/slo/config_consistency_linter"
+
+        E11y::Linters::SLO::ExplicitDeclarationLinter.validate!
+        E11y::Linters::SLO::SloStatusFromLinter.validate!
+        E11y::Linters::SLO::ConfigConsistencyLinter.validate!
+
         puts "✅ slo.yml is valid"
       else
         puts "❌ slo.yml validation failed:"
         errors.each { |e| puts "  #{e}" }
         exit 1
       end
+    rescue E11y::Linters::LinterError => e
+      puts "❌ SLO linter failed: #{e.message}"
+      exit 1
     end
 
     desc "Generate Grafana dashboard from slo.yml"
