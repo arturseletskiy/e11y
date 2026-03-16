@@ -26,19 +26,26 @@ module E11y
         private
 
         def log_enter(name)
-          print "  #{name}... "
+          prefix = $stdout.tty? ? "\e[33m" : ""
+          suffix = $stdout.tty? ? "\e[0m" : ""
+          print "  #{prefix}#{name}#{suffix}... "
         end
 
         def log_exit(_name)
-          puts "✓"
+          mark = $stdout.tty? ? "\e[32m✓\e[0m" : "✓"
+          puts mark
         end
       end
 
       class << self
         def trace_event(event_class, **payload)
+          event_name = event_class.respond_to?(:event_name) ? event_class.event_name : event_class.name
+          puts "\n🔍 Tracing Event Pipeline: #{event_name}\n\n"
           event_data = build_event_data(event_class, payload)
           pipeline = build_tracing_pipeline
-          pipeline.call(event_data)
+          result = pipeline.call(event_data)
+          puts "\n✅ Pipeline trace complete\n"
+          result
         end
 
         private
