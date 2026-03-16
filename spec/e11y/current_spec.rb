@@ -230,6 +230,32 @@ RSpec.describe E11y::Current do
     end
   end
 
+  describe ".to_context" do
+    it "returns hash of set attributes with symbol keys" do
+      described_class.trace_id = "trace-123"
+      described_class.span_id = "span-456"
+      described_class.user_id = 42
+      described_class.request_path = "/admin"
+
+      ctx = described_class.to_context
+      expect(ctx).to eq(
+        trace_id: "trace-123",
+        span_id: "span-456",
+        user_id: 42,
+        request_path: "/admin"
+      )
+    end
+
+    it "omits nil values (compact)" do
+      described_class.trace_id = "trace-123"
+      # user_id, request_path, etc. unset
+
+      ctx = described_class.to_context
+      expect(ctx).to have_key(:trace_id)
+      expect(ctx).not_to have_key(:user_id)
+    end
+  end
+
   describe "hybrid tracing scenarios" do
     context "when in HTTP request scenario" do
       it "sets trace_id without parent_trace_id" do

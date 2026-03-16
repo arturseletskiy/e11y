@@ -2,6 +2,8 @@
 
 require "rack/request"
 require "securerandom"
+require "e11y/tracing/propagator"
+require "e11y/trace_context/sampler"
 
 module E11y
   module Middleware
@@ -37,8 +39,9 @@ module E11y
       def call(env)
         request = Rack::Request.new(env)
 
-        # Extract or generate trace_id
-        trace_id = extract_trace_id(request) || generate_trace_id
+        # Extract or generate trace context (trace_id, sampled from traceparent)
+        trace_ctx = extract_trace_context(request)
+        trace_id = trace_ctx[:trace_id] || generate_trace_id
         span_id = generate_span_id
 
         # Set request context (ActiveSupport::CurrentAttributes)
@@ -50,6 +53,7 @@ module E11y
         E11y::Current.user_agent = request.user_agent
         E11y::Current.request_method = request.request_method
         E11y::Current.request_path = request.path
+        E11y::Current.sampled = resolve_sampled(trace_ctx)
 
         # Start request-scoped buffer (for debug events)
         E11y::Buffers::EphemeralBuffer.initialize! if E11y.config.ephemeral_buffer&.enabled
@@ -121,20 +125,26 @@ module E11y
         extra&.any? { |s| s === status } || false # rubocop:disable Style/CaseEquality
       end
 
-      # Extract trace_id from request headers (W3C Trace Context or custom headers)
+      # Extract trace context from request headers (W3C Trace Context or custom).
       # @param request [Rack::Request] Rack request
-      # @return [String, nil] Trace ID or nil if not found
-      def extract_trace_id(request)
-        # W3C Trace Context (traceparent header)
-        # Format: version-trace_id-span_id-flags
-        # Example: 00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01
+      # @return [Hash] { trace_id:, sampled: (from traceparent, or nil if new trace) }
+      def extract_trace_context(request)
         traceparent = request.get_header("HTTP_TRACEPARENT")
-        return traceparent.split("-")[1] if traceparent
+        if traceparent
+          parsed = E11y::Tracing::Propagator.parse(traceparent)
+          return { trace_id: parsed[:trace_id], sampled: parsed[:sampled] } if parsed
+        end
 
-        # X-Request-ID (Rails default)
-        request.get_header("HTTP_X_REQUEST_ID") ||
-          # X-Trace-Id (custom)
-          request.get_header("HTTP_X_TRACE_ID")
+        trace_id = request.get_header("HTTP_X_REQUEST_ID") || request.get_header("HTTP_X_TRACE_ID")
+        { trace_id: trace_id, sampled: nil }
+      end
+
+      # Resolve sampling decision: from parent (traceparent) or Sampler for new trace.
+      # Context for Sampler = E11y::Current.to_context (already set above).
+      def resolve_sampled(trace_ctx)
+        return trace_ctx[:sampled] if trace_ctx.key?(:sampled) && !trace_ctx[:sampled].nil?
+
+        E11y::TraceContext::Sampler.should_sample?(E11y::Current.to_context)
       end
 
       # Extract request_id from Rack env

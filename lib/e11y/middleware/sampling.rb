@@ -176,8 +176,13 @@ module E11y
         # 1. Check if audit event (never sample audit events!)
         return true if event_class.respond_to?(:audit_event?) && event_class.audit_event?
 
-        # 2. Check trace-aware sampling (C05)
-        return trace_sampling_decision(event_data[:trace_id], event_class, event_data) if @trace_aware && event_data[:trace_id]
+        # 2. Trace-consistent sampling (ADR-005 §7): prefer E11y::Current.sampled when trace_aware
+        if @trace_aware && event_data[:trace_id]
+          if E11y::Current.respond_to?(:sampled) && !E11y::Current.sampled.nil?
+            return E11y::Current.sampled
+          end
+          return trace_sampling_decision(event_data[:trace_id], event_class, event_data)
+        end
 
         # 3. Get sample rate for this event
         sample_rate = determine_sample_rate(event_class, event_data)

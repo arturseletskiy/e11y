@@ -34,7 +34,9 @@ module E11y
         s_id = span_id || E11y::Current.span_id
         s_id = SecureRandom.hex(8) if s_id.nil? || s_id.empty?
 
-        "#{TRACEPARENT_VERSION}-#{t_id}-#{s_id}-#{SAMPLED_FLAG}"
+        sampled = E11y::Current.respond_to?(:sampled) ? E11y::Current.sampled : true
+        flags = (sampled != false) ? SAMPLED_FLAG : "00"
+        "#{TRACEPARENT_VERSION}-#{t_id}-#{s_id}-#{flags}"
       end
 
       # Inject W3C trace context headers into a plain Hash of headers.

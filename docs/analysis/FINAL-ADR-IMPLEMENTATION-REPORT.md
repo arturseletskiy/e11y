@@ -29,19 +29,8 @@
 |----|-------------|
 | F-023 | Trace-consistent sampling (§7) not implemented. |
 
-### ADR-006: Security & Compliance
 
-| ID | Description |
-|----|-------------|
-| F-003 | **BaggageProtection middleware missing (§5.5, C08):** Middleware to block PII in OpenTelemetry Baggage not implemented. |
 
-### ADR-007: OpenTelemetry Integration
-
-| ID | Description |
-|----|-------------|
-| F1 | **OpenTelemetryCollector adapter missing:** ADR §3 describes OTLP HTTP adapter. In code only OTelLogs (SDK). |
-| F2 | **Span creation not implemented:** ADR §6 — SpanCreator, automatic span creation from events. Not implemented. |
-| F3 | **Trace context not integrated with OTel SDK:** ADR §8 — OpenTelemetrySource for reading trace_id from OTel SDK. No `source :opentelemetry`. |
 
 ### ADR-010: Developer Experience
 
@@ -91,13 +80,6 @@
 | F-005 | **PII Declaration Linter not implemented:** E11y::Linters::PiiDeclarationLinter, rake e11y:lint:pii. |
 | F-007 | **Per-adapter PII vs global middleware:** ADR §3.0.6 — PII per adapter; in code PIIFilter is global middleware. |
 
-### ADR-007: OpenTelemetry Integration
-
-| ID | Description |
-|----|-------------|
-| F4 | **Semantic conventions not implemented:** ADR §4 — E11y::OpenTelemetry::SemanticConventions. OTelLogs uses generic event.#{key}. |
-| F5 | **Resource attributes partial:** Only service.name; ADR §7 requires full set. |
-
 ### ADR-008: Rails Integration
 
 | ID | Description |
@@ -125,13 +107,6 @@
 | F-012 | No pipeline trace debugging. |
 | F-013 | Rake tasks missing: e11y:list, e11y:validate, e11y:docs:generate, e11y:stats. |
 | F-014 | Documentation generator not implemented. |
-
-### ADR-012: Event Evolution
-
-| ID | Description |
-|----|-------------|
-| F-* | ~~UC-020 uses event_version vs ADR v:; OrderPaidV1 vs no-suffix~~ ✅ **Resolved:** UC-020 aligned to v:, V1=OrderPaid. |
-| F-* | ~~Event Registry: no VersionExtractor, all_versions, versioned_events~~ ✅ **Resolved:** VersionExtractor added; Registry.all_versions, versioned_events implemented. |
 
 ### ADR-013: Reliability
 

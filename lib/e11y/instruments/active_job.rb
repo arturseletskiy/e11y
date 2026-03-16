@@ -29,6 +29,7 @@ module E11y
             # Store current trace as parent (job will create NEW trace)
             job.e11y_parent_trace_id = E11y::Current.trace_id if E11y::Current.trace_id
             job.e11y_parent_span_id = E11y::Current.span_id if E11y::Current.span_id
+            job.e11y_sampled = E11y::Current.sampled if E11y::Current.respond_to?(:sampled) && !E11y::Current.sampled.nil?
           end
 
           # Set up job-scoped context around job execution (C17 Hybrid Tracing + C18 Non-Failing)
@@ -79,6 +80,18 @@ module E11y
           E11y::Current.span_id = span_id
           E11y::Current.parent_trace_id = parent_trace_id
           E11y::Current.request_id = job.job_id
+
+          # Restore or compute sampling decision (ADR-005 §7)
+          if job.respond_to?(:e11y_sampled) && !job.e11y_sampled.nil?
+            E11y::Current.sampled = job.e11y_sampled
+          else
+            require "e11y/trace_context/sampler"
+            ctx = E11y::Current.to_context.merge(
+              job_class: job.class.name,
+              queue: job.queue_name
+            ).compact
+            E11y::Current.sampled = E11y::TraceContext::Sampler.should_sample?(ctx)
+          end
         end
 
         # Setup job-scoped buffer
@@ -192,6 +205,14 @@ module E11y
 
         def e11y_span_id=(value)
           @e11y_span_id = value
+        end
+
+        def e11y_sampled
+          @e11y_sampled
+        end
+
+        def e11y_sampled=(value)
+          @e11y_sampled = value
         end
       end
     end

@@ -182,7 +182,7 @@ RSpec.describe E11y::Middleware::TraceContext do
       end
     end
 
-    describe "OpenTelemetry source (ADR-007 §8, F3)", :opentelemetry do
+    describe "OpenTelemetry source (ADR-007 §8, F3)", :integration do
       it "uses trace_id and span_id from OTel SDK when config.tracing.source is :opentelemetry" do
         begin
           require "opentelemetry/sdk"

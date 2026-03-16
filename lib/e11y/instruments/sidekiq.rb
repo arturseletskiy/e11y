@@ -92,6 +92,7 @@ module E11y
           # Job will generate NEW trace_id but keep parent link (C17)
           job["e11y_parent_trace_id"] = E11y::Current.trace_id if E11y::Current.trace_id
           job["e11y_parent_span_id"] = E11y::Current.span_id if E11y::Current.span_id
+          job["e11y_sampled"] = E11y::Current.sampled if E11y::Current.respond_to?(:sampled) && !E11y::Current.sampled.nil?
 
           # Emit Enqueued for raw Sidekiq jobs only (ActiveJob emits via ASN)
           emit_job_enqueued(worker_class, job, queue) if raw_sidekiq_job?(job)
@@ -130,7 +131,7 @@ module E11y
           start_time = Time.now
           job_status = :success
 
-          setup_job_context(job)
+          setup_job_context(job, queue)
           setup_job_buffer
 
           emit_job_started(job, queue) if raw_sidekiq_job?(job)
@@ -164,7 +165,7 @@ module E11y
         end
 
         # Setup job-scoped context (C17 Hybrid Tracing)
-        def setup_job_context(job)
+        def setup_job_context(job, queue = nil)
           # Extract parent trace context from job metadata
           parent_trace_id = job["e11y_parent_trace_id"]
 
@@ -177,6 +178,18 @@ module E11y
           E11y::Current.span_id = span_id
           E11y::Current.parent_trace_id = parent_trace_id
           E11y::Current.request_id = job["jid"]
+
+          # Restore or compute sampling decision (ADR-005 §7)
+          if job.key?("e11y_sampled")
+            E11y::Current.sampled = job["e11y_sampled"]
+          else
+            require "e11y/trace_context/sampler"
+            ctx = E11y::Current.to_context.merge(
+              job_class: job["class"],
+              queue: queue
+            ).compact
+            E11y::Current.sampled = E11y::TraceContext::Sampler.should_sample?(ctx)
+          end
         end
 
         # Setup request-scoped buffer (same as HTTP; optional job_buffer_limit)

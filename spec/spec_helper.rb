@@ -167,8 +167,6 @@ RSpec.configure do |config|
   else
     # Default: exclude integration tests (fast unit tests only)
     config.filter_run_excluding integration: true
-    # Exclude opentelemetry tests (require OTel SDK; run with: rspec --tag opentelemetry)
-    config.filter_run_excluding opentelemetry: true
   end
 
   # Unit tests: ensure E11y is enabled and audit events have routing

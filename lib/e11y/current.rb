@@ -38,11 +38,31 @@ module E11y
     attribute :trace_id
     attribute :span_id
     attribute :parent_trace_id # ✅ NEW: Link to parent trace (C17 Resolution)
+    attribute :sampled # Trace-consistent sampling (ADR-005 §7)
     attribute :request_id
     attribute :user_id
     attribute :ip_address
     attribute :user_agent
     attribute :request_method
     attribute :request_path
+
+    # Returns current attributes as a hash for sampling context (symbol keys, nil values omitted).
+    # Callers may merge job-specific keys (job_class, queue) when in job context.
+    #
+    # @return [Hash{Symbol=>Object}]
+    def self.to_context
+      {
+        trace_id: trace_id,
+        span_id: span_id,
+        parent_trace_id: parent_trace_id,
+        sampled: sampled,
+        request_id: request_id,
+        user_id: user_id,
+        ip_address: ip_address,
+        user_agent: user_agent,
+        request_method: request_method,
+        request_path: request_path
+      }.compact
+    end
   end
 end

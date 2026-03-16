@@ -20,7 +20,9 @@ RSpec.describe E11y::Middleware::BaggageProtection do
   end
 
   let(:config_double) do
-    instance_double(E11y::Configuration, security: security_config, enabled: true)
+    dbl = instance_double(E11y::Configuration, security: security_config, enabled: true)
+    allow(dbl).to receive(:built_pipeline).and_return(->(e) { e })
+    dbl
   end
 
   let(:security_config) do
@@ -55,46 +57,8 @@ RSpec.describe E11y::Middleware::BaggageProtection do
       end
     end
 
-    context "when OpenTelemetry::Baggage is loaded", :opentelemetry do
-      before do
-        begin
-          require "opentelemetry/sdk"
-        rescue LoadError
-          skip "OpenTelemetry SDK not available (bundle config set --local with integration)"
-        end
-        skip "OpenTelemetry::Baggage not available" unless defined?(OpenTelemetry::Baggage)
-      end
-
-      it "prepends interceptor on first call" do
-        # Ensure we're first to prepend (no prior BaggageProtection run in this process)
-        middleware.call(event_data)
-
-        ctx = OpenTelemetry::Context.current
-        result_ctx = OpenTelemetry::Baggage.set_value("user_email", "pii@example.com", context: ctx)
-
-        # When protection is active, PII key is blocked (not in returned context)
-        values = OpenTelemetry::Baggage.values(context: result_ctx)
-        expect(values).not_to have_key("user_email")
-      end
-
-      it "allows keys in allowlist" do
-        middleware.call(event_data)
-
-        ctx = OpenTelemetry::Context.current
-        result_ctx = OpenTelemetry::Baggage.set_value("trace_id", "abc123", context: ctx)
-
-        expect(OpenTelemetry::Baggage.values(context: result_ctx)["trace_id"]).to eq("abc123")
-      end
-
-      it "only prepends once (idempotent)" do
-        middleware.call(event_data)
-        middleware.call(event_data)
-
-        # Should not raise (multiple prepends would cause issues)
-        ctx = OpenTelemetry::Context.current
-        OpenTelemetry::Baggage.set_value("user_email", "pii@example.com", context: ctx)
-      end
-    end
+    # OTel integration tests moved to spec/integration/baggage_protection_integration_spec.rb
+    # to avoid hide_const("OpenTelemetry") and config_double conflicts in full suite.
 
     context "when config.security.baggage_protection.enabled is false" do
       before do

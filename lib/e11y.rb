@@ -7,6 +7,8 @@ require "active_support/core_ext/numeric/time" # For 30.days, 7.years, etc.
 loader = Zeitwerk::Loader.for_gem
 # Configure inflector for acronyms
 loader.inflector.inflect(
+  "opentelemetry_collector" => "OpenTelemetryCollector",
+  "otel_span" => "OtelSpan",
   "pii" => "PII",
   "pii_filter" => "PIIFilter",
   "otel_logs" => "OTelLogs",
@@ -226,7 +228,7 @@ module E11y
     attr_accessor :adapters, :log_level, :logger, :enabled, :environment, :service_name, :default_retention_period,
                   :routing_rules, :fallback_adapters, :enable_http_tracing
     attr_reader :adapter_mapping, :pipeline, :rails_instrumentation, :logger_bridge, :ephemeral_buffer, :active_job,
-                :sidekiq, :error_handling, :dlq_storage, :dlq_filter, :security, :tracing
+                :sidekiq, :error_handling, :dlq_storage, :dlq_filter, :security, :tracing, :opentelemetry
 
     def initialize
       initialize_basic_config
@@ -268,6 +270,7 @@ module E11y
       @cardinality_protection = CardinalityProtectionConfig.new
       @security = SecurityConfig.new
       @tracing = TracingConfig.new
+      @opentelemetry = OpenTelemetryConfig.new
     end
 
     public
@@ -363,6 +366,15 @@ module E11y
     # end
     def tracing(&)
       block_given? ? @tracing.instance_eval(&) : @tracing
+    end
+
+    # OpenTelemetry config (ADR-007 §6 — span creation, etc.)
+    #
+    # @example config.opentelemetry do
+    #   span_creation_patterns ["order.*", "payment.*", "error.*"]
+    # end
+    def opentelemetry(&)
+      block_given? ? @opentelemetry.instance_eval(&) : @opentelemetry
     end
 
     # Register an adapter instance by name (convenience alias for config.adapters[name] = instance).
@@ -712,6 +724,19 @@ module E11y
     end
   end
 
+  # OpenTelemetry config (ADR-007 §6 — span creation)
+  class OpenTelemetryConfig
+    def initialize
+      @span_creation_patterns = []
+    end
+
+    def span_creation_patterns(patterns = nil)
+      return @span_creation_patterns if patterns.nil?
+
+      @span_creation_patterns = Array(patterns).map(&:to_s)
+    end
+  end
+
   # Tracing config (ADR-007 §8 — trace context source)
   #
   # @example config.tracing do
@@ -720,6 +745,10 @@ module E11y
   class TracingConfig
     def initialize
       @source = :e11y
+      @default_sample_rate = 0.1
+      @respect_parent_sampling = true
+      @per_event_sample_rates = {}
+      @always_sample_if = nil
     end
 
     def source(value = nil)
@@ -727,6 +756,51 @@ module E11y
 
       @source = value.to_sym
     end
+
+    def default_sample_rate(value = nil)
+      return @default_sample_rate if value.nil?
+
+      @default_sample_rate = value.to_f
+    end
+
+    def respect_parent_sampling(value = nil)
+      return @respect_parent_sampling if value.nil?
+
+      @respect_parent_sampling = value
+    end
+
+    def per_event_sample_rates(&block)
+      return @per_event_sample_rates unless block_given?
+
+      dsl = Class.new do
+        attr_reader :rates
+
+        def initialize
+          @rates = {}
+        end
+
+        def event(name, sample_rate:)
+          @rates[name.to_s] = sample_rate.to_f
+        end
+      end.new
+      dsl.instance_eval(&block)
+      @per_event_sample_rates = dsl.rates
+    end
+
+    # Proc-based always-sample: receives E11y::Current.to_context (plus job_class, queue in jobs).
+    # Return true to force 100% sampling for this trace.
+    #
+    # @example config.tracing do
+    #   always_sample_if ->(ctx) { ctx[:user_id].in?([123, 456]) }
+    #   always_sample_if ->(ctx) { ctx[:request_path]&.match?(%r{/admin|/api/debug}) }
+    #   always_sample_if ->(ctx) { ctx[:user_id] == 42 || ctx[:queue] == "critical" }
+    # end
+    def always_sample_if(proc = nil)
+      return @always_sample_if if proc.nil?
+
+      @always_sample_if = proc
+    end
+
   end
 
   # Security config (ADR-006 §5.5 — Baggage PII protection)
