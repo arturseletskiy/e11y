@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### BREAKING: Configuration — Flat config API
+
+**Nested config objects removed.** All configuration options are now flat accessors on `config`.
+
+**Key migrations:**
+- `config.rails_instrumentation.enabled` → `config.rails_instrumentation_enabled`
+- `config.logger_bridge.track_severities` → `config.logger_bridge_track_severities`
+- `config.rate_limiting { }` removed → use `config.rate_limiting_enabled`, `config.add_rate_limit_per_event(...)`
+- `config.slo { }` removed → use `config.slo_tracking_enabled`, `config.add_slo_controller(...)`
+
+**Full mapping:** See `docs/plans/2026-03-13-configuration-design.md`
+
 ### BREAKING: Middleware order changed (ADR-015 compliance)
 
 **Per ADR-015 and ADR-006:**
