@@ -151,8 +151,8 @@ module E11y
         private
 
         def disable_fail_on_error
-          original = E11y.config.error_handling.fail_on_error
-          E11y.config.error_handling.fail_on_error = false
+          original = E11y.config.error_handling_fail_on_error
+          E11y.config.error_handling_fail_on_error = false
           original
         end
 
@@ -165,7 +165,7 @@ module E11y
           emit_job_completed(job, queue, start_time) if raw_sidekiq_job?(job) && job_status == :success
           track_job_slo(job, queue, job_status, start_time)
           cleanup_job_context
-          E11y.config.error_handling.fail_on_error = original_fail_on_error
+          E11y.config.error_handling_fail_on_error = original_fail_on_error
         end
 
         # Setup job-scoped context (C17 Hybrid Tracing)
@@ -199,9 +199,9 @@ module E11y
 
         # Setup request-scoped buffer (same as HTTP; optional job_buffer_limit)
         def setup_job_buffer
-          return unless E11y.config.ephemeral_buffer&.enabled
+          return unless E11y.config.ephemeral_buffer_enabled
 
-          limit = E11y.config.ephemeral_buffer.job_buffer_limit ||
+          limit = E11y.config.ephemeral_buffer_job_buffer_limit ||
                   E11y::Buffers::EphemeralBuffer::DEFAULT_BUFFER_LIMIT
           E11y::Buffers::EphemeralBuffer.initialize!(buffer_limit: limit)
         rescue StandardError => e
@@ -212,7 +212,7 @@ module E11y
         # Handle job error (C18: Non-Failing Event Tracking)
         def handle_job_error(_error)
           # Flush buffer on error (includes debug events)
-          return unless E11y.config.ephemeral_buffer&.enabled
+          return unless E11y.config.ephemeral_buffer_enabled
 
           E11y::Buffers::EphemeralBuffer.flush_on_error
         rescue StandardError => e
@@ -223,7 +223,7 @@ module E11y
         # Cleanup job-scoped context
         def cleanup_job_context
           # Discard buffer on success (not on error, already flushed in rescue)
-          if !$ERROR_INFO && E11y.config.ephemeral_buffer&.enabled
+          if !$ERROR_INFO && E11y.config.ephemeral_buffer_enabled
             begin
               E11y::Buffers::EphemeralBuffer.discard
             rescue StandardError => e

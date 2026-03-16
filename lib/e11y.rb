@@ -248,8 +248,11 @@ module E11y
                   :routing_rules, :fallback_adapters, :enable_http_tracing,
                   :rails_instrumentation_enabled, :rails_instrumentation_custom_mappings, :rails_instrumentation_ignore_events,
                   :logger_bridge_enabled, :logger_bridge_track_severities, :logger_bridge_ignore_patterns,
-                  :sidekiq_enabled, :active_job_enabled
-    attr_reader :adapter_mapping, :pipeline, :ephemeral_buffer, :error_handling, :dlq_storage, :dlq_filter, :security,
+                  :sidekiq_enabled, :active_job_enabled,
+                  :ephemeral_buffer_enabled, :ephemeral_buffer_flush_on_error, :ephemeral_buffer_flush_on_statuses,
+                  :ephemeral_buffer_debug_adapters, :ephemeral_buffer_job_buffer_limit,
+                  :error_handling_fail_on_error
+    attr_reader :adapter_mapping, :pipeline, :dlq_storage, :dlq_filter, :security,
                 :tracing, :opentelemetry
 
     def initialize
@@ -287,8 +290,12 @@ module E11y
       @logger_bridge_ignore_patterns = []
       @sidekiq_enabled = false
       @active_job_enabled = false
-      @ephemeral_buffer = Config.new
-      @error_handling = ErrorHandlingConfig.new # ✅ C18 Resolution
+      @ephemeral_buffer_enabled = false
+      @ephemeral_buffer_flush_on_error = true
+      @ephemeral_buffer_flush_on_statuses = []
+      @ephemeral_buffer_debug_adapters = nil
+      @ephemeral_buffer_job_buffer_limit = nil
+      @error_handling_fail_on_error = true # C18 Resolution: default true for web requests
       @dlq_storage = nil # Set by user (e.g., DLQ::FileAdapter instance)
       @dlq_filter = nil # Set by user (e.g., DLQ::Filter instance)
       @rate_limiting = RateLimitingConfig.new
@@ -483,43 +490,6 @@ module E11y
       # After adapters: observes dispatch outcome for SLO tracking
       @pipeline.use E11y::Middleware::EventSlo
       @pipeline.use E11y::Middleware::SelfMonitoringEmit
-    end
-  end
-
-  # Ephemeral Buffer configuration (request/job-scoped debug buffering)
-  class Config
-    attr_accessor :enabled, :flush_on_error, :flush_on_statuses, :job_buffer_limit
-
-    # Explicit list of adapter names that receive flushed debug events on request failure.
-    #
-    # If nil (default), falls back to config.fallback_adapters.
-    # Set this to limit debug flushes to adapters that can handle the extra load.
-    #
-    # @example Only flush debug events to Loki (not Sentry)
-    #   config.ephemeral_buffer.debug_adapters = [:loki_logger]
-    attr_accessor :debug_adapters
-
-    def initialize
-      @enabled           = false  # Disabled by default
-      @flush_on_error    = true   # Flush buffer on 5xx server errors (default: true)
-      @flush_on_statuses = []     # Additional HTTP statuses that trigger a flush (e.g. [403])
-      @debug_adapters    = nil    # nil → use fallback_adapters
-      @job_buffer_limit = nil # nil → use EphemeralBuffer::DEFAULT_BUFFER_LIMIT (jobs only)
-    end
-  end
-
-  # Error Handling configuration (C18 Resolution)
-  #
-  # Controls whether event tracking failures should raise exceptions.
-  # Default: true (for web requests - fast feedback)
-  # Exception: false (for background jobs - don't fail business logic)
-  #
-  # @see ADR-013 §3.6 (Event Tracking in Background Jobs)
-  class ErrorHandlingConfig
-    attr_accessor :fail_on_error
-
-    def initialize
-      @fail_on_error = true # Default: raise errors (fast feedback for web requests)
     end
   end
 

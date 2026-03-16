@@ -85,7 +85,7 @@ RSpec.describe E11y::Instruments::Sidekiq do
 
     before do
       E11y.configure do |config|
-        config.ephemeral_buffer.enabled = false # Disable buffer for simpler tests
+        config.ephemeral_buffer_enabled = false # Disable buffer for simpler tests
       end
     end
 
@@ -144,28 +144,28 @@ RSpec.describe E11y::Instruments::Sidekiq do
 
     describe "C18 Non-Failing Event Tracking: fail_on_error = false" do
       it "sets fail_on_error to false before job execution" do
-        original_setting = E11y.config.error_handling.fail_on_error
+        original_setting = E11y.config.error_handling_fail_on_error
 
         middleware.call(worker, job, queue) do
           # Inside job context: fail_on_error should be false
-          expect(E11y.config.error_handling.fail_on_error).to be false
+          expect(E11y.config.error_handling_fail_on_error).to be false
         end
 
         # Restore original setting after job
-        expect(E11y.config.error_handling.fail_on_error).to eq(original_setting)
+        expect(E11y.config.error_handling_fail_on_error).to eq(original_setting)
       end
 
       it "restores original fail_on_error setting after job" do
-        E11y.config.error_handling.fail_on_error = true
-        expect(E11y.config.error_handling.fail_on_error).to be true
+        E11y.config.error_handling_fail_on_error = true
+        expect(E11y.config.error_handling_fail_on_error).to be true
 
         middleware.call(worker, job, queue) {} # rubocop:todo Lint/EmptyBlock
 
-        expect(E11y.config.error_handling.fail_on_error).to be true
+        expect(E11y.config.error_handling_fail_on_error).to be true
       end
 
       it "restores fail_on_error even if job raises exception" do
-        E11y.config.error_handling.fail_on_error = true
+        E11y.config.error_handling_fail_on_error = true
 
         expect do
           middleware.call(worker, job, queue) do
@@ -174,7 +174,7 @@ RSpec.describe E11y::Instruments::Sidekiq do
         end.to raise_error(StandardError, "Job failed")
 
         # Setting should be restored despite exception
-        expect(E11y.config.error_handling.fail_on_error).to be true
+        expect(E11y.config.error_handling_fail_on_error).to be true
       end
 
       it "documents that E11y errors won't fail jobs when fail_on_error=false" do
@@ -185,7 +185,7 @@ RSpec.describe E11y::Instruments::Sidekiq do
         # See ADR-013 §3.6 (C18 Resolution) for rationale.
 
         middleware.call(worker, job, queue) do
-          expect(E11y.config.error_handling.fail_on_error).to be false
+          expect(E11y.config.error_handling_fail_on_error).to be false
           # In this context, adapter failures should be swallowed
         end
       end
@@ -221,7 +221,7 @@ RSpec.describe E11y::Instruments::Sidekiq do
     describe "Error handling: E11y errors don't fail jobs" do
       before do
         E11y.configure do |config|
-          config.ephemeral_buffer.enabled = true
+          config.ephemeral_buffer_enabled = true
         end
       end
 

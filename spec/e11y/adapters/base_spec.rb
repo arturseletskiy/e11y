@@ -421,12 +421,12 @@ RSpec.describe E11y::Adapters::Base do
     let(:event_data) { { event_name: "test.event", severity: :info } }
 
     after do
-      E11y.config.error_handling.fail_on_error = true # Reset to default
+      E11y.config.error_handling_fail_on_error = true # Reset to default
     end
 
     context "when fail_on_error = true (web requests)" do
       before do
-        E11y.config.error_handling.fail_on_error = true
+        E11y.config.error_handling_fail_on_error = true
       end
 
       it "raises RetryExhaustedError (wraps CircuitOpenError)" do
@@ -445,7 +445,7 @@ RSpec.describe E11y::Adapters::Base do
 
     context "when fail_on_error = false (background jobs)" do
       before do
-        E11y.config.error_handling.fail_on_error = false
+        E11y.config.error_handling_fail_on_error = false
       end
 
       # rubocop:disable RSpec/RepeatedExample
@@ -479,29 +479,29 @@ RSpec.describe E11y::Adapters::Base do
 
     describe "fail_on_error setting in different contexts" do
       it "defaults to true (web request context)" do
-        expect(E11y.config.error_handling.fail_on_error).to be true
+        expect(E11y.config.error_handling_fail_on_error).to be true
       end
 
       it "can be set to false (background job context)" do
-        E11y.config.error_handling.fail_on_error = false
-        expect(E11y.config.error_handling.fail_on_error).to be false
+        E11y.config.error_handling_fail_on_error = false
+        expect(E11y.config.error_handling_fail_on_error).to be false
       end
 
       it "can be temporarily changed and restored" do
-        original_setting = E11y.config.error_handling.fail_on_error
+        original_setting = E11y.config.error_handling_fail_on_error
 
-        E11y.config.error_handling.fail_on_error = false
-        expect(E11y.config.error_handling.fail_on_error).to be false
+        E11y.config.error_handling_fail_on_error = false
+        expect(E11y.config.error_handling_fail_on_error).to be false
 
-        E11y.config.error_handling.fail_on_error = original_setting
-        expect(E11y.config.error_handling.fail_on_error).to eq(original_setting)
+        E11y.config.error_handling_fail_on_error = original_setting
+        expect(E11y.config.error_handling_fail_on_error).to eq(original_setting)
       end
     end
 
     describe "ADR-013 §3.6 compliance" do
       it "implements non-failing event tracking for background jobs" do
         # C18 Resolution: Event tracking should NOT fail background jobs
-        E11y.config.error_handling.fail_on_error = false
+        E11y.config.error_handling_fail_on_error = false
 
         # Even if adapter is down (circuit breaker open), event tracking should not raise
         expect do
@@ -514,7 +514,7 @@ RSpec.describe E11y::Adapters::Base do
 
       it "preserves fast feedback for web requests" do
         # Web requests should fail fast (don't hide errors)
-        E11y.config.error_handling.fail_on_error = true
+        E11y.config.error_handling_fail_on_error = true
 
         expect do
           failing_adapter.write_with_reliability(event_data)
@@ -738,13 +738,13 @@ RSpec.describe E11y::Adapters::Base do
         )
         allow(E11y.config).to receive_messages(dlq_filter: dlq_filter, dlq_storage: nil)
 
-        E11y.config.error_handling.fail_on_error = false
+        E11y.config.error_handling_fail_on_error = false
 
         expect do
           adapter.write_with_reliability(event_data)
         end.not_to raise_error
 
-        E11y.config.error_handling.fail_on_error = true
+        E11y.config.error_handling_fail_on_error = true
       end
     end
   end

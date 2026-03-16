@@ -40,7 +40,7 @@ Before do
   E11y.config.rate_limiting.global_limit = 10_000
   E11y.config.rate_limiting.per_event_limit = 1_000
   E11y.config.rate_limiting.window = 1.0
-  E11y.config.ephemeral_buffer.enabled = false
+  E11y.config.ephemeral_buffer_enabled = false
   E11y::Buffers::EphemeralBuffer.reset_all
   E11y::Metrics.reset_backend!
   E11y::SLO::Tracker.reset!

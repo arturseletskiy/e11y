@@ -405,7 +405,7 @@ RSpec.describe E11y::Buffers::EphemeralBuffer do
         config.adapters[:log_adapter] = adapter_a
         config.adapters[:debug_log_adapter] = adapter_b
         config.fallback_adapters = [:log_adapter]
-        config.ephemeral_buffer.debug_adapters = [:debug_log_adapter]
+        config.ephemeral_buffer_debug_adapters = [:debug_log_adapter]
       end
       described_class.initialize!
     end

@@ -522,7 +522,7 @@ RSpec.describe "Reliability Features Integration", :integration do
     before do
       allow(E11y.config).to receive_messages(dlq_filter: nil, dlq_storage: c02_dlq_storage)
       # Disable global fail_on_error so handle_reliability_error saves to DLQ and returns false
-      allow(E11y.config.error_handling).to receive(:fail_on_error).and_return(false)
+      allow(E11y.config).to receive(:error_handling_fail_on_error).and_return(false)
     end
 
     after do
@@ -884,7 +884,7 @@ RSpec.describe "Reliability Features Integration", :integration do
     # Adapter with reliability enabled and a short retry budget so the tests run fast.
     # fail_on_error: true in the RetryHandler raises RetryExhaustedError after max_attempts,
     # which is caught by write_with_reliability → handle_reliability_error.
-    # The global E11y.config.error_handling.fail_on_error is stubbed to false (see before block)
+    # The global E11y.config.error_handling_fail_on_error is stubbed to false (see before block)
     # so handle_reliability_error saves to DLQ and returns false instead of re-raising.
     let(:adapter) do
       always_failing_adapter_class.new(
@@ -918,7 +918,7 @@ RSpec.describe "Reliability Features Integration", :integration do
 
     before do
       allow(E11y.config).to receive_messages(dlq_filter: permissive_dlq_filter, dlq_storage: nil)
-      allow(E11y.config.error_handling).to receive(:fail_on_error).and_return(false)
+      allow(E11y.config).to receive(:error_handling_fail_on_error).and_return(false)
     end
 
     after do
@@ -982,7 +982,7 @@ RSpec.describe "Reliability Features Integration", :integration do
     end
 
     it "write_with_reliability raises when global fail_on_error: true" do
-      allow(E11y.config.error_handling).to receive(:fail_on_error).and_return(true)
+      allow(E11y.config).to receive(:error_handling_fail_on_error).and_return(true)
       stub_storage = double("DLQStorage")
       allow(stub_storage).to receive(:save).and_return("fake-uuid")
       allow(E11y.config).to receive_messages(dlq_filter: permissive_dlq_filter, dlq_storage: stub_storage)

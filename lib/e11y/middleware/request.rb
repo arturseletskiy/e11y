@@ -56,7 +56,7 @@ module E11y
         E11y::Current.sampled = resolve_sampled(trace_ctx)
 
         # Start request-scoped buffer (for debug events)
-        E11y::Buffers::EphemeralBuffer.initialize! if E11y.config.ephemeral_buffer&.enabled
+        E11y::Buffers::EphemeralBuffer.initialize! if E11y.config.ephemeral_buffer_enabled
 
         # Track request start time for SLO
         start_time = Time.now
@@ -77,14 +77,14 @@ module E11y
         [status, headers, body]
       rescue StandardError
         # Flush request buffer on error (includes debug events)
-        E11y::Buffers::EphemeralBuffer.flush_on_error if E11y.config.ephemeral_buffer&.enabled
+        E11y::Buffers::EphemeralBuffer.flush_on_error if E11y.config.ephemeral_buffer_enabled
 
         raise # Re-raise original exception
       ensure
         # Discard request buffer on success (not on error, already flushed above)
         # We need to check if we're here from normal completion or exception
         # If there was an exception, buffer was already flushed in rescue block
-        E11y::Buffers::EphemeralBuffer.discard if !$ERROR_INFO && E11y.config.ephemeral_buffer&.enabled # No exception occurred
+        E11y::Buffers::EphemeralBuffer.discard if !$ERROR_INFO && E11y.config.ephemeral_buffer_enabled # No exception occurred
 
         # Reset context
         E11y::Current.reset
@@ -100,28 +100,26 @@ module E11y
       # - +flush_on_statuses+ (default: []) — extra status codes/ranges, e.g. [403]
       #
       # @example Default behaviour — flush on 5xx only
-      #   config.ephemeral_buffer.flush_on_error   = true  # default
-      #   config.ephemeral_buffer.flush_on_statuses = []   # default
+      #   config.ephemeral_buffer_flush_on_error   = true  # default
+      #   config.ephemeral_buffer_flush_on_statuses = []   # default
       #
       # @example Flush on 403 in addition to 5xx
-      #   config.ephemeral_buffer.flush_on_statuses = [403]
+      #   config.ephemeral_buffer_flush_on_statuses = [403]
       #
       # @example Flush only on explicit statuses (disable 5xx default)
-      #   config.ephemeral_buffer.flush_on_error    = false
-      #   config.ephemeral_buffer.flush_on_statuses = [403, 422]
+      #   config.ephemeral_buffer_flush_on_error    = false
+      #   config.ephemeral_buffer_flush_on_statuses = [403, 422]
       #
       # @param status [Integer] HTTP response status code
       # @return [Boolean]
       def should_flush_buffer?(status)
-        return false unless E11y.config.ephemeral_buffer&.enabled
-
-        buf = E11y.config.ephemeral_buffer
+        return false unless E11y.config.ephemeral_buffer_enabled
 
         # Condition 1: server error flush (5xx)
-        return true if buf.flush_on_error && status >= 500
+        return true if E11y.config.ephemeral_buffer_flush_on_error && status >= 500
 
         # Condition 2: explicit extra statuses
-        extra = buf.flush_on_statuses
+        extra = E11y.config.ephemeral_buffer_flush_on_statuses
         extra&.any? { |s| s === status } || false # rubocop:disable Style/CaseEquality
       end
 

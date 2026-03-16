@@ -8,15 +8,15 @@
 Then("request buffering should be disabled in the configuration") do
   msg = "Expected request buffering to be disabled by default, but it was enabled. " \
         "README says 'automatically captures' but config defaults to enabled: false."
-  expect(E11y.configuration.ephemeral_buffer.enabled).to be(false), msg
+  expect(E11y.configuration.ephemeral_buffer_enabled).to be(false), msg
 end
 
 Given("request buffering is enabled in the configuration") do
-  E11y.configuration.ephemeral_buffer.enabled = true
+  E11y.configuration.ephemeral_buffer_enabled = true
 end
 
 Then("request buffering should be enabled in the configuration") do
-  expect(E11y.configuration.ephemeral_buffer.enabled).to be(true)
+  expect(E11y.configuration.ephemeral_buffer_enabled).to be(true)
 end
 
 Then("{int} events with severity {string} should be in the adapter") do |count, severity|

@@ -39,8 +39,8 @@ module E11y
           # Set up job-scoped context around job execution (C17 Hybrid Tracing + C18 Non-Failing)
           around_perform do |job, block|
             # C18: Disable fail_on_error for jobs (observability should not block business logic)
-            original_fail_on_error = E11y.config.error_handling.fail_on_error
-            E11y.config.error_handling.fail_on_error = false
+            original_fail_on_error = E11y.config.error_handling_fail_on_error
+            E11y.config.error_handling_fail_on_error = false
 
             setup_job_context_active_job(job)
             setup_job_buffer_active_job
@@ -64,7 +64,7 @@ module E11y
             cleanup_job_context_active_job
 
             # Restore original setting
-            E11y.config.error_handling.fail_on_error = original_fail_on_error
+            E11y.config.error_handling_fail_on_error = original_fail_on_error
           end
         end
 
@@ -101,7 +101,7 @@ module E11y
 
         # Setup job-scoped buffer
         def setup_job_buffer_active_job
-          return unless E11y.config.ephemeral_buffer&.enabled
+          return unless E11y.config.ephemeral_buffer_enabled
 
           E11y::Buffers::EphemeralBuffer.initialize!
         rescue StandardError => e
@@ -111,7 +111,7 @@ module E11y
 
         # Handle job error (C18: Non-Failing Event Tracking)
         def handle_job_error_active_job(_error)
-          return unless E11y.config.ephemeral_buffer&.enabled
+          return unless E11y.config.ephemeral_buffer_enabled
 
           E11y::Buffers::EphemeralBuffer.flush_on_error
         rescue StandardError => e
@@ -122,7 +122,7 @@ module E11y
         # Cleanup job-scoped context
         def cleanup_job_context_active_job
           # Flush buffer on success (not on error, already flushed in rescue)
-          if !$ERROR_INFO && E11y.config.ephemeral_buffer&.enabled
+          if !$ERROR_INFO && E11y.config.ephemeral_buffer_enabled
             begin
               E11y::Buffers::EphemeralBuffer.discard
             rescue StandardError => e

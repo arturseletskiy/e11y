@@ -225,7 +225,7 @@ module E11y
         #
         # @return [Array<Object>, nil] Adapter instances to write to, or nil to use pipeline
         def resolve_flush_targets
-          da = E11y.config.ephemeral_buffer&.debug_adapters
+          da = E11y.config.ephemeral_buffer_debug_adapters
           return nil unless da&.any?
 
           da.filter_map { |name| E11y.configuration.adapters[name] }
@@ -233,7 +233,7 @@ module E11y
 
         # Flush single event to adapters via pipeline or debug_adapters
         #
-        # When config.ephemeral_buffer.debug_adapters is set, sends directly to those
+        # When config.ephemeral_buffer_debug_adapters is set, sends directly to those
         # adapters. Otherwise uses the full pipeline (fallback_adapters).
         #
         # @param event_data [Hash] Event to flush

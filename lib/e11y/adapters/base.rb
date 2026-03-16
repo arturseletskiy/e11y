@@ -99,7 +99,7 @@ module E11y
       # This is the recommended public API for sending events.
       # Automatically handles failures, retries, and DLQ.
       #
-      # Respects `E11y.config.error_handling.fail_on_error` setting (C18 Resolution):
+      # Respects `E11y.config.error_handling_fail_on_error` setting (C18 Resolution):
       # - `true`: Raises exceptions (fast feedback for web requests)
       # - `false`: Swallows exceptions, saves to DLQ (don't fail background jobs)
       #
@@ -483,7 +483,7 @@ module E11y
 
       # Handle reliability error (retry exhausted / circuit breaker open).
       #
-      # Behavior depends on `E11y.config.error_handling.fail_on_error` (C18 Resolution):
+      # Behavior depends on `E11y.config.error_handling_fail_on_error` (C18 Resolution):
       # - `true`: Re-raises exception (fast feedback for web requests)
       # - `false`: Swallows exception, saves to DLQ (don't fail background jobs)
       #
@@ -504,7 +504,7 @@ module E11y
         E11y.logger&.warn("[E11y] #{self.class.name} #{reason} for event #{event_data[:event_name]}: #{error.message}")
 
         # Check fail_on_error setting (C18 Resolution)
-        raise error if E11y.config.error_handling.fail_on_error
+        raise error if E11y.config.error_handling_fail_on_error
 
         # Web request context: RAISE (fast feedback)
 
