@@ -81,6 +81,7 @@ unless $e11y_dummy_configured
                         trace_aware: false,
                         severity_rates: { debug: 1.0, info: 1.0, success: 1.0, warn: 1.0, error: 1.0, fatal: 1.0 }
     config.pipeline.use E11y::Middleware::Routing
+    config.pipeline.use E11y::Middleware::EventSlo
   end
   $e11y_dummy_configured = true
 end

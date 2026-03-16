@@ -122,6 +122,45 @@ yabeda_slo_sidekiq_job_duration_seconds{class="ProcessOrderJob"}
 
 ---
 
+### Event-Level SLO (Business Logic)
+
+**Event-driven SLO** tracks business logic reliability (e.g., order created vs failed, payment processed vs rejected). Opt-in via `slo { enabled true }` in Event classes.
+
+> **Implementation:** See [ADR-014 Event-Driven SLO](../ADR-014-event-driven-slo.md) for full architecture.
+
+**Enable Event SLO in Event class:**
+
+```ruby
+module Events
+  class OrderCreated < E11y::Event::Base
+    schema do
+      required(:order_id).filled(:string)
+      optional(:status).filled(:string)
+    end
+
+    slo do
+      enabled true
+      contributes_to "order_creation_success_rate"
+      slo_status_from do |payload|
+        case payload[:status].to_s
+        when "failed", "cancelled" then "failure"
+        when "pending", "completed" then "success"
+        else "success"
+        end
+      end
+    end
+  end
+end
+```
+
+**Required when `slo { enabled true }`:**
+- `contributes_to "slo_name"` — which custom SLO this event feeds
+- `slo_status_from { |payload| ... }` — compute `"success"`, `"failure"`, or `nil` (not counted)
+
+**EventSlo middleware** (in default pipeline) emits `e11y_slo_event_result_total{slo_name, slo_status}` for events with SLO enabled.
+
+---
+
 ## 📐 Sampling Correction for Accurate SLO (C11 Resolution) ⚠️ CRITICAL
 
 **Reference:** [ADR-009 Section 3.7: Stratified Sampling for SLO Accuracy (C11 Resolution)](../ADR-009-cost-optimization.md#37-stratified-sampling-for-slo-accuracy-c11-resolution) and [CONFLICT-ANALYSIS.md C11](../researches/CONFLICT-ANALYSIS.md#c11-adaptive-sampling--slo-tracking)

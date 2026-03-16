@@ -53,7 +53,6 @@
 |----|-------------|
 | F-005 | **PII Declaration Linter not implemented:** E11y::Linters::PiiDeclarationLinter, rake e11y:lint:pii. |
 
-
 ### ADR-008: Rails Integration
 
 | ID | Description |
@@ -82,14 +81,6 @@
 | F-013 | Rake tasks missing: e11y:list, e11y:validate, e11y:docs:generate, e11y:stats. |
 | F-014 | Documentation generator not implemented. |
 
-
-### ADR-014: Event-Driven SLO
-
-| ID | Description |
-|----|-------------|
-| F-001 | UC-004 does not describe event-level SLO; no UC for slo { enabled true }. |
-| F-005 | Dummy app pipeline excludes EventSlo; integration tests may not pass EventSlo. |
-| F-006 | OrderCreated: duplicate slo blocks, missing contributes_to. |
 | F-012 | App-wide SLO aggregation (ADR §9) not implemented. |
 
 ### ADR-016: Self-Monitoring SLO
