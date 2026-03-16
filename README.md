@@ -546,6 +546,7 @@ p99 latency <70µs (`:always`), <10µs (`:sampled`), <50µs (`:never`). Full ben
 | [Rails Integration](docs/RAILS_INTEGRATION.md) | Auto-instrumentation, Sidekiq |
 | [Testing](docs/TESTING.md) | InMemoryTest adapter, RSpec setup |
 | [Configuration](docs/CONFIGURATION.md) | Basic config, middleware pipeline |
+| [SLO PromQL & Alerts](docs/SLO-PROMQL-ALERTS.md) | PromQL queries, Prometheus alert rules |
 | [Performance](docs/PERFORMANCE.md) | Benchmarks, validation modes, cardinality |
 | [Limitations](docs/LIMITATIONS.md) | Rails only, Ruby 3.2+, tradeoffs |
 | [Comparison](docs/COMPARISON.md) | vs Datadog, OTel, Sentry, AppSignal, etc. |

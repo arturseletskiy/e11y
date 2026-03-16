@@ -72,6 +72,7 @@ unless $e11y_dummy_configured
     # Reconfigure pipeline for tests: 100% sampling (capture all events)
     # NOTE: This must happen BEFORE Rails.application.initialize! is called
     config.pipeline.clear
+    config.pipeline.use E11y::Middleware::TrackLatency
     config.pipeline.use E11y::Middleware::TraceContext
     config.pipeline.use E11y::Middleware::Validation
     config.pipeline.use E11y::Middleware::PIIFilter

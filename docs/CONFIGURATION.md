@@ -30,10 +30,13 @@ end
 
 ## Middleware Pipeline
 
-Configure middleware for sampling, PII filtering, and more:
+Configure middleware for sampling, PII filtering, and more. Add `TrackLatency` first for self-monitoring (Event.track() latency):
 
 ```ruby
 E11y.configure do |config|
+  # Self-monitoring: track latency (must be first)
+  config.pipeline.use E11y::Middleware::TrackLatency
+
   # Sampling middleware
   config.pipeline.use E11y::Middleware::Sampling,
     default_sample_rate: 0.1,

@@ -361,7 +361,10 @@ module E11y
           { name: :slo_background_job_duration_seconds, type: :histogram, tags: %i[job_class queue],
             buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0] },
           # E11y self-monitoring (events tracked at pipeline end)
-          { name: :e11y_events_tracked_total, tags: %i[result event_name] }
+          { name: :e11y_events_tracked_total, tags: %i[result event_name] },
+          # Track latency (TrackLatency middleware)
+          { name: :e11y_track_duration_seconds, type: :histogram, tags: %i[event_class severity result],
+            buckets: [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1] }
         ]
 
         metrics.each do |m|

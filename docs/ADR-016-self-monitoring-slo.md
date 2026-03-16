@@ -5,6 +5,8 @@
 **Covers:** Internal observability and reliability of E11y gem itself  
 **Depends On:** ADR-001 (Core), ADR-002 (Metrics), ADR-003 (SLO)
 
+**Implementation (2026-03):** `track_latency` implemented via `E11y::Middleware::TrackLatency` (first in pipeline).
+
 ---
 
 ## 📋 Table of Contents
@@ -163,9 +165,7 @@ graph TB
     end
     
     subgraph "SLO Tracking"
-        Prometheus --> SLOCalc[E11y SLO Calculator]
-        SLOCalc --> ErrorBudget[E11y Error Budget]
-        ErrorBudget --> Alerts[Alertmanager]
+        Prometheus --> Alerts[Alertmanager]
     end
     
     style SelfMetrics fill:#fff3cd
@@ -484,205 +484,7 @@ end
 
 ## 4. Internal SLO Tracking
 
-### 4.1. E11y SLO Definition
-
-**E11y has its own SLO** (separate from application SLO):
-
-```yaml
-# config/e11y_slo.yml
-# 
-# E11y Gem Internal SLO
-# 
-# This defines reliability targets for E11y itself.
-# If E11y violates its SLO → alert SRE immediately!
-
-version: 1
-
-e11y_slo:
-  # === LATENCY SLO ===
-  # E11y.track() must be fast (<1ms p99)
-  latency:
-    enabled: true
-    p99_target: 0.001  # 1ms
-    p95_target: 0.0005 # 0.5ms
-    p50_target: 0.0001 # 0.1ms
-    window: 30d
-    
-    # Multi-window burn rate alerts
-    burn_rate_alerts:
-      fast:
-        enabled: true
-        window: 1h
-        threshold: 14.4
-        alert_after: 5m
-        severity: critical
-      medium:
-        enabled: true
-        window: 6h
-        threshold: 6.0
-        alert_after: 30m
-        severity: warning
-  
-  # === RELIABILITY SLO ===
-  # E11y must deliver 99.9% of events
-  reliability:
-    enabled: true
-    success_rate_target: 0.999  # 99.9%
-    window: 30d
-    
-    # What counts as "success"?
-    success_criteria:
-      - event_tracked: true
-      - not_dropped: true
-      - adapter_delivered: true  # At least 1 adapter succeeded
-    
-    # What counts as "failure"?
-    failure_criteria:
-      - validation_failed: true
-      - all_adapters_failed: true
-      - buffer_overflow: true
-    
-    burn_rate_alerts:
-      fast:
-        enabled: true
-        window: 1h
-        threshold: 14.4
-        alert_after: 5m
-  
-  # === RESOURCE SLO ===
-  # E11y must use <2% CPU, <100MB memory
-  resources:
-    enabled: true
-    
-    cpu_percent_target: 2.0  # <2% CPU
-    memory_mb_target: 100    # <100MB
-    
-    buffer_utilization_target: 80  # <80% full
-    
-    alerts:
-      cpu_high:
-        threshold: 5.0  # Alert if >5% CPU
-        duration: 5m
-      memory_high:
-        threshold: 200  # Alert if >200MB
-        duration: 5m
-      buffer_high:
-        threshold: 90  # Alert if >90% full
-        duration: 1m
-
-# === ERROR BUDGET ===
-error_budget:
-  enabled: true
-  
-  # Latency budget: 0.1% of requests can be >1ms
-  latency_budget: 0.001
-  
-  # Reliability budget: 0.1% of events can be dropped
-  reliability_budget: 0.001
-  
-  # Alert thresholds
-  alert_at_percent_consumed: [50, 80, 90, 100]
-```
-
-### 4.2. SLO Calculator
-
-```ruby
-# lib/e11y/self_monitoring/slo_calculator.rb
-module E11y
-  module SelfMonitoring
-    class SLOCalculator
-      def self.calculate_latency_slo(window: 30.days)
-        # Query Prometheus for E11y latency p99
-        query = <<~PROMQL
-          histogram_quantile(0.99,
-            sum(rate(e11y_track_duration_seconds_bucket[#{window}])) by (le)
-          )
-        PROMQL
-        
-        p99_latency = E11y::Metrics.query_prometheus(query)
-        target = 0.001  # 1ms
-        
-        {
-          current_p99: p99_latency,
-          target_p99: target,
-          slo_met: p99_latency <= target,
-          error_budget_consumed: calculate_latency_budget_consumed(p99_latency, target, window)
-        }
-      end
-      
-      def self.calculate_reliability_slo(window: 30.days)
-        # Query Prometheus for E11y success rate
-        query = <<~PROMQL
-          sum(rate(e11y_events_tracked_total{result="success"}[#{window}]))
-          /
-          sum(rate(e11y_events_tracked_total[#{window}]))
-        PROMQL
-        
-        success_rate = E11y::Metrics.query_prometheus(query)
-        target = 0.999  # 99.9%
-        
-        {
-          current_success_rate: success_rate,
-          target_success_rate: target,
-          slo_met: success_rate >= target,
-          error_budget_consumed: calculate_reliability_budget_consumed(success_rate, target)
-        }
-      end
-      
-      def self.calculate_resource_slo
-        # Query Prometheus for E11y resource usage
-        cpu_query = 'avg(rate(e11y_cpu_seconds_total[5m])) * 100'
-        memory_query = 'e11y_memory_usage_mb'
-        buffer_query = 'e11y_buffer_utilization_percent'
-        
-        cpu_percent = E11y::Metrics.query_prometheus(cpu_query)
-        memory_mb = E11y::Metrics.query_prometheus(memory_query)
-        buffer_percent = E11y::Metrics.query_prometheus(buffer_query)
-        
-        {
-          cpu: {
-            current: cpu_percent,
-            target: 2.0,
-            slo_met: cpu_percent <= 2.0
-          },
-          memory: {
-            current: memory_mb,
-            target: 100,
-            slo_met: memory_mb <= 100
-          },
-          buffer: {
-            current: buffer_percent,
-            target: 80,
-            slo_met: buffer_percent <= 80
-          }
-        }
-      end
-      
-      private
-      
-      def self.calculate_latency_budget_consumed(current, target, window)
-        # Simplified: % of requests exceeding target
-        # In reality, use Prometheus query for exact calculation
-        return 0.0 if current <= target
-        
-        excess = current - target
-        budget = target * 0.001  # 0.1% budget
-        
-        (excess / budget * 100).round(2)
-      end
-      
-      def self.calculate_reliability_budget_consumed(current, target)
-        error_rate = 1.0 - current
-        error_budget = 1.0 - target
-        
-        return 0.0 if error_rate <= error_budget
-        
-        (error_rate / error_budget * 100).round(2)
-      end
-    end
-  end
-end
-```
+**PromQL and alerts:** See [SLO-PROMQL-ALERTS.md](SLO-PROMQL-ALERTS.md) for E11y latency, delivery rate, and alert rules.
 
 ---
 

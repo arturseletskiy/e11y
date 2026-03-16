@@ -298,12 +298,13 @@ RSpec.describe E11y::Configuration do
       expect(middleware_classes).to include(E11y::Middleware::Routing)
     end
 
-    it "registers exactly 10 middlewares (includes BaggageProtection per ADR-006 §5.5)" do
-      expect(middleware_classes.size).to eq(10)
+    it "registers exactly 12 middlewares (includes TrackLatency, BaggageProtection, SelfMonitoringEmit)" do
+      expect(middleware_classes.size).to eq(12)
     end
 
-    it "orders middlewares per ADR-015: TraceContext → Validation → BaggageProtection → AuditSigning → PIIFilter → RateLimiting → Sampling → Versioning → Routing → EventSlo" do # rubocop:disable Layout/LineLength
+    it "orders middlewares per ADR-015: TrackLatency → TraceContext → ... → EventSlo → SelfMonitoringEmit" do # rubocop:disable Layout/LineLength
       expected_order = [
+        E11y::Middleware::TrackLatency,
         E11y::Middleware::TraceContext,
         E11y::Middleware::Validation,
         E11y::Middleware::BaggageProtection,
@@ -313,7 +314,8 @@ RSpec.describe E11y::Configuration do
         E11y::Middleware::Sampling,
         E11y::Middleware::Versioning,
         E11y::Middleware::Routing,
-        E11y::Middleware::EventSlo
+        E11y::Middleware::EventSlo,
+        E11y::Middleware::SelfMonitoringEmit
       ]
       expect(middleware_classes).to eq(expected_order)
     end
