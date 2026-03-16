@@ -104,10 +104,7 @@ module E11y
 
     # Rake task helpers
     rake_tasks do
-      next unless E11y.config.enabled
-
-      # TODO: Add rake tasks (e11y:stats, e11y:test_event, etc.)
-      # load 'e11y/tasks.rake'
+      load File.expand_path("../tasks/e11y_slo.rake", __dir__)
     end
 
     # Setup Rails instrumentation (ActiveSupport::Notifications → E11y)
