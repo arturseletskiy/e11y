@@ -6,10 +6,8 @@ require "rails_helper"
 RSpec.describe "Trace-Consistent Sampling Integration", :integration do
   before do
     E11y.configure do |config|
-      config.tracing do
-        default_sample_rate 0.0 # 0% for deterministic "not sampled"
-        respect_parent_sampling true
-      end
+      config.tracing_default_sample_rate = 0.0 # 0% for deterministic "not sampled"
+      config.tracing_respect_parent_sampling = true
     end
   end
 
@@ -122,10 +120,8 @@ RSpec.describe "Trace-Consistent Sampling Integration", :integration do
   describe "always_sample_if proc" do
     it "always samples when proc returns true (request_path)" do
       E11y.configure do |config|
-        config.tracing do
-          default_sample_rate 0.0
-          always_sample_if ->(ctx) { ctx[:request_path]&.include?("admin") }
-        end
+        config.tracing_default_sample_rate = 0.0
+        config.tracing_always_sample_if = ->(ctx) { ctx[:request_path]&.include?("admin") }
       end
 
       app = lambda do |_env|
@@ -140,10 +136,8 @@ RSpec.describe "Trace-Consistent Sampling Integration", :integration do
 
     it "does not sample when proc returns false" do
       E11y.configure do |config|
-        config.tracing do
-          default_sample_rate 0.0
-          always_sample_if ->(ctx) { ctx[:request_path]&.include?("admin") }
-        end
+        config.tracing_default_sample_rate = 0.0
+        config.tracing_always_sample_if = ->(ctx) { ctx[:request_path]&.include?("admin") }
       end
 
       app = lambda do |_env|

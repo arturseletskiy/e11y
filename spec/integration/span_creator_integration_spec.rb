@@ -12,7 +12,7 @@ RSpec.describe "SpanCreator Integration", :integration do
 
   describe "E11y::OpenTelemetry::SpanCreator" do
     before do
-      allow(E11y.config.opentelemetry).to receive(:span_creation_patterns).and_return(["order.*", "payment.*", "http.*"])
+      allow(E11y.config).to receive(:opentelemetry_span_creation_patterns).and_return(["order.*", "payment.*", "http.*"])
     end
 
     it "creates span for error events" do
@@ -52,7 +52,7 @@ RSpec.describe "SpanCreator Integration", :integration do
     end
 
     it "does not create span for non-matching events when patterns empty" do
-      allow(E11y.config.opentelemetry).to receive(:span_creation_patterns).and_return([])
+      allow(E11y.config).to receive(:opentelemetry_span_creation_patterns).and_return([])
 
       event_data = {
         event_name: "user.viewed",

@@ -6,7 +6,7 @@ module E11y
   module OpenTelemetry
     # Creates OpenTelemetry spans from E11y events (ADR-007 §6, F2).
     #
-    # When enabled via config.opentelemetry.span_creation_patterns, creates
+    # When enabled via config.opentelemetry_span_creation_patterns, creates
     # OTel spans for matching events. Errors/fatal always create spans.
     # Uses SemanticConventions for attribute mapping when applicable.
     #

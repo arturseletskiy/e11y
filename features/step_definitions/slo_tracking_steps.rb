@@ -49,16 +49,16 @@ end
 # Assertion steps
 # ---------------------------------------------------------------------------
 
-Then("E11y.configuration.slo_tracking.enabled should be true") do
+Then("E11y.configuration.slo_tracking_enabled should be true") do
   expect(@slo_config.slo_tracking_enabled).to be(true),
                                  "Expected SLO tracking enabled by default, got: #{@slo_config.slo_tracking_enabled.inspect}"
 end
 
-Then("E11y.configuration.slo_tracking.enabled should be false") do
+Then("E11y.configuration.slo_tracking_enabled should be false") do
   expect(@slo_config.slo_tracking_enabled).to be(false)
 end
 
-Then("enabling SLO tracking requires setting slo_tracking.enabled to true") do
+Then("enabling SLO tracking requires setting slo_tracking_enabled to true") do
   E11y.config.slo_tracking_enabled = true
   expect(E11y.config.slo_tracking_enabled).to be(true)
   E11y.config.slo_tracking_enabled = false
