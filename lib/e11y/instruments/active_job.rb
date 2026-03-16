@@ -161,7 +161,7 @@ module E11y
         # @api private
         # SLO tracking requires config check, duration calculation, method call, and error handling
         def track_job_slo_active_job(job, status, start_time)
-          return unless E11y.config.slo_tracking&.enabled
+          return unless E11y.config.slo_tracking_enabled
 
           duration_ms = ((Time.now - start_time) * 1000).round(2)
 

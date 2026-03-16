@@ -10,15 +10,15 @@
 # ---------------------------------------------------------------------------
 
 Given("SLO tracking is reset to its default state") do
-  E11y.config.slo_tracking.enabled = true
+  E11y.config.slo_tracking_enabled = true
 end
 
 Given("SLO tracking is enabled") do
-  E11y.config.slo_tracking.enabled = true
+  E11y.config.slo_tracking_enabled = true
 end
 
 Given("SLO tracking is explicitly disabled") do
-  E11y.config.slo_tracking.enabled = false
+  E11y.config.slo_tracking_enabled = false
 end
 
 # ---------------------------------------------------------------------------
@@ -26,7 +26,7 @@ end
 # ---------------------------------------------------------------------------
 
 When("I inspect the default SLO tracking configuration") do
-  @slo_config = E11y.config.slo_tracking
+  @slo_config = E11y.config
 end
 
 # ---------------------------------------------------------------------------
@@ -50,18 +50,18 @@ end
 # ---------------------------------------------------------------------------
 
 Then("E11y.configuration.slo_tracking.enabled should be true") do
-  expect(@slo_config.enabled).to be(true),
-                                 "Expected SLO tracking enabled by default, got: #{@slo_config.enabled.inspect}"
+  expect(@slo_config.slo_tracking_enabled).to be(true),
+                                 "Expected SLO tracking enabled by default, got: #{@slo_config.slo_tracking_enabled.inspect}"
 end
 
 Then("E11y.configuration.slo_tracking.enabled should be false") do
-  expect(@slo_config.enabled).to be(false)
+  expect(@slo_config.slo_tracking_enabled).to be(false)
 end
 
 Then("enabling SLO tracking requires setting slo_tracking.enabled to true") do
-  E11y.config.slo_tracking.enabled = true
-  expect(E11y.config.slo_tracking.enabled).to be(true)
-  E11y.config.slo_tracking.enabled = false
+  E11y.config.slo_tracking_enabled = true
+  expect(E11y.config.slo_tracking_enabled).to be(true)
+  E11y.config.slo_tracking_enabled = false
 end
 
 Then("the SLO tracker should have recorded a request for {string}") do |_endpoint|

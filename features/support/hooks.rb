@@ -36,10 +36,10 @@ Before do
   E11y.config.instance_variable_set(:@built_pipeline, nil)
   E11y.config.routing_rules = []
   E11y.config.fallback_adapters = [:memory]
-  E11y.config.rate_limiting.enabled = false
-  E11y.config.rate_limiting.global_limit = 10_000
-  E11y.config.rate_limiting.per_event_limit = 1_000
-  E11y.config.rate_limiting.window = 1.0
+  E11y.config.rate_limiting_enabled = false
+  E11y.config.rate_limiting_global_limit = 10_000
+  E11y.config.rate_limiting_per_event_limit = 1_000
+  E11y.config.rate_limiting_global_window = 1.0
   E11y.config.ephemeral_buffer_enabled = false
   E11y::Buffers::EphemeralBuffer.reset_all
   E11y::Metrics.reset_backend!

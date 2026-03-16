@@ -30,7 +30,7 @@ RSpec.describe E11y::Middleware::Request, "SLO Integration" do
   context "when SLO tracking is enabled" do
     before do
       E11y.configure do |config|
-        config.slo_tracking.enabled = true
+        config.slo_tracking_enabled = true
       end
     end
 
@@ -95,7 +95,7 @@ RSpec.describe E11y::Middleware::Request, "SLO Integration" do
   context "when SLO tracking is disabled" do
     before do
       E11y.configure do |config|
-        config.slo_tracking.enabled = false
+        config.slo_tracking_enabled = false
       end
     end
 
@@ -109,7 +109,7 @@ RSpec.describe E11y::Middleware::Request, "SLO Integration" do
   context "when testing UC-004 compliance" do
     before do
       E11y.configure do |config|
-        config.slo_tracking.enabled = true
+        config.slo_tracking_enabled = true
       end
     end
 

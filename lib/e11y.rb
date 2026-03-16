@@ -251,7 +251,11 @@ module E11y
                   :sidekiq_enabled, :active_job_enabled,
                   :ephemeral_buffer_enabled, :ephemeral_buffer_flush_on_error, :ephemeral_buffer_flush_on_statuses,
                   :ephemeral_buffer_debug_adapters, :ephemeral_buffer_job_buffer_limit,
-                  :error_handling_fail_on_error
+                  :error_handling_fail_on_error,
+                  :rate_limiting_enabled, :rate_limiting_global_limit, :rate_limiting_global_window,
+                  :rate_limiting_per_event_limit, :rate_limiting_per_event_limits,
+                  :slo_tracking_enabled, :slo_tracking_http_ignore_statuses, :slo_tracking_latency_percentiles,
+                  :slo_tracking_controller_configs, :slo_tracking_job_configs
     attr_reader :adapter_mapping, :pipeline, :dlq_storage, :dlq_filter, :security,
                 :tracing, :opentelemetry
 
@@ -298,8 +302,16 @@ module E11y
       @error_handling_fail_on_error = true # C18 Resolution: default true for web requests
       @dlq_storage = nil # Set by user (e.g., DLQ::FileAdapter instance)
       @dlq_filter = nil # Set by user (e.g., DLQ::Filter instance)
-      @rate_limiting = RateLimitingConfig.new
-      @slo_tracking = SLOTrackingConfig.new # ✅ L3.14.1
+      @rate_limiting_enabled = false
+      @rate_limiting_global_limit = 10_000
+      @rate_limiting_global_window = 1.0
+      @rate_limiting_per_event_limit = 1_000
+      @rate_limiting_per_event_limits = []
+      @slo_tracking_enabled = true
+      @slo_tracking_http_ignore_statuses = []
+      @slo_tracking_latency_percentiles = [50, 95, 99]
+      @slo_tracking_controller_configs = {}
+      @slo_tracking_job_configs = {}
       @cardinality_protection = CardinalityProtectionConfig.new
       @security = SecurityConfig.new
       @tracing = TracingConfig.new
@@ -323,50 +335,63 @@ module E11y
       @built_pipeline ||= @pipeline.build(->(_event_data) {})
     end
 
-    # Rate limiting config — call with block for DSL, without for plain access.
+    # Add per-event rate limit rule.
     #
-    # @example DSL form
-    #   config.rate_limiting do
-    #     global limit: 10_000, window: 1.minute
-    #     per_event "user.login.failed", limit: 100, window: 1.minute
-    #   end
-    # @example Plain access
-    #   config.rate_limiting.enabled = true
-    def rate_limiting(&)
-      block_given? ? @rate_limiting.instance_eval(&) : @rate_limiting
+    # @param pattern [String] Event name or glob pattern (e.g. "payment.*")
+    # @param limit [Integer] Max events per window for this pattern
+    # @param window [Numeric] Window size in seconds
+    # @example config.add_rate_limit_per_event "payment.*", limit: 500, window: 60
+    def add_rate_limit_per_event(pattern, limit:, window: 1.0)
+      (@rate_limiting_per_event_limits ||= []) << {
+        pattern: pattern.to_s,
+        limit: limit,
+        window: window.to_f
+      }
     end
 
-    # SLO tracking config — call with block for DSL, without for plain access.
+    # Find the most specific rate limit config for a given event name.
+    # Per-event rules take precedence; falls back to per_event_limit + global_window.
     #
-    # @example DSL form
-    #   config.slo do
-    #     http_ignore_statuses [404, 401]
-    #     latency_percentiles [50, 95, 99]
-    #     controller "Api::OrdersController", action: "show" do
-    #       slo_target 0.999
-    #       latency_target 200
-    #     end
-    #   end
-    def slo(&)
-      block_given? ? @slo_tracking.instance_eval(&) : @slo_tracking
-    end
-
-    # @return [SLOTrackingConfig]
-    def slo_tracking(&)
-      block_given? ? @slo_tracking.instance_eval(&) : @slo_tracking
-    end
-
-    # Set slo_tracking — accepts Boolean (coerced) or SLOTrackingConfig.
-    #
-    # @param value [Boolean, SLOTrackingConfig]
-    # @example config.slo_tracking = true  # enables; no longer crashes
-    def slo_tracking=(value)
-      case value
-      when TrueClass, FalseClass
-        @slo_tracking.enabled = value
-      when SLOTrackingConfig
-        @slo_tracking = value
+    # @param event_name [String] Event name to look up
+    # @return [Hash] { limit:, window: }
+    def rate_limit_for(event_name)
+      limits = @rate_limiting_per_event_limits || []
+      match = limits.find do |rule|
+        pattern = rule[:pattern].gsub(".", "\\.").gsub("*", ".*")
+        Regexp.new("^#{pattern}$").match?(event_name.to_s)
       end
+      m = match || { limit: @rate_limiting_per_event_limit, window: @rate_limiting_global_window }
+      { limit: m[:limit], window: m[:window] }
+    end
+
+    # Add per-controller SLO config.
+    #
+    # @param name [String] Controller class name
+    # @param action [String, nil] Specific action (nil = all actions)
+    # @yield [ControllerSLOConfig] Block for slo_target, latency_target, etc.
+    def add_slo_controller(name, action: nil, &block)
+      key = action ? "#{name}##{action}" : name
+      cfg = ControllerSLOConfig.new
+      cfg.instance_eval(&block) if block_given?
+      (@slo_tracking_controller_configs ||= {})[key] = cfg
+    end
+
+    # Add per-job SLO config.
+    #
+    # @param name [String] Job class name
+    # @yield [JobSLOConfig] Block for ignore, etc.
+    def add_slo_job(name, &block)
+      cfg = JobSLOConfig.new
+      cfg.instance_eval(&block) if block_given?
+      (@slo_tracking_job_configs ||= {})[name] = cfg
+    end
+
+    # Set slo_tracking enabled — accepts Boolean.
+    #
+    # @param value [Boolean]
+    # @example config.slo_tracking = true
+    def slo_tracking=(value)
+      @slo_tracking_enabled = value if value.is_a?(TrueClass) || value.is_a?(FalseClass)
     end
 
     # Cardinality protection config — call with block for DSL, without for plain access.
@@ -493,158 +518,21 @@ module E11y
     end
   end
 
-  # Rate Limiting configuration (UC-011, C02 Resolution)
-  #
-  # Protects adapters from event floods using token bucket algorithm.
-  # Supports global limits and per-event-pattern limits.
-  #
-  # @see UC-011 (Rate Limiting - DoS Protection)
-  # @see ADR-013 §4.6 (C02 Resolution)
-  #
-  # @example Block DSL
-  #   config.rate_limiting do
-  #     global limit: 10_000, window: 1.minute
-  #     per_event "user.login.failed", limit: 100, window: 1.minute
-  #     per_event "payment.*", limit: 500, window: 1.minute
-  #   end
-  class RateLimitingConfig
-    attr_accessor :enabled, :global_limit, :global_window, :per_event_limit
-    attr_reader :per_event_limits
-
-    def initialize
-      @enabled = false # Opt-in (enable explicitly)
-      @global_limit = 10_000 # Max 10K events/sec globally
-      @global_window = 1.0   # 1 second window
-      @per_event_limit = 1_000 # Default per-event limit (used when no per_event_limits rules match)
-      @per_event_limits = []
+  # Per-controller SLO config (used by add_slo_controller).
+  class ControllerSLOConfig
+    def slo_target(value = nil)
+      value ? @slo_target = value : @slo_target
     end
 
-    # Alias for middleware compatibility (uses global_window)
-    def window
-      @global_window
-    end
-
-    def window=(value)
-      @global_window = value.to_f
-    end
-
-    # Set global rate limit.
-    # @param limit [Integer] Max events per window globally
-    # @param window [Numeric, ActiveSupport::Duration] Window size
-    def global(limit:, window: 1.0)
-      @global_limit = limit
-      @global_window = window.to_f
-    end
-
-    # Set per-event (or per-pattern) rate limit.
-    # @param pattern [String] Event name or glob pattern (e.g. "payment.*")
-    # @param limit [Integer] Max events per window for this pattern
-    # @param window [Numeric, ActiveSupport::Duration] Window size
-    def per_event(pattern, limit:, window: 1.0)
-      @per_event_limits << {
-        pattern: pattern.to_s,
-        limit: limit,
-        window: window.to_f
-      }
-    end
-
-    # Find the most specific rate limit config for a given event name.
-    # Per-event rules take precedence; falls back to global config.
-    #
-    # @param event_name [String] Event name to look up
-    # @return [Hash] { limit:, window: }
-    def limit_for(event_name)
-      match = @per_event_limits.find do |rule|
-        pattern = rule[:pattern].gsub(".", "\\.").gsub("*", ".*")
-        Regexp.new("^#{pattern}$").match?(event_name.to_s)
-      end
-      match || { limit: @global_limit, window: @global_window }
+    def latency_target(value = nil)
+      value ? @latency_target = value : @latency_target
     end
   end
 
-  # SLO Tracking configuration (UC-004, ADR-003)
-  #
-  # Zero-config SLO tracking for HTTP requests and background jobs.
-  # Automatically emits SLO metrics (availability, latency, success rate).
-  #
-  # @see UC-004 (Zero-Config SLO Tracking)
-  # @see ADR-003 (SLO & Observability)
-  #
-  # @note C11 Resolution (Sampling Correction): Requires Phase 2.8 (Stratified Sampling).
-  #   Without stratified sampling, SLO metrics may be inaccurate when adaptive sampling is enabled.
-  #
-  # @example Block DSL
-  #   config.slo do
-  #     http_ignore_statuses [404, 401]
-  #     latency_percentiles [50, 95, 99]
-  #     controller "Api::OrdersController", action: "show" do
-  #       slo_target 0.999
-  #       latency_target 200
-  #     end
-  #     job "ReportGenerationJob" do
-  #       ignore true
-  #     end
-  #   end
-  class SLOTrackingConfig
-    attr_accessor :enabled
-    attr_reader :controller_configs, :job_configs
-
-    def initialize
-      @enabled = true # Zero-config: enabled by default
-      @http_ignore_statuses = []
-      @latency_percentiles = [50, 95, 99]
-      @controller_configs = {}
-      @job_configs = {}
-    end
-
-    # @param statuses [Array<Integer>, nil] HTTP status codes to exclude from SLO calculations (nil = getter)
-    def http_ignore_statuses(statuses = nil)
-      return @http_ignore_statuses if statuses.nil?
-
-      @http_ignore_statuses = Array(statuses)
-    end
-
-    # @param percentiles [Array<Integer>, nil] Latency percentiles to track (nil = getter)
-    def latency_percentiles(percentiles = nil)
-      return @latency_percentiles if percentiles.nil?
-
-      @latency_percentiles = Array(percentiles)
-    end
-
-    # Per-controller SLO config.
-    # @param name [String] Controller class name
-    # @param action [String, nil] Specific action (nil = all actions)
-    def controller(name, action: nil, &)
-      key = action ? "#{name}##{action}" : name
-      cfg = ControllerSLOConfig.new
-      cfg.instance_eval(&) if block_given?
-      @controller_configs[key] = cfg
-    end
-
-    # Per-job SLO config.
-    # @param name [String] Job class name
-    def job(name, &)
-      cfg = JobSLOConfig.new
-      cfg.instance_eval(&) if block_given?
-      @job_configs[name] = cfg
-    end
-
-    # Per-controller SLO target config.
-    class ControllerSLOConfig
-      def slo_target(value = nil)
-        value ? @slo_target = value : @slo_target
-      end
-
-      def latency_target(value = nil)
-        value ? @latency_target = value : @latency_target
-      end
-    end
-
-    # Per-job SLO config.
-    class JobSLOConfig
-      def ignore(value = nil)
-        value.nil? ? @ignore : @ignore = value
-      end
+  # Per-job SLO config (used by add_slo_job).
+  class JobSLOConfig
+    def ignore(value = nil)
+      value.nil? ? @ignore : @ignore = value
     end
   end
 

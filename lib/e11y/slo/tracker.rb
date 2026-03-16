@@ -17,7 +17,7 @@ module E11y
     #
     # @example Enable SLO tracking
     #   E11y.configure do |config|
-    #     config.slo_tracking.enabled = true
+    #     config.slo_tracking_enabled = true
     #   end
     #
     # @example Track HTTP request
@@ -121,7 +121,7 @@ module E11y
         #
         # @return [Boolean] true if enabled
         def enabled?
-          E11y.config.respond_to?(:slo_tracking) && E11y.config.slo_tracking&.enabled
+          E11y.config.respond_to?(:slo_tracking_enabled) && E11y.config.slo_tracking_enabled
         end
 
         # Normalize HTTP status code to category (2xx, 3xx, 4xx, 5xx).

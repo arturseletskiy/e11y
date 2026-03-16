@@ -17,7 +17,7 @@ RSpec.describe E11y::SLO::Tracker do
     context "when SLO tracking is enabled" do
       before do
         E11y.configure do |config|
-          config.slo_tracking.enabled = true
+          config.slo_tracking_enabled = true
         end
       end
 
@@ -88,7 +88,7 @@ RSpec.describe E11y::SLO::Tracker do
     context "when SLO tracking is disabled" do
       before do
         E11y.configure do |config|
-          config.slo_tracking.enabled = false
+          config.slo_tracking_enabled = false
         end
       end
 
@@ -110,7 +110,7 @@ RSpec.describe E11y::SLO::Tracker do
     context "when SLO tracking is enabled" do
       before do
         E11y.configure do |config|
-          config.slo_tracking.enabled = true
+          config.slo_tracking_enabled = true
         end
       end
 
@@ -181,7 +181,7 @@ RSpec.describe E11y::SLO::Tracker do
     context "when SLO tracking is disabled" do
       before do
         E11y.configure do |config|
-          config.slo_tracking.enabled = false
+          config.slo_tracking_enabled = false
         end
       end
 
@@ -201,7 +201,7 @@ RSpec.describe E11y::SLO::Tracker do
   describe ".enabled?" do
     it "returns true when slo_tracking is enabled" do
       E11y.configure do |config|
-        config.slo_tracking.enabled = true
+        config.slo_tracking_enabled = true
       end
 
       expect(described_class.enabled?).to be true
@@ -209,7 +209,7 @@ RSpec.describe E11y::SLO::Tracker do
 
     it "returns false when slo_tracking is disabled" do
       E11y.configure do |config|
-        config.slo_tracking.enabled = false
+        config.slo_tracking_enabled = false
       end
 
       expect(described_class.enabled?).to be false
@@ -251,7 +251,7 @@ RSpec.describe E11y::SLO::Tracker do
   context "when testing UC-004 compliance" do
     it "supports zero-config SLO tracking" do
       E11y.configure do |config|
-        config.slo_tracking.enabled = true
+        config.slo_tracking_enabled = true
       end
 
       # HTTP requests tracked
@@ -281,7 +281,7 @@ RSpec.describe E11y::SLO::Tracker do
   context "when testing ADR-003 compliance" do
     it "tracks application-wide SLO metrics" do
       E11y.configure do |config|
-        config.slo_tracking.enabled = true
+        config.slo_tracking_enabled = true
       end
 
       expect(E11y::Metrics).to receive(:increment).with(
