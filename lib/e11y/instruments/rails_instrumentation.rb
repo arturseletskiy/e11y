@@ -137,7 +137,7 @@ module E11y
           # Apply custom mappings from config (Devise-style overrides)
           custom_mappings = E11y.config.rails_instrumentation_custom_mappings || {}
           custom_mappings.each do |pattern, event_class|
-            mapping[pattern] = event_class.name
+            mapping[pattern] = event_class.respond_to?(:name) ? event_class.name : event_class.to_s
           end
 
           mapping
