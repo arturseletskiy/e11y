@@ -28,31 +28,15 @@
 | F-007 | **Event Explorer, Timeline, Inspector, Trace Viewer** not implemented. |
 | F-011 | **PipelineInspector not implemented:** ADR §6.1 — E11y::Debug::PipelineInspector.trace_event. No Debug module. |
 
-### ADR-014: Event-Driven SLO
-
-| ID | Description |
-|----|-------------|
-| F-008 | **slo.yml custom_slos not implemented:** ADR §5 — config/slo.yml with custom_slos. — **RESOLVED** (ConfigLoader + DashboardGenerator support custom_slos) |
-| F-011 | **Three SLO linters not implemented:** ADR §7 — ExplicitDeclaration, SloStatusFrom, ConfigConsistency. Not implemented. |
-| F-012 | **App-wide SLO aggregation (ADR §9) not implemented.** — **RESOLVED** (DashboardGenerator builds app_wide.aggregated_slo panel) |
-
 ### ADR-016: Self-Monitoring SLO
 
 | ID | Description |
 |----|-------------|
-| F1 | **e11y_events_tracked_total not implemented:** UCs and ADR reference it; SLO reliability depends on success/total. |
 | F3 | **SLO targets not implemented:** ADR §4 — config/e11y_slo.yml, SLOCalculator, latency/reliability/resource SLO. Missing. |
 
 ---
 
 ## 3. Medium Findings
-
-
-### ADR-006: Security & Compliance
-
-| ID | Description |
-|----|-------------|
-| F-005 | **PII Declaration Linter not implemented:** E11y::Linters::PiiDeclarationLinter, rake e11y:lint:pii. |
 
 ### ADR-008: Rails Integration
 

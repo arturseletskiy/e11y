@@ -359,7 +359,9 @@ module E11y
             buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0] },
           { name: :slo_background_jobs_total, tags: %i[job_class status queue] },
           { name: :slo_background_job_duration_seconds, type: :histogram, tags: %i[job_class queue],
-            buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0] }
+            buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0] },
+          # E11y self-monitoring (events tracked at pipeline end)
+          { name: :e11y_events_tracked_total, tags: %i[result event_name] }
         ]
 
         metrics.each do |m|

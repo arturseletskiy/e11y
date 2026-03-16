@@ -429,12 +429,13 @@ module E11y
     # 5. RateLimiting - Token-bucket rate limiting (zone: :routing)
     # 6. Sampling     - Adaptive sampling (zone: :routing)
     # 7. Versioning   - Normalize event names (LAST before Routing, zone: :adapters)
-    # 8. Routing      - Buffer routing (zone: :adapters)
-    # 9. EventSlo     - Event-driven SLO tracking (after adapters, observes dispatch)
-    #
-    # @return [void]
-    # @see ADR-015 Middleware Execution Order
-    def configure_default_pipeline
+      # 8. Routing      - Buffer routing (zone: :adapters)
+      # 9. EventSlo     - Event-driven SLO tracking (after adapters, observes dispatch)
+      # 10. SelfMonitoringEmit - e11y_events_tracked_total (last, when e11y_self_monitoring.enabled)
+      #
+      # @return [void]
+      # @see ADR-015 Middleware Execution Order
+      def configure_default_pipeline
       # Zone: :pre_processing
       @pipeline.use E11y::Middleware::TraceContext
       @pipeline.use E11y::Middleware::Validation
@@ -454,6 +455,7 @@ module E11y
 
       # After adapters: observes dispatch outcome for SLO tracking
       @pipeline.use E11y::Middleware::EventSlo
+      @pipeline.use E11y::Middleware::SelfMonitoringEmit
     end
   end
 

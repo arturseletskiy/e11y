@@ -18,6 +18,16 @@ module E11y
           nil
         end
 
+        # Returns true when e11y_self_monitoring.enabled is true in slo.yml.
+        #
+        # @return [Boolean]
+        def self_monitoring_enabled?
+          config = load
+          return false if config.nil?
+
+          config.dig("e11y_self_monitoring", "enabled") == true
+        end
+
         private
 
         def default_search_paths

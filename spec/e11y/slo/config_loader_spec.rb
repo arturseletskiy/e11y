@@ -50,4 +50,31 @@ RSpec.describe E11y::SLO::ConfigLoader do
       end
     end
   end
+
+  describe ".self_monitoring_enabled?" do
+    it "returns false when slo.yml not found" do
+      expect(described_class).to receive(:load).and_return(nil)
+      expect(described_class.self_monitoring_enabled?).to be false
+    end
+
+    it "returns false when e11y_self_monitoring is absent" do
+      expect(described_class).to receive(:load).and_return({})
+      expect(described_class.self_monitoring_enabled?).to be false
+    end
+
+    it "returns false when e11y_self_monitoring.enabled is false" do
+      expect(described_class).to receive(:load).and_return("e11y_self_monitoring" => { "enabled" => false })
+      expect(described_class.self_monitoring_enabled?).to be false
+    end
+
+    it "returns true when e11y_self_monitoring.enabled is true" do
+      expect(described_class).to receive(:load).and_return("e11y_self_monitoring" => { "enabled" => true })
+      expect(described_class.self_monitoring_enabled?).to be true
+    end
+
+    it "returns false when e11y_self_monitoring.enabled is not exactly true" do
+      expect(described_class).to receive(:load).and_return("e11y_self_monitoring" => { "enabled" => "true" })
+      expect(described_class.self_monitoring_enabled?).to be false
+    end
+  end
 end

@@ -13,6 +13,7 @@ module E11y
           panels.concat(build_endpoint_panels(config["endpoints"]))
           panels.concat(build_app_wide_panels(config["app_wide"]))
           panels.concat(build_event_slo_panels(config["custom_slos"])) if config["custom_slos"]
+          panels.concat(build_self_monitoring_panels(config["e11y_self_monitoring"]))
 
           dashboard = {
             title: "E11y SLO Dashboard",
@@ -35,6 +36,20 @@ module E11y
             targets: [{
               expr: "sum(rate(e11y_slo_http_requests_total{status=~\"2..|3..\"}[30d])) by (controller, action) / sum(rate(e11y_slo_http_requests_total[30d])) by (controller, action)",
               legendFormat: '{{controller}}#{{action}}'
+            }]
+          }]
+        end
+
+        def build_self_monitoring_panels(e11y_self_monitoring)
+          return [] if e11y_self_monitoring.nil? || !e11y_self_monitoring["enabled"]
+
+          [{
+            id: 200,
+            title: "E11y Self-Monitoring Reliability",
+            type: "timeseries",
+            targets: [{
+              expr: 'sum(rate(e11y_e11y_events_tracked_total{result="success"}[30d])) / sum(rate(e11y_e11y_events_tracked_total[30d]))',
+              legendFormat: "reliability"
             }]
           }]
         end

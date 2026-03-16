@@ -32,5 +32,30 @@ RSpec.describe E11y::SLO::DashboardGenerator do
       titles = json["panels"].map { |p| p["title"] }
       expect(titles.any? { |t| t =~ /[Aa]pp-[Ww]ide|[Aa]ggregat/ }).to be true
     end
+
+    it "includes E11y Self-Monitoring Reliability panel when e11y_self_monitoring.enabled" do
+      config = {
+        "version" => 1,
+        "endpoints" => [],
+        "e11y_self_monitoring" => { "enabled" => true }
+      }
+      result = described_class.generate(config)
+      json = JSON.parse(result)
+      panel = json["panels"].find { |p| p["title"] == "E11y Self-Monitoring Reliability" }
+      expect(panel).to be_present
+      expect(panel["targets"].first["expr"]).to include("e11y_e11y_events_tracked_total")
+    end
+
+    it "omits self-monitoring panel when e11y_self_monitoring disabled" do
+      config = {
+        "version" => 1,
+        "endpoints" => [],
+        "e11y_self_monitoring" => { "enabled" => false }
+      }
+      result = described_class.generate(config)
+      json = JSON.parse(result)
+      titles = json["panels"].map { |p| p["title"] }
+      expect(titles).not_to include("E11y Self-Monitoring Reliability")
+    end
   end
 end
