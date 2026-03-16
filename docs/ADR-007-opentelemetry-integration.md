@@ -738,7 +738,7 @@ module E11y
         return true if event[:severity].in?([:error, :fatal])
         
         # Check if event matches span creation patterns
-        E11y.config.opentelemetry.span_creation_patterns.any? do |pattern|
+        E11y.config.opentelemetry_span_creation_patterns.any? do |pattern|
           File.fnmatch(pattern, event[:event_name])
         end
       end
@@ -1050,7 +1050,7 @@ module E11y
         return true if event[:severity].in?([:error, :fatal])
         
         # Check configured patterns
-        patterns = E11y.config.opentelemetry.span_creation_patterns || []
+        patterns = E11y.config.opentelemetry_span_creation_patterns || []
         patterns.any? { |pattern| File.fnmatch(pattern, event[:event_name]) }
       end
       

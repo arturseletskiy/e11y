@@ -24,6 +24,6 @@ E11y includes Sidekiq instrumentation support. Configure in your initializer:
 
 ```ruby
 E11y.configure do |config|
-  config.rails_instrumentation.enabled = true
+  config.rails_instrumentation_enabled = true
 end
 ```

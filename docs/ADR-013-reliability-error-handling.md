@@ -1038,11 +1038,11 @@ module E11y
     class SidekiqErrorHandlingMiddleware
       def call(worker, job, queue)
         # Save original setting
-        original_fail_on_error = E11y.config.error_handling.fail_on_error
+        original_fail_on_error = E11y.config.error_handling_fail_on_error
         
         # Disable failing on errors for this job
         # Observability should NOT block business logic!
-        E11y.config.error_handling.fail_on_error = false
+        E11y.config.error_handling_fail_on_error = false
         
         E11y.logger.debug(
           "Sidekiq job starting with fail_on_error=false",
@@ -1053,7 +1053,7 @@ module E11y
         yield
       ensure
         # Restore original setting
-        E11y.config.error_handling.fail_on_error = original_fail_on_error
+        E11y.config.error_handling_fail_on_error = original_fail_on_error
       end
     end
   end
@@ -1112,7 +1112,7 @@ module E11y
     
     def self.handle_error(error)
       # Should we raise or swallow?
-      if E11y.config.error_handling.fail_on_error
+      if E11y.config.error_handling_fail_on_error
         # Web request context: RAISE (fast feedback!)
         raise error
       else
@@ -1177,7 +1177,7 @@ class CriticalReportJob < ApplicationJob
   
   def perform(report_id)
     # Temporarily enable fail_on_error
-    E11y.config.error_handling.fail_on_error = true
+    E11y.config.error_handling_fail_on_error = true
     
     # Generate report
     report = Report.generate(report_id)
@@ -1190,7 +1190,7 @@ class CriticalReportJob < ApplicationJob
     # ↑ If this fails, job SHOULD fail (retry later)
   ensure
     # Restore default (will be restored by middleware anyway)
-    E11y.config.error_handling.fail_on_error = false
+    E11y.config.error_handling_fail_on_error = false
   end
 end
 ```

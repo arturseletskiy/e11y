@@ -3228,44 +3228,24 @@ end
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.security.baggage_protection do
-    enabled true  # ✅ CRITICAL: Always enable in production
-    
-    # Allowlist: Only these keys allowed in baggage
-    allowed_keys [
-      'trace_id',
-      'span_id',
-      'environment',
-      'version',
-      'service_name',
-      'deployment_id',
-      'request_id',
-      # Custom safe keys (optional):
-      'feature_flag_id',   # Feature flag identifier (not PII)
-      'ab_test_variant'    # A/B test variant (not PII)
-    ]
-    
-    # Block mode (how to handle violations)
-    block_mode :silent   # Options: :silent, :warn, :raise
-    
-    # Monitoring
-    on_blocked_key do |key, value, caller_location|
-      # Track violations for security audit
-      Yabeda.e11y_baggage_pii_blocked.increment(
-        key: key,
-        service: ENV['SERVICE_NAME']
-      )
-      
-      # Alert on critical violations
-      if key.match?(/email|password|ssn|credit_card/)
-        Sentry.capture_message(
-          "Critical PII blocked from baggage: #{key}",
-          level: :warning,
-          extra: { caller: caller_location }
-        )
-      end
-    end
-  end
+  config.security_baggage_protection_enabled = true  # ✅ CRITICAL: Always enable in production
+  
+  # Allowlist: Only these keys allowed in baggage
+  config.security_baggage_protection_allowed_keys = [
+    'trace_id',
+    'span_id',
+    'environment',
+    'version',
+    'service_name',
+    'deployment_id',
+    'request_id',
+    # Custom safe keys (optional):
+    'feature_flag_id',   # Feature flag identifier (not PII)
+    'ab_test_variant'    # A/B test variant (not PII)
+  ]
+  
+  # Block mode (how to handle violations)
+  config.security_baggage_protection_block_mode = :silent  # Options: :silent, :warn, :raise
 end
 ```
 
@@ -3329,14 +3309,12 @@ OpenTelemetry::Baggage.set_value('request_id', SecureRandom.uuid)
 ```ruby
 # config/environments/development.rb
 E11y.configure do |config|
-  config.security.baggage_protection do
-    enabled true
-    
-    # RAISE exception on blocked keys (fail fast)
-    block_mode :raise  # ← Developer sees error immediately
-    
-    allowed_keys E11y::Middleware::BaggageProtection::ALLOWED_KEYS
-  end
+  config.security_baggage_protection_enabled = true
+  
+  # RAISE exception on blocked keys (fail fast)
+  config.security_baggage_protection_block_mode = :raise  # ← Developer sees error immediately
+  
+  config.security_baggage_protection_allowed_keys = E11y::BAGGAGE_PROTECTION_DEFAULT_ALLOWED_KEYS
 end
 
 # Developer tries to set PII in baggage:
@@ -4037,7 +4015,7 @@ RSpec.describe E11y::RateLimiting do
       end
       
       # Exceed limit
-      E11y.config.rate_limiting.global.limit = 100
+      E11y.config.rate_limiting_global_limit = 100
       
       expect(Events::Test.track(message: 'over limit')).to be_falsey
     end

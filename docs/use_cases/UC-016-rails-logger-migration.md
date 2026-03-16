@@ -38,9 +38,9 @@ Rails.logger.info "Processing order #{order_id}"
 ```ruby
 # ✅ AFTER: Enable logger bridge
 E11y.configure do |config|
-  config.logger_bridge.enabled = true
-  config.logger_bridge.track_severities = [:info, :warn, :error, :fatal]
-  config.logger_bridge.ignore_patterns = [/Started GET/, /Completed \d+ OK/]
+  config.logger_bridge_enabled = true
+  config.logger_bridge_track_severities = [:info, :warn, :error, :fatal]
+  config.logger_bridge_ignore_patterns = [/Started GET/, /Completed \d+ OK/]
 end
 
 # Existing code works unchanged!
@@ -64,9 +64,9 @@ Events::OrderCreated.track(order_id: order.id)
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.logger_bridge.enabled = true
-  config.logger_bridge.track_severities = [:info, :warn, :error, :fatal]
-  config.logger_bridge.ignore_patterns = [/Started GET/, /Completed \d+ OK/, /CACHE/]
+  config.logger_bridge_enabled = true
+  config.logger_bridge_track_severities = [:info, :warn, :error, :fatal]
+  config.logger_bridge_ignore_patterns = [/Started GET/, /Completed \d+ OK/, /CACHE/]
 end
 
 # Existing code continues to work!
@@ -145,9 +145,9 @@ end
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.logger_bridge.enabled = true
-  config.logger_bridge.track_severities = [:info, :warn, :error, :fatal]
-  config.logger_bridge.ignore_patterns = [/Started GET/, /Completed \d+ OK/]
+  config.logger_bridge_enabled = true
+  config.logger_bridge_track_severities = [:info, :warn, :error, :fatal]
+  config.logger_bridge_ignore_patterns = [/Started GET/, /Completed \d+ OK/]
 end
 
 # Rails.logger calls → Events::Rails::Log::Info/Warn/Error/Fatal (structured)
@@ -396,9 +396,9 @@ end
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.logger_bridge.enabled = true
-  config.logger_bridge.track_severities = [:info, :warn, :error, :fatal]
-  config.logger_bridge.ignore_patterns = [
+  config.logger_bridge_enabled = true
+  config.logger_bridge_track_severities = [:info, :warn, :error, :fatal]
+  config.logger_bridge_ignore_patterns = [
     /Started GET/,
     /Completed \d+ OK/,
     /CACHE/
@@ -437,9 +437,9 @@ end
 ```ruby
 # Logger Bridge is enabled in test via config
 E11y.configure do |config|
-  config.logger_bridge.enabled = true
-  config.logger_bridge.track_severities = [:info, :warn, :error, :fatal]
-  config.logger_bridge.ignore_patterns = []
+  config.logger_bridge_enabled = true
+  config.logger_bridge_track_severities = [:info, :warn, :error, :fatal]
+  config.logger_bridge_ignore_patterns = []
 end
 
 # spec/controllers/orders_controller_spec.rb
@@ -524,8 +524,8 @@ end
 **4. Use Logger Bridge for remaining Rails.logger**
 ```ruby
 # ✅ GOOD: Bridge converts Rails.logger to Events::Rails::Log::*
-config.logger_bridge.enabled = true
-config.logger_bridge.ignore_patterns = [/Started GET/, /Completed \d+ OK/]
+config.logger_bridge_enabled = true
+config.logger_bridge_ignore_patterns = [/Started GET/, /Completed \d+ OK/]
 ```
 
 ---

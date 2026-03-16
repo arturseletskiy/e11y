@@ -16,7 +16,7 @@ Sampling strategies:
 > ```ruby
 > config.pipeline.use E11y::Middleware::RateLimiting
 > ```
-> Enabling `config.rate_limiting.enabled = true` alone has no effect without this step.
+> Enabling `config.rate_limiting_enabled = true` alone has no effect without this step.
 
 ## Configuration
 

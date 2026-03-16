@@ -594,7 +594,7 @@ RSpec.configure do |config|
       e11y_config.adapters.register :test, E11y::Adapters::InMemory.new
       
       # Disable rate limiting in tests
-      e11y_config.rate_limiting.enabled = false
+      e11y_config.rate_limiting_enabled = false
       
       # Disable sampling (track everything)
       e11y_config.sampling.default_sample_rate = 1.0
@@ -1497,8 +1497,8 @@ RSpec.describe 'Rate limiting', type: :integration do
   
   before do
     E11y.configure do |config|
-      config.rate_limiting.enabled = true
-      config.rate_limiting.global_limit = 10  # 10 events/sec
+      config.rate_limiting_enabled = true
+      config.rate_limiting_global_limit = 10  # 10 events/sec
     end
   end
   
@@ -1514,7 +1514,7 @@ RSpec.describe 'Rate limiting', type: :integration do
   end
   
   it 'never drops critical events (bypass rate limit)' do
-    E11y.config.rate_limiting.global_limit = 1  # Extremely low
+    E11y.config.rate_limiting_global_limit = 1  # Extremely low
     
     # Track 10 critical events
     10.times { Events::PaymentFailed.track(payment_id: 'p123') }
@@ -1524,9 +1524,7 @@ RSpec.describe 'Rate limiting', type: :integration do
   end
   
   it 'applies per-event rate limits' do
-    E11y.config.rate_limiting.per_event_limits = {
-      'Events::DebugQuery' => 5  # Max 5 per second
-    }
+    E11y.config.add_rate_limit_per_event('Events::DebugQuery', limit: 5)  # Max 5 per second
     
     10.times { Events::DebugQuery.track(sql: 'SELECT 1') }
     

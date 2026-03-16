@@ -123,7 +123,7 @@ Adapters are registered in configuration and events route to them by severity:
 
 ### Request-Scoped Buffering
 
-The buffer middleware captures debug-level events in a `Concurrent::Array` per request (stored in `Thread.current`). On request success: buffer discarded. On request failure: buffer flushed to configured adapters. Controlled by `config.ephemeral_buffer.enabled`.
+The buffer middleware captures debug-level events in a `Concurrent::Array` per request (stored in `Thread.current`). On request success: buffer discarded. On request failure: buffer flushed to configured adapters. Controlled by `config.ephemeral_buffer_enabled`.
 
 ## Test Structure
 

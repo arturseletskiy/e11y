@@ -313,33 +313,23 @@ E11y blocks ALL baggage keys by default, allowing ONLY safe keys (no PII):
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.security.baggage_protection do
-    enabled true  # ✅ CRITICAL: Always enable in production
-    
-    # Allowlist: ONLY these keys are safe
-    allowed_keys [
-      'trace_id',       # ✅ Safe: Correlation ID
-      'span_id',        # ✅ Safe: Trace context
-      'environment',    # ✅ Safe: Deployment context
-      'version',        # ✅ Safe: Service version
-      'service_name',   # ✅ Safe: Service identifier
-      'request_id',     # ✅ Safe: Request identifier
-      # Custom safe keys (no PII!):
-      'feature_flag_id',  # ✅ Safe: Feature flag name
-      'ab_test_variant'   # ✅ Safe: A/B test group
-    ]
-    
-    # Block mode: What happens when PII detected?
-    block_mode :silent   # Options: :silent (log), :warn (log+warn), :raise (exception)
-    
-    # Monitoring: Track violations
-    on_blocked_key do |key, value, caller_location|
-      Yabeda.e11y_baggage_pii_blocked.increment(
-        key: key,
-        service: ENV['SERVICE_NAME']
-      )
-    end
-  end
+  config.security_baggage_protection_enabled = true  # ✅ CRITICAL: Always enable in production
+  
+  # Allowlist: ONLY these keys are safe
+  config.security_baggage_protection_allowed_keys = [
+    'trace_id',       # ✅ Safe: Correlation ID
+    'span_id',        # ✅ Safe: Trace context
+    'environment',    # ✅ Safe: Deployment context
+    'version',        # ✅ Safe: Service version
+    'service_name',   # ✅ Safe: Service identifier
+    'request_id',     # ✅ Safe: Request identifier
+    # Custom safe keys (no PII!):
+    'feature_flag_id',  # ✅ Safe: Feature flag name
+    'ab_test_variant'   # ✅ Safe: A/B test group
+  ]
+  
+  # Block mode: What happens when PII detected?
+  config.security_baggage_protection_block_mode = :silent  # Options: :silent (log), :warn (log+warn), :raise (exception)
 end
 ```
 
@@ -404,11 +394,9 @@ Fail fast in non-production environments:
 ```ruby
 # config/environments/development.rb
 E11y.configure do |config|
-  config.security.baggage_protection do
-    enabled true
-    block_mode :raise  # ← RAISE exception on blocked keys (fail fast)
-    allowed_keys E11y::Middleware::BaggageProtection::ALLOWED_KEYS
-  end
+  config.security_baggage_protection_enabled = true
+  config.security_baggage_protection_block_mode = :raise  # ← RAISE exception on blocked keys (fail fast)
+  config.security_baggage_protection_allowed_keys = E11y::BAGGAGE_PROTECTION_DEFAULT_ALLOWED_KEYS
 end
 
 # Developer tries to set PII:

@@ -74,7 +74,7 @@
 **Current API:**
 ```ruby
 E11y.configure do |config|
-  config.slo_tracking.enabled = true
+  config.slo_tracking_enabled = true
 end
 ```
 
@@ -144,7 +144,7 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
     
     # Enable SLO tracking
     E11y.configure do |config|
-      config.slo_tracking.enabled = true
+      config.slo_tracking_enabled = true
     end
     
     # Configure Yabeda adapter
@@ -437,7 +437,7 @@ error_rate = errors / total (over window)
 **Integration Point:** `E11y.config.slo_tracking`
 
 **Flow:**
-1. Configuration: `E11y.config.slo_tracking.enabled = true`
+1. Configuration: `E11y.config.slo_tracking_enabled = true`
 2. Tracker checks: `Tracker.enabled?` returns true
 3. Tracking proceeds: Metrics emitted
 

@@ -89,7 +89,7 @@
 ```ruby
 # Zero-config SLO tracking
 E11y.configure do |config|
-  config.slo_tracking.enabled = true
+  config.slo_tracking_enabled = true
 end
 
 # Track HTTP request
@@ -169,7 +169,7 @@ RSpec.describe "ADR-003 SLO Observability Integration", :integration do
   before do
     # Configure SLO tracking
     E11y.configure do |config|
-      config.slo_tracking.enabled = true
+      config.slo_tracking_enabled = true
     end
     
     # Configure Yabeda adapter

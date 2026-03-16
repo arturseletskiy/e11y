@@ -116,8 +116,8 @@ Automatic trace_id extraction with fallback chain:
 
 ```ruby
 E11y.configure do |config|
-  config.rails_instrumentation.enabled = true
-  # config.slo_tracking.enabled = true  # enabled by default
+  config.rails_instrumentation_enabled = true
+  # config.slo_tracking_enabled = true  # enabled by default
 end
 
 # Automatically emits metrics:
@@ -298,29 +298,26 @@ E11y.configure do |config|
   )
 
   # === Request-scoped buffering ===
-  config.ephemeral_buffer.enabled = true
+  config.ephemeral_buffer_enabled = true
   # flush_on_error (default: true) — flush buffer on any 5xx server error
-  # config.ephemeral_buffer.flush_on_error = false  # disable 5xx auto-flush
+  # config.ephemeral_buffer_flush_on_error = false  # disable 5xx auto-flush
   # flush_on_statuses (default: []) — extra statuses, independent of flush_on_error
-  # config.ephemeral_buffer.flush_on_statuses = [403]       # also flush on 403 Forbidden
-  # config.ephemeral_buffer.flush_on_statuses = [401, 403]  # multiple codes
+  # config.ephemeral_buffer_flush_on_statuses = [403]       # also flush on 403 Forbidden
+  # config.ephemeral_buffer_flush_on_statuses = [401, 403]  # multiple codes
 
   # === Rails auto-instrumentation (HTTP, ActiveRecord, ActiveJob, Cache) ===
-  config.rails_instrumentation.enabled = true
+  config.rails_instrumentation_enabled = true
 
   # === SLO tracking (enabled by default) ===
-  # config.slo_tracking.enabled = true  # already true
-  # Note: config.slo_tracking accepts both forms:
-  #   config.slo_tracking.enabled = true   # object DSL (recommended)
-  #   config.slo_tracking = true            # boolean shorthand (coerced)
+  # config.slo_tracking_enabled = true  # already true
 
   # === Rate limiting (now in default pipeline!) ===
   # Rate limiting is wired into the default pipeline in v0.2.0.
   # Enable and configure parameters:
-  # config.rate_limiting.enabled         = true
-  # config.rate_limiting.global_limit    = 10_000   # events/sec
-  # config.rate_limiting.per_event_limit = 1_000    # events/sec per type
-  # config.rate_limiting.window          = 1.0       # seconds
+  # config.rate_limiting_enabled         = true
+  # config.rate_limiting_global_limit    = 10_000   # events/sec
+  # config.rate_limiting_per_event_limit  = 1_000    # events/sec per type
+  # config.rate_limiting_global_window    = 1.0      # seconds
 
   # === Retention ===
   config.default_retention_period = 30.days
@@ -495,7 +492,7 @@ Events::PaymentFailed.track(reason: 'timeout')  # ← :error  (from name "Failed
 
 ### Rails / Rack
 
-`E11y::Middleware::Request` is automatically inserted by the Railtie when `ephemeral_buffer.enabled` is true.
+`E11y::Middleware::Request` is automatically inserted by the Railtie when `ephemeral_buffer_enabled` is true.
 
 ### Sidekiq
 
@@ -516,7 +513,7 @@ TraceContext → Validation → PIIFilter → AuditSigning → Sampling → Rate
 ```
 
 As of v0.2.0, `RateLimiting` is wired into the default pipeline. To activate it, set
-`config.rate_limiting.enabled = true` (no manual `.use` call needed).
+`config.rate_limiting_enabled = true` (no manual `.use` call needed).
 
 **Versioning (opt-in):**
 
@@ -684,14 +681,14 @@ enabling the config (no extra `.use` call required):
 
 ```ruby
 E11y.configure do |config|
-  config.rate_limiting.enabled         = true
-  config.rate_limiting.global_limit    = 10_000  # events/sec
-  config.rate_limiting.per_event_limit = 1_000   # events/sec per type
-  config.rate_limiting.window          = 1.0     # seconds
+  config.rate_limiting_enabled         = true
+  config.rate_limiting_global_limit     = 10_000  # events/sec
+  config.rate_limiting_per_event_limit  = 1_000   # events/sec per type
+  config.rate_limiting_global_window    = 1.0     # seconds
 end
 ```
 
-> **Note:** When `config.rate_limiting.enabled = false` (default), the middleware is present in
+> **Note:** When `config.rate_limiting_enabled = false` (default), the middleware is present in
 > the pipeline but passes all events through without limiting. Set `enabled = true` to activate.
 
 > 🚧 **Roadmap:** Per-event and per-pattern rate limiting (e.g. `'user.login.failed'` → 100/min)
@@ -701,7 +698,7 @@ end
 
 ## 🎯 Built-in SLO Tracking
 
-**What is tracked automatically** when `config.rails_instrumentation.enabled = true`:
+**What is tracked automatically** when `config.rails_instrumentation_enabled = true`:
 
 ```ruby
 # HTTP Metrics (via Rack middleware)
@@ -797,16 +794,16 @@ E11y.circuit_breaker_state         # => :closed/:open/:half_open
 
 ```ruby
 # Is the buffer enabled?
-E11y.config.ephemeral_buffer.enabled  # => true
+E11y.config.ephemeral_buffer_enabled  # => true
 
 # Is Rails instrumentation enabled?
-E11y.config.rails_instrumentation.enabled  # => true
+E11y.config.rails_instrumentation_enabled  # => true
 
 # Is 5xx auto-flush enabled?
-E11y.config.ephemeral_buffer.flush_on_error    # => true (default)
+E11y.config.ephemeral_buffer_flush_on_error    # => true (default)
 
 # Any extra statuses configured?
-E11y.config.ephemeral_buffer.flush_on_statuses # => [] (default) or [403] etc.
+E11y.config.ephemeral_buffer_flush_on_statuses # => [] (default) or [403] etc.
 
 # Note: flush_on_error and flush_on_statuses are independent.
 # flush_on_error=true  → flush on any 5xx.
@@ -843,8 +840,8 @@ E11y.config.adapters[:logs].healthy?
 - [ ] Run `rails g e11y:install` (or create `config/initializers/e11y.rb` manually)
 - [ ] Configure adapters: `config.adapters[:logs] = E11y::Adapters::Loki.new(...)`
 - [ ] For metrics: add `gem 'yabeda'`, set `config.adapters[:metrics] = E11y::Adapters::Yabeda.new`
-- [ ] Enable request buffering: `config.ephemeral_buffer.enabled = true`
-- [ ] Enable Rails instrumentation: `config.rails_instrumentation.enabled = true`
+- [ ] Enable request buffering: `config.ephemeral_buffer_enabled = true`
+- [ ] Enable Rails instrumentation: `config.rails_instrumentation_enabled = true`
 - [ ] Define first event class in `app/events/`
 - [ ] Use `EventName.track(...)` in a controller or service
 - [ ] Write a test using `E11y::Adapters::InMemory`
@@ -861,7 +858,7 @@ E11y.config.adapters[:logs].healthy?
 |---------|-------|
 | `rails g e11y:install` | Generator available: creates initializer + `app/events/` |
 | `E11y.start!` / `E11y.stop!` | Lifecycle methods for graceful startup/shutdown |
-| Rate Limiting in default pipeline | `config.rate_limiting.enabled = true` now works |
+| Rate Limiting in default pipeline | `config.rate_limiting_enabled = true` now works |
 | Event name normalization (`Middleware::Versioning`) | Now in default pipeline |
 | OTelLogs payload attributes | All payload attributes now included in OTel log records |
 | `config.slo_tracking = true` | Boolean coercion now accepted |

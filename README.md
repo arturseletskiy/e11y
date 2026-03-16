@@ -67,7 +67,7 @@ You enable debug logs in production to catch that one weird bug.
 ```ruby
 # 1. Configure once
 E11y.configure do |config|
-  config.ephemeral_buffer.enabled = true
+  config.ephemeral_buffer_enabled = true
   config.adapters[:logs] = E11y::Adapters::Loki.new(url: ENV["LOKI_URL"])
 end
 
@@ -114,7 +114,7 @@ Rails.logger.debug "rendering view"   # → Always written to disk
 
 # E11y approach:
 E11y.configure do |config|
-  config.ephemeral_buffer.enabled = true
+  config.ephemeral_buffer_enabled = true
 end
 
 # Debug events buffered in memory during request
@@ -127,11 +127,11 @@ end
 >
 > ```ruby
 > # flush_on_error (default: true) — controls 5xx behaviour
-> config.ephemeral_buffer.flush_on_error = false  # disable 5xx flush
+> config.ephemeral_buffer_flush_on_error = false  # disable 5xx flush
 >
 > # flush_on_statuses (default: []) — extra statuses, independent of flush_on_error
-> config.ephemeral_buffer.flush_on_statuses = [403]       # also flush on 403 Forbidden
-> config.ephemeral_buffer.flush_on_statuses = [401, 403]  # multiple codes
+> config.ephemeral_buffer_flush_on_statuses = [403]       # also flush on 403 Forbidden
+> config.ephemeral_buffer_flush_on_statuses = [401, 403]  # multiple codes
 > ```
 
 **Real-world impact:**
@@ -190,7 +190,7 @@ Automatic Service Level Objectives for your endpoints and jobs:
 ```ruby
 # Enable Rails instrumentation
 E11y.configure do |config|
-  config.rails_instrumentation.enabled = true
+  config.rails_instrumentation_enabled = true
 end
 
 # That's it! E11y now emits SLO metrics automatically:
@@ -224,7 +224,7 @@ E11y.configure do |config|
 end
 
 # Auto-instruments Rails (optional):
-config.rails_instrumentation.enabled = true
+config.rails_instrumentation_enabled = true
 # → HTTP requests, ActiveRecord, ActiveJob, Cache events
 ```
 
@@ -308,9 +308,9 @@ bundle install
 # config/initializers/e11y.rb
 E11y.configure do |config|
   # Enable request-scoped debug buffering (THE killer feature)
-  config.ephemeral_buffer.enabled        = true
-  # config.ephemeral_buffer.flush_on_error    = true   # default: flush on 5xx
-  # config.ephemeral_buffer.flush_on_statuses = [403]  # also flush on 403
+  config.ephemeral_buffer_enabled        = true
+  # config.ephemeral_buffer_flush_on_error    = true   # default: flush on 5xx
+  # config.ephemeral_buffer_flush_on_statuses = [403]  # also flush on 403
   
   # Configure where events go
   config.adapters[:logs] = E11y::Adapters::Loki.new(
@@ -323,7 +323,7 @@ E11y.configure do |config|
   )
   
   # Optional: Auto-instrument Rails
-  config.rails_instrumentation.enabled = true
+  config.rails_instrumentation_enabled = true
 end
 ```
 
@@ -417,7 +417,7 @@ Rails.logger.error "Payment failed!"
 
 ```ruby
 # Production with E11y:
-E11y.configure { |c| c.ephemeral_buffer.enabled = true }
+E11y.configure { |c| c.ephemeral_buffer_enabled = true }
 
 # 99 successful requests:
 #   [INFO] User logged in (99 lines)

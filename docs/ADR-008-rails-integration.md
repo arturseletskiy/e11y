@@ -209,7 +209,7 @@ module E11y
       E11y::Railtie.setup_active_job if defined?(::ActiveJob) && E11y.config.active_job&.enabled
       
       # Setup logger bridge
-      E11y::Logger::Bridge.setup! if E11y.config.logger_bridge.enabled
+      E11y::Logger::Bridge.setup! if E11y.config.logger_bridge_enabled
       
       # Setup development tools
       E11y::Console.setup! if Rails.env.development?
@@ -694,16 +694,16 @@ end
 ```ruby
 # Disable ASN but keep Sidekiq
 E11y.configure do |config|
-  config.rails_instrumentation.enabled = false
-  config.sidekiq.enabled = true
-  config.active_job.enabled = true
+  config.rails_instrumentation_enabled = false
+  config.sidekiq_enabled = true
+  config.active_job_enabled = true
 end
 
 # Minimal setup: only Sidekiq
 E11y.configure do |config|
-  config.rails_instrumentation.enabled = false
-  config.sidekiq.enabled = true
-  config.active_job.enabled = false
+  config.rails_instrumentation_enabled = false
+  config.sidekiq_enabled = true
+  config.active_job_enabled = false
 end
 ```
 
@@ -859,9 +859,9 @@ module E11y
             queue: queue
           )
           
-          # Start request-scoped buffer (same as HTTP; config.ephemeral_buffer.enabled)
-          if E11y.config.ephemeral_buffer&.enabled
-            limit = E11y.config.ephemeral_buffer.job_buffer_limit ||
+          # Start request-scoped buffer (same as HTTP; config.ephemeral_buffer_enabled)
+          if E11y.config.ephemeral_buffer_enabled
+            limit = E11y.config.ephemeral_buffer_job_buffer_limit ||
                     E11y::Buffers::EphemeralBuffer::DEFAULT_BUFFER_LIMIT
             E11y::EphemeralBuffer.initialize!(buffer_limit: limit)
           end
@@ -889,7 +889,7 @@ module E11y
             )
             
             # Discard buffer on success (same as HTTP)
-            E11y::EphemeralBuffer.discard if E11y.config.ephemeral_buffer&.enabled
+            E11y::EphemeralBuffer.discard if E11y.config.ephemeral_buffer_enabled
             
             result
           rescue => error
@@ -905,7 +905,7 @@ module E11y
             )
             
             # Flush buffer on error (includes debug events)
-            E11y::EphemeralBuffer.flush_on_error if E11y.config.ephemeral_buffer&.enabled
+            E11y::EphemeralBuffer.flush_on_error if E11y.config.ephemeral_buffer_enabled
             
             raise
           ensure
@@ -967,10 +967,10 @@ end
 # config/initializers/e11y.rb
 E11y.configure do |config|
   # Shared buffer for HTTP and jobs
-  config.ephemeral_buffer.enabled = true
+  config.ephemeral_buffer_enabled = true
   
   # Optional: job-specific overrides (jobs can run longer → more debug events)
-  config.ephemeral_buffer.job_buffer_limit = 500  # nil = use default (100)
+  config.ephemeral_buffer_job_buffer_limit = 500  # nil = use default (100)
 end
 ```
 
@@ -1055,9 +1055,9 @@ module E11y
             job_class: self.class.name
           )
           
-          # Start request-scoped buffer (same as HTTP; config.ephemeral_buffer.enabled)
-          if E11y.config.ephemeral_buffer&.enabled
-            limit = E11y.config.ephemeral_buffer.job_buffer_limit ||
+          # Start request-scoped buffer (same as HTTP; config.ephemeral_buffer_enabled)
+          if E11y.config.ephemeral_buffer_enabled
+            limit = E11y.config.ephemeral_buffer_job_buffer_limit ||
                     E11y::Buffers::EphemeralBuffer::DEFAULT_BUFFER_LIMIT
             E11y::EphemeralBuffer.initialize!(buffer_limit: limit)
           end
@@ -1081,7 +1081,7 @@ module E11y
             )
             
             # Discard buffer on success (same as HTTP)
-            E11y::EphemeralBuffer.discard if E11y.config.ephemeral_buffer&.enabled
+            E11y::EphemeralBuffer.discard if E11y.config.ephemeral_buffer_enabled
           rescue => error
             Events::Rails::Job::Failed.track(
               job_class: self.class.name,
@@ -1092,7 +1092,7 @@ module E11y
             )
             
             # Flush buffer on error (includes debug events)
-            E11y::EphemeralBuffer.flush_on_error if E11y.config.ephemeral_buffer&.enabled
+            E11y::EphemeralBuffer.flush_on_error if E11y.config.ephemeral_buffer_enabled
             
             raise
           ensure
@@ -1141,7 +1141,7 @@ module E11y
   module Logger
     class Bridge
       def self.setup!
-        return unless E11y.config.logger_bridge.enabled
+        return unless E11y.config.logger_bridge_enabled
         
         # Replace Rails.logger
         Rails.logger = Bridge.new(Rails.logger)
@@ -1234,13 +1234,13 @@ end
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.logger_bridge.enabled = true
+  config.logger_bridge_enabled = true
   
   # Which severities to track (nil = all)
-  config.logger_bridge.track_severities = [:info, :warn, :error, :fatal]
+  config.logger_bridge_track_severities = [:info, :warn, :error, :fatal]
   
   # Skip noisy log messages (regex or string)
-  config.logger_bridge.ignore_patterns = [
+  config.logger_bridge_ignore_patterns = [
     /Started GET/,
     /Completed \d+ OK/,
     /CACHE/
@@ -1260,7 +1260,7 @@ end
 
 | Buffer | Purpose | Lifecycle | Config |
 |--------|---------|-----------|--------|
-| **Request Buffer** | Debug events (HTTP + jobs) | Per-request/job, flush on error, discard on success | `config.ephemeral_buffer.enabled`, `job_buffer_limit` |
+| **Request Buffer** | Debug events (HTTP + jobs) | Per-request/job, flush on error, discard on success | `config.ephemeral_buffer_enabled`, `ephemeral_buffer_job_buffer_limit` |
 | **Main Buffer** | All events (info+) | Global, flush every 200ms | — |
 
 **Diagram:**
@@ -1303,8 +1303,8 @@ graph TB
 ```ruby
 E11y.configure do |config|
   # Request-scoped buffer (shared for HTTP and jobs)
-  config.ephemeral_buffer.enabled = true
-  config.ephemeral_buffer.job_buffer_limit = 500  # Optional: higher limit for jobs (nil = default 100)
+  config.ephemeral_buffer_enabled = true
+  config.ephemeral_buffer_job_buffer_limit = 500  # Optional: higher limit for jobs (nil = default 100)
 end
 ```
 
@@ -1493,7 +1493,7 @@ module E11y
         )
         
         # Disable rate limiting in console
-        config.rate_limiting.enabled = false
+        config.rate_limiting_enabled = false
         
         # Show all severities
         config.severity_threshold = :debug
@@ -1691,10 +1691,10 @@ end
 
 ```ruby
 E11y.configure do |config|
-  config.rails_instrumentation.enabled = false  # Disable ASN
-  config.sidekiq.enabled = true                # Keep Sidekiq
-  config.active_job.enabled = true              # Keep ActiveJob
-  config.logger_bridge.enabled = true          # Keep logger bridge
+  config.rails_instrumentation_enabled = false  # Disable ASN
+  config.sidekiq_enabled = true                # Keep Sidekiq
+  config.active_job_enabled = true              # Keep ActiveJob
+  config.logger_bridge_enabled = true          # Keep logger bridge
 end
 ```
 
@@ -1741,8 +1741,8 @@ end
 Config:
 
 ```ruby
-config.ephemeral_buffer.enabled = true
-config.ephemeral_buffer.job_buffer_limit = 500  # Optional: higher limit for jobs (nil = default 100)
+config.ephemeral_buffer_enabled = true
+config.ephemeral_buffer_job_buffer_limit = 500  # Optional: higher limit for jobs (nil = default 100)
 ```
 
 ### Q5: How do I customize built-in Rails events?

@@ -697,7 +697,7 @@ end
 
 ```ruby
 # ❌ BAD: E11y failure fails the job
-config.error_handling.fail_on_error_in_jobs = true
+config.error_handling_fail_on_error_in_jobs = true
 
 # Job fails if Loki is down:
 # - Payment was created successfully
@@ -706,7 +706,7 @@ config.error_handling.fail_on_error_in_jobs = true
 # - Result: Duplicate payments! 💸💸💸
 
 # ✅ GOOD: E11y failure doesn't fail the job
-config.error_handling.fail_on_error_in_jobs = false
+config.error_handling_fail_on_error_in_jobs = false
 
 # Job succeeds even if Loki is down:
 # - Payment created ✅

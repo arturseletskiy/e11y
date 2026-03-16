@@ -68,7 +68,7 @@ Feature: SLO Tracking
     Then the SLO metric "slo_event_result_total" should have been incremented
     And the metric labels should include slo_status "success"
 
-  Scenario: SLO is disabled when config.slo_tracking.enabled = false
+  Scenario: SLO is disabled when config.slo_tracking_enabled = false
     Given SLO tracking is explicitly disabled
     When I send a POST request to "/orders" with order params
     Then no SLO metrics should have been recorded for "orders#create"
@@ -77,7 +77,7 @@ Feature: SLO Tracking
     # Documents the current reality: default is disabled, must opt-in.
     When I inspect the default SLO tracking configuration
     Then E11y.configuration.slo_tracking.enabled should be false
-    And enabling SLO tracking requires setting config.slo_tracking.enabled = true
+    And enabling SLO tracking requires setting config.slo_tracking_enabled = true
 ```
 
 **Step 2: Run to verify it fails (feature file exists, no steps yet)**
@@ -114,7 +114,7 @@ end
 Given("SLO tracking is reset to its default state") do
   # Disable SLO tracking to start each scenario from a clean slate.
   # Scenarios that need it enabled call "Given SLO tracking is enabled".
-  E11y.config.slo_tracking.enabled = false
+  E11y.config.slo_tracking_enabled = false
 end
 
 # ---------------------------------------------------------------------------
@@ -122,11 +122,11 @@ end
 # ---------------------------------------------------------------------------
 
 Given("SLO tracking is enabled") do
-  E11y.config.slo_tracking.enabled = true
+  E11y.config.slo_tracking_enabled = true
 end
 
 Given("SLO tracking is explicitly disabled") do
-  E11y.config.slo_tracking.enabled = false
+  E11y.config.slo_tracking_enabled = false
 end
 
 # ---------------------------------------------------------------------------
@@ -161,7 +161,7 @@ end
 # ---------------------------------------------------------------------------
 
 When("I inspect the default SLO tracking configuration") do
-  @slo_config = E11y.config.slo_tracking
+  @slo_tracking_enabled = E11y.config.slo_tracking_enabled
 end
 
 # ---------------------------------------------------------------------------
@@ -196,21 +196,21 @@ end
 # ---------------------------------------------------------------------------
 
 Then("E11y.configuration.slo_tracking.enabled should be true") do
-  expect(@slo_config.enabled).to be(true),
-    "Expected SLO tracking to be enabled by default, but it was: #{@slo_config.enabled.inspect}\n" \
+  expect(@slo_tracking_enabled).to be(true),
+    "Expected SLO tracking to be enabled by default, but it was: #{@slo_tracking_enabled.inspect}\n" \
     "BUG: SLOTrackingConfig#initialize sets @enabled = false, contradicting 'Zero-Config SLO Tracking' claim."
 end
 
 Then("E11y.configuration.slo_tracking.enabled should be false") do
-  expect(@slo_config.enabled).to be(false)
+  expect(@slo_tracking_enabled).to be(false)
 end
 
-Then("enabling SLO tracking requires setting config.slo_tracking.enabled = true") do
+Then("enabling SLO tracking requires setting config.slo_tracking_enabled = true") do
   # Documents the workaround required due to the bug.
-  E11y.config.slo_tracking.enabled = true
-  expect(E11y.config.slo_tracking.enabled).to be(true)
+  E11y.config.slo_tracking_enabled = true
+  expect(E11y.config.slo_tracking_enabled).to be(true)
   # Restore for subsequent scenarios
-  E11y.config.slo_tracking.enabled = false
+  E11y.config.slo_tracking_enabled = false
 end
 
 Then("the SLO tracker should have recorded {int} request(s) for {string}") do |_count, _endpoint|
@@ -221,7 +221,7 @@ Then("the SLO tracker should have recorded {int} request(s) for {string}") do |_
   # middleware fires track_http_request, then the metric increment must have occurred.
   #
   # We do this indirectly by confirming no error was raised and SLO is enabled.
-  expect(E11y.config.slo_tracking.enabled).to be(true),
+  expect(E11y.config.slo_tracking_enabled).to be(true),
     "SLO tracking must be enabled for this assertion to be meaningful"
 
   # If Yabeda is available, check the counter directly.
@@ -291,7 +291,7 @@ end
 After("@wip") do
   # Restore any pipeline modifications made during @wip scenarios
   E11y.config.instance_variable_set(:@built_pipeline, nil)
-  E11y.config.slo_tracking.enabled = false
+  E11y.config.slo_tracking_enabled = false
 end
 ```
 
