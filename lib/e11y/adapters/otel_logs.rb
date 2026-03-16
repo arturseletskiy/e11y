@@ -97,15 +97,28 @@ module E11y
       #   `:all` (default) passes every payload key — PII is already stripped upstream by
       #   Middleware::PIIFilter before the adapter is called.
       #   Pass an explicit Array for stricter filtering (backward compat).
-      # @param max_attributes [Integer] Max attributes per log (cardinality protection)
+      # @param max_attributes [Integer] Max attributes per log (cardinality limit)
+      # @param cardinality_protection [Boolean] Use full 3-layer protection (C04). Default false for
+      #   logs (preserves user_id, order_id for debugging). Set true for cost-sensitive OTLP backends.
       # @param endpoint [String, nil] OTLP endpoint (e.g. http://localhost:4318/v1/logs).
       #   When set, logs are exported to OTel Collector. Default: in-process only.
-      def initialize(service_name: nil, baggage_allowlist: :all, max_attributes: 50, endpoint: nil, **)
+      def initialize(service_name: nil, baggage_allowlist: :all, max_attributes: 50, cardinality_protection: false, endpoint: nil, **)
         super(**)
         @service_name = service_name
         @baggage_allowlist = baggage_allowlist
         @max_attributes = max_attributes
         @endpoint = endpoint
+        @use_cardinality_protection = cardinality_protection
+
+        if @use_cardinality_protection
+          require "e11y/metrics/cardinality_protection"
+          @cardinality_protection = E11y::Metrics::CardinalityProtection.new(
+            cardinality_limit: 1000,
+            overflow_strategy: :drop
+          )
+        else
+          @cardinality_protection = nil
+        end
 
         setup_logger_provider
       end
@@ -260,26 +273,29 @@ module E11y
       def build_attributes(event_data)
         attributes = {}
 
-        # Add event metadata
+        # Add event metadata (low cardinality)
         attributes["event.name"] = event_data[:event_name]
         attributes["event.version"] = event_data[:v] if event_data[:v]
         attributes["service.name"] = @service_name if @service_name
 
-        # Map payload via semantic conventions (F4) or event.* prefix
         payload = event_data[:payload] || {}
-        payload.each do |key, value|
-          # C04: Cardinality protection - limit attributes
-          break if attributes.size >= @max_attributes
 
-          # C08: Optional allowlist — skip unless allowed
+        # C04: Optional cardinality protection (denylist + per-key limits). Off by default for logs.
+        if @cardinality_protection
+          payload_symbols = payload.transform_keys { |k| k.to_s.to_sym }
+          payload = @cardinality_protection.filter(payload_symbols, "otel_logs")
+        end
+
+        # Map payload to OTel semantic keys (F4)
+        payload.each do |key, value|
           next unless baggage_allowed?(key)
 
-          # F4: Map to semantic convention key when applicable
           otel_key = E11y::OpenTelemetry::SemanticConventions.map_key(
             event_data[:event_name],
             key
           )
           attributes[otel_key] = value
+          break if attributes.size >= @max_attributes
         end
 
         attributes

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "e11y/middleware/base"
+require "e11y/sampling/stratified_tracker"
 
 module E11y
   module Middleware
@@ -92,9 +93,15 @@ module E11y
         # Track events for load-based adaptive sampling (FEAT-4842)
         @load_monitor&.record_event
 
+        # C11: Get sample rate and severity before decision (for StratifiedTracker)
+        sample_rate = determine_sample_rate(event_class, event_data)
+        severity = event_data[:severity] || (event_class.respond_to?(:severity) ? event_class.severity : :info)
+
         # Determine if event should be sampled
         # Drop event if not sampled
         unless should_sample?(event_data, event_class)
+          # C11: Record dropped event to StratifiedTracker for sampling correction
+          E11y::Sampling.stratified_tracker.record_sample(severity: severity, sample_rate: sample_rate, sampled: false)
           begin
             if defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:increment)
               E11y::Metrics.increment(:e11y_events_dropped_total, {
@@ -110,7 +117,10 @@ module E11y
 
         # Mark as sampled for downstream middleware
         event_data[:sampled] = true
-        event_data[:sample_rate] = determine_sample_rate(event_class, event_data)
+        event_data[:sample_rate] = sample_rate
+
+        # C11: Record sampled event to StratifiedTracker for sampling correction
+        E11y::Sampling.stratified_tracker.record_sample(severity: severity, sample_rate: sample_rate, sampled: true)
 
         # Pass to next middleware
         @app.call(event_data)

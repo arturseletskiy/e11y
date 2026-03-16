@@ -81,8 +81,8 @@ module E11y
           return @app&.call(event_data) || event_data
         end
 
-        # Emit SLO metric
-        emit_slo_metric(event_class, slo_status, event_data[:payload])
+        # Emit SLO metric (with sampling correction when stratified sampling enabled)
+        emit_slo_metric(event_class, slo_status, event_data[:payload], event_data)
 
         # Pass to next middleware (Routing writes to adapters)
         @app&.call(event_data) || event_data
@@ -131,15 +131,22 @@ module E11y
       end
 
       # Emit SLO metric to Yabeda/Prometheus.
+      # C11: Applies stratified sampling correction when event was sampled.
       #
       # @param event_class [Class] Event class
       # @param slo_status [String] 'success' or 'failure'
       # @param payload [Hash] Event payload
+      # @param event_data [Hash] Full event data (for sample_rate)
       # @return [void]
-      def emit_slo_metric(event_class, slo_status, payload)
+      def emit_slo_metric(event_class, slo_status, payload, event_data = {})
         labels = build_slo_labels(event_class, slo_status, payload)
 
-        E11y::Metrics.increment(:slo_event_result_total, labels)
+        # C11: Apply sampling correction for accurate SLO with stratified sampling
+        stratum = slo_status == "success" ? :success : :error
+        correction = E11y::Sampling.stratified_tracker.sampling_correction(stratum)
+        value = (correction * 100).round / 100.0 # Round to 2 decimals for Prometheus
+
+        E11y::Metrics.increment(:slo_event_result_total, labels, value: value)
       rescue StandardError => e
         E11y.logger.error(
           "[E11y::Middleware::EventSlo] Failed to emit SLO metric for #{event_class.name}: #{e.message}"

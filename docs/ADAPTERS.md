@@ -8,7 +8,7 @@ E11y supports multiple adapters for different backends.
 |---------|---------|----------|----------|
 | **Loki** | Log aggregation (Grafana) | Yes | Production logs |
 | **Sentry** | Error tracking | Via SDK | Error monitoring |
-| **OpenTelemetry** | OTLP export | Yes | Distributed tracing |
+| **OpenTelemetry** | OTLP export (OTelLogs, OpenTelemetryCollector) | Varies | Distributed tracing, logs |
 | **Yabeda** | Prometheus metrics | N/A | Metrics export |
 | **File** | Local logs | Yes | Development, CI |
 | **Stdout** | Console output | No | Development |
@@ -34,6 +34,12 @@ E11y.configure do |config|
   config.adapters[:stdout] = E11y::Adapters::Stdout.new(
     format: :pretty
   )
+
+  # OpenTelemetry Collector (compress: true default, requires Faraday)
+  # config.adapters[:otel] = E11y::Adapters::OpenTelemetryCollector.new(
+  #   endpoint: ENV["OTEL_EXPORTER_OTLP_ENDPOINT"],
+  #   service_name: "my-app"
+  # )
 end
 ```
 

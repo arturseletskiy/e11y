@@ -17,7 +17,7 @@
 - ⚠️ **PARTIAL:** Cost Tracking - May not be fully implemented (cost calculation, adapter pricing)
 - ⚠️ **PARTIAL:** Budget Enforcement - May not be fully implemented (budget limits, cutoff behavior)
 - ⚠️ **PARTIAL:** Cost Alerts - May not be fully implemented (alerts when budget exceeded)
-- ❌ **NOT Implemented:** Compression - Per ADR-009, compression not started
+- ✅ **Implemented:** Compression - Adapter-level defaults (Loki, OpenTelemetryCollector `compress: true`)
 - ❌ **NOT Implemented:** Payload Minimization - May not be fully implemented
 
 **Unit Test Coverage:** Good (comprehensive tests for adaptive sampling strategies, routing)
@@ -57,7 +57,7 @@
 5. Budget enforcement (if implemented) → Reduces sampling when budget exceeded
 6. Cost alerts (if implemented) → Alerts when budget threshold reached
 
-**Note:** Per ADR-009, compression is not started. Cost tracking and budget enforcement may not be fully implemented.
+**Note:** Compression implemented at adapter level (Loki, OpenTelemetryCollector). Cost tracking and budget enforcement may not be fully implemented.
 
 ### 1.2. Current Features
 
@@ -71,7 +71,7 @@
 | Cost Tracking | ⚠️ PARTIAL | May not be fully implemented |
 | Budget Enforcement | ⚠️ PARTIAL | May not be fully implemented |
 | Cost Alerts | ⚠️ PARTIAL | May not be fully implemented |
-| Compression | ❌ NOT Implemented | Per ADR-009, compression not started |
+| Compression | ✅ Implemented | Adapter-level (Loki, OpenTelemetryCollector) |
 | Payload Minimization | ❌ NOT Implemented | May not be fully implemented |
 
 ### 1.3. Configuration
@@ -573,7 +573,7 @@ Sampling integration tests были созданы (11 tests, все прохо�
 | Сценарий | Статус |
 |----------|--------|
 | Value-based sampling E2E | ❌ Missing — DSL + ValueExtractor работают unit, integration test нет |
-| Stratified sampling E2E | ❌ Missing — StratifiedTracker работает unit, integration test нет |
+| Stratified sampling E2E | ✅ Wired — StratifiedTracker in Sampling middleware + EventSlo |
 | Pattern-based sampling | ❌ Missing — закомментировано в spec как "will be added" |
 
 ### v1.1 Backlog Items

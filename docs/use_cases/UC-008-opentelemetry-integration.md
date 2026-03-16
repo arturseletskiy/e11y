@@ -73,28 +73,11 @@ end
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.adapters << E11y::Adapters::OpenTelemetryCollectorAdapter.new(
+  config.adapters[:otel] = E11y::Adapters::OpenTelemetryCollector.new(
     endpoint: ENV['OTEL_EXPORTER_OTLP_ENDPOINT'] || 'http://localhost:4318',
-    protocol: :http,  # :http or :grpc
-    headers: {
-      'X-API-Key' => ENV['OTEL_API_KEY']
-    },
-    
-    # Signal types
-    export_logs: true,      # E11y events → OTel Logs Signal
-    export_traces: true,    # Spans from events → OTel Traces
-    export_metrics: false,  # Use Yabeda for metrics (better)
-    
-    # Batching
-    batch_size: 100,
-    flush_interval: 10.seconds,
-    
-    # Compression
-    compression: :gzip,
-    
-    # Retry
-    retry_enabled: true,
-    max_retries: 3
+    service_name: 'my-app',
+    headers: { 'X-API-Key' => ENV['OTEL_API_KEY'] },
+    compress: true  # default, gzip on HTTP body
   )
 end
 
@@ -554,11 +537,9 @@ service:
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.adapters << E11y::Adapters::OpenTelemetryCollectorAdapter.new(
+  config.adapters[:otel] = E11y::Adapters::OpenTelemetryCollector.new(
     endpoint: 'http://otel-collector:4318',
-    protocol: :http,
-    export_logs: true,
-    export_traces: true
+    service_name: 'my-app'
   )
 end
 
@@ -738,14 +719,11 @@ end
 # config/initializers/e11y.rb
 E11y.configure do |config|
   # Single adapter: OTel Collector
-  config.adapters = [
-    E11y::Adapters::OpenTelemetryCollectorAdapter.new(
-      endpoint: 'http://otel-collector:4318',
-      export_logs: true,
-      export_traces: true
-    )
-  ]
-  
+  config.adapters[:otel] = E11y::Adapters::OpenTelemetryCollector.new(
+    endpoint: 'http://otel-collector:4318',
+    service_name: 'my-app'
+  )
+
   # OTel Collector handles routing to multiple backends!
   # No need for multiple E11y adapters
 end
@@ -1044,11 +1022,10 @@ end
 **1. Use OTel Collector in production**
 ```ruby
 # ✅ GOOD: Central pipeline
-config.adapters = [
-  E11y::Adapters::OpenTelemetryCollectorAdapter.new(
-    endpoint: 'http://otel-collector:4318'
-  )
-]
+config.adapters[:otel] = E11y::Adapters::OpenTelemetryCollector.new(
+  endpoint: 'http://otel-collector:4318',
+  service_name: 'my-app'
+)
 
 # OTel Collector handles:
 # - Sampling
@@ -1094,9 +1071,10 @@ config.adapters = [
 ]
 
 # ✅ GOOD: Through OTel Collector
-config.adapters = [
-  E11y::Adapters::OpenTelemetryCollectorAdapter.new(...)
-]
+config.adapters[:otel] = E11y::Adapters::OpenTelemetryCollector.new(
+  endpoint: ENV['OTEL_EXPORTER_OTLP_ENDPOINT'],
+  service_name: 'my-app'
+)
 ```
 
 **2. Don't use custom field names**

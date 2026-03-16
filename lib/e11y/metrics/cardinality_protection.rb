@@ -63,7 +63,7 @@ module E11y
       # Default per-metric cardinality limit
       DEFAULT_CARDINALITY_LIMIT = 1000
 
-      # Overflow strategies (Layer 4: Dynamic Actions)
+      # Overflow strategies (Layer 3: Dynamic Actions)
       OVERFLOW_STRATEGIES = %i[drop alert relabel].freeze
 
       # Default overflow strategy

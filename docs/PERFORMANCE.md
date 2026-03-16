@@ -52,9 +52,9 @@ Optional cardinality protection prevents high-cardinality labels from overwhelmi
 ```ruby
 E11y::Adapters::Loki.new(
   url: "http://loki:3100",
-  enable_cardinality_protection: true,
-  max_label_cardinality: 100
+  enable_cardinality_protection: true,  # default
+  max_label_cardinality: 1000          # ~1000 event types
 )
 ```
 
-When enabled, high-cardinality labels (e.g., `user_id`, `order_id`) are filtered from metric tags.
+Labels = `event_name` + `severity` only. Payload (user_uuid, etc.) stays in log line — filter via LogQL: `| json | user_uuid="xxx"`.

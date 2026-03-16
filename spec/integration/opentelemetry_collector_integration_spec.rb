@@ -16,7 +16,8 @@ RSpec.describe "OpenTelemetry Collector Adapter Integration", :integration do
     let(:adapter) do
       E11y::Adapters::OpenTelemetryCollector.new(
         endpoint: collector_url,
-        service_name: "e11y-integration-test"
+        service_name: "e11y-integration-test",
+        compress: false  # Stub expects JSON; production uses compress: true (default)
       )
     end
 
@@ -72,6 +73,29 @@ RSpec.describe "OpenTelemetry Collector Adapter Integration", :integration do
       attrs = log_record["attributes"].map { |a| [a["key"], a["value"]] }.to_h
       expect(attrs).to have_key("event.name")
       expect(attrs).to have_key("event.order_id")
+    end
+
+    it "sends gzip-compressed body when compress: true (default)" do
+      compressed_adapter = E11y::Adapters::OpenTelemetryCollector.new(
+        endpoint: collector_url,
+        service_name: "e11y-integration-test",
+        compress: true
+      )
+
+      request_received = nil
+      stub_request(:post, "#{collector_url}/v1/logs")
+        .to_return(status: 200, body: "")
+        .with do |req|
+          request_received = req
+          true
+        end
+
+      compressed_adapter.write(event_data)
+
+      expect(request_received.headers["Content-Encoding"]).to eq("gzip")
+      decompressed = Zlib::GzipReader.new(StringIO.new(request_received.body)).read
+      parsed = JSON.parse(decompressed)
+      expect(parsed).to have_key("resourceLogs")
     end
   end
 end

@@ -1114,7 +1114,7 @@ end
 |----------|-----|-----|-----------|
 | **Auto-metrics** | Zero boilerplate | Less control | DX > control |
 | **Pattern matching** | Flexible | Slower than exact | Flexibility matters |
-| **4-layer defense** | Robust | Complex | Safety critical |
+| **3-layer defense** | Robust | Complex | Safety critical |
 | **Hash bucketing** | Preserves some signal | Loss of precision | Better than drop |
 | **Yabeda dependency** | Battle-tested | External dep | Standard in Ruby |
 
@@ -1155,7 +1155,7 @@ Loki/Sentry/File:
 
 ---
 
-### Q2: Are Layers 1-4 applied simultaneously or sequentially?
+### Q2: Are Layers 1–3 applied simultaneously or sequentially?
 
 **A: Sequentially (waterfall), not simultaneously.**
 

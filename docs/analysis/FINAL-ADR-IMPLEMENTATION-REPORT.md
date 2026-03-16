@@ -37,21 +37,6 @@
 
 ## 3. Medium Findings
 
-### ADR-008: Rails Integration
-
-| ID | Description |
-|----|-------------|
-| 1 | No `instruments` namespace; flat config (`rails_instrumentation`, `sidekiq`, `active_job`, `logger_bridge`). |
-| 4 | Trace propagation: C17 hybrid (`e11y_parent_trace_id`) vs ADR same-trace (`e11y_trace_id`). |
-
-### ADR-009: Cost Optimization
-
-| ID | Description |
-|----|-------------|
-| F1 | **Stratified Sampling (C11) not integrated —** StratifiedTracker exists but not used by sampling middleware or SLO Tracker. |
-| F2 | **Cardinality protection not unified for OTLP —** no CardinalityFilter middleware; OTel uses max_attributes truncation. |
-| F3 | **Loki cardinality opt-in** — defaults to false; ADR §8 requires default. |
-| F4 | **Compression not implemented** — pipeline-level compression not started. |
 
 ### ADR-016: Self-Monitoring SLO
 
@@ -66,24 +51,9 @@
 
 ## 4. Additional ADRs (Low/Info, gaps)
 
-### ADR-002: Metrics (Yabeda)
-
-| ID | Description |
-|----|-------------|
-| F1 | **Four-Layer vs Three-Layer inconsistency** — §4.1 header says "Three-Layer"; §4.2–4.5 and ToC — four layers. |
-| F2 | **Layer 2 (Safe Allowlist) not implemented** — ADR §4.3 defines SAFE_LABELS; CardinalityProtection has no allowlist. |
-
 ### ADR-003: SLO Observability
 
 | ID | Description |
 |----|-------------|
 | F4 | **Multi-window burn rate alerts** — ADR §5. No BurnRateCalculator, alert generation. |
 | F6 | **ErrorBudget** — ADR §7. Not implemented. |
-
-
-*Implemented:* Base contract, Stdout, File, Loki, Sentry, InMemory, Retention-Based Routing. Elasticsearch cancelled.
-
-### ADR-018: Memory Optimization
-
-**Status:** Mostly implemented. Event::Base — hash-based, class methods only. Ring buffer, Adaptive buffer — aligned. Backpressure: drop_oldest, drop_newest, block.
-

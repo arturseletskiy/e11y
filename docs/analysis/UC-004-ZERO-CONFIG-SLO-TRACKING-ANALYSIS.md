@@ -463,7 +463,7 @@ error_rate = errors / total (over window)
 
 **Status:** ❌ **NOT IMPLEMENTED** (per Tracker code comment)
 
-**Gap:** C11 Resolution (Sampling Correction) not yet implemented. Requires Phase 2.8 (Stratified Sampling).
+**C11 Resolved:** StratifiedTracker wired into Sampling middleware + EventSlo. Sampling correction applied automatically.
 
 **Impact:** SLO calculations may be inaccurate with sampling enabled. Integration tests should note this limitation.
 

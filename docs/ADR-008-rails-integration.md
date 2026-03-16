@@ -204,21 +204,9 @@ module E11y
       next unless E11y.config.enabled
       
       # Setup instruments (each can be enabled/disabled separately)
-      if E11y.config.instruments.active_support_notifications.enabled
-        E11y::Instruments::ActiveSupportNotifications.setup!
-      end
-      
-      if E11y.config.instruments.sidekiq.enabled
-        E11y::Instruments::Sidekiq.setup!
-      end
-      
-      if E11y.config.instruments.active_job.enabled
-        E11y::Instruments::ActiveJob.setup!
-      end
-      
-      if E11y.config.instruments.rack_middleware.enabled
-        E11y::Instruments::RackMiddleware.setup!
-      end
+      E11y::Railtie.setup_rails_instrumentation if E11y.config.rails_instrumentation&.enabled
+      E11y::Railtie.setup_sidekiq if defined?(::Sidekiq) && E11y.config.sidekiq&.enabled
+      E11y::Railtie.setup_active_job if defined?(::ActiveJob) && E11y.config.active_job&.enabled
       
       # Setup logger bridge
       E11y::Logger::Bridge.setup! if E11y.config.logger_bridge.enabled
@@ -400,7 +388,7 @@ module E11y
       # ========================================
       
       def self.setup!
-        return unless E11y.config.instruments.rails_instrumentation.enabled
+        return unless E11y.config.rails_instrumentation&.enabled
         
         # Subscribe to Rails events
         event_mapping.each do |asn_pattern, e11y_event_class|
@@ -443,7 +431,7 @@ module E11y
           mapping = DEFAULT_RAILS_EVENT_MAPPING.dup
           
           # Apply custom mappings from config (Devise-style overrides)
-          custom_mappings = E11y.config.instruments.rails_instrumentation.custom_mappings || {}
+          custom_mappings = E11y.config.rails_instrumentation&.custom_mappings || {}
           mapping.merge!(custom_mappings)
           
           mapping
@@ -451,7 +439,7 @@ module E11y
       end
       
       def self.ignored?(pattern)
-        ignore_list = E11y.config.instruments.rails_instrumentation.ignore_events || []
+        ignore_list = E11y.config.rails_instrumentation&.ignore_events || []
         ignore_list.include?(pattern)
       end
       
@@ -478,62 +466,60 @@ end
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.instruments do
+  # ========================================
+  # Rails Instrumentation (ActiveSupport::Notifications → E11y)
+  # ========================================
+  config.rails_instrumentation do
+    # Enable/disable entire ASN integration
+    enabled true  # Set to false to completely disable
+    
+    # Built-in event classes (auto-created by E11y)
+    # Located in Events::Rails namespace
+    use_built_in_events true  # If false, no auto-mapping
+    
     # ========================================
-    # Rails Instrumentation (ActiveSupport::Notifications → E11y)
+    # OVERRIDE EVENT CLASSES (Devise-style)
     # ========================================
-    rails_instrumentation do
-      # Enable/disable entire ASN integration
-      enabled true  # Set to false to completely disable
-      
-      # Built-in event classes (auto-created by E11y)
-      # Located in Events::Rails namespace
-      use_built_in_events true  # If false, no auto-mapping
-      
-      # ========================================
-      # OVERRIDE EVENT CLASSES (Devise-style)
-      # ========================================
-      
-      # Override default event class for specific ASN pattern
-      event_class_for 'sql.active_record', MyApp::Events::CustomDatabaseQuery
-      event_class_for 'process_action.action_controller', MyApp::Events::CustomHttpRequest
-      
-      # Disable specific events (too noisy or not needed)
-      ignore_event 'cache_read.active_support'
-      ignore_event 'render_partial.action_view'
-      ignore_event 'SCHEMA'  # Schema queries
-      
-      # ========================================
-      # SELECTIVE INSTRUMENTATION
-      # ========================================
-      
-      # Which Rails events to track (glob patterns)
-      track_patterns [
-        'sql.active_record',
-        'process_action.action_controller',
-        'render_template.action_view',
-        'cache_*.active_support'
-      ]
-      
-      # Sampling for high-volume events
-      sample_patterns do
-        pattern 'sql.active_record', sample_rate: 0.1  # 10% of SQL queries
-        pattern 'cache_read.active_support', sample_rate: 0.01  # 1% of cache reads
-      end
-      
-      # Enrich with custom data
-      enrich do |asn_event|
-        {
-          controller: asn_event.payload[:controller],
-          action: asn_event.payload[:action],
-          format: asn_event.payload[:format],
-          user_id: Current.user&.id  # Add context
-        }
-      end
+    
+    # Override default event class for specific ASN pattern
+    event_class_for 'sql.active_record', MyApp::Events::CustomDatabaseQuery
+    event_class_for 'process_action.action_controller', MyApp::Events::CustomHttpRequest
+    
+    # Disable specific events (too noisy or not needed)
+    ignore_event 'cache_read.active_support'
+    ignore_event 'render_partial.action_view'
+    ignore_event 'SCHEMA'  # Schema queries
+    
+    # ========================================
+    # SELECTIVE INSTRUMENTATION
+    # ========================================
+    
+    # Which Rails events to track (glob patterns)
+    track_patterns [
+      'sql.active_record',
+      'process_action.action_controller',
+      'render_template.action_view',
+      'cache_*.active_support'
+    ]
+    
+    # Sampling for high-volume events
+    sample_patterns do
+      pattern 'sql.active_record', sample_rate: 0.1  # 10% of SQL queries
+      pattern 'cache_read.active_support', sample_rate: 0.01  # 1% of cache reads
     end
     
-    # (Other integrations: Sidekiq, ActiveJob, etc.)
+    # Enrich with custom data
+    enrich do |asn_event|
+      {
+        controller: asn_event.payload[:controller],
+        action: asn_event.payload[:action],
+        format: asn_event.payload[:format],
+        user_id: Current.user&.id  # Add context
+      }
+    end
   end
+  
+  # (Other integrations: config.sidekiq, config.active_job, config.logger_bridge)
 end
 ```
 
@@ -581,7 +567,7 @@ end
 
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.instruments.rails_instrumentation do
+  config.rails_instrumentation do
     # Override default event class
     event_class_for 'sql.active_record', MyApp::Events::CustomDatabaseQuery
   end
@@ -661,56 +647,44 @@ module E11y
 end
 ```
     
-    # ========================================
-    # Sidekiq
-    # ========================================
-    sidekiq do
-      enabled true  # Set to false to disable Sidekiq integration
-      
-      # Server middleware (job execution)
-      server_middleware do
-        enabled true
-        track_start true
-        track_complete true
-        track_failure true
-      end
-      
-      # Client middleware (job enqueuing)
-      client_middleware do
-        enabled true
-        track_enqueue true
-      end
-      
-      # Trace propagation
-      propagate_trace_context true
-      trace_context_keys ['e11y_trace_id', 'e11y_span_id', 'e11y_sampled']
-    end
+  # ========================================
+  # Sidekiq
+  # ========================================
+  config.sidekiq do
+    enabled true  # Set to false to disable Sidekiq integration
     
-    # ========================================
-    # ActiveJob
-    # ========================================
-    active_job do
-      enabled true  # Set to false to disable ActiveJob integration
-      
-      track_enqueue true
+    # Server middleware (job execution)
+    server_middleware do
+      enabled true
       track_start true
       track_complete true
       track_failure true
-      
-      # Trace propagation
-      propagate_trace_context true
     end
     
-    # ========================================
-    # Rack Middleware
-    # ========================================
-    rack_middleware do
-      enabled true  # Set to false to disable Rack middleware
-      
-      track_request_start true
-      track_request_complete true
-      track_request_failure true
+    # Client middleware (job enqueuing)
+    client_middleware do
+      enabled true
+      track_enqueue true
     end
+    
+    # Trace propagation (C17 hybrid: job gets NEW trace_id, links via e11y_parent_trace_id)
+    propagate_trace_context true
+    trace_context_keys ['e11y_parent_trace_id', 'e11y_span_id', 'e11y_sampled']
+  end
+  
+  # ========================================
+  # ActiveJob
+  # ========================================
+  config.active_job do
+    enabled true  # Set to false to disable ActiveJob integration
+    
+    track_enqueue true
+    track_start true
+    track_complete true
+    track_failure true
+    
+    # Trace propagation
+    propagate_trace_context true
   end
 end
 ```
@@ -720,19 +694,16 @@ end
 ```ruby
 # Disable ASN but keep Sidekiq
 E11y.configure do |config|
-  config.instruments.active_support_notifications.enabled = false
-  config.instruments.sidekiq.enabled = true
-  config.instruments.active_job.enabled = true
+  config.rails_instrumentation.enabled = false
+  config.sidekiq.enabled = true
+  config.active_job.enabled = true
 end
 
 # Minimal setup: only Sidekiq
 E11y.configure do |config|
-  config.instruments do
-    active_support_notifications { enabled false }
-    sidekiq { enabled true }
-    active_job { enabled false }
-    rack_middleware { enabled false }
-  end
+  config.rails_instrumentation.enabled = false
+  config.sidekiq.enabled = true
+  config.active_job.enabled = false
 end
 ```
 
@@ -846,7 +817,7 @@ end
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.instruments.active_support_notifications do
+  config.rails_instrumentation do
     # Disable built-in events
     use_built_in_events false
     
@@ -874,13 +845,14 @@ module E11y
     module Sidekiq
       class ServerMiddleware
         def call(worker, job, queue)
-          # Extract trace context from job metadata
-          trace_id = job['e11y_trace_id'] || E11y::TraceContext.generate_id
+          # C17 Hybrid: Job gets NEW trace_id, parent_trace_id links to enqueuing request
+          parent_trace_id = job['e11y_parent_trace_id']
+          trace_id = E11y::TraceContext.generate_id  # NEW trace per job
           parent_span_id = job['e11y_span_id']
           
-          # Restore trace context
           E11y::Current.set(
             trace_id: trace_id,
+            parent_trace_id: parent_trace_id,
             parent_span_id: parent_span_id,
             job_id: job['jid'],
             job_class: worker.class.name,
@@ -966,8 +938,8 @@ module E11y
     module Sidekiq
       class ClientMiddleware
         def call(worker_class, job, queue, redis_pool)
-          # Propagate trace context to job
-          job['e11y_trace_id'] = E11y::Current.trace_id
+          # C17 Hybrid: Propagate parent trace (job will create NEW trace_id)
+          job['e11y_parent_trace_id'] = E11y::Current.trace_id if E11y::Current.trace_id
           job['e11y_span_id'] = E11y::TraceContext.generate_span_id
           job['e11y_sampled'] = E11y::Current.sampled  # Trace-consistent sampling
           
@@ -1023,21 +995,21 @@ sequenceDiagram
     ClientMW->>ClientMW: Extract trace_id from Current
     ClientMW->>Redis: Store job + trace metadata
     
-    Note over Redis: job['e11y_trace_id'] = 'abc123'<br/>job['e11y_span_id'] = 'span002'<br/>job['e11y_sampled'] = true
+    Note over Redis: job['e11y_parent_trace_id'] = 'abc123'<br/>job['e11y_span_id'] = 'span002'<br/>job['e11y_sampled'] = true
     
     ClientMW->>E11y: Track Enqueued event
     
     Note over ServerMW: Later... job dequeued
     
     Redis->>ServerMW: Fetch job
-    ServerMW->>ServerMW: Extract trace_id from job
+    ServerMW->>ServerMW: C17: new trace_id, parent_trace_id from job
     ServerMW->>E11y: Restore Current context
     
-    Note over E11y: Current.trace_id = 'abc123'<br/>Current.parent_span_id = 'span002'
+    Note over E11y: Current.trace_id = NEW<br/>Current.parent_trace_id = 'abc123'<br/>Current.parent_span_id = 'span002'
     
     ServerMW->>E11y: Track Started event
     ServerMW->>Worker: perform
-    Worker->>E11y: Track custom events (same trace_id!)
+    Worker->>E11y: Track events (linked via parent_trace_id!)
     ServerMW->>E11y: Track Completed event
 ```
 
@@ -1070,12 +1042,14 @@ module E11y
         private
         
         def e11y_track_job_execution
-          # Extract trace context
-          trace_id = job_metadata['e11y_trace_id'] || E11y::TraceContext.generate_id
+          # C17 Hybrid: Job gets NEW trace_id, parent_trace_id links to enqueuer
+          parent_trace_id = job_metadata['e11y_parent_trace_id']
+          trace_id = E11y::TraceContext.generate_id
           parent_span_id = job_metadata['e11y_span_id']
           
           E11y::Current.set(
             trace_id: trace_id,
+            parent_trace_id: parent_trace_id,
             parent_span_id: parent_span_id,
             job_id: job_id,
             job_class: self.class.name
@@ -1127,8 +1101,8 @@ module E11y
         end
         
         def e11y_track_job_enqueued
-          # Store trace context in job metadata
-          job_metadata['e11y_trace_id'] = E11y::Current.trace_id
+          # C17 Hybrid: Store parent trace (job will create NEW trace_id)
+          job_metadata['e11y_parent_trace_id'] = E11y::Current.trace_id if E11y::Current.trace_id
           job_metadata['e11y_span_id'] = E11y::TraceContext.generate_span_id
           job_metadata['e11y_sampled'] = E11y::Current.sampled
           
@@ -1670,7 +1644,7 @@ RSpec.describe OrdersController, type: :controller do
       }.to have_enqueued_job(SendOrderEmailJob)
       
       job = ActiveJob::Base.queue_adapter.enqueued_jobs.last
-      expect(job[:args].first['e11y_trace_id']).to be_present
+      expect(job[:args].first['e11y_parent_trace_id']).to be_present
     end
   end
 end
@@ -1717,10 +1691,10 @@ end
 
 ```ruby
 E11y.configure do |config|
-  config.instruments.active_support_notifications.enabled = false  # Disable ASN
-  config.instruments.sidekiq.enabled = true                       # Keep Sidekiq
-  config.instruments.active_job.enabled = true                    # Keep ActiveJob
-  config.instruments.rack_middleware.enabled = true               # Keep HTTP tracking
+  config.rails_instrumentation.enabled = false  # Disable ASN
+  config.sidekiq.enabled = true                # Keep Sidekiq
+  config.active_job.enabled = true              # Keep ActiveJob
+  config.logger_bridge.enabled = true          # Keep logger bridge
 end
 ```
 
@@ -1743,7 +1717,7 @@ end
 **No!** It's configurable:
 
 ```ruby
-config.instruments.active_support_notifications do
+config.rails_instrumentation do
   enabled false  # Completely disable ASN integration
 end
 ```
@@ -1751,9 +1725,9 @@ end
 You can also filter which ASN events to track:
 
 ```ruby
-config.instruments.active_support_notifications do
+config.rails_instrumentation do
   track_patterns ['sql.active_record', 'process_action.*']
-  ignore_patterns ['render_partial.*', 'SCHEMA']
+  ignore_events ['render_partial.*', 'SCHEMA']
 end
 ```
 
@@ -1776,7 +1750,7 @@ config.ephemeral_buffer.job_buffer_limit = 500  # Optional: higher limit for job
 **Option A: Override with custom event class:**
 
 ```ruby
-config.instruments.active_support_notifications do
+config.rails_instrumentation do
   custom_mappings do
     map 'sql.active_record', to: MyApp::Events::CustomDatabaseQuery
   end
@@ -1786,7 +1760,7 @@ end
 **Option B: Disable built-in events entirely:**
 
 ```ruby
-config.instruments.active_support_notifications do
+config.rails_instrumentation do
   use_built_in_events false  # No automatic mapping
   
   # Manually handle ASN events

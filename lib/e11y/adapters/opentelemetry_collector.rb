@@ -42,21 +42,26 @@ module E11y
         debug: 5, info: 9, success: 9, warn: 13, error: 17, fatal: 21
       }.freeze
 
-      def initialize(endpoint: nil, service_name: nil, headers: {}, timeout: 10, max_attributes: 50, **opts)
+      def initialize(endpoint: nil, service_name: nil, headers: {}, timeout: 10, max_attributes: 50, compress: true, **opts)
         super(**opts)
         @endpoint = (endpoint || ENV["OTEL_EXPORTER_OTLP_ENDPOINT"] || "http://localhost:4318").chomp("/")
         @service_name = service_name || E11y.config&.service_name || "e11y"
         @headers = headers
         @timeout = timeout
         @max_attributes = max_attributes
+        @compress = compress
         @connection = build_connection
       end
 
       def write(event_data)
         payload = build_otlp_payload([event_data])
+        body = payload.to_json
+        body = compress_body(body) if @compress
+
         response = @connection.post("/v1/logs") do |req|
           req.headers["Content-Type"] = "application/json"
-          req.body = payload.to_json
+          req.headers["Content-Encoding"] = "gzip" if @compress
+          req.body = body
         end
         response.success?
       rescue Faraday::Error => e
@@ -69,10 +74,18 @@ module E11y
       end
 
       def capabilities
-        { batching: false, compression: false, async: false, streaming: false }
+        { batching: false, compression: @compress, async: false, streaming: false }
       end
 
       private
+
+      def compress_body(body)
+        io = StringIO.new
+        gz = Zlib::GzipWriter.new(io)
+        gz.write(body)
+        gz.close
+        io.string
+      end
 
       def build_connection
         Faraday.new(url: @endpoint, request: { timeout: @timeout }) do |f|

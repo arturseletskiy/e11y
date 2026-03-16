@@ -28,8 +28,9 @@ module E11y
     #     duration_ms: 42.5
     #   )
     #
-    # @note C11 Resolution (Sampling Correction): Not yet implemented.
-    #   Requires Phase 2.8 (Stratified Sampling) for accurate SLO with sampling.
+    # @note C11 Resolution: Event-driven SLO (EventSlo middleware) applies stratified
+    #   sampling correction via E11y::Sampling.stratified_tracker. HTTP/job SLO
+    #   are tracked directly (no sampling) and need no correction.
     module Tracker
       # In-memory store for tracked request data (per endpoint).
       # @api private Intended for test assertions only; not part of public API.

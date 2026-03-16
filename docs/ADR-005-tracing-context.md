@@ -682,11 +682,11 @@ Already implemented in ADR-008, but here's the core logic:
 module E11y
   module TraceContext
     class JobPropagator
-      # Inject trace context into job metadata
+      # C17 Hybrid: Inject parent trace into job metadata (job will create NEW trace_id)
       def self.inject(job_metadata = {})
         return job_metadata unless E11y::Current.traced?
         
-        job_metadata['e11y_trace_id'] = E11y::Current.trace_id
+        job_metadata['e11y_parent_trace_id'] = E11y::Current.trace_id
         job_metadata['e11y_span_id'] = E11y::Current.span_id
         job_metadata['e11y_sampled'] = E11y::Current.sampled
         
@@ -702,14 +702,15 @@ module E11y
         job_metadata
       end
       
-      # Extract trace context from job metadata
+      # C17 Hybrid: Extract parent context; job gets NEW trace_id, links via parent_trace_id
       def self.extract(job_metadata)
-        return {} unless job_metadata['e11y_trace_id']
+        return {} unless job_metadata['e11y_parent_trace_id']
         
         {
-          trace_id: job_metadata['e11y_trace_id'],
+          trace_id: IDGenerator.generate_trace_id,  # NEW trace per job
+          parent_trace_id: job_metadata['e11y_parent_trace_id'],
           parent_span_id: job_metadata['e11y_span_id'],
-          span_id: IDGenerator.generate_span_id,  # New span for job
+          span_id: IDGenerator.generate_span_id,
           sampled: job_metadata['e11y_sampled'],
           baggage: job_metadata['e11y_baggage'],
           user_id: job_metadata['e11y_user_id'],
@@ -1055,7 +1056,7 @@ module E11y
       
       def extract_parent_context(job)
         {
-          trace_id: job['e11y_trace_id'],
+          trace_id: job['e11y_parent_trace_id'],
           span_id: job['e11y_span_id'],
           sampled: job['e11y_sampled'],
           baggage: job['e11y_baggage'],
@@ -1085,7 +1086,7 @@ module E11y
       def call(worker_class, job, queue, redis_pool)
         # Inject current trace context into job metadata
         if E11y::Current.traced?
-          job['e11y_trace_id'] = E11y::Current.trace_id
+          job['e11y_parent_trace_id'] = E11y::Current.trace_id
           job['e11y_span_id'] = E11y::Current.span_id
           job['e11y_sampled'] = E11y::Current.sampled
           job['e11y_baggage'] = E11y::Current.baggage if E11y::Current.baggage&.any?
@@ -1184,7 +1185,7 @@ ORDER BY created_at;
 # 1. Web request (trace_id: abc-123)
 POST /orders
   → Events::OrderCreated (trace_id: abc-123, span_id: span-001)
-  → Enqueue SendOrderEmailJob (metadata: {e11y_trace_id: 'abc-123'})
+  → Enqueue SendOrderEmailJob (metadata: {e11y_parent_trace_id: 'abc-123'})
 
 # 2. Sidekiq job execution (NEW trace_id: xyz-789)
 SendOrderEmailJob#perform

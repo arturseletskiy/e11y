@@ -868,11 +868,8 @@ RSpec.describe "Sampling Middleware Integration", :integration do
   end
 
   describe "Scenario 8: Stratified sampling — correction factors (FEAT-4851)" do
-    # StratifiedTracker is NOT wired into the Sampling middleware pipeline.
-    # It is a standalone statistics tracker designed to be used by SLO calculators
-    # and other consumers that need to correct for sampling bias.
-    # Tests exercise the tracker in isolation (unit-style inside integration suite).
-
+    # StratifiedTracker is wired into Sampling middleware (C11). These tests
+    # exercise the tracker directly for correction factor validation (isolated).
     let(:tracker) { E11y::Sampling::StratifiedTracker.new }
 
     it "tracks sampling decisions per severity stratum" do
