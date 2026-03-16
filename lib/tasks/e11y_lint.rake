@@ -46,6 +46,32 @@ namespace :e11y do
       all_ok = false
     end
 
+    # 3. Schema check (each event has compiled_schema)
+    begin
+      require "e11y/registry"
+      begin
+        Rails.application.eager_load! if defined?(Rails) && Rails.application.respond_to?(:eager_load!)
+      rescue Zeitwerk::SetupRequired
+        # Zeitwerk not ready (e.g. dummy app with eager_load=false); use already-loaded events
+      end
+      schema_errors = []
+      E11y::Registry.event_classes.each do |klass|
+        next if klass.respond_to?(:compiled_schema) && klass.compiled_schema
+        name = klass.respond_to?(:event_name) ? klass.event_name : klass.name
+        schema_errors << "#{klass.name} (#{name}): missing schema"
+      end
+      if schema_errors.any?
+        puts "❌ Schema check failed:"
+        schema_errors.each { |e| puts "  #{e}" }
+        all_ok = false
+      else
+        puts "✅ Schema check OK"
+      end
+    rescue => e
+      puts "❌ Schema check failed: #{e.message}"
+      all_ok = false
+    end
+
     exit 1 unless all_ok
   end
 end
