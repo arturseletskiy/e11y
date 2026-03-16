@@ -107,6 +107,7 @@ module E11y
       load File.expand_path("../tasks/e11y_slo.rake", __dir__)
       load File.expand_path("../tasks/e11y_lint.rake", __dir__)
       load File.expand_path("../tasks/e11y_events.rake", __dir__)
+      load File.expand_path("../tasks/e11y_docs.rake", __dir__)
     end
 
     # Setup Rails instrumentation (ActiveSupport::Notifications → E11y)

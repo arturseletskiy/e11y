@@ -7,6 +7,7 @@ require "active_support/core_ext/numeric/time" # For 30.days, 7.years, etc.
 loader = Zeitwerk::Loader.for_gem
 # Configure inflector for acronyms
 loader.inflector.inflect(
+  "documentation" => "Documentation",
   "debug" => "Debug",
   "opentelemetry_collector" => "OpenTelemetryCollector",
   "otel_span" => "OtelSpan",
