@@ -4,7 +4,36 @@ require "active_support/core_ext/numeric/time"
 
 module E11y
   module Debug
+    # Debug utility to trace events through the pipeline with per-middleware logging.
     class PipelineInspector
+      # Wraps a middleware to log enter/exit for pipeline tracing.
+      class TracingWrapper
+        def initialize(middleware_class, next_app, name, args: [], options: {})
+          @middleware_class = middleware_class
+          @next_app = next_app
+          @name = name
+          @args = args
+          @options = options
+        end
+
+        def call(event_data)
+          log_enter(@name)
+          result = @middleware_class.new(@next_app, *@args, **@options).call(event_data)
+          log_exit(@name)
+          result
+        end
+
+        private
+
+        def log_enter(name)
+          print "  #{name}... "
+        end
+
+        def log_exit(_name)
+          puts "✓"
+        end
+      end
+
       class << self
         def trace_event(event_class, **payload)
           event_data = build_event_data(event_class, payload)
@@ -29,8 +58,19 @@ module E11y
         end
 
         def build_tracing_pipeline
-          # Placeholder - Task 2
-          ->(ed) { ed }
+          builder = E11y.configuration.pipeline
+          final_app = ->(event_data) { event_data }
+
+          builder.middlewares.reverse.reduce(final_app) do |next_app, entry|
+            name = entry.middleware_class.name.split("::").last
+            TracingWrapper.new(
+              entry.middleware_class,
+              next_app,
+              name,
+              args: entry.args,
+              options: entry.options
+            )
+          end
         end
       end
     end
