@@ -194,7 +194,7 @@ module E11y
             next if line.empty?
 
             events << JSON_LOAD.call(line)
-          rescue StandardError
+          rescue ::JSON::ParserError
             next
           end
           events
