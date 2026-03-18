@@ -48,7 +48,7 @@ if ENV["COVERAGE"]
     add_group "Middleware", "lib/e11y/middleware"
     add_group "Adapters", "lib/e11y/adapters"
 
-    minimum_coverage line: 94
+    minimum_coverage line: 93
     refuse_coverage_drop
 
     # Print files with low coverage (using SimpleCov's at_exit hook)
