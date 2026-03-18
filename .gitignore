@@ -56,3 +56,4 @@ Gemfile.lock
 # Docker volumes
 /config/loki-data/
 /config/prometheus-data/
+.worktrees/
