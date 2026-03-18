@@ -71,7 +71,7 @@ RSpec.describe E11y::Adapters::Stdout do
 
   describe "Console alias (ADR-010 F-003)" do
     it "Console equals Stdout" do
-      expect(E11y::Adapters::Console).to eq(E11y::Adapters::Stdout)
+      expect(E11y::Adapters::Console).to eq(described_class)
     end
   end
 

@@ -7,13 +7,12 @@ require "e11y/linters/slo/slo_status_from_linter"
 RSpec.describe E11y::Linters::SLO::SloStatusFromLinter do
   def event_double(name:, slo_enabled:, slo_status_proc: nil, contributes_to_value: nil)
     slo_config = instance_double(
-      "E11y::SLO::EventDriven::SLOConfig",
+      E11y::SLO::EventDriven::SLOConfig,
       slo_status_proc: slo_status_proc,
       contributes_to_value: contributes_to_value
     )
-    event_class = instance_double("EventClass", name: name)
-    allow(event_class).to receive(:slo_enabled?).and_return(slo_enabled)
-    allow(event_class).to receive(:slo_config).and_return(slo_enabled ? slo_config : nil)
+    event_class = instance_double(EventClass, name: name)
+    allow(event_class).to receive_messages(slo_enabled?: slo_enabled, slo_config: slo_enabled ? slo_config : nil)
     event_class
   end
 

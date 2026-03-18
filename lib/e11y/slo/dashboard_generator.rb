@@ -98,7 +98,7 @@ module E11y
 
         def build_weighted_expr(components, window)
           parts = components.map do |c|
-            weight = c["weight"] || 1.0 / components.size
+            weight = c["weight"] || (1.0 / components.size)
             metric = (c["metric"] || "").gsub(/\[\d+d\]/, "[#{window}]")
             metric = metric.strip
             "(#{weight} * (#{metric}))"
@@ -111,7 +111,7 @@ module E11y
             metric = (c["metric"] || "").gsub(/\[\d+d\]/, "[#{window}]")
             metric.strip
           end
-          "min(#{parts.join(", ")})"
+          "min(#{parts.join(', ')})"
         end
       end
     end

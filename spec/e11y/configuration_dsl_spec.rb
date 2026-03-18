@@ -273,7 +273,7 @@ RSpec.describe E11y::Configuration do
       expect(middleware_classes.size).to eq(12)
     end
 
-    it "orders middlewares per ADR-015: TrackLatency → TraceContext → ... → EventSlo → SelfMonitoringEmit" do # rubocop:disable Layout/LineLength
+    it "orders middlewares per ADR-015: TrackLatency → TraceContext → ... → EventSlo → SelfMonitoringEmit" do
       expected_order = [
         E11y::Middleware::TrackLatency,
         E11y::Middleware::TraceContext,

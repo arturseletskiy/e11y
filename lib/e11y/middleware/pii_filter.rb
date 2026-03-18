@@ -119,9 +119,7 @@ module E11y
 
         # 2. payload_rewrites: per-adapter overrides for exclude_adapters fields only
         has_exclude_adapters = pii_config[:fields]&.any? { |_, v| v[:exclude_adapters]&.any? }
-        if has_exclude_adapters
-          filtered_data[:payload_rewrites] = build_payload_rewrites(event_data, pii_config)
-        end
+        filtered_data[:payload_rewrites] = build_payload_rewrites(event_data, pii_config) if has_exclude_adapters
 
         filtered_data
       end
@@ -166,9 +164,7 @@ module E11y
           strategy = field_config[:strategy] || :allow
 
           # Per-adapter: use :skip for excluded adapters (e.g. audit gets original)
-          if adapter_name && field_config[:exclude_adapters]&.include?(adapter_name)
-            strategy = :allow
-          end
+          strategy = :allow if adapter_name && field_config[:exclude_adapters]&.include?(adapter_name)
 
           # rubocop:disable Lint/DuplicateBranch
           filtered[key] = case strategy
@@ -217,7 +213,7 @@ module E11y
       def path_under_allowed_key?(path, pii_config)
         return false unless pii_config && pii_config[:fields]
 
-        allowed_keys = pii_config[:fields].select { |_k, v| [:allow, :skip].include?(v[:strategy]) }.keys
+        allowed_keys = pii_config[:fields].select { |_k, v| %i[allow skip].include?(v[:strategy]) }.keys
         path.any? { |p| allowed_keys.include?(p) }
       end
 

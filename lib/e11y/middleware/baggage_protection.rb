@@ -21,7 +21,7 @@ module E11y
       middleware_zone :security
 
       def initialize(app)
-        super(app)
+        super
         @protected = false
       end
 
@@ -71,6 +71,5 @@ module E11y
         end
       end
     end
-
   end
 end

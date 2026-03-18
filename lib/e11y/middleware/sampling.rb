@@ -188,9 +188,8 @@ module E11y
 
         # 2. Trace-consistent sampling (ADR-005 §7): prefer E11y::Current.sampled when trace_aware
         if @trace_aware && event_data[:trace_id]
-          if E11y::Current.respond_to?(:sampled) && !E11y::Current.sampled.nil?
-            return E11y::Current.sampled
-          end
+          return E11y::Current.sampled if E11y::Current.respond_to?(:sampled) && !E11y::Current.sampled.nil?
+
           return trace_sampling_decision(event_data[:trace_id], event_class, event_data)
         end
 

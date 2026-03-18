@@ -47,13 +47,13 @@ module E11y
           severity = event_data[:severity]
 
           # Priority 1: Event DSL use_dlq == false
-          if event_class&.respond_to?(:use_dlq) && event_class.use_dlq == false
+          if event_class.respond_to?(:use_dlq) && event_class.use_dlq == false
             increment_filter_metric("discarded", "use_dlq")
             return false
           end
 
           # Priority 2: Event DSL use_dlq == true
-          if event_class&.respond_to?(:use_dlq) && event_class.use_dlq == true
+          if event_class.respond_to?(:use_dlq) && event_class.use_dlq == true
             increment_filter_metric("saved", "use_dlq")
             return true
           end

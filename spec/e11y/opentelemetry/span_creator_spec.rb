@@ -41,7 +41,7 @@ RSpec.describe E11y::OpenTelemetry::SpanCreator do
         }
 
         span = described_class.create_span_from_event(event_data)
-        expect(span).to be_a(::OpenTelemetry::Trace::Span)
+        expect(span).to be_a(OpenTelemetry::Trace::Span)
       end
 
       it "creates span for fatal events regardless of patterns" do
@@ -55,7 +55,7 @@ RSpec.describe E11y::OpenTelemetry::SpanCreator do
         }
 
         span = described_class.create_span_from_event(event_data)
-        expect(span).to be_a(::OpenTelemetry::Trace::Span)
+        expect(span).to be_a(OpenTelemetry::Trace::Span)
       end
 
       it "returns nil for non-matching events when patterns empty" do
@@ -92,7 +92,7 @@ RSpec.describe E11y::OpenTelemetry::SpanCreator do
         }
 
         span = described_class.create_span_from_event(event_data)
-        expect(span).to be_a(::OpenTelemetry::Trace::Span)
+        expect(span).to be_a(OpenTelemetry::Trace::Span)
       end
 
       it "handles nil payload" do
@@ -104,7 +104,7 @@ RSpec.describe E11y::OpenTelemetry::SpanCreator do
         }
 
         span = described_class.create_span_from_event(event_data)
-        expect(span).to be_a(::OpenTelemetry::Trace::Span)
+        expect(span).to be_a(OpenTelemetry::Trace::Span)
       end
     end
   end
@@ -125,7 +125,7 @@ RSpec.describe E11y::OpenTelemetry::SpanCreator do
       }
 
       span = described_class.create_span_from_event(event_data)
-      expect(span).to be_a(::OpenTelemetry::Trace::Span)
+      expect(span).to be_a(OpenTelemetry::Trace::Span)
     end
 
     it "maps HTTP payload to semantic conventions" do
@@ -137,7 +137,7 @@ RSpec.describe E11y::OpenTelemetry::SpanCreator do
       }
 
       span = described_class.create_span_from_event(event_data)
-      expect(span).to be_a(::OpenTelemetry::Trace::Span)
+      expect(span).to be_a(OpenTelemetry::Trace::Span)
     end
 
     it "maps error payload to exception conventions" do
@@ -149,7 +149,7 @@ RSpec.describe E11y::OpenTelemetry::SpanCreator do
       }
 
       span = described_class.create_span_from_event(event_data)
-      expect(span).to be_a(::OpenTelemetry::Trace::Span)
+      expect(span).to be_a(OpenTelemetry::Trace::Span)
     end
   end
 
@@ -170,7 +170,7 @@ RSpec.describe E11y::OpenTelemetry::SpanCreator do
       }
 
       span = described_class.create_span_from_event(event_data)
-      expect(span).to be_a(::OpenTelemetry::Trace::Span)
+      expect(span).to be_a(OpenTelemetry::Trace::Span)
     end
 
     it "creates CLIENT span when span_kind is :client", :integration do
@@ -183,7 +183,7 @@ RSpec.describe E11y::OpenTelemetry::SpanCreator do
       }
 
       span = described_class.create_span_from_event(event_data)
-      expect(span).to be_a(::OpenTelemetry::Trace::Span)
+      expect(span).to be_a(OpenTelemetry::Trace::Span)
     end
 
     it "creates INTERNAL span by default", :integration do
@@ -195,7 +195,7 @@ RSpec.describe E11y::OpenTelemetry::SpanCreator do
       }
 
       span = described_class.create_span_from_event(event_data)
-      expect(span).to be_a(::OpenTelemetry::Trace::Span)
+      expect(span).to be_a(OpenTelemetry::Trace::Span)
     end
   end
 end

@@ -51,7 +51,7 @@ end
 
 Then("E11y.configuration.slo_tracking_enabled should be true") do
   expect(@slo_config.slo_tracking_enabled).to be(true),
-                                 "Expected SLO tracking enabled by default, got: #{@slo_config.slo_tracking_enabled.inspect}"
+                                              "Expected SLO tracking enabled by default, got: #{@slo_config.slo_tracking_enabled.inspect}"
 end
 
 Then("E11y.configuration.slo_tracking_enabled should be false") do

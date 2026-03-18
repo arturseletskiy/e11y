@@ -77,7 +77,7 @@ module E11y
 
               Event declared `contains_pii true` but missing field declarations:
 
-              Missing fields: #{missing_fields.map { |x| ":#{x}" }.join(", ")}
+              Missing fields: #{missing_fields.map { |x| ":#{x}" }.join(', ')}
 
               Fix: Add explicit PII strategy for each field in pii_filtering block:
 
@@ -89,7 +89,7 @@ module E11y
                 end
               end
 
-              Available strategies: #{VALID_STRATEGIES.map { |s| ":#{s}" }.join(", ")}
+              Available strategies: #{VALID_STRATEGIES.map { |s| ":#{s}" }.join(', ')}
             ERROR
           end
 
@@ -100,15 +100,15 @@ module E11y
                 Invalid PII strategy for #{event_class.name}##{field}
 
                 Strategy: #{strategy.inspect}
-                Valid strategies: #{VALID_STRATEGIES.map { |s| ":#{s}" }.join(", ")}
+                Valid strategies: #{VALID_STRATEGIES.map { |s| ":#{s}" }.join(', ')}
               ERROR
             end
 
             return unless config.key?(:exclude_adapters)
 
-            unless config[:exclude_adapters].is_a?(Array)
-              raise PiiDeclarationError, "exclude_adapters must be an Array for #{event_class.name}##{field}"
-            end
+            return if config[:exclude_adapters].is_a?(Array)
+
+            raise PiiDeclarationError, "exclude_adapters must be an Array for #{event_class.name}##{field}"
           end
         end
       end

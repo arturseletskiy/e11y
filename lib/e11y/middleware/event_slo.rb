@@ -138,7 +138,7 @@ module E11y
       # @param payload [Hash] Event payload
       # @param event_data [Hash] Full event data (for sample_rate)
       # @return [void]
-      def emit_slo_metric(event_class, slo_status, payload, event_data = {})
+      def emit_slo_metric(event_class, slo_status, payload, _event_data = {})
         labels = build_slo_labels(event_class, slo_status, payload)
 
         # C11: Apply sampling correction for accurate SLO with stratified sampling

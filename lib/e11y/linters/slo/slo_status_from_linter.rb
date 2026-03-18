@@ -25,13 +25,9 @@ module E11y
               config = event_class.slo_config
               name = event_class.respond_to?(:event_name) ? event_class.event_name : event_class.name
 
-              unless config&.slo_status_proc
-                errors << "Event #{name} has slo enabled but missing slo_status_from"
-              end
+              errors << "Event #{name} has slo enabled but missing slo_status_from" unless config&.slo_status_proc
 
-              unless config&.contributes_to_value
-                errors << "Event #{name} has slo enabled but missing contributes_to"
-              end
+              errors << "Event #{name} has slo enabled but missing contributes_to" unless config&.contributes_to_value
             end
 
             return if errors.empty?

@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "delegate"
-require "set"
 
 module E11y
   module Logger
@@ -175,7 +174,7 @@ module E11y
       end
 
       def build_compiled_patterns(patterns)
-        return [] if patterns.nil? || !patterns.respond_to?(:any?) || !patterns.any?
+        return [] if patterns.nil? || !patterns.respond_to?(:any?) || patterns.none?
 
         Array(patterns).map do |p|
           p.is_a?(Regexp) ? p : Regexp.new(Regexp.escape(p.to_s))

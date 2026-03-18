@@ -126,7 +126,7 @@ module E11y
         lines << format_event_name_line(event_data)
         lines << format_payload_section(event_data[:payload]) if event_data[:payload]&.any?
         lines << format_metadata_section(event_data) if event_data[:trace_id] || event_data[:span_id]
-        lines << "─" * 80
+        lines << ("─" * 80)
         lines.join("\n")
       end
 

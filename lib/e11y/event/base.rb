@@ -744,17 +744,18 @@ module E11y
           #     strategy :hash
           #     exclude_adapters [:file_audit]  # Audit gets original (GDPR)
           #   end
-          def field(field_name, &block)
+          def field(field_name, &)
             return unless block_given?
 
             opts = { strategy: :allow }
             dsl = Class.new do
               attr_reader :opts
-              def initialize(opts); @opts = opts; end
-              def strategy(s); @opts[:strategy] = s; end
-              def exclude_adapters(adapters); @opts[:exclude_adapters] = Array(adapters).map(&:to_sym); end
+
+              def initialize(opts) = @opts = opts
+              def strategy(s) = @opts.[]=(:strategy, s)
+              def exclude_adapters(adapters) = @opts.[]=(:exclude_adapters, Array(adapters).map(&:to_sym))
             end.new(opts)
-            dsl.instance_eval(&block)
+            dsl.instance_eval(&)
             @config[:fields][field_name] = opts
           end
         end
@@ -812,6 +813,7 @@ module E11y
         def use_dlq(value = nil)
           if value.nil?
             return superclass.use_dlq if !instance_variable_defined?(:@use_dlq) && superclass.respond_to?(:use_dlq)
+
             @use_dlq
           else
             @use_dlq = value

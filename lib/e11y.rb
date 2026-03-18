@@ -389,10 +389,10 @@ module E11y
     # @param name [String] Controller class name
     # @param action [String, nil] Specific action (nil = all actions)
     # @yield [ControllerSLOConfig] Block for slo_target, latency_target, etc.
-    def add_slo_controller(name, action: nil, &block)
+    def add_slo_controller(name, action: nil, &)
       key = action ? "#{name}##{action}" : name
       cfg = ControllerSLOConfig.new
-      cfg.instance_eval(&block) if block_given?
+      cfg.instance_eval(&) if block_given?
       (@slo_tracking_controller_configs ||= {})[key] = cfg
     end
 
@@ -400,9 +400,9 @@ module E11y
     #
     # @param name [String] Job class name
     # @yield [JobSLOConfig] Block for ignore, etc.
-    def add_slo_job(name, &block)
+    def add_slo_job(name, &)
       cfg = JobSLOConfig.new
-      cfg.instance_eval(&block) if block_given?
+      cfg.instance_eval(&) if block_given?
       (@slo_tracking_job_configs ||= {})[name] = cfg
     end
 
@@ -476,16 +476,16 @@ module E11y
     # 5. RateLimiting - Token-bucket rate limiting (zone: :routing)
     # 6. Sampling     - Adaptive sampling (zone: :routing)
     # 7. Versioning   - Normalize event names (LAST before Routing, zone: :adapters)
-      # 0. TrackLatency  - Self-monitoring: Event.track() latency (first, wraps entire pipeline)
-      # 1. TraceContext  - Distributed tracing metadata
-      # ...
-      # 9. Routing      - Buffer routing (zone: :adapters)
-      # 10. EventSlo     - Event-driven SLO tracking (after adapters, observes dispatch)
-      # 11. SelfMonitoringEmit - e11y_events_tracked_total (last, when e11y_self_monitoring.enabled)
-      #
-      # @return [void]
-      # @see ADR-015 Middleware Execution Order
-      def configure_default_pipeline
+    # 0. TrackLatency  - Self-monitoring: Event.track() latency (first, wraps entire pipeline)
+    # 1. TraceContext  - Distributed tracing metadata
+    # ...
+    # 9. Routing      - Buffer routing (zone: :adapters)
+    # 10. EventSlo     - Event-driven SLO tracking (after adapters, observes dispatch)
+    # 11. SelfMonitoringEmit - e11y_events_tracked_total (last, when e11y_self_monitoring.enabled)
+    #
+    # @return [void]
+    # @see ADR-015 Middleware Execution Order
+    def configure_default_pipeline
       # Zone: :pre_processing (TrackLatency first — measures full pipeline)
       @pipeline.use E11y::Middleware::TrackLatency
       @pipeline.use E11y::Middleware::TraceContext
@@ -527,7 +527,6 @@ module E11y
       value.nil? ? @ignore : @ignore = value
     end
   end
-
 end
 
 # Load Railtie if Rails is present

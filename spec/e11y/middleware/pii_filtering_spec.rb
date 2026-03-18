@@ -147,7 +147,7 @@ RSpec.describe E11y::Middleware::PIIFilter do
         it "produces payload_rewrites with original for excluded adapter" do
           event_data = {
             event_class: event_class,
-            adapters: [:memory, :file_audit],
+            adapters: %i[memory file_audit],
             payload: { email: "user@example.com", user_id: "u-123" }
           }
 
