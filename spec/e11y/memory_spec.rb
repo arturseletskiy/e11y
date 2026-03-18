@@ -74,7 +74,7 @@ RSpec.describe "E11y Memory Profile", :memory do # rubocop:disable RSpec/Describ
         end
       end
 
-      it "allocates <=50 objects per event and retains 0" do
+      it "allocates <=70 objects per event and retains 0" do
         report = measure_allocations(count: 100) { event_class_never.track(**payload) }
         per_event = report.total_allocated.to_f / 100
         print_allocation_summary(report, label: "validation_mode :never", event_count: 100)
@@ -83,10 +83,12 @@ RSpec.describe "E11y Memory Profile", :memory do # rubocop:disable RSpec/Describ
           expect(report.total_retained).to eq(0),
                                            "Memory leak: #{report.total_retained} objects retained after 100 events"
 
-          # Measured baseline: ~33/event on Ruby 3.3 (pipeline overhead without dry-schema).
-          # Threshold = ceil(33 * 1.6) = 53. See benchmarks/allocation_profiling.rb.
-          expect(per_event).to be <= 55,
-                               "Allocation regression: #{per_event.round(2)} objects/event exceeds <=55 target " \
+          # Baseline grew from ~33/event (pre-feat/review-fact-vs-plan) to ~61/event on Ruby 3.3
+          # after new middleware (TrackLatency, SelfMonitoringEmit, BaggageProtection, OtelSpan).
+          # Threshold = ceil(61 * 1.1) = 68, rounded to 70 for buffer.
+          # See benchmarks/allocation_profiling.rb.
+          expect(per_event).to be <= 70,
+                               "Allocation regression: #{per_event.round(2)} objects/event exceeds <=70 target " \
                                "for :never mode. See benchmarks/allocation_profiling.rb."
         end
       end
