@@ -53,6 +53,15 @@ rake cucumber
 # Cucumber with Loki (adapter_configurations.feature): start Loki + OTel first
 docker compose up -d loki otel-collector
 rake cucumber
+
+# Run TUI (interactive log viewer)
+bundle exec e11y
+
+# Start MCP server (for Cursor / Claude Code)
+bundle exec e11y mcp
+
+# Stream events to stdout (pipe-friendly)
+bundle exec e11y tail
 ```
 
 ## Architecture
@@ -91,6 +100,11 @@ Pipeline is built in `lib/e11y/pipeline/builder.rb`. Middleware order matters �
 | `lib/e11y/reliability/` | Circuit breaker, DLQ (dead letter queue), retry logic |
 | `lib/e11y/slo/` | Event-driven SLO tracking |
 | `lib/e11y/metrics/` | Prometheus metrics registry with cardinality protection |
+| `gems/e11y-devtools/` | Developer tools gem (TUI, Browser Overlay, MCP) — dev-only |
+| `gems/e11y-devtools/lib/e11y/devtools/tui/` | ratatui_ruby TUI — interaction-centric log viewer |
+| `gems/e11y-devtools/lib/e11y/devtools/overlay/` | Rails Engine — floating badge + slide-in panel |
+| `gems/e11y-devtools/lib/e11y/devtools/mcp/` | MCP Server — AI integration for Cursor/Claude Code |
+| `lib/e11y/adapters/dev_log.rb` | DevLog adapter — JSONL write+read, shared by all viewers |
 
 ### Event Definition Pattern
 
