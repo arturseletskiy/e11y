@@ -40,7 +40,9 @@ namespace :e11y do
       schema = "#{schema[0...(schema_max - 3)]}..." if schema.length > schema_max
       pii = pii_str(klass)
       audit = klass.respond_to?(:audit_event?) && klass.audit_event? ? "✓" : "—"
-      puts "#{name.ljust(name_width)} #{klass.name.to_s.ljust(class_width)} #{version.ljust(4)} #{severity.ljust(5)} #{adapters.ljust(12)} #{schema.ljust(schema_width)} #{pii.ljust(6)} #{audit}"
+      row = [name.ljust(name_width), klass.name.to_s.ljust(class_width), version.ljust(4),
+             severity.ljust(5), adapters.ljust(12), schema.ljust(schema_width), pii.ljust(6), audit]
+      puts row.join(" ")
     end
 
     puts "-" * sep_len

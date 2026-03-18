@@ -67,6 +67,7 @@ module E11y
           mapped = E11y::OpenTelemetry::SemanticConventions.map(event_data[:event_name].to_s, payload)
           mapped.each do |key, value|
             next if value.nil?
+
             span.set_attribute(key.to_s, otel_value(value))
           rescue ArgumentError, TypeError
             span.set_attribute(key.to_s, value.to_s)
@@ -75,13 +76,9 @@ module E11y
 
         def otel_value(value)
           case value
-          when TrueClass, FalseClass then value
-          when Integer then value
-          when Float then value
-          when String then value
-          when Symbol then value.to_s
-          when Array then value.map { |v| v.to_s }
-          else value.to_s
+          when TrueClass, FalseClass, Integer, Float, String then value
+          when Array then value.map(&:to_s)
+          else value.to_s # Symbol, NilClass, Hash, etc.
           end
         end
 
@@ -135,6 +132,7 @@ module E11y
 
         def time_to_nano(time)
           return (Time.now.to_f * 1_000_000_000).to_i if time.nil?
+
           time = Time.parse(time.to_s) if time.is_a?(String)
           (time.to_f * 1_000_000_000).to_i
         end

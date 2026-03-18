@@ -59,7 +59,7 @@ RSpec.describe E11y::Middleware::Request do
         env["HTTP_TRACESTATE"] = "experiment=exp-42,tenant=acme"
 
         captured_baggage = nil
-        capture_app = lambda do |e|
+        capture_app = lambda do |_e|
           captured_baggage = E11y::Current.baggage
           [200, { "Content-Type" => "text/plain" }, ["OK"]]
         end

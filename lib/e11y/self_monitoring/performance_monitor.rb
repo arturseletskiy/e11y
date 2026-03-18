@@ -15,6 +15,11 @@ module E11y
     #   E11y::SelfMonitoring::PerformanceMonitor.track_latency(0.5, event_class: 'Events::OrderPaid', severity: 'info', result: :success)
     #   E11y::SelfMonitoring::PerformanceMonitor.track_adapter_latency('E11y::Adapters::Loki', 42)
     module PerformanceMonitor
+      TRACK_BUCKETS = [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1].freeze # 0.1ms to 100ms
+      ADAPTER_BUCKETS = [0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0].freeze # 1ms to 5s
+      RESULT_SUCCESS = "success"
+      RESULT_DROPPED = "dropped"
+
       # Track Event.track() pipeline latency (from entry to exit).
       #
       # @param duration_ms [Numeric] Duration in milliseconds
@@ -23,11 +28,12 @@ module E11y
       # @param result [Symbol] :success or :dropped
       # @return [void]
       def self.track_latency(duration_ms, event_class:, severity:, result:)
+        result_str = result == :success ? RESULT_SUCCESS : RESULT_DROPPED
         E11y::Metrics.histogram(
           :e11y_track_duration_seconds,
           duration_ms / 1000.0,
-          { event_class: event_class, severity: severity, result: result.to_s },
-          buckets: [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1] # 0.1ms to 100ms
+          { event_class: event_class, severity: severity, result: result_str },
+          buckets: TRACK_BUCKETS
         )
       end
 
@@ -41,7 +47,7 @@ module E11y
           :e11y_adapter_send_duration_seconds,
           duration_ms / 1000.0,
           { adapter: adapter_name },
-          buckets: [0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0] # 1ms to 5s
+          buckets: ADAPTER_BUCKETS
         )
       end
     end

@@ -13,7 +13,7 @@ RSpec.describe "Trace-Consistent Sampling Integration", :integration do
 
   describe "Request middleware + traceparent" do
     it "sets E11y::Current.sampled from traceparent flags" do
-      app = lambda do |env|
+      app = lambda do |_env|
         [200, {}, [E11y::Current.sampled.inspect]]
       end
       middleware = E11y::Middleware::Request.new(app)
@@ -28,7 +28,7 @@ RSpec.describe "Trace-Consistent Sampling Integration", :integration do
     end
 
     it "sets E11y::Current.sampled true when traceparent has flags 01" do
-      app = lambda do |env|
+      app = lambda do |_env|
         [200, {}, [E11y::Current.sampled.inspect]]
       end
       middleware = E11y::Middleware::Request.new(app)

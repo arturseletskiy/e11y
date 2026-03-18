@@ -48,22 +48,15 @@ RSpec.describe E11y::Instruments::RailsInstrumentation do
   end
 
   describe ".setup!" do
-    it "returns early if rails_instrumentation not enabled" do
-      allow(E11y.config).to receive(:rails_instrumentation_enabled).and_return(false)
-      expect(described_class).not_to receive(:event_mapping)
-      described_class.setup!
-    end
-
-    it "returns early if rails_instrumentation_enabled is false" do
+    it "returns early when rails_instrumentation is disabled" do
       allow(E11y.config).to receive(:rails_instrumentation_enabled).and_return(false)
       expect(described_class).not_to receive(:event_mapping)
       described_class.setup!
     end
 
     it "subscribes to configured events when enabled" do
-      allow(E11y.config).to receive(:rails_instrumentation_enabled).and_return(true)
-      allow(E11y.config).to receive(:rails_instrumentation_custom_mappings).and_return({})
-      allow(E11y.config).to receive(:rails_instrumentation_ignore_events).and_return([])
+      allow(E11y.config).to receive_messages(rails_instrumentation_enabled: true, rails_instrumentation_custom_mappings: {},
+                                             rails_instrumentation_ignore_events: [])
       allow(described_class).to receive(:ignored?).and_return(false)
 
       expect(described_class).to receive(:subscribe_to_event).at_least(:once)
@@ -72,9 +65,8 @@ RSpec.describe E11y::Instruments::RailsInstrumentation do
     end
 
     it "skips ignored events" do
-      allow(E11y.config).to receive(:rails_instrumentation_enabled).and_return(true)
-      allow(E11y.config).to receive(:rails_instrumentation_custom_mappings).and_return({})
-      allow(E11y.config).to receive(:rails_instrumentation_ignore_events).and_return(["sql.active_record"])
+      allow(E11y.config).to receive_messages(rails_instrumentation_enabled: true, rails_instrumentation_custom_mappings: {},
+                                             rails_instrumentation_ignore_events: ["sql.active_record"])
 
       expect(described_class).not_to receive(:subscribe_to_event).with("sql.active_record", anything)
       described_class.instance_variable_set(:@event_mapping, nil) # Reset cache

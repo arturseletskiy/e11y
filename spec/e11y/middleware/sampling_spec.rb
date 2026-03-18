@@ -308,7 +308,7 @@ RSpec.describe E11y::Middleware::Sampling do
     end
 
     context "when trace-aware sampling is disabled" do
-      let(:config) { { trace_aware: false, default_sample_rate: 0.5 } }
+      let(:config) { { trace_aware: false, default_sample_rate: 0.5, severity_rates: { success: 0.5 } } }
 
       it "makes independent decisions for each event" do
         # Track decisions for same trace

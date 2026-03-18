@@ -42,8 +42,8 @@ module E11y
         debug: 5, info: 9, success: 9, warn: 13, error: 17, fatal: 21
       }.freeze
 
-      def initialize(endpoint: nil, service_name: nil, headers: {}, timeout: 10, max_attributes: 50, compress: true, **opts)
-        super(**opts)
+      def initialize(endpoint: nil, service_name: nil, headers: {}, timeout: 10, max_attributes: 50, compress: true, **)
+        super(**)
         @endpoint = (endpoint || ENV["OTEL_EXPORTER_OTLP_ENDPOINT"] || "http://localhost:4318").chomp("/")
         @service_name = service_name || E11y.config&.service_name || "e11y"
         @headers = headers
@@ -111,7 +111,7 @@ module E11y
         [
           { key: "service.name", value: { stringValue: @service_name } },
           { key: "service.version", value: { stringValue: E11y::VERSION } },
-          { key: "deployment.environment", value: { stringValue: (E11y.config&.environment || ENV["RAILS_ENV"] || "development") } },
+          { key: "deployment.environment", value: { stringValue: E11y.config&.environment || ENV["RAILS_ENV"] || "development" } },
           { key: "host.name", value: { stringValue: hostname } },
           { key: "process.pid", value: { intValue: Process.pid.to_s } }
         ]
