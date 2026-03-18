@@ -117,9 +117,9 @@ Key implementation details:
 Public API:
 
 ```ruby
-query = E11y::Adapters::DevLog::Query.new(path: "log/e11y_dev.jsonl")
+query = E11y::Adapters::DevLog::Query.new("log/e11y_dev.jsonl")
 
-query.stored_events          # → Array of all event Hashes
+query.stored_events(limit: 1000, severity: nil, source: nil)  # → Array of event Hashes
 query.search("checkout")     # → Array of matching events (full-text)
 query.events_by_trace(id)    # → Array of events for one trace_id
 query.interactions           # → Array of Interaction structs (grouped traces)
@@ -131,9 +131,10 @@ query.clear!                 # → truncates the JSONL file
 
 `Interaction` is a plain Struct:
 ```ruby
-Interaction = Struct.new(:trace_id, :started_at, :duration_ms,
-                          :event_count, :error_count, :source,
-                          :events, keyword_init: true)
+Interaction = Struct.new(:started_at, :trace_ids, :has_error?,
+                         :source, keyword_init: true) do
+  def traces_count = trace_ids.size
+end
 ```
 
 ### 3.3. DevLog Adapter Facade
@@ -158,8 +159,8 @@ adapter.capabilities                 # → { dev_log: true, readable: true }
 `E11y::Middleware::DevLogSource` is a Rack middleware that stamps request metadata before events are tracked:
 
 ```ruby
-Thread.current[:e11y_source] = "web"       # marks events as coming from web layer
-env["e11y.trace_id"] = generated_trace_id  # stable ID for the request lifetime
+Thread.current[:e11y_source] = "web"           # sets thread-local; downstream code (including DevLog#serialize) reads this
+env["e11y.trace_id"] ||= Thread.current[:e11y_trace_id]  # exposes trace ID to the Browser Overlay JS
 ```
 
 ### 3.5. Railtie Auto-Registration
@@ -195,17 +196,18 @@ The TUI presents a drill-down hierarchy:
 
 ### 4.3. Keyboard Map
 
-| Key | Action |
-|---|---|
-| `j` / `k` | Navigate list up/down |
-| `Enter` | Drill into selected item |
-| `Esc` / `b` | Go back one level |
-| `w` | Filter: web requests only |
-| `j` | Filter: background jobs only |
-| `a` | Filter: all sources |
-| `r` | Reload from file |
-| `q` | Quit |
-| `c` | Copy selected item as JSON to clipboard |
+| Key | View | Action |
+|---|---|---|
+| `↓` / `↑` | interactions, events | Navigate down/up |
+| `Enter` | interactions | Drill into events for selected interaction |
+| `Enter` | events | Open detail overlay |
+| `Esc` / `b` | events, detail | Go back |
+| `w` | interactions | Source filter: web requests only |
+| `j` | interactions | Source filter: background jobs only |
+| `a` | interactions | Source filter: all sources |
+| `r` | interactions | Force reload |
+| `q` | any | Quit |
+| `c` | detail | Copy event JSON to clipboard |
 
 ### 4.4. Interaction Grouping
 
@@ -259,7 +261,7 @@ All controller actions return `404 Not Found` outside the `development` environm
 
 ### 5.3. Rack Middleware — Script Injection
 
-`E11y::Devtools::Overlay::InjectionMiddleware` sits in the Rack stack and injects the overlay script into HTML responses:
+`E11y::Devtools::Overlay::Middleware` sits in the Rack stack and injects the overlay script into HTML responses:
 
 - Skips: XHR requests, asset paths (`/assets/`, `.js`, `.css`, etc.), non-HTML content types.
 - Injects `<script>` tag before `</body>`.
@@ -286,7 +288,7 @@ No npm build step, no React, no webpack — the script is a single file of vanil
 
 ```bash
 bundle exec e11y mcp              # stdio transport (Claude Desktop, Cursor)
-bundle exec e11y mcp --port 7777  # StreamableHTTP transport (WEBrick)
+bundle exec e11y mcp --port 3099  # StreamableHTTP transport (WEBrick)
 ```
 
 ### 6.2. Tools
@@ -295,14 +297,14 @@ The MCP server exposes 8 tools backed by `DevLog::Query`:
 
 | Tool | Description |
 |---|---|
-| `recent_events` | Most recent N events (default 50) |
-| `events_by_trace` | All events for a given `trace_id` |
-| `search` | Full-text search across event JSON |
-| `stats` | Summary: total count, error rate, top event types |
-| `interactions` | Grouped interaction list (same grouping as TUI) |
-| `event_detail` | Full data for a single event by ID |
-| `errors` | All events with severity `error` or `fatal` |
-| `clear` | Truncate the log file |
+| `RecentEvents` | Most recent N events (default 50) |
+| `EventsByTrace` | All events for a given `trace_id` |
+| `Search` | Full-text search across event JSON |
+| `Stats` | Summary: total count, error rate, top event types |
+| `Interactions` | Grouped interaction list (same grouping as TUI) |
+| `EventDetail` | Full data for a single event by ID |
+| `Errors` | All events with severity `error` or `fatal` |
+| `Clear` | Truncate the log file |
 
 ### 6.3 AI Tool Setup
 
@@ -340,7 +342,7 @@ Once connected, ask your AI assistant: *"What errors happened in the last reques
 The `server_context` passed to every tool handler contains:
 
 ```ruby
-{ store: E11y::Adapters::DevLog::Query.new(path: log_path) }
+{ store: E11y::Adapters::DevLog::Query.new(log_path) }
 ```
 
 Tools call `context[:store]` directly — no shared mutable state between requests.
