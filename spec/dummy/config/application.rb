@@ -64,14 +64,15 @@ unless $e11y_dummy_configured
     end
 
     # Enable instrumentation
-    config.rails_instrumentation.enabled = true
-    config.active_job.enabled = true
-    config.sidekiq.enabled = true if defined?(Sidekiq)
-    config.logger_bridge.enabled = false
+    config.rails_instrumentation_enabled = true
+    config.active_job_enabled = true
+    config.sidekiq_enabled = true if defined?(Sidekiq)
+    config.logger_bridge_enabled = false
 
     # Reconfigure pipeline for tests: 100% sampling (capture all events)
     # NOTE: This must happen BEFORE Rails.application.initialize! is called
     config.pipeline.clear
+    config.pipeline.use E11y::Middleware::TrackLatency
     config.pipeline.use E11y::Middleware::TraceContext
     config.pipeline.use E11y::Middleware::Validation
     config.pipeline.use E11y::Middleware::PIIFilter
@@ -81,6 +82,7 @@ unless $e11y_dummy_configured
                         trace_aware: false,
                         severity_rates: { debug: 1.0, info: 1.0, success: 1.0, warn: 1.0, error: 1.0, fatal: 1.0 }
     config.pipeline.use E11y::Middleware::Routing
+    config.pipeline.use E11y::Middleware::EventSlo
   end
   $e11y_dummy_configured = true
 end
@@ -106,11 +108,8 @@ module Dummy
     config.cache_classes = false # Set to false to allow reloading during tests
     config.consider_all_requests_local = true
     config.action_controller.perform_caching = false
-    # Use false to ensure exceptions are raised (not handled) in tests
-    # Rails 7.0: false is the correct value
-    # Rails 7.1+: false is deprecated (should use :none) but still works
-    # NOTE: :none doesn't work in Rails 7.0 (it's treated as truthy, causing exceptions to be swallowed)
-    config.action_dispatch.show_exceptions = false
+    # Exceptions caught → 500 response (same for Rails 7.x and 8.x)
+    config.action_dispatch.show_exceptions = :all
     config.action_controller.allow_forgery_protection = false
     config.active_support.deprecation = :stderr
     config.active_support.test_order = :random

@@ -565,7 +565,7 @@ end
 | Trace-aware sampling (C05) | ✅ Implemented + Integration test | Same trace_id → same decision |
 | Sampling Middleware | ✅ Implemented | Correct priority chain |
 | ValueExtractor + DSL | ✅ Implemented, unit-tested | ❌ Missing integration test |
-| StratifiedTracker | ✅ Implemented, unit-tested | ❌ Missing integration test |
+| StratifiedTracker | ✅ Implemented, wired in Sampling + EventSlo | Integration via pipeline |
 | Budget exhaustion | ❌ → v1.1 (UC-015) | |
 
 ### ⚠️ Missing Integration Tests (блокируют отметку UC-014 как DONE)

@@ -308,7 +308,7 @@ RSpec.describe E11y::Middleware::Sampling do
     end
 
     context "when trace-aware sampling is disabled" do
-      let(:config) { { trace_aware: false, default_sample_rate: 0.5 } }
+      let(:config) { { trace_aware: false, default_sample_rate: 0.5, severity_rates: { success: 0.5 } } }
 
       it "makes independent decisions for each event" do
         # Track decisions for same trace
@@ -329,18 +329,18 @@ RSpec.describe E11y::Middleware::Sampling do
   describe "#cleanup_trace_decisions" do
     let(:config) { { trace_aware: true } }
 
-    it "removes approximately 50% of cached decisions" do
-      # Populate cache with 1000 decisions
+    it "removes approximately 50% of cached decisions (LRU eviction)" do
+      # Populate cache with 1000 decisions (oldest first for deterministic LRU)
       decisions = middleware.instance_variable_get(:@trace_decisions)
-      1000.times { |i| decisions["trace-#{i}"] = true }
+      base_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      1000.times { |i| decisions["trace-#{i}"] = { decision: true, last_access: base_time - (1000 - i) } }
 
       expect(decisions.size).to eq(1000)
 
-      # Trigger cleanup
+      # Trigger cleanup (evicts oldest 500)
       middleware.send(:cleanup_trace_decisions)
 
-      # Should have ~500 decisions left (allow variance)
-      expect(decisions.size).to be_within(100).of(500)
+      expect(decisions.size).to eq(500)
     end
 
     it "is triggered when cache exceeds 1000 entries" do

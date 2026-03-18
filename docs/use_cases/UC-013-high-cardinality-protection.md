@@ -386,7 +386,7 @@ Events::OrderPlaced.track(
 > | Adapter Type | Denylist Applied? | Why? |
 > |---|---|---|
 > | **Metrics (Yabeda/Prometheus)** | ✅ YES | High-cardinality labels cause memory explosion in time-series databases (1M labels = 1GB RAM). |
-> | **Logs (Loki)** | ❌ NO | Loki is designed for high-cardinality labels and uses different indexing strategy. Full payload preserved. |
+> | **Logs (Loki)** | Optional | Loki labels = event_name + severity (low cardinality). Payload (user_id, etc.) in log line. Optional `enable_cardinality_protection` for labels. |
 > | **Errors (Sentry)** | ❌ NO | Sentry needs full context for debugging. High cardinality is acceptable for error tracking. |
 > | **Audit (File/PostgreSQL)** | ❌ NO | Audit trails require complete, unfiltered data for compliance. |
 >

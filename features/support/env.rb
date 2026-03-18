@@ -58,7 +58,7 @@ Rails.application.routes_reloader.reload! if Rails.application.routes.empty?
 #   - Disable rate limiting (interferes with assertions)
 #   - Set fallback adapters to :memory so events with adapters: [] are captured
 E11y.configure do |config|
-  config.rate_limiting.enabled = false if config.respond_to?(:rate_limiting)
+  config.rate_limiting_enabled = false if config.respond_to?(:rate_limiting_enabled)
   config.fallback_adapters = [:memory]
 end
 

@@ -61,6 +61,7 @@ module E11y
           cleanup_old_files
 
           E11y::Metrics.increment("e11y.dlq.saved", event_name: event_data[:event_name])
+          update_dlq_size_gauge
 
           event_id
         end
@@ -144,6 +145,10 @@ module E11y
           event_data = entry[:event_data]
           return false unless event_data
 
+          # F-004/C07: Mark as DLQ-replayed so PIIFilter skips (avoid double-hashing)
+          event_data = event_data.dup
+          event_data[:dlq_replayed] = true
+
           E11y.config.built_pipeline.call(event_data)
           E11y::Metrics.increment("e11y.dlq.replayed", event_name: entry[:event_name])
           true
@@ -185,12 +190,22 @@ module E11y
           return false unless found
 
           rewrite_file_with(entries)
+          update_dlq_size_gauge
           true
         rescue StandardError
           false
         end
 
         private
+
+        def update_dlq_size_gauge
+          return unless defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:gauge)
+
+          count = stats[:total_entries]
+          E11y::Metrics.gauge(:e11y_dlq_size, count)
+        rescue StandardError
+          # Non-fatal: gauge update must not break DLQ operations
+        end
 
         def read_entries_excluding(event_id)
           entries = []

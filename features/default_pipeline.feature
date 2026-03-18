@@ -3,7 +3,7 @@
 Feature: Default pipeline completeness
 
   # The E11y pipeline processes every event through a chain of middleware.
-  # Default: TraceContext → Validation → PIIFilter → AuditSigning → Sampling → Routing
+  # Default: TraceContext → Validation → AuditSigning → PIIFilter → RateLimiting → Sampling → Versioning → Routing
   # Opt-in (when enabled): RateLimiting, EventSlo — add via Given steps.
 
   Background:

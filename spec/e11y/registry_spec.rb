@@ -53,7 +53,7 @@ RSpec.describe E11y::Registry do
       end
       registry.register(klass)
       registry.register(klass)
-      entries = registry.all_events
+      entries = registry.event_classes
       expect(entries.count { |k| k == klass }).to eq(1)
     end
 
@@ -69,7 +69,7 @@ RSpec.describe E11y::Registry do
       registry.register(v1)
       registry.register(v2)
       # both are stored
-      expect(registry.all_events).to include(v1, v2)
+      expect(registry.event_classes).to include(v1, v2)
       # find returns the latest (last registered)
       expect(registry.find("order.created")).to eq(v2)
     end
@@ -144,11 +144,11 @@ RSpec.describe E11y::Registry do
   end
 
   # -------------------------------------------------------------------------
-  # #all_events
+  # #event_classes
   # -------------------------------------------------------------------------
-  describe "#all_events" do
+  describe "#event_classes" do
     it "returns an empty array when nothing is registered" do
-      expect(registry.all_events).to eq([])
+      expect(registry.event_classes).to eq([])
     end
 
     it "returns all registered event classes" do
@@ -162,7 +162,7 @@ RSpec.describe E11y::Registry do
       end
       registry.register(k1)
       registry.register(k2)
-      expect(registry.all_events).to contain_exactly(k1, k2)
+      expect(registry.event_classes).to contain_exactly(k1, k2)
     end
 
     it "returns a copy — mutating the result does not affect the registry" do
@@ -171,9 +171,9 @@ RSpec.describe E11y::Registry do
         event_name "ev.mutation"
       end
       registry.register(k1)
-      result = registry.all_events
+      result = registry.event_classes
       result.clear
-      expect(registry.all_events).not_to be_empty
+      expect(registry.event_classes).not_to be_empty
     end
   end
 
@@ -219,14 +219,14 @@ RSpec.describe E11y::Registry do
       expect(registry.size).to eq(0)
     end
 
-    it "returns an empty array from all_events after clearing" do
+    it "returns an empty array from event_classes after clearing" do
       klass = Class.new(E11y::Event::Base) do
         contains_pii false
         event_name "ev.clear2"
       end
       registry.register(klass)
       registry.clear!
-      expect(registry.all_events).to eq([])
+      expect(registry.event_classes).to eq([])
     end
   end
 
@@ -320,6 +320,72 @@ RSpec.describe E11y::Registry do
   end
 
   # -------------------------------------------------------------------------
+  # #all_versions (ADR-012 §6.2)
+  # -------------------------------------------------------------------------
+  describe "#all_versions" do
+    it "returns empty array for unknown event" do
+      expect(registry.all_versions("unknown.event")).to eq([])
+    end
+
+    it "returns single version for unversioned event" do
+      klass = Class.new(E11y::Event::Base) do
+        contains_pii false
+        event_name "ev.single"
+      end
+      registry.register(klass)
+      result = registry.all_versions("ev.single")
+      expect(result).to eq([{ version: 1, class: klass }])
+    end
+
+    it "returns all versions sorted by version" do
+      v1 = Class.new(E11y::Event::Base) do
+        contains_pii false
+        event_name "ev.multi"
+        version 1
+      end
+      v2 = Class.new(E11y::Event::Base) do
+        contains_pii false
+        event_name "ev.multi"
+        version 2
+      end
+      registry.register(v1)
+      registry.register(v2)
+      result = registry.all_versions("ev.multi")
+      expect(result).to eq([{ version: 1, class: v1 }, { version: 2, class: v2 }])
+    end
+  end
+
+  # -------------------------------------------------------------------------
+  # #versioned_events (ADR-012 §6.2)
+  # -------------------------------------------------------------------------
+  describe "#versioned_events" do
+    it "returns empty array when no versioned events" do
+      klass = Class.new(E11y::Event::Base) do
+        contains_pii false
+        event_name "ev.alone"
+      end
+      registry.register(klass)
+      expect(registry.versioned_events).to eq([])
+    end
+
+    it "returns event names with 2+ versions" do
+      v1 = Class.new(E11y::Event::Base) do
+        contains_pii false
+        event_name "ev.versioned"
+        version 1
+      end
+      v2 = Class.new(E11y::Event::Base) do
+        contains_pii false
+        event_name "ev.versioned"
+        version 2
+      end
+      registry.register(v1)
+      registry.register(v2)
+      expect(registry.versioned_events).to include("ev.versioned")
+    end
+  end
+
+  # -------------------------------------------------------------------------
   # #to_documentation
   # -------------------------------------------------------------------------
   describe "#to_documentation" do
@@ -398,7 +464,7 @@ RSpec.describe E11y::Registry do
       registry.register(klass)
 
       results = Array.new(10) do
-        Thread.new { registry.all_events }
+        Thread.new { registry.event_classes }
       end.map(&:value)
 
       expect(results).to all(include(klass))
@@ -475,13 +541,13 @@ RSpec.describe E11y::Registry do
       expect(described_class.find("delg.register")).to eq(klass)
     end
 
-    it "E11y::Registry.all_events delegates to instance" do
+    it "E11y::Registry.event_classes delegates to instance" do
       klass = Class.new(E11y::Event::Base) do
         contains_pii false
-        event_name "delg.all_events"
+        event_name "delg.event_classes"
       end
       described_class.register(klass)
-      expect(described_class.all_events).to include(klass)
+      expect(described_class.event_classes).to include(klass)
     end
 
     it "E11y::Registry.size delegates to instance" do

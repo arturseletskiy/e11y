@@ -650,13 +650,13 @@ module E11y
           end
         end
 
-        # Determine the PII filtering tier for this event.
-        # @return [Symbol] :tier1, :tier2, or :tier3
-        def pii_tier
+        # PII filtering mode for this event.
+        # @return [Symbol] :no_pii, :rails_filters, or :explicit_pii
+        def pii_filtering_mode
           case contains_pii
-          when false then :tier1
-          when true then :tier3
-          else :tier2 # Default if not explicitly declared
+          when false then :no_pii
+          when true then :explicit_pii
+          else :rails_filters # Default if not explicitly declared
           end
         end
 
@@ -734,6 +734,30 @@ module E11y
           def allows(*fields)
             fields.each { |field| @config[:fields][field] = { strategy: :allow } }
           end
+
+          # Per-field config with exclude_adapters (Tier 3 per-adapter filtering).
+          #
+          # @param field [Symbol] Field name
+          # @yield Block with strategy, exclude_adapters
+          # @example
+          #   field :email do
+          #     strategy :hash
+          #     exclude_adapters [:file_audit]  # Audit gets original (GDPR)
+          #   end
+          def field(field_name, &)
+            return unless block_given?
+
+            opts = { strategy: :allow }
+            dsl = Class.new do
+              attr_reader :opts
+
+              def initialize(opts) = @opts = opts
+              def strategy(val) = @opts.[]=(:strategy, val)
+              def exclude_adapters(adapters) = @opts.[]=(:exclude_adapters, Array(adapters).map(&:to_sym))
+            end.new(opts)
+            dsl.instance_eval(&)
+            @config[:fields][field_name] = opts
+          end
         end
 
         # === Audit Event DSL (ADR-006, UC-012) ===
@@ -771,6 +795,33 @@ module E11y
         # @return [Boolean] true if audit event
         def audit_event?
           @audit_event == true
+        end
+
+        # === DLQ Filter DSL (ADR-013, UC-021) ===
+
+        # Declare whether this event should be saved to DLQ on failure.
+        #
+        # @param value [Boolean, nil] true = save, false = discard, nil = use severity + default
+        # @example
+        #   class Events::PaymentFailed < E11y::Event::Base
+        #     use_dlq true
+        #   end
+        #
+        #   class Events::DebugTrace < E11y::Event::Base
+        #     use_dlq false
+        #   end
+        def use_dlq(value = nil)
+          if value.nil?
+            return superclass.use_dlq if !instance_variable_defined?(:@use_dlq) && superclass.respond_to?(:use_dlq)
+
+            @use_dlq
+          else
+            @use_dlq = value
+          end
+        end
+
+        def use_dlq?
+          use_dlq == true
         end
 
         # Configure cryptographic signing for audit event

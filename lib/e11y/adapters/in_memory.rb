@@ -39,6 +39,7 @@ module E11y
     #   test_adapter = E11y::Adapters::InMemory.new(max_events: nil)
     #
     # @see ADR-004 §9.1 (In-Memory Test Adapter)
+    # rubocop:disable Metrics/ClassLength
     class InMemory < Base
       # Default maximum number of events to store
       DEFAULT_MAX_EVENTS = 1000
@@ -122,15 +123,24 @@ module E11y
 
       # Find events matching pattern
       #
-      # @param pattern [String, Regexp] Pattern to match against event_name
+      # @param pattern [String, Regexp, Class] Event name pattern or event class
       # @return [Array<Hash>] Matching events
       #
       # @example
       #   adapter.find_events(/order/)  # All order.* events
       #   adapter.find_events("order.paid")  # Exact match
+      #   adapter.find_events(Events::OrderPaid)  # By event class
       def find_events(pattern)
-        pattern = Regexp.new(Regexp.escape(pattern)) if pattern.is_a?(String)
-        @events.select { |event| event[:event_name].to_s.match?(pattern) }
+        pattern = event_pattern_for(pattern)
+        @events.select { |event| event_matches?(event, pattern) }
+      end
+
+      # Find first event matching pattern
+      #
+      # @param pattern [String, Regexp, Class] Event name pattern or event class
+      # @return [Hash, nil] First matching event or nil
+      def find_event(pattern)
+        find_events(pattern).first
       end
 
       # Count events by name
@@ -219,6 +229,28 @@ module E11y
 
       private
 
+      def event_pattern_for(pattern)
+        case pattern
+        when Class then pattern
+        when String, Regexp then pattern.is_a?(String) ? Regexp.new(Regexp.escape(pattern)) : pattern
+        else raise ArgumentError, "Pattern must be Class, String, or Regexp, got #{pattern.class}"
+        end
+      end
+
+      def event_matches?(event, pattern)
+        return event[:event_name].to_s.match?(pattern) if pattern.is_a?(Regexp)
+        return event_matches_class?(event, pattern) if pattern.is_a?(Class)
+
+        false
+      end
+
+      def event_matches_class?(event, klass)
+        event[:event_class] == klass ||
+          event[:event_class]&.name == klass.name ||
+          event[:event_name].to_s == (klass.respond_to?(:event_name) ? klass.event_name : klass.name) ||
+          event[:event_name].to_s.include?(klass.name)
+      end
+
       # Enforce max_events limit by dropping oldest events (FIFO)
       #
       # @return [void]
@@ -232,5 +264,6 @@ module E11y
         @dropped_count += excess
       end
     end
+    # rubocop:enable Metrics/ClassLength
   end
 end

@@ -7,11 +7,10 @@ module E11y
   module Metrics
     # Cardinality protection for metrics labels.
     #
-    # Implements 4-layer defense system to prevent cardinality explosions:
+    # Implements 3-layer defense system to prevent cardinality explosions:
     # 1. Universal Denylist - Block high-cardinality fields (user_id, order_id, etc.)
     # 2. Per-Metric Limits - Track unique values per metric, drop if exceeded
-    # 3. Dynamic Monitoring - Alert when approaching limits
-    # 4. Dynamic Actions - Auto-relabeling, alerting, or dropping on overflow
+    # 3. Dynamic Actions - Drop, alert, or relabel on overflow
     #
     # Now supports optional relabeling to reduce cardinality while preserving signal.
     #
@@ -37,7 +36,7 @@ module E11y
     # @see ADR-002 §4 (Cardinality Protection)
     # @see UC-013 (High Cardinality Protection)
     # rubocop:disable Metrics/ClassLength
-    # Cardinality protection is a cohesive 4-layer defense system against metric explosions
+    # Cardinality protection is a cohesive 3-layer defense system against metric explosions
     class CardinalityProtection
       # Universal denylist - high-cardinality fields that should NEVER be labels
       UNIVERSAL_DENYLIST = %i[
@@ -64,7 +63,7 @@ module E11y
       # Default per-metric cardinality limit
       DEFAULT_CARDINALITY_LIMIT = 1000
 
-      # Overflow strategies (Layer 4: Dynamic Actions)
+      # Overflow strategies (Layer 3: Dynamic Actions)
       OVERFLOW_STRATEGIES = %i[drop alert relabel].freeze
 
       # Default overflow strategy

@@ -99,7 +99,7 @@ module E11y
       # This is the recommended public API for sending events.
       # Automatically handles failures, retries, and DLQ.
       #
-      # Respects `E11y.config.error_handling.fail_on_error` setting (C18 Resolution):
+      # Respects `E11y.config.error_handling_fail_on_error` setting (C18 Resolution):
       # - `true`: Raises exceptions (fast feedback for web requests)
       # - `false`: Swallows exceptions, saves to DLQ (don't fail background jobs)
       #
@@ -305,7 +305,7 @@ module E11y
       #   def retriable_error?(error)
       #     super || error.is_a?(CustomTransientError)
       #   end
-      # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+      # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
       # This method checks many different error types for retryability - splitting would reduce clarity
       def retriable_error?(error)
         # Network timeout errors
@@ -333,7 +333,7 @@ module E11y
 
         false
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+      # rubocop:enable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
       # Calculate exponential backoff delay with jitter
       #
@@ -479,15 +479,11 @@ module E11y
           adapter_name: self.class.name,
           config: circuit_breaker_config
         )
-
-        # Setup DLQ components (will be initialized from E11y.config later)
-        @dlq_filter = nil
-        @dlq_storage = nil
       end
 
       # Handle reliability error (retry exhausted / circuit breaker open).
       #
-      # Behavior depends on `E11y.config.error_handling.fail_on_error` (C18 Resolution):
+      # Behavior depends on `E11y.config.error_handling_fail_on_error` (C18 Resolution):
       # - `true`: Re-raises exception (fast feedback for web requests)
       # - `false`: Swallows exception, saves to DLQ (don't fail background jobs)
       #
@@ -508,7 +504,7 @@ module E11y
         E11y.logger&.warn("[E11y] #{self.class.name} #{reason} for event #{event_data[:event_name]}: #{error.message}")
 
         # Check fail_on_error setting (C18 Resolution)
-        raise error if E11y.config.error_handling.fail_on_error
+        raise error if E11y.config.error_handling_fail_on_error
 
         # Web request context: RAISE (fast feedback)
 
@@ -519,18 +515,22 @@ module E11y
       # rubocop:enable Naming/PredicateMethod
 
       # Save event to DLQ if filter allows.
+      # Uses E11y.config.dlq_filter and E11y.config.dlq_storage (F3 — wired from config).
       #
       # @api private
       def save_to_dlq_if_needed(event_data, error, reason)
-        return unless @dlq_filter&.should_save?(event_data, error)
+        dlq_filter = E11y.config.respond_to?(:dlq_filter) ? E11y.config.dlq_filter : nil
+        dlq_storage = E11y.config.respond_to?(:dlq_storage) ? E11y.config.dlq_storage : nil
+        return unless dlq_filter&.should_save?(event_data, error)
+        return unless dlq_storage
 
-        @dlq_storage&.save(event_data, metadata: {
-                             error: error,
-                             error_class: error.class.name,
-                             reason: reason,
-                             adapter: self.class.name,
-                             timestamp: Time.now.utc.iso8601
-                           })
+        dlq_storage.save(event_data, metadata: {
+                           error: error,
+                           error_class: error.class.name,
+                           reason: reason,
+                           adapter: self.class.name,
+                           timestamp: Time.now.utc.iso8601
+                         })
       rescue StandardError => e
         # C18: Don't fail if DLQ save fails
         E11y.logger&.warn("[E11y] Failed to save event to DLQ: #{e.message}")

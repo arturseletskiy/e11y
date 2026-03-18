@@ -94,10 +94,10 @@ RSpec.describe "Sidekiq Integration", :integration do
       expect(E11y::Railtie).to respond_to(:setup_sidekiq)
     end
 
-    it "respects E11y.config.sidekiq.enabled setting" do
-      # Check that config has sidekiq settings
-      expect(E11y.config).to respond_to(:sidekiq)
-      expect(E11y.config.sidekiq).to respond_to(:enabled)
+    it "respects E11y.config.sidekiq_enabled setting" do
+      # Check that config has sidekiq_enabled setting
+      expect(E11y.config).to respond_to(:sidekiq_enabled)
+      expect(E11y.config.sidekiq_enabled).to be_in([true, false])
     end
   end
 end

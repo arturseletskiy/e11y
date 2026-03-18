@@ -55,8 +55,7 @@ module E11y
     # @see UC-020 for use cases
     class Versioning < Base
       middleware_zone :pre_processing
-      # Version extraction regex (matches V2, V3, etc. at end of class name)
-      VERSION_REGEX = /V(\d+)$/
+      VERSION_REGEX = E11y::Versioning::VersionExtractor::VERSION_REGEX
 
       # Lazy cache: class name -> normalized event_name (per class, immutable)
       NORMALIZED_CACHE = Concurrent::Map.new
@@ -95,10 +94,7 @@ module E11y
       end
 
       def extract_version(class_name)
-        return 1 unless class_name
-
-        match = class_name.match(VERSION_REGEX)
-        match ? match[1].to_i : 1
+        E11y::Versioning::VersionExtractor.extract_version(class_name)
       end
 
       # Normalize event_name by removing version suffix

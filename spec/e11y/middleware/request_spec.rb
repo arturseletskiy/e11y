@@ -54,6 +54,19 @@ RSpec.describe E11y::Middleware::Request do
 
         expect(headers["X-E11y-Trace-Id"]).to eq("request-id-456")
       end
+
+      it "extracts tracestate into E11y::Current.baggage (F-014)" do
+        env["HTTP_TRACESTATE"] = "experiment=exp-42,tenant=acme"
+
+        captured_baggage = nil
+        capture_app = lambda do |_e|
+          captured_baggage = E11y::Current.baggage
+          [200, { "Content-Type" => "text/plain" }, ["OK"]]
+        end
+        described_class.new(capture_app).call(env)
+
+        expect(captured_baggage).to eq("experiment" => "exp-42", "tenant" => "acme")
+      end
     end
 
     context "when no trace_id is provided" do

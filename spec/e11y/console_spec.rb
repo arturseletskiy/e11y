@@ -77,26 +77,32 @@ RSpec.describe E11y::Console do
     end
 
     describe "#events" do
-      it "returns empty array" do
+      it "delegates to Registry.event_classes and returns event names" do
+        fake_event = double("Event", event_name: "order.created", name: "Events::OrderCreated")
+        allow(E11y::Registry).to receive(:event_classes).and_return([fake_event])
         result = E11y.events
-        expect(result).to eq([])
+        expect(result).to eq(["order.created"])
       end
 
-      it "outputs to stdout" do
-        expect { E11y.events }.to output.to_stdout
+      it "returns array" do
+        allow(E11y::Registry).to receive(:event_classes).and_return([])
+        expect(E11y.events).to eq([])
       end
     end
 
     describe "#adapters" do
-      it "returns array" do
+      it "returns array from config.adapters" do
         adapters = E11y.adapters
         expect(adapters).to be_an(Array)
       end
 
-      it "calls Registry.all" do
-        allow(E11y::Adapters::Registry).to receive(:all).and_return([])
+      it "returns adapters from config" do
+        stdout = instance_double(E11y::Adapters::Stdout, class: E11y::Adapters::Stdout, healthy?: true, capabilities: {})
+        allow(E11y.config).to receive(:adapters).and_return({ stdout: stdout })
         result = E11y.adapters
-        expect(result).to eq([])
+        expect(result).to contain_exactly(
+          hash_including(name: :stdout, class: "E11y::Adapters::Stdout", healthy: true)
+        )
       end
     end
 

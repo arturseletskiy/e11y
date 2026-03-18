@@ -8,7 +8,7 @@ module E11y
     #
     # Transparent wrapper around Rails.logger that:
     # 1. Delegates all calls to the original logger (preserves Rails behavior)
-    # 2. Tracks log calls as E11y events (when logger_bridge.enabled = true)
+    # 2. Tracks log calls as E11y events (when logger_bridge_enabled = true)
     #
     # **Why SimpleDelegator instead of full replacement:**
     # - ✅ Simpler: No need to reimplement entire Logger API
@@ -17,12 +17,12 @@ module E11y
     # - ✅ Rails Way: Extends functionality without replacing core components
     #
     # @example Basic usage
-    #   # Automatically enabled by E11y::Railtie if config.logger_bridge.enabled = true
+    #   # Automatically enabled by E11y::Railtie if config.logger_bridge_enabled = true
     #   Rails.logger = E11y::Logger::Bridge.new(Rails.logger)
     #
     # @example Manual setup
     #   E11y.configure do |config|
-    #     config.logger_bridge.enabled = true  # Wrap Rails.logger and send logs to E11y
+    #     config.logger_bridge_enabled = true  # Wrap Rails.logger and send logs to E11y
     #   end
     #
     # @see ADR-008 §7 (Rails.logger Migration)
@@ -34,7 +34,7 @@ module E11y
       #
       # @return [void]
       def self.setup!
-        return unless E11y.config.logger_bridge&.enabled
+        return unless E11y.config.logger_bridge_enabled
         return unless defined?(::Rails)
 
         # Wrap Rails.logger (preserves original behavior)
@@ -53,6 +53,8 @@ module E11y
           ::Logger::FATAL => :fatal,
           ::Logger::UNKNOWN => :warn
         }
+        @track_severities_set = build_track_severities_set(E11y.config.logger_bridge_track_severities)
+        @ignore_patterns = build_compiled_patterns(E11y.config.logger_bridge_ignore_patterns)
       end
 
       # Intercept logger methods to track to E11y
@@ -130,11 +132,16 @@ module E11y
         msg = message || (block_given? ? yield : nil)
         return if msg.nil? || (msg.respond_to?(:empty?) && msg.empty?)
 
+        msg_str = msg.to_s
+
+        return if @track_severities_set && !@track_severities_set.include?(severity)
+        return if @ignore_patterns.any? { |re| re.match?(msg_str) }
+
         # Track to E11y using severity-specific class
         require "e11y/events/rails/log"
         event_class = event_class_for_severity(severity)
         event_class.track(
-          message: msg.to_s,
+          message: msg_str,
           caller_location: extract_caller_location
         )
       rescue StandardError => e
@@ -159,6 +166,20 @@ module E11y
         end
       end
       # rubocop:enable Lint/DuplicateBranch
+
+      def build_track_severities_set(severities)
+        return nil if severities.nil? || (severities.respond_to?(:empty?) && severities.empty?)
+
+        Set.new(Array(severities).map(&:to_sym))
+      end
+
+      def build_compiled_patterns(patterns)
+        return [] if patterns.nil? || !patterns.respond_to?(:any?) || patterns.none?
+
+        Array(patterns).map do |p|
+          p.is_a?(Regexp) ? p : Regexp.new(Regexp.escape(p.to_s))
+        end.freeze
+      end
 
       # Extract caller location (first caller outside E11y)
       # @return [String, nil] Caller location string

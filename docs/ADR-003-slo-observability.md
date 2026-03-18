@@ -17,8 +17,7 @@ This ADR covers **HTTP/Job SLO** (infrastructure reliability):
 - ✅ Zero-config SLO for HTTP requests (99.9% availability)
 - ✅ Zero-config SLO for Sidekiq/ActiveJob (99.5% success rate)
 - ✅ Per-endpoint SLO configuration in `slo.yml`
-- ✅ Multi-window burn rate alerts (5 min detection)
-- ✅ Error budget management & deployment gates
+- ✅ PromQL queries and alert rules — see [SLO-PROMQL-ALERTS.md](SLO-PROMQL-ALERTS.md)
 
 **For Event-based SLO** (business logic reliability like "order creation success rate"), see **ADR-014**.
 
@@ -32,11 +31,13 @@ This ADR covers **HTTP/Job SLO** (infrastructure reliability):
 2. [Architecture Overview](#2-architecture-overview)
 3. [Multi-Level SLO Strategy](#3-multi-level-slo-strategy)
 4. [Per-Endpoint SLO Configuration](#4-per-endpoint-slo-configuration)
-5. [Multi-Window Multi-Burn Rate Alerts](#5-multi-window-multi-burn-rate-alerts)
+5. [PromQL & Alerts](#5-promql--alerts)
 6. [SLO Config Validation & Linting](#6-slo-config-validation--linting)
-7. [Error Budget Management](#7-error-budget-management)
-8. [Dashboard & Reporting](#8-dashboard--reporting)
+7. [Dashboard & Reporting](#7-dashboard--reporting)
+8. [Production Best Practices & Edge Cases](#8-production-best-practices--edge-cases)
 9. [Trade-offs](#9-trade-offs)
+10. [Real-World Configuration Examples](#10-real-world-configuration-examples)
+11. [Summary & Next Steps](#11-summary--next-steps)
 
 ---
 
@@ -1225,185 +1226,9 @@ end
 
 ---
 
-## 5. Multi-Window Multi-Burn Rate Alerts
+## 5. PromQL & Alerts
 
-### 5.1. Why Multi-Window? (Google SRE Best Practice)
-
-**Problem with Single Window:**
-```
-Single 30-day window:
-- Slow reaction (hours to detect)
-- Hard to distinguish acute vs chronic issues
-
-Single 5-minute window:
-- Fast reaction
-- High false positive rate (noise)
-```
-
-**Solution: Multi-Window Multi-Burn Rate:**
-```
-3 windows simultaneously:
-- 1 hour:  Fast burn (acute issue, page immediately)
-- 6 hours: Medium burn (developing issue, warn team)
-- 3 days:  Slow burn (chronic issue, investigate)
-```
-
-### 5.2. Burn Rate Calculation
-
-**Formula:**
-```
-Burn Rate = (Actual Error Rate) / (Error Budget per Hour)
-
-For 99.9% SLO (30-day window):
-- Error Budget = 0.1% = 0.001
-- Error Budget per Hour = 0.001 / (30 * 24) = 0.00000139
-
-Fast Burn (1h window):
-- Threshold = 14.4x burn rate
-- Means: consuming 2% of 30-day budget in 1 hour
-- Alert fires in 5 minutes
-
-Medium Burn (6h window):
-- Threshold = 6.0x burn rate
-- Means: consuming 5% of 30-day budget in 6 hours
-- Alert fires in 30 minutes
-
-Slow Burn (3d window):
-- Threshold = 1.0x burn rate
-- Means: consuming 10% of 30-day budget in 3 days
-- Alert fires in 6 hours
-```
-
-### 5.3. Prometheus Alert Rules (Per-Endpoint!)
-
-```yaml
-# prometheus/alerts/e11y_slo_per_endpoint.yml
-groups:
-  - name: e11y_slo_per_endpoint
-    interval: 30s  # Check every 30 seconds
-    rules:
-      # ===== FAST BURN (1h window, 5 min alert) =====
-      - alert: E11ySLOFastBurn_CreateOrder
-        expr: |
-          (
-            # Error rate in last 1 hour
-            sum(rate(http_requests_total{
-              controller="Api::OrdersController",
-              action="create",
-              status=~"5.."
-            }[1h]))
-            /
-            sum(rate(http_requests_total{
-              controller="Api::OrdersController",
-              action="create"
-            }[1h]))
-          )
-          /
-          # Error budget per hour (0.001 / 720 hours)
-          0.00000139
-          > 14.4  # 14.4x burn rate = 2% of 30-day budget in 1h
-        for: 5m  # Alert after 5 minutes
-        labels:
-          severity: critical
-          endpoint: "POST /api/orders"
-          controller: "Api::OrdersController"
-          action: "create"
-          burn_window: "1h"
-        annotations:
-          summary: "CRITICAL: Fast burn on {{ $labels.endpoint }}"
-          description: |
-            Error rate is 14.4x higher than sustainable rate.
-            Burning 2% of 30-day error budget in 1 hour.
-            Current burn rate: {{ $value | humanize }}x
-            
-            Impact: Will exhaust error budget in {{ div 720 $value | humanize }} hours
-            
-            Dashboard: https://grafana/d/e11y-slo?var-endpoint=orders_create
-            Runbook: https://wiki/runbooks/fast-burn-orders
-      
-      # ===== MEDIUM BURN (6h window, 30 min alert) =====
-      - alert: E11ySLOMediumBurn_CreateOrder
-        expr: |
-          (
-            sum(rate(http_requests_total{
-              controller="Api::OrdersController",
-              action="create",
-              status=~"5.."
-            }[6h]))
-            /
-            sum(rate(http_requests_total{
-              controller="Api::OrdersController",
-              action="create"
-            }[6h]))
-          )
-          /
-          0.00000139
-          > 6.0  # 6x burn rate = 5% of 30-day budget in 6h
-        for: 30m  # Alert after 30 minutes
-        labels:
-          severity: warning
-          endpoint: "POST /api/orders"
-          controller: "Api::OrdersController"
-          action: "create"
-          burn_window: "6h"
-        annotations:
-          summary: "WARNING: Medium burn on {{ $labels.endpoint }}"
-          description: |
-            Error rate is 6x higher than sustainable rate.
-            Burning 5% of 30-day error budget in 6 hours.
-            Current burn rate: {{ $value | humanize }}x
-      
-      # ===== SLOW BURN (3d window, 6h alert) =====
-      - alert: E11ySLOSlowBurn_CreateOrder
-        expr: |
-          (
-            sum(rate(http_requests_total{
-              controller="Api::OrdersController",
-              action="create",
-              status=~"5.."
-            }[3d]))
-            /
-            sum(rate(http_requests_total{
-              controller="Api::OrdersController",
-              action="create"
-            }[3d]))
-          )
-          /
-          0.00000139
-          > 1.0  # 1x burn rate = 10% of 30-day budget in 3 days
-        for: 6h  # Alert after 6 hours
-        labels:
-          severity: info
-          endpoint: "POST /api/orders"
-          controller: "Api::OrdersController"
-          action: "create"
-          burn_window: "3d"
-        annotations:
-          summary: "INFO: Slow burn on {{ $labels.endpoint }}"
-          description: |
-            Chronic issue: consuming error budget at steady rate.
-            Burning 10% of 30-day error budget in 3 days.
-            
-            This is a trend, not an emergency. Investigate root cause.
-      
-      # ===== LATENCY SLO (optional per endpoint) =====
-      - alert: E11ySLOLatency_CreateOrder
-        expr: |
-          histogram_quantile(0.99,
-            sum(rate(http_request_duration_seconds_bucket{
-              controller="Api::OrdersController",
-              action="create"
-            }[5m])) by (le)
-          ) > 0.5  # 500ms p99 threshold
-        for: 5m
-        labels:
-          severity: warning
-          endpoint: "POST /api/orders"
-          slo_type: "latency_p99"
-        annotations:
-          summary: "Latency SLO violation: {{ $labels.endpoint }}"
-          description: "P99 latency is {{ $value | humanize }}s (threshold: 500ms)"
-```
+PromQL queries and Prometheus alert rules: see [SLO-PROMQL-ALERTS.md](SLO-PROMQL-ALERTS.md).
 
 ---
 
@@ -2389,264 +2214,13 @@ RSpec.describe E11y::SLO::ConfigValidator do
   end
 end
 
-# spec/lib/e11y/slo/error_budget_spec.rb
-RSpec.describe E11y::SLO::ErrorBudget do
-  let(:slo_config) do
-    {
-      'availability' => { 'target' => 0.999 },
-      'window' => '30d'
-    }
-  end
-  
-  let(:budget) do
-    described_class.new('OrdersController', 'create', slo_config)
-  end
-  
-  before do
-    # Mock Prometheus query
-    allow(E11y::Metrics).to receive(:query_prometheus).and_return(
-      { 'data' => { 'result' => [{ 'value' => [Time.now.to_i, error_rate.to_s] }] } }
-    )
-  end
-  
-  describe '#total' do
-    it 'calculates total error budget' do
-      expect(budget.total).to eq(0.001)  # 1 - 0.999
-    end
-  end
-  
-  describe '#consumed' do
-    let(:error_rate) { 0.0005 }  # 0.05% error rate
-    
-    it 'calculates consumed error budget' do
-      expect(budget.consumed).to eq(0.0005)
-    end
-  end
-  
-  describe '#remaining' do
-    let(:error_rate) { 0.0005 }
-    
-    it 'calculates remaining error budget' do
-      expect(budget.remaining).to eq(0.0005)  # 0.001 - 0.0005
-    end
-    
-    context 'when consumed exceeds total' do
-      let(:error_rate) { 0.002 }  # 0.2% > 0.1%
-      
-      it 'never goes negative' do
-        expect(budget.remaining).to eq(0.0)
-      end
-    end
-  end
-  
-  describe '#exhausted?' do
-    context 'when budget remaining' do
-      let(:error_rate) { 0.0005 }
-      
-      it 'returns false' do
-        expect(budget).not_to be_exhausted
-      end
-    end
-    
-    context 'when budget exhausted' do
-      let(:error_rate) { 0.002 }  # Exceeds 0.001
-      
-      it 'returns true' do
-        expect(budget).to be_exhausted
-      end
-    end
-  end
-  
-  describe '#can_deploy?' do
-    context 'with sufficient budget' do
-      let(:error_rate) { 0.0002 }  # 20% consumed, 80% remaining
-      
-      it 'allows deployment' do
-        expect(budget.can_deploy?(20)).to be true
-      end
-    end
-    
-    context 'with insufficient budget' do
-      let(:error_rate) { 0.0009 }  # 90% consumed, 10% remaining
-      
-      it 'blocks deployment' do
-        expect(budget.can_deploy?(20)).to be false
-      end
-    end
-  end
-end
 ```
 
 ---
 
-## 7. Error Budget Management
+## 7. Dashboard & Reporting
 
-### 7.1. Error Budget Calculation (Per-Endpoint)
-
-```ruby
-# lib/e11y/slo/error_budget.rb
-module E11y
-  module SLO
-    class ErrorBudget
-      def initialize(controller, action, slo_config)
-        @controller = controller
-        @action = action
-        @slo_config = slo_config
-        @target = slo_config['availability_target'] || 0.999
-        @window = parse_window(slo_config['window'] || '30d')
-      end
-      
-      # Total error budget (e.g., 0.001 for 99.9%)
-      def total
-        1.0 - @target
-      end
-      
-      # Consumed error budget in current window
-      def consumed
-        error_rate = calculate_error_rate(@window)
-        [error_rate, total].min  # Cap at total budget
-      end
-      
-      # Remaining error budget
-      def remaining
-        [total - consumed, 0.0].max  # Never negative
-      end
-      
-      # Percentage of error budget consumed
-      def percent_consumed
-        return 0.0 if total.zero?
-        (consumed / total) * 100
-      end
-      
-      # Is error budget exhausted?
-      def exhausted?
-        remaining <= 0
-      end
-      
-      # Time until error budget exhaustion (at current burn rate)
-      def time_until_exhaustion
-        burn_rate_per_hour = calculate_burn_rate(1.hour)
-        return Float::INFINITY if burn_rate_per_hour <= 0
-        
-        hours_remaining = remaining / burn_rate_per_hour
-        hours_remaining.hours
-      end
-      
-      # Can we deploy? (have enough error budget?)
-      def can_deploy?(minimum_budget_percent = 20)
-        percent_remaining = (remaining / total) * 100
-        percent_remaining >= minimum_budget_percent
-      end
-      
-      private
-      
-      def calculate_error_rate(window)
-        # Query Prometheus for actual error rate
-        query = <<~PROMQL
-          sum(rate(http_requests_total{
-            controller="#{@controller}",
-            action="#{@action}",
-            status=~"5.."
-          }[#{window}]))
-          /
-          sum(rate(http_requests_total{
-            controller="#{@controller}",
-            action="#{@action}"
-          }[#{window}]))
-        PROMQL
-        
-        result = E11y::Metrics.query_prometheus(query)
-        result.dig('data', 'result', 0, 'value', 1).to_f
-      end
-      
-      def calculate_burn_rate(window)
-        error_rate = calculate_error_rate(window)
-        error_budget_per_hour = total / (@window.to_f / 1.hour)
-        
-        error_rate / error_budget_per_hour
-      end
-      
-      def parse_window(window)
-        case window
-        when /(\d+)d/
-          $1.to_i.days
-        when /(\d+)h/
-          $1.to_i.hours
-        when /(\d+)m/
-          $1.to_i.minutes
-        else
-          30.days  # Default
-        end
-      end
-    end
-  end
-end
-```
-
-### 7.2. Deployment Gate (Optional)
-
-```ruby
-# lib/e11y/slo/deployment_gate.rb
-module E11y
-  module SLO
-    class DeploymentGate
-      def self.check!(minimum_budget_percent: 20)
-        config = E11y::SLO::ConfigLoader.load!
-        
-        critical_endpoints = config.endpoints.select do |ep|
-          ep.dig('slo', 'availability_target').to_f >= 0.999
-        end
-        
-        violations = []
-        
-        critical_endpoints.each do |endpoint|
-          controller = endpoint['controller']
-          action = endpoint['action']
-          slo_config = endpoint['slo']
-          
-          budget = ErrorBudget.new(controller, action, slo_config)
-          
-          unless budget.can_deploy?(minimum_budget_percent)
-            violations << {
-              endpoint: "#{controller}##{action}",
-              budget_remaining: budget.percent_remaining,
-              budget_consumed: budget.percent_consumed
-            }
-          end
-        end
-        
-        if violations.any?
-          raise DeploymentBlockedError.new(violations)
-        end
-        
-        true
-      end
-    end
-    
-    class DeploymentBlockedError < StandardError
-      attr_reader :violations
-      
-      def initialize(violations)
-        @violations = violations
-        
-        message = "❌ Deployment blocked: Insufficient error budget\n\n"
-        violations.each do |v|
-          message << "  - #{v[:endpoint]}: #{v[:budget_remaining].round(1)}% remaining (need 20%+)\n"
-        end
-        message << "\nWait for error budget to recover before deploying."
-        
-        super(message)
-      end
-    end
-  end
-end
-```
-
----
-
-## 8. Dashboard & Reporting
-
-### 8.1. Per-Endpoint Grafana Dashboard
+### 7.1. Per-Endpoint Grafana Dashboard
 
 ```json
 {
@@ -2747,9 +2321,9 @@ end
 
 ---
 
-## 9. Production Best Practices & Edge Cases
+## 8. Production Best Practices & Edge Cases
 
-### 9.1. Rollout Strategy
+### 8.1. Rollout Strategy
 
 **Phase 1: Observability Only (1-2 weeks)**
 ```yaml
@@ -2832,7 +2406,7 @@ advanced:
     override_label: "deploy:emergency"
 ```
 
-### 9.2. Edge Cases & Solutions
+### 8.2. Edge Cases & Solutions
 
 **Edge Case 1: Routes Not Loaded During Validation**
 ```ruby
@@ -2993,7 +2567,7 @@ def calculate_error_rate(window)
 end
 ```
 
-### 9.3. Monitoring the SLO System Itself
+### 8.3. Monitoring the SLO System Itself
 
 **Self-Monitoring Metrics:**
 ```ruby
@@ -3032,7 +2606,7 @@ rate(e11y_slo_prometheus_query_errors_total[5m]) > 0.01
 
 ---
 
-## 10. Trade-offs
+## 9. Trade-offs
 
 ### 9.1. Key Decisions
 
@@ -3064,9 +2638,9 @@ rate(e11y_slo_prometheus_query_errors_total[5m]) > 0.01
 
 ---
 
-## 11. Real-World Configuration Examples
+## 10. Real-World Configuration Examples
 
-### 11.1. E-Commerce Platform
+### 10.1. E-Commerce Platform
 
 ```yaml
 # config/slo.yml - E-commerce example
@@ -3158,7 +2732,7 @@ services:
           p99_target: 60000  # 60s
 ```
 
-### 11.2. SaaS API Platform
+### 10.2. SaaS API Platform
 
 ```yaml
 # config/slo.yml - API platform example
@@ -3222,7 +2796,7 @@ services:
           p99_target: 10000  # 10s (external API)
 ```
 
-### 11.3. Internal Admin Tool
+### 10.3. Internal Admin Tool
 
 ```yaml
 # config/slo.yml - Admin tool example
@@ -3273,9 +2847,9 @@ advanced:
 
 ---
 
-## 12. Summary & Next Steps
+## 11. Summary & Next Steps
 
-### 12.1. What We Achieved
+### 11.1. What We Achieved
 
 ✅ **Multi-level SLO strategy**: App-wide, service-level, per-endpoint  
 ✅ **5-minute alert detection**: Multi-window burn rate (Google SRE 2026)  
@@ -3283,12 +2857,13 @@ advanced:
 ✅ **Flexible latency SLO**: Optional per endpoint  
 ✅ **Throughput SLO**: Min/max requests per second  
 ✅ **Config validation & linting**: Prevents drift from reality  
-✅ **Full implementation**: ConfigLoader, Validator, ErrorBudget with edge cases  
+✅ **Full implementation**: ConfigLoader, Validator with edge cases  
+✅ **PromQL & alerts**: See [SLO-PROMQL-ALERTS.md](SLO-PROMQL-ALERTS.md)  
 ✅ **RSpec testing**: Comprehensive test coverage  
 ✅ **Production best practices**: Rollout strategy, edge case handling, self-monitoring  
 ✅ **Real-world examples**: E-commerce, SaaS API, Admin tool configurations  
 
-### 12.2. Implementation Checklist
+### 11.2. Implementation Checklist
 
 **Phase 1: Core (Week 1-2)**
 - [x] Implement `E11y::SLO::ConfigLoader` with ERB support
@@ -3298,19 +2873,7 @@ advanced:
 - [ ] Add per-endpoint metrics to `E11y::Rack::Middleware`
 - [ ] Implement `E11y::SLO::MetricsEmitter`
 
-**Phase 2: Burn Rate & Alerts (Week 3-4)**
-- [ ] Implement `E11y::SLO::BurnRateCalculator`
-- [ ] Generate Prometheus alert rules from `slo.yml`
-- [ ] Implement multi-window burn rate alerts
-- [ ] Add Prometheus query error handling
-
-**Phase 3: Error Budget (Week 5-6)**
-- [x] Implement `E11y::SLO::ErrorBudget`
-- [ ] Implement `E11y::SLO::DeploymentGate`
-- [ ] Add error budget tracking middleware
-- [ ] Create Grafana dashboard templates
-
-**Phase 4: Production Readiness (Week 7-8)**
+**Phase 2: Production Readiness (Week 3-4)**
 - [ ] Add maintenance window support
 - [ ] Implement grace period after deployment
 - [ ] Add self-monitoring metrics
@@ -3318,11 +2881,9 @@ advanced:
 - [ ] Document SLO config guide
 - [ ] Add rollout playbook
 
-**Phase 5: RSpec Tests (Week 8)**
+**Phase 3: RSpec Tests**
 - [x] ConfigLoader specs (edge cases: missing file, invalid YAML, ERB)
 - [x] ConfigValidator specs (invalid targets, missing routes, conflicts)
-- [x] ErrorBudget specs (calculations, exhaustion, deployment gate)
-- [ ] BurnRateCalculator specs (multi-window, new endpoints)
 - [ ] Integration specs (end-to-end SLO tracking)
 
 ---
@@ -3333,5 +2894,5 @@ advanced:
 **Impact:** 
 - Per-endpoint SLO visibility (100% coverage)
 - 5-minute incident detection (vs. 30-minute baseline)
-- Error budget-driven deployment decisions
+- PromQL-based alerts (see SLO-PROMQL-ALERTS.md)
 - Zero-config for simple apps, full control for complex apps

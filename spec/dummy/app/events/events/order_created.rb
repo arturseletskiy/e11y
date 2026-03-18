@@ -18,6 +18,7 @@ module Events
 
     slo do
       enabled true
+      contributes_to "order_creation_success_rate"
       slo_status_from do |payload|
         case payload[:status].to_s
         when "failed", "cancelled" then "failure"
@@ -28,17 +29,6 @@ module Events
 
     metrics do
       counter :orders_total, tags: [:status]
-    end
-
-    slo do
-      enabled true
-      slo_status_from do |payload|
-        case payload[:status]
-        when "pending", "completed" then "success"
-        when "failed", "cancelled" then "failure"
-        else "success" # rubocop:todo Lint/DuplicateBranch
-        end
-      end
     end
 
     # Use fallback routing for integration tests

@@ -117,8 +117,8 @@ end
 **Primary Goals:**
 - ✅ **Beautiful console output** (colored, pretty-printed)
 - ✅ **Web UI** for event exploration
-- ✅ **Event Registry** API for introspection
-- ✅ **Debug helpers** (E11y.stats, E11y.inspect)
+- ✅ **Event Registry** API (find, event_classes, where, to_documentation)
+- ✅ **Debug helpers** (E11y.stats, E11y.events)
 - ✅ **CLI tools** (rake tasks)
 - ✅ **Auto-generated docs** from event schemas
 
@@ -236,15 +236,15 @@ sequenceDiagram
     
     App->>E11y: Events::OrderCreated.track(...)
     
-    E11y->>Console: send_batch (stdout)
+    E11y->>Console: write_batch (stdout)
     Console-->>App: ✓ printed to terminal
     
-    E11y->>Memory: send_batch (store in RAM)
+    E11y->>Memory: write_batch (store in RAM)
     Memory-->>Memory: events = [event1, event2, ...]
     Memory-->>E11y: ✓ stored
     
     WebUI->>Memory: GET /e11y/events
-    Memory-->>WebUI: all_events (last 1000)
+    Memory-->>WebUI: events (last 1000)
     WebUI-->>WebUI: Render UI
     
     Note over App,Loki: PRODUCTION
@@ -253,7 +253,7 @@ sequenceDiagram
     
     Note over Memory: ❌ Not registered
     
-    E11y->>Loki: send_batch (HTTP)
+    E11y->>Loki: write_batch (HTTP)
     Loki-->>E11y: ✓ sent
     
     Note over WebUI: ❌ Not mounted
@@ -278,7 +278,7 @@ module E11y
         @show_metadata = config[:show_metadata] || false
       end
       
-      def send_batch(events)
+      def write_batch(events)
         events.each do |event|
           print_event(event)
         end
@@ -485,7 +485,7 @@ module E11y
       # ADAPTER INTERFACE (Write events)
       # ===================================================================
       
-      def send_batch(events)
+      def write_batch(events)
         @mutex.synchronize do
           FileUtils.mkdir_p(File.dirname(@file_path))
           
@@ -525,7 +525,7 @@ module E11y
       # ===================================================================
       
       # Get all events (cached for performance)
-      def all_events(limit: 1000)
+      def stored_events(limit: 1000)
         # Check if file changed
         if cache_valid?
           return @cache
@@ -556,23 +556,23 @@ module E11y
       
       # Filter by event name
       def events_by_name(event_name, limit: 1000)
-        all_events(limit: limit * 2).select { |e| e[:event_name] == event_name }.first(limit)
+        stored_events(limit: limit * 2).select { |e| e[:event_name] == event_name }.first(limit)
       end
       
       # Filter by severity
       def events_by_severity(severity, limit: 1000)
-        all_events(limit: limit * 2).select { |e| e[:severity] == severity }.first(limit)
+        stored_events(limit: limit * 2).select { |e| e[:severity] == severity }.first(limit)
       end
       
       # Filter by trace_id
       def events_by_trace(trace_id)
-        all_events(limit: 10_000).select { |e| e[:trace_id] == trace_id }
+        stored_events(limit: 10_000).select { |e| e[:trace_id] == trace_id }
       end
       
       # Search in payload
       def search(query, limit: 1000)
         query_downcase = query.downcase
-        all_events(limit: limit * 2).select do |event|
+        stored_events(limit: limit * 2).select do |event|
           event.to_json.downcase.include?(query_downcase)
         end.first(limit)
       end
@@ -587,7 +587,7 @@ module E11y
       
       # Statistics
       def stats
-        events = all_events(limit: 10_000)
+        events = stored_events(limit: 10_000)
         
         {
           total_events: events.size,
@@ -740,7 +740,7 @@ end
 >> E11y.dev_log_adapter
 => #<E11y::Adapters::DevLog @file_path="log/e11y_dev.jsonl">
 
->> E11y.dev_log_adapter.all_events
+>> E11y.dev_log_adapter.stored_events
 => [{ event_name: 'Events::OrderCreated', payload: {...}, ... }, ...]
 
 >> E11y.dev_log_adapter.clear!
@@ -795,7 +795,7 @@ module E11y
       
       def index
         # ✅ Read from file-based adapter
-        @events = dev_log_adapter.all_events(limit: 1000)
+        @events = dev_log_adapter.stored_events(limit: 1000)
         @event_names = @events.map { |e| e[:event_name] }.uniq.sort
         
         # Filter by event name
@@ -852,7 +852,7 @@ module E11y
       end
       
       def export
-        @events = dev_log_adapter.all_events(limit: 10_000)
+        @events = dev_log_adapter.stored_events(limit: 10_000)
         
         respond_to do |format|
           format.json { render json: @events }
@@ -872,7 +872,7 @@ module E11y
         
         if dev_log_adapter.updated_since?(last_check_time)
           # File updated → return new events
-          @events = dev_log_adapter.all_events(limit: 100)
+          @events = dev_log_adapter.stored_events(limit: 100)
           
           render json: {
             updated: true,
@@ -1188,102 +1188,15 @@ $ tail -10 log/e11y_dev.jsonl | jq
 ### 5.1. Registry API (Extended from ADR-012)
 
 ```ruby
-# lib/e11y/registry.rb (extended)
+# lib/e11y/registry.rb
 module E11y
   class Registry
-    # ... (previous methods from ADR-012) ...
-    
-    # Introspection methods for developers
-    def self.introspect(event_class_or_name)
-      event_class = resolve_class(event_class_or_name)
-      return nil unless event_class
-      
-      {
-        name: event_class.name,
-        event_name: event_class.event_name,
-        version: event_class.event_version,
-        schema: extract_schema(event_class),
-        adapters: event_class.adapters,
-        severity: event_class.severity,
-        deprecated: event_class.deprecated?,
-        migration_rules: event_class.migration_rules.keys
-      }
-    end
-    
-    def self.search(query)
-      @events.keys.select { |name| name.downcase.include?(query.downcase) }
-    end
-    
-    def self.by_adapter(adapter_name)
-      all_event_classes.select do |event_class|
-        event_class.adapters.include?(adapter_name)
-      end
-    end
-    
-    def self.by_severity(severity)
-      all_event_classes.select do |event_class|
-        event_class.severity == severity
-      end
-    end
-    
-    def self.statistics
-      {
-        total_events: @events.size,
-        total_versions: @events.sum { |_name, versions| versions.size },
-        deprecated_count: deprecated_events.size,
-        by_severity: count_by_severity,
-        by_adapter: count_by_adapter
-      }
-    end
-    
-    private
-    
-    def self.resolve_class(event_class_or_name)
-      case event_class_or_name
-      when Class
-        event_class_or_name
-      when String
-        latest_version(event_class_or_name)
-      else
-        nil
-      end
-    end
-    
-    def self.extract_schema(event_class)
-      return {} unless event_class.respond_to?(:schema)
-      
-      schema = event_class.schema
-      
-      # Extract field definitions
-      schema.rules.map do |key, rule|
-        {
-          name: key,
-          type: rule.type,
-          required: rule.required?,
-          options: rule.options
-        }
-      end
-    end
-    
-    def self.all_event_classes
-      @events.values.flat_map(&:values)
-    end
-    
-    def self.count_by_severity
-      all_event_classes.group_by(&:severity).transform_values(&:count)
-    end
-    
-    def self.count_by_adapter
-      adapter_counts = Hash.new(0)
-      
-      all_event_classes.each do |event_class|
-        event_class.adapters.each do |adapter|
-          adapter_counts[adapter] += 1
-        end
-      end
-      
-      adapter_counts
-    end
+    # Core methods (implemented)
+    def self.find(event_name, version: nil)      # Find event class by name
+    def self.event_classes                       # All registered event classes
+    def self.where(severity:, adapter:, version:) # Filter by criteria
+    def self.to_documentation                    # Documentation hash for all events
+    def self.size                                # Number of unique event names
   end
 end
 ```
@@ -1292,63 +1205,9 @@ end
 
 ```ruby
 # Rails console helpers
-module E11y
-  module Console
-    def self.setup!
-      define_helper_methods
-    end
-    
-    def self.define_helper_methods
-      # List all events
-      def E11y.events
-        Registry.all_events
-      end
-      
-      # Search events
-      def E11y.search(query)
-        Registry.search(query)
-      end
-      
-      # Introspect event
-      def E11y.inspect(event_class_or_name)
-        info = Registry.introspect(event_class_or_name)
-        
-        puts "Event: #{info[:name]}"
-        puts "  Version: #{info[:version]}"
-        puts "  Event Name: #{info[:event_name]}"
-        puts "  Severity: #{info[:severity]}"
-        puts "  Adapters: #{info[:adapters].join(', ')}"
-        puts "  Deprecated: #{info[:deprecated] ? 'Yes' : 'No'}"
-        puts ""
-        puts "Schema:"
-        info[:schema].each do |field|
-          required = field[:required] ? 'required' : 'optional'
-          puts "  #{field[:name]} (#{field[:type]}, #{required})"
-        end
-        
-        nil
-      end
-      
-      # Registry statistics
-      def E11y.stats
-        Registry.statistics
-      end
-      
-      # Test event tracking
-      def E11y.test(event_class = nil)
-        event_class ||= Events::TestEvent
-        
-        event_class.track(
-          test: true,
-          timestamp: Time.now,
-          message: 'Test event from console'
-        )
-        
-        puts "✅ Test event tracked: #{event_class.name}"
-      end
-    end
-  end
-end
+# E11y.events — delegates to Registry.event_classes (event names)
+# E11y.stats  — config info (enabled, adapters, buffer)
+# E11y.adapters — list registered adapters
 ```
 
 ### 5.3. Usage Examples
@@ -1356,36 +1215,13 @@ end
 ```ruby
 # Rails console
 >> E11y.events
-=> ["Events::OrderCreated", "Events::OrderPaid", "Events::PaymentProcessed"]
+=> ["order.created", "order.paid", "payment.processed"]
 
->> E11y.search('order')
-=> ["Events::OrderCreated", "Events::OrderPaid", "Events::OrderCancelled"]
+>> E11y.registry.find("order.created")
+=> Events::OrderCreated
 
->> E11y.inspect(Events::OrderCreated)
-Event: Events::OrderCreated
-  Version: 1
-  Event Name: Events::OrderCreated
-  Severity: info
-  Adapters: loki, sentry
-  Deprecated: No
-
-Schema:
-  order_id (string, required)
-  user_id (integer, required)
-  amount (float, required)
-  currency (string, optional)
-
->> E11y.stats
-=> {
-  total_events: 25,
-  total_versions: 28,
-  deprecated_count: 3,
-  by_severity: { debug: 5, info: 15, warn: 3, error: 2 },
-  by_adapter: { loki: 20, sentry: 15, file: 25 }
-}
-
->> E11y.test
-✅ Test event tracked: Events::TestEvent
+>> E11y.registry.where(severity: :error)
+=> [Events::PaymentFailed, ...]
 ```
 
 ---
@@ -1506,22 +1342,17 @@ namespace :e11y do
     puts "=" * 80
     puts ""
     
-    E11y::Registry.all_events.each do |event_name|
-      versions = E11y::Registry.all_versions(event_name)
-      
-      versions.each do |event_class|
-        status = event_class.deprecated? ? "[DEPRECATED]" : ""
-        puts "#{event_class.name} (v#{event_class.event_version}) #{status}"
-        puts "  Severity: #{event_class.severity}"
-        puts "  Adapters: #{event_class.adapters.join(', ')}"
-        puts ""
-      end
+    E11y::Registry.event_classes.each do |event_class|
+      name = event_class.respond_to?(:event_name) ? event_class.event_name : event_class.name
+      severity = event_class.respond_to?(:severity) ? event_class.severity : "—"
+      adapters = event_class.respond_to?(:adapters) ? Array(event_class.adapters).join(", ") : "—"
+      puts "#{event_class.name} (#{name})"
+      puts "  Severity: #{severity}, Adapters: #{adapters}"
+      puts ""
     end
     
-    stats = E11y::Registry.statistics
     puts "=" * 80
-    puts "Total: #{stats[:total_events]} events, #{stats[:total_versions]} versions"
-    puts "Deprecated: #{stats[:deprecated_count]}"
+    puts "Total: #{E11y::Registry.size} event names, #{E11y::Registry.event_classes.size} classes"
   end
   
   desc 'Validate all event schemas'
@@ -1531,7 +1362,7 @@ namespace :e11y do
     
     errors = []
     
-    E11y::Registry.all_versions('*').each do |event_class|
+    E11y::Registry.event_classes.each do |event_class|
       begin
         # Check if schema is defined
         unless event_class.respond_to?(:schema)
@@ -1579,24 +1410,11 @@ namespace :e11y do
   
   desc 'Show E11y statistics'
   task stats: :environment do
-    stats = E11y::Registry.statistics
-    
     puts "E11y Statistics"
     puts "=" * 80
     puts ""
-    puts "Events: #{stats[:total_events]}"
-    puts "Versions: #{stats[:total_versions]}"
-    puts "Deprecated: #{stats[:deprecated_count]}"
-    puts ""
-    puts "By Severity:"
-    stats[:by_severity].each do |severity, count|
-      puts "  #{severity}: #{count}"
-    end
-    puts ""
-    puts "By Adapter:"
-    stats[:by_adapter].each do |adapter, count|
-      puts "  #{adapter}: #{count}"
-    end
+    puts "Event names: #{E11y::Registry.size}"
+    puts "Event classes: #{E11y::Registry.event_classes.size}"
   end
 end
 ```
@@ -1617,9 +1435,7 @@ module E11y
         generate_index(output_dir)
         
         # Generate per-event documentation
-        E11y::Registry.all_events.each do |event_name|
-          generate_event_docs(event_name, output_dir)
-        end
+        generate_event_docs(output_dir)
         
         # Generate catalog
         generate_catalog(output_dir)
@@ -1637,9 +1453,8 @@ module E11y
           
           ## Statistics
           
-          - Total Events: #{E11y::Registry.statistics[:total_events]}
-          - Total Versions: #{E11y::Registry.statistics[:total_versions]}
-          - Deprecated: #{E11y::Registry.statistics[:deprecated_count]}
+          - Event names: #{E11y::Registry.size}
+          - Event classes: #{E11y::Registry.event_classes.size}
           
           ## Events
           
@@ -1650,74 +1465,52 @@ module E11y
       end
       
       def self.generate_event_list
-        E11y::Registry.all_events.sort.map do |event_name|
-          latest = E11y::Registry.latest_version(event_name)
-          "- [#{latest.name}](#{event_name.gsub('::', '_')}.md)"
+        E11y::Registry.to_documentation.map do |doc|
+          name = doc[:name] || doc[:class]
+          "- [#{doc[:class]}](#{doc[:class].gsub('::', '_')}.md)"
         end.join("\n")
       end
       
-      def self.generate_event_docs(event_name, output_dir)
-        versions = E11y::Registry.all_versions(event_name)
-        latest = versions.last
-        
-        content = <<~MARKDOWN
-          # #{latest.name}
-          
-          **Current Version:** #{latest.event_version}  
-          **Severity:** #{latest.severity}  
-          **Adapters:** #{latest.adapters.join(', ')}  
-          **Deprecated:** #{latest.deprecated? ? 'Yes' : 'No'}
-          
-          ## Schema
-          
-          ```ruby
-          #{generate_schema_example(latest)}
-          ```
-          
-          ## Usage
-          
-          ```ruby
-          #{latest.name}.track(
-            #{generate_payload_example(latest)}
-          )
-          ```
-          
-          ## Versions
-          
-          #{generate_version_history(versions)}
-          
-          ## Examples
-          
-          #{generate_examples(latest)}
-        MARKDOWN
-        
-        filename = event_name.gsub('::', '_') + '.md'
-        File.write(output_dir.join(filename), content)
+      def self.generate_event_docs(output_dir)
+        E11y::Registry.event_classes.each do |event_class|
+          content = <<~MARKDOWN
+            # #{event_class.name}
+            
+            **Severity:** #{event_class.respond_to?(:severity) ? event_class.severity : "—"}  
+            **Adapters:** #{event_class.respond_to?(:adapters) ? Array(event_class.adapters).join(", ") : "—"}
+            
+            ## Schema
+            
+            ```ruby
+            #{generate_schema_example(event_class)}
+            ```
+            
+            ## Usage
+            
+            ```ruby
+            #{event_class.name}.track(
+              #{generate_payload_example(event_class)}
+            )
+            ```
+          MARKDOWN
+            
+          filename = event_class.name.gsub("::", "_") + ".md"
+          File.write(output_dir.join(filename), content)
+        end
       end
       
       def self.generate_schema_example(event_class)
-        info = E11y::Registry.introspect(event_class)
+        doc = E11y::Registry.to_documentation.find { |d| d[:class] == event_class.name }
+        return "" unless doc && doc[:schema_keys]
         
-        info[:schema].map do |field|
-          required = field[:required] ? 'required' : 'optional'
-          "#{required}(:#{field[:name]}).filled(:#{field[:type]})"
-        end.join("\n")
+        doc[:schema_keys].map { |key| "required(:#{key}).filled(:string)" }.join("\n")
       end
       
       def self.generate_payload_example(event_class)
-        info = E11y::Registry.introspect(event_class)
+        doc = E11y::Registry.to_documentation.find { |d| d[:class] == event_class.name }
+        return "" unless doc && doc[:schema_keys]
         
-        info[:schema].map do |field|
-          example_value = case field[:type]
-          when :string then "'example'"
-          when :integer then '123'
-          when :float then '99.99'
-          when :bool then 'true'
-          else 'value'
-          end
-          
-          "#{field[:name]}: #{example_value}"
-        end.join(",\n  ")
+        doc[:schema_keys].map { |key| "#{key}: 'example'" }.join(",\n  ")
       end
       
       def self.generate_version_history(versions)
@@ -1766,27 +1559,24 @@ module E11y
       end
       
       def self.generate_by_severity
-        stats = E11y::Registry.statistics
-        
-        stats[:by_severity].map do |severity, count|
-          events = E11y::Registry.by_severity(severity)
+        %i[debug info warn error fatal].map do |severity|
+          events = E11y::Registry.where(severity: severity)
+          next if events.empty?
           
           <<~MARKDOWN
-            ### #{severity.to_s.capitalize} (#{count})
+            ### #{severity.to_s.capitalize} (#{events.size})
             
             #{events.map { |e| "- #{e.name}" }.join("\n")}
           MARKDOWN
-        end.join("\n")
+        end.compact.join("\n")
       end
       
       def self.generate_by_adapter
-        stats = E11y::Registry.statistics
-        
-        stats[:by_adapter].map do |adapter, count|
-          events = E11y::Registry.by_adapter(adapter)
-          
+        adapters = E11y::Registry.event_classes.flat_map { |e| Array(e.adapters) }.uniq
+        adapters.map do |adapter|
+          events = E11y::Registry.where(adapter: adapter)
           <<~MARKDOWN
-            ### #{adapter} (#{count})
+            ### #{adapter} (#{events.size})
             
             #{events.map { |e| "- #{e.name}" }.join("\n")}
           MARKDOWN
@@ -1809,7 +1599,7 @@ end
 | **Web UI** | Visual exploration | Maintenance burden | Critical for DX |
 | **File-based JSONL** | Multi-process, persistent, zero deps | ~50ms read latency | Multi-process support > speed |
 | **Near-realtime (3s)** | Simple, no WebSocket | 3s delay | Good enough for dev |
-| **Event Registry** | Full introspection | Memory overhead | Worth it |
+| **Event Registry** | find, event_classes, where, to_documentation | — | Core DX |
 | **Auto-generated docs** | Always up-to-date | Limited customization | Consistency |
 | **Dev-only features** | Safe | Not in production | Clear separation |
 | **Max 10K events** | Auto-rotation | Limited history | Enough for debugging |
@@ -2039,7 +1829,7 @@ For production → use Grafana + Loki.
 module E11y
   module Adapters
     class LokiQuery
-      def all_events(limit: 1000)
+      def stored_events(limit: 1000)
         Loki.query('{app="myapp"}', limit: limit)
       end
     end
@@ -2049,9 +1839,9 @@ end
 # Web UI controller (future)
 def index
   if params[:source] == 'loki'
-    @events = E11y::Adapters::LokiQuery.new.all_events
+    @events = E11y::Adapters::LokiQuery.new.stored_events
   else
-    @events = memory_adapter.all_events  # Default
+    @events = memory_adapter.events  # Default (InMemory)
   end
 end
 ```
@@ -2071,7 +1861,7 @@ end
 1. Events::OrderCreated.track(...)
 2. → E11y Pipeline
 3. → DevLog Adapter (if registered)
-4. → adapter.send_batch([event])
+4. → adapter.write_batch([event])
 5. → Append to log/e11y_dev.jsonl
 6. → Web UI reads file (cached)
 ```

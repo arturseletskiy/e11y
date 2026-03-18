@@ -16,10 +16,7 @@ module E11y
         # @example Custom override
         #   # config/initializers/e11y.rb
         #   E11y.configure do |config|
-        #     config.rails_instrumentation.event_class_for(
-        #       'sql.active_record',
-        #       MyApp::CustomDatabaseQuery
-        #     )
+        #     config.rails_instrumentation_custom_mappings['sql.active_record'] = MyApp::CustomDatabaseQuery
         #   end
         #
         # @see ADR-008 §4.3 (Built-in Event Classes)

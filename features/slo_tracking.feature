@@ -18,7 +18,7 @@ Feature: SLO Tracking
 
   Scenario: SLO tracking is enabled by default without any configuration
     When I inspect the default SLO tracking configuration
-    Then E11y.configuration.slo_tracking.enabled should be true
+    Then E11y.configuration.slo_tracking_enabled should be true
 
   Scenario: Successful HTTP request is tracked in SLO
     Given SLO tracking is enabled
@@ -39,7 +39,7 @@ Feature: SLO Tracking
       | order[status] | pending |
     Then the SLO metric "slo_event_result_total" should have been incremented
 
-  Scenario: SLO is disabled when config.slo_tracking.enabled is false
+  Scenario: SLO is disabled when config.slo_tracking_enabled is false
     Given SLO tracking is explicitly disabled
     When I POST to "/orders" with order params:
       | order[status] | pending |
@@ -48,5 +48,5 @@ Feature: SLO Tracking
   Scenario: SLO tracking can be explicitly disabled
     # Zero-config: enabled by default; can opt-out.
     When I inspect the default SLO tracking configuration
-    Then E11y.configuration.slo_tracking.enabled should be true
-    And enabling SLO tracking requires setting slo_tracking.enabled to true
+    Then E11y.configuration.slo_tracking_enabled should be true
+    And enabling SLO tracking requires setting slo_tracking_enabled to true

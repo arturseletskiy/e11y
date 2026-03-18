@@ -322,7 +322,7 @@ Background Flush Thread (200ms interval):
 def track_event(event)
   if event.severity == :debug && E11y.request_scope.active?
     # → Request-scoped buffer (Thread-local)
-    Thread.current[:e11y_request_buffer] << event
+    Thread.current[:e11y_ephemeral_buffer] << event
   else
     # → Main buffer (Global SPSC ring buffer)
     E11y.main_buffer << event
@@ -413,20 +413,20 @@ end
 
 ```ruby
 # Exposed via Yabeda (auto-configured)
-Yabeda.e11y_request_buffer_size  # Gauge: current buffer size per request
-Yabeda.e11y_request_buffer_flushes_total  # Counter: buffer flushes by trigger
+Yabeda.e11y_ephemeral_buffer_size  # Gauge: current buffer size per request
+Yabeda.e11y_ephemeral_buffer_flushes_total  # Counter: buffer flushes by trigger
 
 # Accessible via Prometheus metrics endpoint
 # Example queries:
 
 # 1. Average buffer size
-avg(e11y_request_buffer_size)
+avg(e11y_ephemeral_buffer_size)
 
 # 2. Buffer flush rate by trigger
-rate(e11y_request_buffer_flushes_total{trigger="error"}[5m])
+rate(e11y_ephemeral_buffer_flushes_total{trigger="error"}[5m])
 
 # 3. Buffer overflow alerts
-e11y_request_buffer_size >= 100  # Alert if buffer limit reached
+e11y_ephemeral_buffer_size >= 100  # Alert if buffer limit reached
 ```
 
 **Monitoring Examples:**
@@ -436,18 +436,18 @@ e11y_request_buffer_size >= 100  # Alert if buffer limit reached
 
 # Panel 1: Buffer Size Distribution
 histogram_quantile(0.99, 
-  sum(rate(e11y_request_buffer_size[5m])) by (le)
+  sum(rate(e11y_ephemeral_buffer_size[5m])) by (le)
 )
 # Shows p99 buffer size
 
 # Panel 2: Flush Triggers Breakdown
 sum by (trigger) (
-  rate(e11y_request_buffer_flushes_total[5m])
+  rate(e11y_ephemeral_buffer_flushes_total[5m])
 )
 # Shows why buffers flush (error vs. slow_request vs. custom)
 
 # Panel 3: Memory Impact Estimate
-avg(e11y_request_buffer_size) * 500  # bytes per event
+avg(e11y_ephemeral_buffer_size) * 500  # bytes per event
 # Estimates per-request memory usage
 ```
 

@@ -327,7 +327,7 @@ module E11y
 
         metrics = [
           # Request buffer (consolidated)
-          { name: :e11y_request_buffer_total, tags: [:event] },
+          { name: :e11y_ephemeral_buffer_total, tags: [:event] },
           # Retry handler
           { name: :e11y_retry_success, tags: %i[adapter attempts] },
           { name: :e11y_retry_recovered, tags: %i[adapter attempts] },
@@ -341,6 +341,7 @@ module E11y
           { name: :e11y_adapter_send_duration_seconds, type: :histogram, tags: [:adapter], buckets: [0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0] },
           { name: :e11y_adapter_writes_total, tags: %i[adapter status error_class] },
           # DLQ
+          { name: :e11y_dlq_size, type: :gauge, tags: [] },
           { name: :e11y_dlq_filter_decisions_total, tags: %i[action reason] },
           { name: :e11y_dlq_saved_total, tags: [:event_name] },
           { name: :e11y_dlq_parse_error_total, tags: [:error] },
@@ -358,7 +359,12 @@ module E11y
             buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0] },
           { name: :slo_background_jobs_total, tags: %i[job_class status queue] },
           { name: :slo_background_job_duration_seconds, type: :histogram, tags: %i[job_class queue],
-            buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0] }
+            buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0] },
+          # E11y self-monitoring (events tracked at pipeline end)
+          { name: :e11y_events_tracked_total, tags: %i[result event_name] },
+          # Track latency (TrackLatency middleware)
+          { name: :e11y_track_duration_seconds, type: :histogram, tags: %i[event_class severity result],
+            buckets: [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1] }
         ]
 
         metrics.each do |m|

@@ -34,7 +34,7 @@ RSpec.describe "Zero-Config SLO Tracking Integration", :integration do
 
     # Enable SLO tracking
     E11y.configure do |config|
-      config.slo_tracking.enabled = true
+      config.slo_tracking_enabled = true
     end
 
     # Unified approach: use YabedaHelpers (see spec/support/yabeda_helpers.rb)

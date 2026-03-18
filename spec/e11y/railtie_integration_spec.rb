@@ -152,7 +152,7 @@ RSpec.describe E11y::Railtie, :railtie_integration do
     context "Rails instrumentation" do # rubocop:todo RSpec/ContextWording
       it "sets up Rails instrumentation when enabled" do
         E11y.configure do |config|
-          config.rails_instrumentation.enabled = true
+          config.rails_instrumentation_enabled = true
         end
 
         # Mock the instrumentation setup
@@ -163,7 +163,7 @@ RSpec.describe E11y::Railtie, :railtie_integration do
 
       it "does not setup Rails instrumentation when disabled" do
         E11y.configure do |config|
-          config.rails_instrumentation.enabled = false
+          config.rails_instrumentation_enabled = false
         end
 
         expect(E11y::Instruments::RailsInstrumentation).not_to receive(:setup!)
@@ -175,7 +175,7 @@ RSpec.describe E11y::Railtie, :railtie_integration do
     context "Logger bridge" do # rubocop:todo RSpec/ContextWording
       it "sets up logger bridge when enabled" do
         E11y.configure do |config|
-          config.logger_bridge.enabled = true
+          config.logger_bridge_enabled = true
         end
 
         expect(E11y::Logger::Bridge).to receive(:setup!)

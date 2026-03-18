@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### BREAKING: Configuration — Flat config API
+
+**Nested config objects removed.** All configuration options are now flat accessors on `config`.
+
+**Key migrations:**
+- `config.rails_instrumentation.enabled` → `config.rails_instrumentation_enabled`
+- `config.logger_bridge.track_severities` → `config.logger_bridge_track_severities`
+- `config.rate_limiting { }` removed → use `config.rate_limiting_enabled`, `config.add_rate_limit_per_event(...)`
+- `config.slo { }` removed → use `config.slo_tracking_enabled`, `config.add_slo_controller(...)`
+
+**Full mapping:** See `docs/plans/2026-03-13-configuration-design.md`
+
+### BREAKING: Middleware order changed (ADR-015 compliance)
+
+**Per ADR-015 and ADR-006:**
+- **Versioning** moved to last (before Routing) — Validation, PII, RateLimiting, Sampling now use original class names
+- **AuditSigning** before PIIFilter — audit events signed with original data (GDPR Art. 30 non-repudiation)
+- **RateLimiting** before Sampling — matches ADR #4, #5
+
+**New order:** TraceContext → Validation → AuditSigning → PIIFilter → RateLimiting → Sampling → Versioning → Routing → EventSlo
+
+**Migration:** If you custom-configured pipeline order, ensure Versioning is last before Routing. Audit events now receive unfiltered payload at signing.
+
+### BREAKING: Registry.all_events → Registry.event_classes
+
+**Renamed for clarity:** Method returns event classes, not event instances or names.
+
+**Migration:** `E11y::Registry.all_events` → `E11y::Registry.event_classes`
+
+### BREAKING: RequestScopedBuffer → EphemeralBuffer
+
+**Renamed for accuracy:** The buffer works for both HTTP requests and background jobs. "Ephemeral" reflects its temporary lifecycle.
+
+**Migration:**
+- `E11y::Buffers::RequestScopedBuffer` → `E11y::Buffers::EphemeralBuffer`
+- `config.request_buffer` → `config.ephemeral_buffer`
+- `Thread.current[:e11y_request_buffer]` → `Thread.current[:e11y_ephemeral_buffer]`
+- Yabeda metric `e11y_request_buffer_total` → `e11y_ephemeral_buffer_total`
+
+**Search and replace:** `RequestScopedBuffer` → `EphemeralBuffer`, `request_buffer` → `ephemeral_buffer`
+
 ### Added
 
 ### Changed

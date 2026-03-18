@@ -27,9 +27,9 @@ def add_rate_limiting_to_pipeline!
     middleware_class: E11y::Middleware::RateLimiting,
     args: [],
     options: {
-      global_limit: config.rate_limiting.global_limit,
-      per_event_limit: config.rate_limiting.per_event_limit,
-      window: config.rate_limiting.window
+      global_limit: config.rate_limiting_global_limit,
+      per_event_limit: config.rate_limiting_per_event_limit,
+      window: config.rate_limiting_global_window
     }
   )
   entries.insert(sampling_idx || entries.size, entry)
@@ -90,18 +90,18 @@ Then("{string} should come before {string} in the pipeline") do |first, second|
 end
 
 Given("rate limiting is configured with global_limit {int}") do |limit|
-  E11y.configuration.rate_limiting.enabled = true
-  E11y.configuration.rate_limiting.global_limit = limit
+  E11y.configuration.rate_limiting_enabled = true
+  E11y.configuration.rate_limiting_global_limit = limit
   add_rate_limiting_to_pipeline!
 end
 
 Given("rate limiting is enabled") do
-  E11y.configuration.rate_limiting.enabled = true
+  E11y.configuration.rate_limiting_enabled = true
   add_rate_limiting_to_pipeline!
 end
 
 Given("EventSlo middleware is enabled") do
-  E11y.configuration.slo_tracking.enabled = true
+  E11y.configuration.slo_tracking_enabled = true
   add_event_slo_to_pipeline!
 end
 

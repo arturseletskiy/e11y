@@ -5,8 +5,8 @@ require "spec_helper"
 # Rate limiting integration tests require time-sensitive scenarios,
 # token bucket state management, and multiple test configurations.
 RSpec.describe E11y::Middleware::RateLimiting do
-  before { E11y.configuration.rate_limiting.enabled = true }
-  after  { E11y.configuration.rate_limiting.enabled = false }
+  before { E11y.configuration.rate_limiting_enabled = true }
+  after  { E11y.configuration.rate_limiting_enabled = false }
 
   let(:next_middleware) { ->(event) { event } }
   let(:middleware) { described_class.new(next_middleware, global_limit: 10, per_event_limit: 5, window: 1.0) }
@@ -147,7 +147,11 @@ RSpec.describe E11y::Middleware::RateLimiting do
   describe "C02 Resolution: Critical Events Bypass" do
     let(:payment_event) { { event_name: "payment.failed", severity: :error } }
     let(:log_event) { { event_name: "log.debug", severity: :debug } }
-    let(:dlq_filter) { double("DLQFilter", always_save_patterns: [/^payment\./]) }
+    let(:dlq_filter) do
+      double("DLQFilter").tap do |d|
+        allow(d).to receive(:should_save?) { |event_data| event_data[:event_name] == "payment.failed" }
+      end
+    end
     let(:dlq_storage) { double("DLQStorage") }
 
     before do
@@ -298,7 +302,11 @@ RSpec.describe E11y::Middleware::RateLimiting do
   describe "ADR-013 §4.6 compliance (C02 Resolution)" do
     let(:critical_event) { { event_name: "audit.user_action", severity: :warn } }
     let(:normal_event) { { event_name: "log.info", severity: :info } }
-    let(:dlq_filter) { double("DLQFilter", always_save_patterns: [/^audit\./]) }
+    let(:dlq_filter) do
+      double("DLQFilter").tap do |d|
+        allow(d).to receive(:should_save?) { |event_data| event_data[:event_name] == "audit.user_action" }
+      end
+    end
     let(:dlq_storage) { double("DLQStorage") }
 
     before do

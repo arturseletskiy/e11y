@@ -369,12 +369,12 @@ module E11y
         end
         
         def no_events_message
-          all_events = E11y.test_adapter.all_events
+          events = E11y.test_adapter.events
           
-          if all_events.empty?
+          if events.empty?
             "expected to have tracked #{event_name}, but no events were tracked at all"
           else
-            tracked_names = all_events.map { |e| e[:event_name] }.uniq.join(', ')
+            tracked_names = events.map { |e| e[:event_name] }.uniq.join(', ')
             "expected to have tracked #{event_name}, but only tracked: #{tracked_names}"
           end
         end
@@ -495,78 +495,38 @@ end
 
 ```ruby
 # lib/e11y/adapters/in_memory.rb
+# API: write, write_batch (adapter contract), events, find_events, clear!, any_event?
 module E11y
   module Adapters
     class InMemory < Base
-      def initialize
-        super(name: :test)
-        @events = []
-        @mutex = Mutex.new
-      end
-      
-      def send_batch(events)
-        @mutex.synchronize do
-          events.each do |event|
-            @events << event.dup
-          end
-        end
-        
-        { success: true, sent: events.size }
-      end
-      
-      def health_check
+      attr_reader :events
+
+      def write(event_data)
+        @mutex.synchronize { @events << event_data }
         true
       end
-      
+
+      def write_batch(events)
+        @mutex.synchronize { @events.concat(events) }
+        true
+      end
+
       # Test helper methods
-      def all_events
-        @mutex.synchronize { @events.dup }
+      def find_events(pattern)  # pattern: String or Regexp
+        pattern = Regexp.new(Regexp.escape(pattern)) if pattern.is_a?(String)
+        @events.select { |e| e[:event_name].to_s.match?(pattern) }
       end
-      
-      def find_events(pattern)
-        @mutex.synchronize do
-          @events.select do |event|
-            case pattern
-            when String
-              event[:event_name] == pattern
-            when Regexp
-              event[:event_name] =~ pattern
-            when Class
-              event[:event_name] == pattern.event_name
-            else
-              false
-            end
-          end
-        end
+
+      def event_count(event_name = nil)
+        event_name ? @events.count { |e| e[:event_name] == event_name } : @events.size
       end
-      
-      def find_event(pattern)
-        find_events(pattern).first
-      end
-      
-      def event_count(pattern = nil)
-        if pattern
-          find_events(pattern).size
-        else
-          @mutex.synchronize { @events.size }
-        end
-      end
-      
+
       def clear!
-        @mutex.synchronize { @events.clear }
+        @events.clear
       end
-      
-      def tracked?(event_class_or_pattern)
-        find_events(event_class_or_pattern).any?
-      end
-      
-      # Pretty print for debugging
-      def inspect
-        "#<E11y::Adapters::InMemory events=#{@events.size}>"
-      end
-      
-      def to_s
-        inspect
+
+      def any_event?(pattern)  # true if any events match pattern
+        find_events(pattern).any?
       end
     end
   end
@@ -590,7 +550,7 @@ module E11y
         @call_count = 0
       end
       
-      def send_batch(events)
+      def write_batch(events)
         @call_count += 1
         
         # Simulate delay
@@ -634,7 +594,7 @@ RSpec.configure do |config|
       e11y_config.adapters.register :test, E11y::Adapters::InMemory.new
       
       # Disable rate limiting in tests
-      e11y_config.rate_limiting.enabled = false
+      e11y_config.rate_limiting_enabled = false
       
       # Disable sampling (track everything)
       e11y_config.sampling.default_sample_rate = 1.0
@@ -661,10 +621,10 @@ RSpec.configure do |config|
   config.alias_example_group_to :describe_event, type: :event
 end
 
-# Convenience method to access test adapter
+# Convenience method to access test adapter (uses config.adapters[:test] or [:memory])
 module E11y
   def self.test_adapter
-    Adapters::Registry.get(:test)
+    configuration.adapters[:test] || configuration.adapters[:memory]
   end
 end
 ```
@@ -963,7 +923,7 @@ RSpec.describe 'Order flow integration', type: :integration do
       .and have_tracked_event(Events::EmailQueued)
     
     # Verify event sequence
-    events = E11y.test_adapter.all_events
+    events = E11y.test_adapter.events
     event_names = events.map { |e| e[:event_name] }
     
     expect(event_names).to eq([
@@ -1050,16 +1010,16 @@ end
 RSpec.shared_examples 'an E11y adapter' do
   let(:adapter) { described_class.new }
   
-  describe '#send_batch' do
+  describe '#write_batch' do
     it 'accepts array of events' do
       events = [build(:event)]
       
-      expect { adapter.send_batch(events) }.not_to raise_error
+      expect { adapter.write_batch(events) }.not_to raise_error
     end
     
     it 'returns success hash' do
       events = [build(:event)]
-      result = adapter.send_batch(events)
+      result = adapter.write_batch(events)
       
       expect(result).to be_a(Hash)
       expect(result).to have_key(:success)
@@ -1067,11 +1027,11 @@ RSpec.shared_examples 'an E11y adapter' do
     end
     
     it 'handles empty batch' do
-      expect { adapter.send_batch([]) }.not_to raise_error
+      expect { adapter.write_batch([]) }.not_to raise_error
     end
     
     it 'raises on invalid input' do
-      expect { adapter.send_batch(nil) }.to raise_error(ArgumentError)
+      expect { adapter.write_batch(nil) }.to raise_error(ArgumentError)
     end
   end
   
@@ -1537,8 +1497,8 @@ RSpec.describe 'Rate limiting', type: :integration do
   
   before do
     E11y.configure do |config|
-      config.rate_limiting.enabled = true
-      config.rate_limiting.global_limit = 10  # 10 events/sec
+      config.rate_limiting_enabled = true
+      config.rate_limiting_global_limit = 10  # 10 events/sec
     end
   end
   
@@ -1554,7 +1514,7 @@ RSpec.describe 'Rate limiting', type: :integration do
   end
   
   it 'never drops critical events (bypass rate limit)' do
-    E11y.config.rate_limiting.global_limit = 1  # Extremely low
+    E11y.config.rate_limiting_global_limit = 1  # Extremely low
     
     # Track 10 critical events
     10.times { Events::PaymentFailed.track(payment_id: 'p123') }
@@ -1564,9 +1524,7 @@ RSpec.describe 'Rate limiting', type: :integration do
   end
   
   it 'applies per-event rate limits' do
-    E11y.config.rate_limiting.per_event_limits = {
-      'Events::DebugQuery' => 5  # Max 5 per second
-    }
+    E11y.config.add_rate_limit_per_event('Events::DebugQuery', limit: 5)  # Max 5 per second
     
     10.times { Events::DebugQuery.track(sql: 'SELECT 1') }
     
@@ -1659,12 +1617,12 @@ RSpec.configure do |config|
     next unless E11y.config.pii.strict_mode
     
     # Get all events from all adapters
-    all_events = E11y.config.adapters.all.flat_map do |adapter|
-      adapter.respond_to?(:all_events) ? adapter.all_events : []
+    events = E11y.config.adapters.all.flat_map do |adapter|
+      adapter.respond_to?(:events) ? adapter.events : []
     end
     
     # Verify no plain-text PII (if event declares contains_pii)
-    all_events.each do |event|
+    events.each do |event|
       event_class = E11y::Registry.get(event[:event_name])
       
       if event_class&.contains_pii?

@@ -33,11 +33,8 @@ module E11y
     #     severity_threshold: :warn
     #   )
     #
-    # @example With Registry
-    #   E11y::Adapters::Registry.register(
-    #     :error_tracker,
-    #     E11y::Adapters::Sentry.new(dsn: ENV["SENTRY_DSN"])
-    #   )
+    # @example Configuration
+    #   config.adapters[:sentry] = E11y::Adapters::Sentry.new(dsn: ENV["SENTRY_DSN"])
     #
     # @see https://docs.sentry.io/platforms/ruby/
     # rubocop:disable Metrics/ClassLength

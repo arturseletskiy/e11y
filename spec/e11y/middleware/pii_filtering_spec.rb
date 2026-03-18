@@ -119,6 +119,46 @@ RSpec.describe E11y::Middleware::PIIFilter do
         expect(result[:payload][:password]).to eq("[FILTERED]")
         expect(result[:payload][:user_id]).to eq("u-123")
       end
+
+      context "when exclude_adapters present (per-adapter Tier 3)" do
+        let(:event_class) do
+          Class.new(E11y::Event::Base) do
+            def self.name
+              "Events::UserWithAudit"
+            end
+
+            schema do
+              required(:email).filled(:string)
+              required(:user_id).filled(:string)
+            end
+
+            contains_pii true
+
+            pii_filtering do
+              field :email do
+                strategy :hash
+                exclude_adapters [:file_audit]
+              end
+              allows :user_id
+            end
+          end
+        end
+
+        it "produces payload_rewrites with original for excluded adapter" do
+          event_data = {
+            event_class: event_class,
+            adapters: %i[memory file_audit],
+            payload: { email: "user@example.com", user_id: "u-123" }
+          }
+
+          result = middleware.call(event_data)
+
+          expect(result[:payload_rewrites]).to be_a(Hash)
+          expect(result[:payload_rewrites][:file_audit]).to eq(email: "user@example.com")
+          expect(result[:payload_rewrites][:memory]).to be_nil
+          expect(result[:payload][:email]).to match(/^hashed_[a-f0-9]{16}$/)
+        end
+      end
     end
 
     context "when using inheritance (child inherits and overrides parent pii_filtering)" do
@@ -204,25 +244,24 @@ RSpec.describe E11y::Middleware::PIIFilter do
       end
     end
 
-    context "when event class has unknown or invalid pii_tier" do
+    context "when event class has unknown filtering_mode" do
       let(:event_class) do
         Class.new(E11y::Event::Base) do
           def self.name
-            "Events::InvalidTierEvent"
+            "Events::InvalidModeEvent"
           end
 
           schema do
             required(:data).filled(:string)
           end
 
-          # Override pii_tier to return invalid value
-          def self.pii_tier
-            :unknown_tier
+          def self.pii_filtering_mode
+            :unknown
           end
         end
       end
 
-      it "falls back to skipping filtering (safe default)" do
+      it "falls back to no filtering (safe default)" do
         event_data = {
           event_class: event_class,
           payload: {
@@ -237,22 +276,22 @@ RSpec.describe E11y::Middleware::PIIFilter do
       end
     end
 
-    context "when event class does not respond to pii_tier" do
+    context "when event class does not respond to pii_filtering_mode" do
       let(:event_class) do
         Class.new(E11y::Event::Base) do
           def self.name
-            "Events::NoTierEvent"
+            "Events::NoModeEvent"
           end
 
           schema do
             required(:order_id).filled(:string)
           end
-
-          # No pii_tier method - should default to tier2
         end
       end
 
       before do
+        allow(event_class).to receive(:respond_to?).and_call_original
+        allow(event_class).to receive(:respond_to?).with(:pii_filtering_mode).and_return(false)
         # rubocop:disable RSpec/AnyInstance
         allow_any_instance_of(described_class).to receive(:parameter_filter).and_return(
           ActiveSupport::ParameterFilter.new(%i[password])
@@ -260,7 +299,7 @@ RSpec.describe E11y::Middleware::PIIFilter do
         # rubocop:enable RSpec/AnyInstance
       end
 
-      it "defaults to Tier 2 (Rails filters)" do
+      it "defaults to :rails_filters" do
         event_data = {
           event_class: event_class,
           payload: {

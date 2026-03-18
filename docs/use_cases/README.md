@@ -34,7 +34,7 @@
 - **[UC-018: Testing Events](./UC-018-testing-events.md)** - Test strategies
 - **[UC-020: Event Versioning](./UC-020-event-versioning.md)** - Schema evolution & backward compatibility
 - **[UC-021: Error Handling & DLQ](./UC-021-error-handling-retry-dlq.md)** - Retry policy & dead letter queue
-- **[UC-022: Event Registry](./UC-022-event-registry.md)** - Event introspection & discovery
+- **[UC-022: Event Registry](./UC-022-event-registry.md)** - Event discovery (find, event_classes, where)
 
 ## 🎯 Use Case Categories
 

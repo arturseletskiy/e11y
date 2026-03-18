@@ -91,7 +91,8 @@ RSpec.describe E11y::Middleware::EventSlo do
             slo_status: "success",
             slo_name: "payment_success_rate",
             group_by: "card"
-          )
+          ),
+          hash_including(value: a_kind_of(Numeric))
         )
       end
 
@@ -102,9 +103,8 @@ RSpec.describe E11y::Middleware::EventSlo do
 
         expect(E11y::Metrics).to have_received(:increment).with(
           :slo_event_result_total,
-          hash_including(
-            slo_status: "failure"
-          )
+          hash_including(slo_status: "failure"),
+          hash_including(value: a_kind_of(Numeric))
         )
       end
 

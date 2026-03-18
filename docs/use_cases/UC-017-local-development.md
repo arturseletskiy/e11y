@@ -49,7 +49,7 @@ E11y.configure do |config|
     config.severity = :debug
     
     # No rate limiting in dev
-    config.rate_limiting.enabled = false
+    config.rate_limiting_enabled = false
   end
 end
 
@@ -355,7 +355,7 @@ E11y.configure do |config|
   
   # === RATE LIMITING: DISABLED (no throttling) ===
   # ✅ Rapid testing won't hit limits
-  config.rate_limiting.enabled = false
+  config.rate_limiting_enabled = false
   
   # === PII FILTERING: DISABLED (optional) ===
   # ✅ See real data for easier debugging
@@ -563,7 +563,7 @@ Rails.application.configure do
       
       # === FEATURES ===
       # Disable production features
-      config.rate_limiting.enabled = false
+      config.rate_limiting_enabled = false
       config.sampling.enabled = false
       config.pii_filtering.enabled = false  # Easier debugging
       
@@ -754,7 +754,7 @@ Rails.application.configure do
       config.severity = :debug
       
       # === FEATURES ===
-      config.rate_limiting.enabled = false
+      config.rate_limiting_enabled = false
       config.sampling.enabled = false
       config.buffering.enabled = false
       
@@ -828,11 +828,11 @@ config.adapters = [
 **2. Don't forget to disable features**
 ```ruby
 # ❌ BAD: Production features enabled
-config.rate_limiting.enabled = true  # Annoying in dev!
+config.rate_limiting_enabled = true  # Annoying in dev!
 config.sampling.enabled = true       # Lose events!
 
 # ✅ GOOD: Disable in development
-config.rate_limiting.enabled = false
+config.rate_limiting_enabled = false
 config.sampling.enabled = false
 ```
 

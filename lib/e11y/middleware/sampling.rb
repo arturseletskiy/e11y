@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "e11y/middleware/base"
+require "e11y/sampling/stratified_tracker"
 
 module E11y
   module Middleware
@@ -92,9 +93,15 @@ module E11y
         # Track events for load-based adaptive sampling (FEAT-4842)
         @load_monitor&.record_event
 
+        # C11: Get sample rate and severity before decision (for StratifiedTracker)
+        sample_rate = determine_sample_rate(event_class, event_data)
+        severity = event_data[:severity] || (event_class.respond_to?(:severity) ? event_class.severity : :info)
+
         # Determine if event should be sampled
         # Drop event if not sampled
         unless should_sample?(event_data, event_class)
+          # C11: Record dropped event to StratifiedTracker for sampling correction
+          E11y::Sampling.stratified_tracker.record_sample(severity: severity, sample_rate: sample_rate, sampled: false)
           begin
             if defined?(E11y::Metrics) && E11y::Metrics.respond_to?(:increment)
               E11y::Metrics.increment(:e11y_events_dropped_total, {
@@ -110,7 +117,10 @@ module E11y
 
         # Mark as sampled for downstream middleware
         event_data[:sampled] = true
-        event_data[:sample_rate] = determine_sample_rate(event_class, event_data)
+        event_data[:sample_rate] = sample_rate
+
+        # C11: Record sampled event to StratifiedTracker for sampling correction
+        E11y::Sampling.stratified_tracker.record_sample(severity: severity, sample_rate: sample_rate, sampled: true)
 
         # Pass to next middleware
         @app.call(event_data)
@@ -176,8 +186,12 @@ module E11y
         # 1. Check if audit event (never sample audit events!)
         return true if event_class.respond_to?(:audit_event?) && event_class.audit_event?
 
-        # 2. Check trace-aware sampling (C05)
-        return trace_sampling_decision(event_data[:trace_id], event_class, event_data) if @trace_aware && event_data[:trace_id]
+        # 2. Trace-consistent sampling (ADR-005 §7): prefer E11y::Current.sampled when trace_aware
+        if @trace_aware && event_data[:trace_id]
+          return E11y::Current.sampled if E11y::Current.respond_to?(:sampled) && !E11y::Current.sampled.nil?
+
+          return trace_sampling_decision(event_data[:trace_id], event_class, event_data)
+        end
 
         # 3. Get sample rate for this event
         sample_rate = determine_sample_rate(event_class, event_data)
@@ -199,7 +213,7 @@ module E11y
       # @param event_class [Class] The event class
       # @param event_data [Hash] Event payload (for value-based sampling)
       # @return [Float] Sample rate (0.0-1.0)
-      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+      # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
       # Sample rate determination follows a 6-step priority chain:
       # error spike (0) → pattern-based (0.5) → value-based (1) →
       # load-based (2) → severity (3) → event-level (4) → default (5)
@@ -254,7 +268,7 @@ module E11y
         # 4. Default/load-based rate
         base_rate
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+      # rubocop:enable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
       # Trace-aware sampling decision (C05 Resolution)
       #
@@ -267,15 +281,21 @@ module E11y
       # @return [Boolean] true if trace should be sampled
       def trace_sampling_decision(trace_id, event_class, event_data = nil)
         @trace_decisions_mutex.synchronize do
+          # Use monotonic clock (Float) to avoid Time object allocation — prevents memory leak in hot path
+          now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
           # Check if decision already made for this trace
-          return @trace_decisions[trace_id] if @trace_decisions.key?(trace_id)
+          if (entry = @trace_decisions[trace_id])
+            entry[:last_access] = now # LRU touch
+            return entry[:decision]
+          end
 
           # Make new sampling decision
           sample_rate = determine_sample_rate(event_class, event_data)
           decision = rand < sample_rate
 
-          # Cache decision (TTL handled by periodic cleanup)
-          @trace_decisions[trace_id] = decision
+          # Cache decision with LRU metadata (evict oldest on cleanup)
+          @trace_decisions[trace_id] = { decision: decision, last_access: now }
 
           # Cleanup old decisions periodically (every 1000 traces)
           cleanup_trace_decisions if @trace_decisions.size > 1000
@@ -286,13 +306,15 @@ module E11y
 
       # Cleanup old trace decisions to prevent memory leaks
       #
-      # Removes random 50% of cached decisions when cache grows too large.
-      # This is a simple heuristic - traces typically complete in <10 seconds,
-      # so old decisions are likely stale.
+      # Evicts oldest 50% by last_access (LRU). Active traces stay in cache
+      # because they are touched on each lookup, preserving trace-level consistency.
       def cleanup_trace_decisions
-        # Remove random 50% of decisions
-        keys_to_remove = @trace_decisions.keys.sample(@trace_decisions.size / 2)
-        keys_to_remove.each { |key| @trace_decisions.delete(key) }
+        return if @trace_decisions.size <= 100
+
+        size_to_remove = @trace_decisions.size / 2
+        sorted = @trace_decisions.to_a.sort_by { |_, v| v[:last_access] }
+        keys_to_remove = sorted.first(size_to_remove).map(&:first)
+        keys_to_remove.each { |k| @trace_decisions.delete(k) }
       end
     end
     # rubocop:enable Metrics/ClassLength

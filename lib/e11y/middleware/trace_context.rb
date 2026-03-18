@@ -68,7 +68,7 @@ module E11y
       # @return [void]
       def enrich_trace_context(event_data)
         event_data[:trace_id] ||= current_trace_id || generate_trace_id
-        event_data[:span_id] ||= generate_span_id
+        event_data[:span_id] ||= current_span_id || generate_span_id
         event_data[:parent_trace_id] ||= current_parent_trace_id if current_parent_trace_id
 
         # Format timestamp if it's a Time object
@@ -103,13 +103,52 @@ module E11y
         event_data[:environment] ||= E11y.config.environment
       end
 
-      # Get current trace ID from E11y::Current or thread-local storage (request context).
+      # Get current trace ID from configured source (ADR-007 §8).
       #
-      # Priority: E11y::Current > Thread.current
+      # When config.tracing_source is :opentelemetry and OTel SDK has an active span,
+      # uses trace_id from OpenTelemetry::Trace.current_span.
+      # Otherwise: E11y::Current > Thread.current
       #
       # @return [String, nil] Current trace ID if set, nil otherwise
       def current_trace_id
+        if tracing_source_opentelemetry?
+          otel = otel_trace_context
+          return otel[:trace_id] if otel[:trace_id]
+        end
         E11y::Current.trace_id || Thread.current[:e11y_trace_id]
+      end
+
+      # Get current span ID (for event correlation).
+      # When using OTel source and span exists, returns OTel span_id; otherwise nil (caller generates).
+      #
+      # @return [String, nil]
+      def current_span_id
+        return nil unless tracing_source_opentelemetry?
+
+        otel = otel_trace_context
+        otel[:span_id]
+      end
+
+      def tracing_source_opentelemetry?
+        E11y.config&.tracing_source == :opentelemetry
+      end
+
+      def otel_trace_context
+        return {} unless defined?(OpenTelemetry::Trace)
+
+        span = OpenTelemetry::Trace.current_span
+        ctx = span.context
+        return {} unless ctx.respond_to?(:valid?) && ctx.valid?
+
+        trace_id = ctx.respond_to?(:hex_trace_id) ? ctx.hex_trace_id : nil
+        span_id = ctx.respond_to?(:hex_span_id) ? ctx.hex_span_id : nil
+        return {} if trace_id.to_s.empty?
+
+        # Sync to E11y::Current so downstream uses same context
+        E11y::Current.trace_id = trace_id
+        E11y::Current.span_id = span_id
+
+        { trace_id: trace_id, span_id: span_id }
       end
 
       # Get current parent trace ID from E11y::Current (background job context).

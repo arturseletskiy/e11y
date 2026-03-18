@@ -34,6 +34,45 @@ RSpec.describe E11y::Adapters::Stdout do
       adapter = described_class.new(pretty_print: false)
       expect(adapter.instance_variable_get(:@pretty_print)).to be false
     end
+
+    it "accepts format: :rich for ADR-010 §3 structured output" do
+      adapter = described_class.new(format: :rich, colorize: false)
+      expect(adapter.instance_variable_get(:@format)).to eq(:rich)
+    end
+  end
+
+  describe "format: :rich (ADR-010 §3)" do
+    let(:adapter) { described_class.new(format: :rich, colorize: false) }
+
+    it "outputs structured format with header, event name, payload" do
+      output = nil
+      allow($stdout).to receive(:puts) { |arg| output = arg }
+
+      adapter.write(event_data)
+
+      expect(output).to include("test.event")
+      expect(output).to include("Payload:")
+      expect(output).to include("key: \"value\"")
+      expect(output).to include("→")
+      expect(output).to match(/\d{2}:\d{2}:\d{2}\.\d{3}\s+INFO/)
+    end
+
+    it "includes metadata section when trace_id present" do
+      output = nil
+      allow($stdout).to receive(:puts) { |arg| output = arg }
+
+      adapter.write(event_data)
+
+      expect(output).to include("Metadata:")
+      expect(output).to include("trace_id: trace-123")
+      expect(output).to include("span_id: span-456")
+    end
+  end
+
+  describe "Console alias (ADR-010 F-003)" do
+    it "Console equals Stdout" do
+      expect(E11y::Adapters::Console).to eq(described_class)
+    end
   end
 
   describe "#write" do

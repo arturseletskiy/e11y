@@ -248,7 +248,7 @@ Based on UC-011 requirements and real-world patterns, integration tests should c
 - **Risk:** None (handled correctly)
 
 **Critical Event Pattern Mismatch:**
-- **Problem:** Event doesn't match `always_save_patterns`
+- **Problem:** Event class doesn't have `use_dlq true` (or severity/default doesn't match)
 - **Current State:** Event dropped (correct behavior for non-critical events)
 - **Risk:** None (handled correctly)
 

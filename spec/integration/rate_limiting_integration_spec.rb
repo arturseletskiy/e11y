@@ -19,7 +19,11 @@ require "timecop"
 RSpec.describe "Rate Limiting Integration", :integration do
   let(:memory_adapter) { E11y.config.adapters[:memory] }
   let(:dlq_storage) { double("DLQStorage") }
-  let(:dlq_filter) { double("DLQFilter", always_save_patterns: [/^payment\./, /^audit\./]) }
+  let(:dlq_filter) do
+    double("DLQFilter").tap do |d|
+      allow(d).to receive(:should_save?) { |event_data| event_data[:event_name].to_s.include?("PaymentFailed") }
+    end
+  end
 
   before do
     memory_adapter.clear!
@@ -304,7 +308,7 @@ RSpec.describe "Rate Limiting Integration", :integration do
 
   describe "Edge Case 1: Critical event bypass (DLQ integration)" do
     it "saves rate-limited critical events to DLQ" do
-      # Setup: Per-event limit: 5 events/sec, DLQ filter: always_save_patterns = [/^payment\./]
+      # Setup: Per-event limit: 5 events/sec, DLQ filter: use_dlq true for PaymentFailed
       # Test:
       #   1. Track 5 payment events (exhaust limit)
       #   2. Track 6th payment event (rate-limited)
@@ -326,9 +330,6 @@ RSpec.describe "Rate Limiting Integration", :integration do
         )
       end
       E11y.config.instance_variable_set(:@built_pipeline, nil)
-
-      # Setup DLQ filter to match payment events (event_name is "Events::PaymentFailed")
-      allow(dlq_filter).to receive(:always_save_patterns).and_return([/PaymentFailed/i, /^payment\./i])
 
       # Step 1: Track 5 payment events (exhaust limit)
       5.times do |i|
@@ -353,7 +354,7 @@ RSpec.describe "Rate Limiting Integration", :integration do
   describe "Edge Case 2: Non-critical event drop" do
     it "drops rate-limited non-critical events (not saved to DLQ)" do
       # Setup: Per-event limit: 5 events/sec
-      #        DLQ filter: always_save_patterns = [/^payment\./] (log events NOT in pattern)
+      #        DLQ filter: use_dlq true only for PaymentFailed (LogInfo not in pattern)
       # Test:
       #   1. Track 5 log events (exhaust limit)
       #   2. Track 6th log event (rate-limited)
@@ -376,9 +377,6 @@ RSpec.describe "Rate Limiting Integration", :integration do
       end
       E11y.config.instance_variable_set(:@built_pipeline, nil)
 
-      # DLQ filter does NOT match log events (only payment.*)
-      allow(dlq_filter).to receive(:always_save_patterns).and_return([/^payment\./])
-
       # Step 1: Track 5 log events (exhaust limit)
       5.times do |i|
         Events::LogInfo.track(message: "Log message #{i}")
@@ -398,7 +396,7 @@ RSpec.describe "Rate Limiting Integration", :integration do
 
   describe "Edge Case 3: DLQ save failure (C18 Resolution)" do
     it "does not crash middleware when DLQ save fails" do
-      # Setup: Per-event limit: 5 events/sec, DLQ filter: always_save_patterns = [/^payment\./]
+      # Setup: Per-event limit: 5 events/sec, DLQ filter: use_dlq true for PaymentFailed
       #        DLQ storage: Mock to raise StandardError
       # Test:
       #   1. Track 5 payment events (exhaust limit)
@@ -422,9 +420,6 @@ RSpec.describe "Rate Limiting Integration", :integration do
         )
       end
       E11y.config.instance_variable_set(:@built_pipeline, nil)
-
-      # Setup DLQ filter to match payment events
-      allow(dlq_filter).to receive(:always_save_patterns).and_return([/PaymentFailed/i])
 
       # Step 1: Track 5 payment events (exhaust limit)
       5.times do |i|

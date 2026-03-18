@@ -73,28 +73,11 @@ end
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.adapters << E11y::Adapters::OpenTelemetryCollectorAdapter.new(
+  config.adapters[:otel] = E11y::Adapters::OpenTelemetryCollector.new(
     endpoint: ENV['OTEL_EXPORTER_OTLP_ENDPOINT'] || 'http://localhost:4318',
-    protocol: :http,  # :http or :grpc
-    headers: {
-      'X-API-Key' => ENV['OTEL_API_KEY']
-    },
-    
-    # Signal types
-    export_logs: true,      # E11y events → OTel Logs Signal
-    export_traces: true,    # Spans from events → OTel Traces
-    export_metrics: false,  # Use Yabeda for metrics (better)
-    
-    # Batching
-    batch_size: 100,
-    flush_interval: 10.seconds,
-    
-    # Compression
-    compression: :gzip,
-    
-    # Retry
-    retry_enabled: true,
-    max_retries: 3
+    service_name: 'my-app',
+    headers: { 'X-API-Key' => ENV['OTEL_API_KEY'] },
+    compress: true  # default, gzip on HTTP body
   )
 end
 
@@ -330,33 +313,23 @@ E11y blocks ALL baggage keys by default, allowing ONLY safe keys (no PII):
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.security.baggage_protection do
-    enabled true  # ✅ CRITICAL: Always enable in production
-    
-    # Allowlist: ONLY these keys are safe
-    allowed_keys [
-      'trace_id',       # ✅ Safe: Correlation ID
-      'span_id',        # ✅ Safe: Trace context
-      'environment',    # ✅ Safe: Deployment context
-      'version',        # ✅ Safe: Service version
-      'service_name',   # ✅ Safe: Service identifier
-      'request_id',     # ✅ Safe: Request identifier
-      # Custom safe keys (no PII!):
-      'feature_flag_id',  # ✅ Safe: Feature flag name
-      'ab_test_variant'   # ✅ Safe: A/B test group
-    ]
-    
-    # Block mode: What happens when PII detected?
-    block_mode :silent   # Options: :silent (log), :warn (log+warn), :raise (exception)
-    
-    # Monitoring: Track violations
-    on_blocked_key do |key, value, caller_location|
-      Yabeda.e11y_baggage_pii_blocked.increment(
-        key: key,
-        service: ENV['SERVICE_NAME']
-      )
-    end
-  end
+  config.security_baggage_protection_enabled = true  # ✅ CRITICAL: Always enable in production
+  
+  # Allowlist: ONLY these keys are safe
+  config.security_baggage_protection_allowed_keys = [
+    'trace_id',       # ✅ Safe: Correlation ID
+    'span_id',        # ✅ Safe: Trace context
+    'environment',    # ✅ Safe: Deployment context
+    'version',        # ✅ Safe: Service version
+    'service_name',   # ✅ Safe: Service identifier
+    'request_id',     # ✅ Safe: Request identifier
+    # Custom safe keys (no PII!):
+    'feature_flag_id',  # ✅ Safe: Feature flag name
+    'ab_test_variant'   # ✅ Safe: A/B test group
+  ]
+  
+  # Block mode: What happens when PII detected?
+  config.security_baggage_protection_block_mode = :silent  # Options: :silent (log), :warn (log+warn), :raise (exception)
 end
 ```
 
@@ -421,11 +394,9 @@ Fail fast in non-production environments:
 ```ruby
 # config/environments/development.rb
 E11y.configure do |config|
-  config.security.baggage_protection do
-    enabled true
-    block_mode :raise  # ← RAISE exception on blocked keys (fail fast)
-    allowed_keys E11y::Middleware::BaggageProtection::ALLOWED_KEYS
-  end
+  config.security_baggage_protection_enabled = true
+  config.security_baggage_protection_block_mode = :raise  # ← RAISE exception on blocked keys (fail fast)
+  config.security_baggage_protection_allowed_keys = E11y::BAGGAGE_PROTECTION_DEFAULT_ALLOWED_KEYS
 end
 
 # Developer tries to set PII:
@@ -554,11 +525,9 @@ service:
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.adapters << E11y::Adapters::OpenTelemetryCollectorAdapter.new(
+  config.adapters[:otel] = E11y::Adapters::OpenTelemetryCollector.new(
     endpoint: 'http://otel-collector:4318',
-    protocol: :http,
-    export_logs: true,
-    export_traces: true
+    service_name: 'my-app'
   )
 end
 
@@ -738,14 +707,11 @@ end
 # config/initializers/e11y.rb
 E11y.configure do |config|
   # Single adapter: OTel Collector
-  config.adapters = [
-    E11y::Adapters::OpenTelemetryCollectorAdapter.new(
-      endpoint: 'http://otel-collector:4318',
-      export_logs: true,
-      export_traces: true
-    )
-  ]
-  
+  config.adapters[:otel] = E11y::Adapters::OpenTelemetryCollector.new(
+    endpoint: 'http://otel-collector:4318',
+    service_name: 'my-app'
+  )
+
   # OTel Collector handles routing to multiple backends!
   # No need for multiple E11y adapters
 end
@@ -1044,11 +1010,10 @@ end
 **1. Use OTel Collector in production**
 ```ruby
 # ✅ GOOD: Central pipeline
-config.adapters = [
-  E11y::Adapters::OpenTelemetryCollectorAdapter.new(
-    endpoint: 'http://otel-collector:4318'
-  )
-]
+config.adapters[:otel] = E11y::Adapters::OpenTelemetryCollector.new(
+  endpoint: 'http://otel-collector:4318',
+  service_name: 'my-app'
+)
 
 # OTel Collector handles:
 # - Sampling
@@ -1094,9 +1059,10 @@ config.adapters = [
 ]
 
 # ✅ GOOD: Through OTel Collector
-config.adapters = [
-  E11y::Adapters::OpenTelemetryCollectorAdapter.new(...)
-]
+config.adapters[:otel] = E11y::Adapters::OpenTelemetryCollector.new(
+  endpoint: ENV['OTEL_EXPORTER_OTLP_ENDPOINT'],
+  service_name: 'my-app'
+)
 ```
 
 **2. Don't use custom field names**

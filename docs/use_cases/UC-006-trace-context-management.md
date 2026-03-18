@@ -42,12 +42,13 @@ Events::PaymentProcessed.track(order_id: '123', amount: 99)
 Events::OrderCreated.track(order_id: '456')
 # → { trace_id: 'def-456', event: 'order.created' }
 
-# Request 1 background job (trace_id: abc-123 - PRESERVED!)
+# Request 1 background job (C17 Hybrid: NEW trace_id xyz-789, parent_trace_id: abc-123)
 Events::EmailSent.track(order_id: '123')
-# → { trace_id: 'abc-123', event: 'email.sent' }
+# → { trace_id: 'xyz-789', parent_trace_id: 'abc-123', event: 'email.sent' }
 
 # In Grafana/Loki:
-# {trace_id="abc-123"} → Shows COMPLETE request timeline across services
+# {trace_id="abc-123"} → Request timeline
+# {trace_id="xyz-789"} or {parent_trace_id="abc-123"} → Job timeline (linked to request)
 ```
 
 ---
@@ -111,18 +112,19 @@ end
 **Solution:** Automatic propagation via Sidekiq middleware
 
 ```ruby
-# lib/e11y/integrations/sidekiq.rb (built-in)
+# lib/e11y/instruments/sidekiq.rb (built-in)
+# C17 Hybrid: Job gets NEW trace_id; parent_trace_id links to enqueuing request
 module E11y
-  module Integrations
-    class SidekiqMiddleware
-      def call(worker, job, queue)
-        # Extract trace_id from job payload
-        trace_id = job['trace_id']
-        
-        # Set thread-local trace_id
-        E11y::TraceId.with_trace_id(trace_id) do
-          yield  # Execute job
-        end
+  module Instruments
+    class Sidekiq::ServerMiddleware
+      def setup_job_context(job, queue)
+        # Extract parent from job payload
+        parent_trace_id = job['e11y_parent_trace_id']
+        # Generate NEW trace_id for this job
+        E11y::Current.trace_id = generate_trace_id
+        E11y::Current.parent_trace_id = parent_trace_id
+        E11y::Current.sampled = job['e11y_sampled']  # Propagate sampling decision
+        # ...
       end
     end
   end
@@ -149,36 +151,36 @@ class OrdersController < ApplicationController
   def create
     order = Order.create!(params)
     
-    # Enqueue job (trace_id automatically passed)
+    # Enqueue job (C17: parent_trace_id + e11y_sampled propagated)
     SendOrderConfirmationJob.perform_later(order.id)
-    # → Job payload includes: { 'trace_id' => 'abc-123' }
+    # → Job payload includes: { 'e11y_parent_trace_id' => 'abc-123', 'e11y_sampled' => true }
     
     render json: order
   end
 end
 
-# In job (trace_id: abc-123 - PRESERVED!)
+# In job (C17 Hybrid: NEW trace_id xyz-789, parent_trace_id: abc-123)
 class SendOrderConfirmationJob < ApplicationJob
   def perform(order_id)
     order = Order.find(order_id)
     
-    # trace_id is automatically restored!
+    # Job gets NEW trace_id; parent_trace_id links to originating request
     Events::EmailSending.track(order_id: order.id)
-    # → trace_id = 'abc-123' (same as original request!)
+    # → trace_id = 'xyz-789', parent_trace_id = 'abc-123'
     
     UserMailer.order_confirmation(order).deliver_now
     
     Events::EmailSent.track(order_id: order.id)
-    # → trace_id = 'abc-123' (still same!)
+    # → trace_id = 'xyz-789' (same job trace)
   end
 end
 
-# Timeline in Grafana:
+# Timeline in Grafana (C17 Hybrid):
 # 10:00:00.000 [abc-123] order.created (controller)
 # 10:00:00.050 [abc-123] payment.processed (controller)
-# 10:00:00.100 [abc-123] email.sending (job, 3 seconds later)
-# 10:00:03.200 [abc-123] email.sent (job)
-# → Complete trace across HTTP request + background job!
+# 10:00:00.100 [xyz-789] email.sending (job, parent: abc-123)
+# 10:00:03.200 [xyz-789] email.sent (job)
+# → Query by parent_trace_id to link job trace to request trace
 ```
 
 ---

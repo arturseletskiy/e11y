@@ -10,15 +10,14 @@ module E11y
     # **Unidirectional Flow:** ASN → E11y
     #
     # @example Basic usage
-    #   # Automatically enabled by E11y::Railtie if config.rails_instrumentation.enabled = true
+    #   # Automatically enabled by E11y::Railtie if config.rails_instrumentation_enabled = true
     #   E11y::Instruments::RailsInstrumentation.setup!
     #
     # @example Custom event mapping
     #   E11y.configure do |config|
-    #     config.rails_instrumentation do
-    #       event_class_for 'sql.active_record', MyApp::CustomQueryEvent
-    #       ignore_event 'cache_read.active_support'
-    #     end
+    #     config.rails_instrumentation_enabled = true
+    #     config.rails_instrumentation_custom_mappings['sql.active_record'] = MyApp::CustomQueryEvent
+    #     config.rails_instrumentation_ignore_events << 'cache_read.active_support'
     #   end
     #
     # @see ADR-008 §4.1 (Unidirectional Flow ASN → E11y)
@@ -41,6 +40,7 @@ module E11y
         "enqueue.active_job" => "E11y::Events::Rails::Job::Enqueued",
         "enqueue_at.active_job" => "E11y::Events::Rails::Job::Scheduled",
         "perform_start.active_job" => "E11y::Events::Rails::Job::Started",
+        # perform.active_job: Completed on success, Failed on exception (routed in track_rails_event)
         "perform.active_job" => "E11y::Events::Rails::Job::Completed"
       }.freeze
 
@@ -50,7 +50,7 @@ module E11y
       #
       # @return [void]
       def self.setup!
-        return unless E11y.config.rails_instrumentation&.enabled
+        return unless E11y.config.rails_instrumentation_enabled
 
         # Subscribe to each configured event pattern
         event_mapping.each do |asn_pattern, e11y_event_class_name|
@@ -89,17 +89,43 @@ module E11y
 
       def self.track_rails_event(name, start, finish, payload, e11y_event_class_name)
         duration = (finish - start) * 1000
-        e11y_event_class = resolve_event_class(e11y_event_class_name)
-        return unless e11y_event_class
-
         extracted_payload = extract_job_info_from_object(payload)
-        extracted_payload = extracted_payload.merge(severity: :error) if process_action_error?(name, payload)
+
+        # perform.active_job: route to Failed when job raised exception
+        if name == "perform.active_job" && job_failed?(payload)
+          e11y_event_class = resolve_event_class("E11y::Events::Rails::Job::Failed")
+          extracted_payload = extracted_payload.merge(extract_job_exception_info(payload))
+        else
+          e11y_event_class = resolve_event_class(e11y_event_class_name)
+          extracted_payload = extracted_payload.merge(severity: :error) if process_action_error?(name, payload)
+        end
+
+        return unless e11y_event_class
 
         e11y_event_class.track(event_name: name, duration: duration, **extracted_payload)
       end
 
       def self.process_action_error?(name, payload)
         name == "process_action.action_controller" && (payload[:exception] || payload["exception"])
+      end
+
+      def self.job_failed?(payload)
+        payload[:exception].present? || payload["exception"].present?
+      end
+
+      # Extract error_class and error_message from ActiveJob exception payload.
+      # Rails passes exception as ["ErrorClass", "message"] or exception_object.
+      def self.extract_job_exception_info(payload)
+        ex = payload[:exception] || payload["exception"]
+        return {} unless ex
+
+        if ex.is_a?(Array) && ex.size >= 2
+          { error_class: ex[0].to_s, error_message: ex[1].to_s }
+        elsif ex.respond_to?(:class) && ex.respond_to?(:message)
+          { error_class: ex.class.name, error_message: ex.message.to_s }
+        else
+          {}
+        end
       end
 
       # Get final event mapping (after config overrides)
@@ -109,9 +135,9 @@ module E11y
           mapping = DEFAULT_RAILS_EVENT_MAPPING.dup
 
           # Apply custom mappings from config (Devise-style overrides)
-          custom_mappings = E11y.config.rails_instrumentation&.custom_mappings || {}
+          custom_mappings = E11y.config.rails_instrumentation_custom_mappings || {}
           custom_mappings.each do |pattern, event_class|
-            mapping[pattern] = event_class.name
+            mapping[pattern] = event_class.respond_to?(:name) ? event_class.name : event_class.to_s
           end
 
           mapping
@@ -122,7 +148,7 @@ module E11y
       # @param pattern [String] ASN event pattern
       # @return [Boolean] true if should be ignored
       def self.ignored?(pattern)
-        ignore_list = E11y.config.rails_instrumentation&.ignore_events || []
+        ignore_list = E11y.config.rails_instrumentation_ignore_events || []
         ignore_list.include?(pattern)
       end
 

@@ -387,7 +387,7 @@ RSpec.configure do |config|
       ]
       
       # === OPTIONAL: Disable rate limiting ===
-      config.rate_limiting.enabled = false
+      config.rate_limiting_enabled = false
       
       # === OPTIONAL: Disable PII filtering (test data is fake) ===
       config.pii_filtering.enabled = false

@@ -235,19 +235,19 @@ sequenceDiagram
 
 #### 3.0.2. Three-Tier Filtering Strategy
 
-E11y uses a **3-tier approach** to balance security and performance:
+E11y uses a **3-tier approach** to balance security and performance. Code uses `pii_filtering_mode` returning `:no_pii`, `:rails_filters`, or `:explicit_pii`:
 
-| Tier | Strategy | Cost | Use Case | Events/sec |
+| Mode | Strategy | Cost | Use Case | Events/sec |
 |------|----------|------|----------|------------|
-| **Tier 1** | Skip filtering | 0ms | Health checks, metrics, internal events | 500 |
-| **Tier 2** | Rails filters only | ~0.05ms | Standard events (known PII keys) | 400 |
-| **Tier 3** | Deep filtering | ~0.2ms | User data, payments, complex nested | 100 |
+| **:no_pii** | Skip filtering | 0ms | Health checks, metrics, internal events | 500 |
+| **:rails_filters** | Rails filters only | ~0.05ms | Standard events (known PII keys) | 400 |
+| **:explicit_pii** | Deep filtering | ~0.2ms | User data, payments, complex nested | 100 |
 
 **Performance Budget:**
 ```
-500 events/sec × 0ms     = 0ms CPU/sec      (Tier 1)
-400 events/sec × 0.05ms  = 20ms CPU/sec     (Tier 2)
-100 events/sec × 0.2ms   = 20ms CPU/sec     (Tier 3)
+500 events/sec × 0ms     = 0ms CPU/sec      (:no_pii)
+400 events/sec × 0.05ms  = 20ms CPU/sec     (:rails_filters)
+100 events/sec × 0.2ms   = 20ms CPU/sec     (:explicit_pii)
 ---
 Total: 40ms CPU/sec = 4% CPU on single core ✅
 ```
@@ -264,7 +264,7 @@ class Events::HealthCheck < E11y::Event::Base
   end
   
   # ✅ Explicit: This event contains NO PII
-  contains_pii false  # Skip all PII filtering (Tier 1)
+  contains_pii false  # Skip all PII filtering (:no_pii)
 end
 ```
 
@@ -276,7 +276,7 @@ class Events::OrderCreated < E11y::Event::Base
     required(:amount).filled(:float)
   end
   
-  # No declaration → Rails filters applied (Tier 2, default)
+  # No declaration → Rails filters applied (:rails_filters, default)
   # Uses: Rails.application.config.filter_parameters
 end
 ```
@@ -292,7 +292,7 @@ class Events::UserRegistered < E11y::Event::Base
   end
   
   # ✅ Explicit: This event contains PII
-  contains_pii true  # Tier 3: Deep filtering
+  contains_pii true  # :explicit_pii: Deep filtering
   
   pii_filtering do
     # ✅ MANDATORY: Explicit declaration for EACH schema field
@@ -385,7 +385,7 @@ module E11y
   module Linters
     class PiiDeclarationLinter
       def self.validate_all!
-        E11y::Registry.all_events.each do |event_class|
+        E11y::Registry.event_classes.each do |event_class|
           validate!(event_class)
         end
       end
@@ -476,7 +476,7 @@ namespace :e11y do
       errors = []
       warnings = []
       
-      E11y::Registry.all_events.each do |event_class|
+      E11y::Registry.event_classes.each do |event_class|
         begin
           E11y::Linters::PiiDeclarationLinter.validate!(event_class)
           
@@ -563,7 +563,7 @@ end
 #### 3.0.6. Default Behavior
 
 **If `contains_pii` not specified:**
-- ✅ Apply Rails filters only (Tier 2)
+- ✅ Apply Rails filters only (:rails_filters)
 - ✅ Fast (0.05ms overhead)
 - ✅ Covers 90% of use cases (password, token, secret, api_key)
 - ⚠️ No linter validation (assumes you know what you're doing)
@@ -635,7 +635,10 @@ end
       └─→ PII Filtering (per-adapter, different rules per destination)
    ```
 
-**Key Insight:** PII filtering is **NOT a global middleware** — it's applied **inside each adapter** with different rules!
+**Key Insight (Hybrid Implementation):** PII filtering uses a **hybrid model**:
+- **:no_pii / :rails_filters:** Global middleware (PIIFilter) — skip or Rails filters only
+- **:explicit_pii without exclude_adapters:** Global middleware — single filtered payload
+- **:explicit_pii with exclude_adapters:** Per-adapter — PIIFilter produces `payload_rewrites`, Routing merges overrides per adapter (e.g. audit gets original for GDPR Art. 6(1)(c))
 
 ### 3.1. Rails Integration
 
@@ -1904,7 +1907,7 @@ RSpec.describe 'PII Filtering', type: :integration do
     end
   end
   
-  describe 'Tier 1: No PII (Skip Filtering)' do
+  describe ':no_pii (Skip Filtering)' do
     let(:event_class) { Events::HealthCheck }
     let(:payload) { { status: 'ok' } }
     
@@ -1920,7 +1923,7 @@ RSpec.describe 'PII Filtering', type: :integration do
     end
   end
   
-  describe 'Tier 2: Rails Filters Only' do
+  describe ':rails_filters (Rails Filters Only)' do
     let(:event_class) { Events::OrderCreated }
     let(:payload) do
       {
@@ -1946,7 +1949,7 @@ RSpec.describe 'PII Filtering', type: :integration do
     end
   end
   
-  describe 'Tier 3: Deep Filtering' do
+  describe ':explicit_pii (Deep Filtering)' do
     let(:event_class) { Events::UserRegistered }
     let(:payload) do
       {
@@ -1990,9 +1993,9 @@ RSpec.describe 'PII Filtering', type: :integration do
   describe 'Performance Regression Test' do
     it 'meets performance budget for 1000 events/sec' do
       events = [
-        { class: Events::HealthCheck, payload: { status: 'ok' }, count: 500 },         # Tier 1
-        { class: Events::OrderCreated, payload: { id: 'o1' }, count: 400 },            # Tier 2
-        { class: Events::UserLogin, payload: { email: 'u@x.com' }, count: 100 }        # Tier 3
+        { class: Events::HealthCheck, payload: { status: 'ok' }, count: 500 },         # :no_pii
+        { class: Events::OrderCreated, payload: { id: 'o1' }, count: 400 },            # :rails_filters
+        { class: Events::UserLogin, payload: { email: 'u@x.com' }, count: 100 }        # :explicit_pii
       ]
       
       start = Time.now
@@ -2108,7 +2111,7 @@ end
 bundle exec rspec spec/lib/e11y/security/pii_filtering_spec.rb
 
 # Test specific tier
-bundle exec rspec spec/lib/e11y/security/pii_filtering_spec.rb -e "Tier 3"
+bundle exec rspec spec/e11y/middleware/pii_filtering_spec.rb -e "explicit_pii"
 
 # Performance test
 bundle exec rspec spec/lib/e11y/security/pii_filtering_spec.rb -e "Performance"
@@ -3225,44 +3228,24 @@ end
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.security.baggage_protection do
-    enabled true  # ✅ CRITICAL: Always enable in production
-    
-    # Allowlist: Only these keys allowed in baggage
-    allowed_keys [
-      'trace_id',
-      'span_id',
-      'environment',
-      'version',
-      'service_name',
-      'deployment_id',
-      'request_id',
-      # Custom safe keys (optional):
-      'feature_flag_id',   # Feature flag identifier (not PII)
-      'ab_test_variant'    # A/B test variant (not PII)
-    ]
-    
-    # Block mode (how to handle violations)
-    block_mode :silent   # Options: :silent, :warn, :raise
-    
-    # Monitoring
-    on_blocked_key do |key, value, caller_location|
-      # Track violations for security audit
-      Yabeda.e11y_baggage_pii_blocked.increment(
-        key: key,
-        service: ENV['SERVICE_NAME']
-      )
-      
-      # Alert on critical violations
-      if key.match?(/email|password|ssn|credit_card/)
-        Sentry.capture_message(
-          "Critical PII blocked from baggage: #{key}",
-          level: :warning,
-          extra: { caller: caller_location }
-        )
-      end
-    end
-  end
+  config.security_baggage_protection_enabled = true  # ✅ CRITICAL: Always enable in production
+  
+  # Allowlist: Only these keys allowed in baggage
+  config.security_baggage_protection_allowed_keys = [
+    'trace_id',
+    'span_id',
+    'environment',
+    'version',
+    'service_name',
+    'deployment_id',
+    'request_id',
+    # Custom safe keys (optional):
+    'feature_flag_id',   # Feature flag identifier (not PII)
+    'ab_test_variant'    # A/B test variant (not PII)
+  ]
+  
+  # Block mode (how to handle violations)
+  config.security_baggage_protection_block_mode = :silent  # Options: :silent, :warn, :raise
 end
 ```
 
@@ -3326,14 +3309,12 @@ OpenTelemetry::Baggage.set_value('request_id', SecureRandom.uuid)
 ```ruby
 # config/environments/development.rb
 E11y.configure do |config|
-  config.security.baggage_protection do
-    enabled true
-    
-    # RAISE exception on blocked keys (fail fast)
-    block_mode :raise  # ← Developer sees error immediately
-    
-    allowed_keys E11y::Middleware::BaggageProtection::ALLOWED_KEYS
-  end
+  config.security_baggage_protection_enabled = true
+  
+  # RAISE exception on blocked keys (fail fast)
+  config.security_baggage_protection_block_mode = :raise  # ← Developer sees error immediately
+  
+  config.security_baggage_protection_allowed_keys = E11y::BAGGAGE_PROTECTION_DEFAULT_ALLOWED_KEYS
 end
 
 # Developer tries to set PII in baggage:
@@ -3438,11 +3419,11 @@ Events::UserLogin.track(
 
 **Metadata Flags:**
 - `:pii_filtered` - Event already went through PII filtering (set by PII filter middleware)
-- `:replayed` - Event is being replayed from DLQ (set by DLQ replay service)
+- `:dlq_replayed` - Event is being replayed from DLQ (set by DLQ replay service)
 
 **When to Skip PII Filtering:**
 1. Event has `:pii_filtered => true` (already processed)
-2. Event has `:replayed => true` (replay scenario)
+2. Event has `:dlq_replayed => true` (replay scenario)
 3. Both flags present → skip PII filtering entirely
 
 ### 5.6.3. PiiFilter Middleware with Replay Detection
@@ -3469,7 +3450,7 @@ module E11y
         
         # Check if event contains PII
         unless event_class.contains_pii?
-          # No PII declared, skip filtering (Tier 1)
+          # No PII declared, skip filtering (:no_pii)
           return event_data
         end
         
@@ -3489,7 +3470,7 @@ module E11y
         metadata = event_data[:metadata] || {}
         
         # Check for replay flag
-        return true if metadata[:replayed]
+        return true if metadata[:dlq_replayed]
         
         # Check for already-filtered flag
         return true if metadata[:pii_filtered]
@@ -3519,7 +3500,7 @@ module E11y
         
         # ✅ CRITICAL: Mark as replayed (skip transformations)
         event_data[:metadata] ||= {}
-        event_data[:metadata][:replayed] = true
+        event_data[:metadata][:dlq_replayed] = true
         event_data[:metadata][:pii_filtered] = true  # Already filtered!
         event_data[:metadata][:replayed_at] = Time.now.utc.iso8601
         event_data[:metadata][:original_event_id] = event_data[:event_id]
@@ -3572,7 +3553,7 @@ E11y.configure do |config|
   config.dlq.replay do
     # Metadata flags for replayed events
     set_metadata_flags do
-      replayed true
+      dlq_replayed true
       pii_filtered true
       replay_timestamp true
       original_event_id true
@@ -4034,7 +4015,7 @@ RSpec.describe E11y::RateLimiting do
       end
       
       # Exceed limit
-      E11y.config.rate_limiting.global.limit = 100
+      E11y.config.rate_limiting_global_limit = 100
       
       expect(Events::Test.track(message: 'over limit')).to be_falsey
     end

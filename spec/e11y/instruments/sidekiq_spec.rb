@@ -5,7 +5,7 @@ require "spec_helper"
 RSpec.describe E11y::Instruments::Sidekiq do
   describe "ClientMiddleware" do
     let(:middleware) { described_class::ClientMiddleware.new }
-    let(:job) { {} }
+    let(:job) { { "class" => "MyWorker", "jid" => "jid-123" } }
 
     before { E11y::Current.reset }
 
@@ -28,10 +28,19 @@ RSpec.describe E11y::Instruments::Sidekiq do
         E11y::Current.reset
       end
 
-      it "does not inject metadata if E11y::Current is empty" do
+      it "injects e11y_baggage when baggage is set" do
+        E11y::Current.baggage = { "experiment" => "exp-42" }
         middleware.call(nil, job, nil, nil) {} # rubocop:todo Lint/EmptyBlock
-        expect(job).not_to have_key("e11y_parent_trace_id")
-        expect(job).not_to have_key("e11y_parent_span_id")
+        expect(job["e11y_baggage"]).to eq("experiment" => "exp-42")
+      ensure
+        E11y::Current.reset
+      end
+
+      it "does not inject metadata if E11y::Current is empty" do
+        empty_job = {}
+        middleware.call(nil, empty_job, nil, nil) {} # rubocop:todo Lint/EmptyBlock
+        expect(empty_job).not_to have_key("e11y_parent_trace_id")
+        expect(empty_job).not_to have_key("e11y_parent_span_id")
       end
 
       it "documents C17 behavior: propagate trace as parent (job will generate NEW trace)" do
@@ -46,18 +55,37 @@ RSpec.describe E11y::Instruments::Sidekiq do
       ensure
         E11y::Current.reset
       end
+
+      it "emits Enqueued for raw Sidekiq jobs" do
+        expect(E11y::Events::Rails::Job::Enqueued).to receive(:track).with(
+          hash_including(
+            event_name: "sidekiq.enqueue",
+            job_class: "MyWorker",
+            queue: "default"
+          )
+        )
+        middleware.call("MyWorker", job, "default", nil) {} # rubocop:todo Lint/EmptyBlock
+      end
+
+      it "does not emit Enqueued for ActiveJob-wrapped jobs" do
+        job["class"] = "ActiveJob::QueueAdapters::SidekiqAdapter::JobWrapper"
+        job["wrapped"] = "SendEmailJob"
+
+        expect(E11y::Events::Rails::Job::Enqueued).not_to receive(:track)
+        middleware.call("ActiveJob::QueueAdapters::SidekiqAdapter::JobWrapper", job, "default", nil) {} # rubocop:todo Lint/EmptyBlock
+      end
     end
   end
 
   describe "ServerMiddleware" do
     let(:middleware) { described_class::ServerMiddleware.new }
     let(:worker) { double("worker") }
-    let(:job) { { "jid" => "job123" } }
+    let(:job) { { "jid" => "job123", "class" => "MyWorker" } }
     let(:queue) { "default" }
 
     before do
       E11y.configure do |config|
-        config.request_buffer.enabled = false # Disable buffer for simpler tests
+        config.ephemeral_buffer_enabled = false # Disable buffer for simpler tests
       end
     end
 
@@ -104,32 +132,40 @@ RSpec.describe E11y::Instruments::Sidekiq do
           expect(E11y::Current.request_id).to eq("job123")
         end
       end
+
+      it "restores baggage from e11y_baggage in job metadata" do
+        job["e11y_baggage"] = { "experiment" => "exp-42" }
+
+        middleware.call(worker, job, queue) do
+          expect(E11y::Current.baggage).to eq("experiment" => "exp-42")
+        end
+      end
     end
 
     describe "C18 Non-Failing Event Tracking: fail_on_error = false" do
       it "sets fail_on_error to false before job execution" do
-        original_setting = E11y.config.error_handling.fail_on_error
+        original_setting = E11y.config.error_handling_fail_on_error
 
         middleware.call(worker, job, queue) do
           # Inside job context: fail_on_error should be false
-          expect(E11y.config.error_handling.fail_on_error).to be false
+          expect(E11y.config.error_handling_fail_on_error).to be false
         end
 
         # Restore original setting after job
-        expect(E11y.config.error_handling.fail_on_error).to eq(original_setting)
+        expect(E11y.config.error_handling_fail_on_error).to eq(original_setting)
       end
 
       it "restores original fail_on_error setting after job" do
-        E11y.config.error_handling.fail_on_error = true
-        expect(E11y.config.error_handling.fail_on_error).to be true
+        E11y.config.error_handling_fail_on_error = true
+        expect(E11y.config.error_handling_fail_on_error).to be true
 
         middleware.call(worker, job, queue) {} # rubocop:todo Lint/EmptyBlock
 
-        expect(E11y.config.error_handling.fail_on_error).to be true
+        expect(E11y.config.error_handling_fail_on_error).to be true
       end
 
       it "restores fail_on_error even if job raises exception" do
-        E11y.config.error_handling.fail_on_error = true
+        E11y.config.error_handling_fail_on_error = true
 
         expect do
           middleware.call(worker, job, queue) do
@@ -138,7 +174,7 @@ RSpec.describe E11y::Instruments::Sidekiq do
         end.to raise_error(StandardError, "Job failed")
 
         # Setting should be restored despite exception
-        expect(E11y.config.error_handling.fail_on_error).to be true
+        expect(E11y.config.error_handling_fail_on_error).to be true
       end
 
       it "documents that E11y errors won't fail jobs when fail_on_error=false" do
@@ -149,7 +185,7 @@ RSpec.describe E11y::Instruments::Sidekiq do
         # See ADR-013 §3.6 (C18 Resolution) for rationale.
 
         middleware.call(worker, job, queue) do
-          expect(E11y.config.error_handling.fail_on_error).to be false
+          expect(E11y.config.error_handling_fail_on_error).to be false
           # In this context, adapter failures should be swallowed
         end
       end
@@ -185,12 +221,12 @@ RSpec.describe E11y::Instruments::Sidekiq do
     describe "Error handling: E11y errors don't fail jobs" do
       before do
         E11y.configure do |config|
-          config.request_buffer.enabled = true
+          config.ephemeral_buffer_enabled = true
         end
       end
 
-      it "swallows E11y::Buffers::RequestScopedBuffer errors" do
-        allow(E11y::Buffers::RequestScopedBuffer).to receive(:start!).and_raise(StandardError, "Buffer error")
+      it "swallows E11y::Buffers::EphemeralBuffer errors" do
+        allow(E11y::Buffers::EphemeralBuffer).to receive(:initialize!).and_raise(StandardError, "Buffer error")
 
         # Job should succeed despite E11y buffer failure
         expect do
@@ -198,13 +234,54 @@ RSpec.describe E11y::Instruments::Sidekiq do
         end.not_to raise_error
       end
 
-      it "swallows E11y::Buffers::RequestScopedBuffer.flush! errors" do
-        allow(E11y::Buffers::RequestScopedBuffer).to receive(:flush!).and_raise(StandardError, "Flush error")
+      it "swallows E11y::Buffers::EphemeralBuffer.flush_on_error errors" do
+        allow(E11y::Buffers::EphemeralBuffer).to receive(:flush_on_error).and_raise(StandardError, "Flush error")
 
         # Job should succeed despite E11y flush failure
         expect do
           middleware.call(worker, job, queue) {} # rubocop:todo Lint/EmptyBlock
         end.not_to raise_error
+      end
+
+      it "emits Started/Completed/Failed for raw Sidekiq jobs" do
+        expect(E11y::Events::Rails::Job::Started).to receive(:track).with(
+          hash_including(job_class: "MyWorker", job_id: "job123", queue: "default")
+        )
+        expect(E11y::Events::Rails::Job::Completed).to receive(:track).with(
+          hash_including(job_class: "MyWorker", job_id: "job123", queue: "default")
+        )
+        expect(E11y::Events::Rails::Job::Failed).not_to receive(:track)
+
+        middleware.call(worker, job, queue) {} # rubocop:todo Lint/EmptyBlock
+      end
+
+      it "emits Failed when job raises" do
+        expect(E11y::Events::Rails::Job::Started).to receive(:track)
+        expect(E11y::Events::Rails::Job::Failed).to receive(:track).with(
+          hash_including(
+            job_class: "MyWorker",
+            job_id: "job123",
+            queue: "default",
+            error_class: "StandardError",
+            error_message: "Job failed"
+          )
+        )
+        expect(E11y::Events::Rails::Job::Completed).not_to receive(:track)
+
+        expect do
+          middleware.call(worker, job, queue) { raise StandardError, "Job failed" }
+        end.to raise_error(StandardError, "Job failed")
+      end
+
+      it "does not emit job events for ActiveJob-wrapped jobs" do
+        job["class"] = "ActiveJob::QueueAdapters::SidekiqAdapter::JobWrapper"
+        job["wrapped"] = "SendEmailJob"
+
+        expect(E11y::Events::Rails::Job::Started).not_to receive(:track)
+        expect(E11y::Events::Rails::Job::Completed).not_to receive(:track)
+        expect(E11y::Events::Rails::Job::Failed).not_to receive(:track)
+
+        middleware.call(worker, job, queue) {} # rubocop:todo Lint/EmptyBlock
       end
 
       it "swallows E11y::Current.reset errors (extreme edge case)" do

@@ -157,6 +157,83 @@ RSpec.describe E11y::Current do
       end
     end
 
+    context "with baggage" do
+      it "can be set and retrieved" do
+        described_class.baggage = { "experiment" => "exp-42" }
+        expect(described_class.baggage).to eq("experiment" => "exp-42")
+      end
+
+      it "handles nil values correctly" do
+        described_class.baggage = nil
+        expect(described_class.baggage).to be_nil
+      end
+
+      it "add_baggage merges and converts to string" do
+        described_class.add_baggage(:experiment_id, "exp-42")
+        described_class.add_baggage("tenant", "acme")
+        expect(described_class.baggage).to eq("experiment_id" => "exp-42", "tenant" => "acme")
+      end
+
+      it "get_baggage returns value by key" do
+        described_class.baggage = { "experiment" => "exp-42" }
+        expect(described_class.get_baggage("experiment")).to eq("exp-42")
+        expect(described_class.get_baggage(:experiment)).to eq("exp-42")
+        expect(described_class.get_baggage("missing")).to be_nil
+      end
+
+      context "when baggage_protection enabled (ADR-006 §5.5)" do
+        let(:config_double) do
+          instance_double(
+            E11y::Configuration,
+            security_baggage_protection_enabled: true,
+            security_baggage_protection_allowed_keys: %w[trace_id experiment tenant],
+            security_baggage_protection_block_mode: :silent
+          )
+        end
+
+        before do
+          allow(E11y).to receive(:config).and_return(config_double)
+        end
+
+        it "blocks disallowed keys (user_email) in silent mode" do
+          described_class.add_baggage("user_email", "user@example.com")
+          expect(described_class.baggage).to be_nil
+        end
+
+        it "allows allowed keys" do
+          described_class.add_baggage("experiment", "exp-42")
+          expect(described_class.baggage).to eq("experiment" => "exp-42")
+        end
+
+        it "raises when block_mode is :raise" do
+          allow(config_double).to receive(:security_baggage_protection_block_mode).and_return(:raise)
+          expect { described_class.add_baggage("user_email", "x") }.to raise_error(
+            E11y::BaggagePiiError,
+            /Blocked PII from E11y baggage/
+          )
+        end
+
+        it "warns when block_mode is :warn" do
+          allow(config_double).to receive(:security_baggage_protection_block_mode).and_return(:warn)
+          expect(E11y.logger).to receive(:warn).with(/Blocked PII from E11y baggage.*user_email/)
+          described_class.add_baggage("user_email", "x")
+          expect(described_class.baggage).to be_nil
+        end
+      end
+
+      context "when baggage_protection disabled" do
+        before do
+          config_double = instance_double(E11y::Configuration, security_baggage_protection_enabled: false)
+          allow(E11y).to receive(:config).and_return(config_double)
+        end
+
+        it "allows any key" do
+          described_class.add_baggage("user_email", "user@example.com")
+          expect(described_class.baggage).to eq("user_email" => "user@example.com")
+        end
+      end
+    end
+
     context "with request_path" do
       it "can be set and retrieved" do
         described_class.request_path = "/api/v1/users"
@@ -230,6 +307,39 @@ RSpec.describe E11y::Current do
     end
   end
 
+  describe ".to_context" do
+    it "returns hash of set attributes with symbol keys" do
+      described_class.trace_id = "trace-123"
+      described_class.span_id = "span-456"
+      described_class.user_id = 42
+      described_class.request_path = "/admin"
+
+      ctx = described_class.to_context
+      expect(ctx).to eq(
+        trace_id: "trace-123",
+        span_id: "span-456",
+        user_id: 42,
+        request_path: "/admin"
+      )
+    end
+
+    it "omits nil values (compact)" do
+      described_class.trace_id = "trace-123"
+      # user_id, request_path, etc. unset
+
+      ctx = described_class.to_context
+      expect(ctx).to have_key(:trace_id)
+      expect(ctx).not_to have_key(:user_id)
+    end
+
+    it "includes baggage when set" do
+      described_class.trace_id = "trace-123"
+      described_class.baggage = { "experiment" => "exp-42" }
+      ctx = described_class.to_context
+      expect(ctx[:baggage]).to eq("experiment" => "exp-42")
+    end
+  end
+
   describe "hybrid tracing scenarios" do
     context "when in HTTP request scenario" do
       it "sets trace_id without parent_trace_id" do
@@ -283,6 +393,7 @@ RSpec.describe E11y::Current do
       expect(described_class.parent_trace_id).to be_nil
       expect(described_class.request_id).to be_nil
       expect(described_class.user_id).to be_nil
+      expect(described_class.baggage).to be_nil
       expect(described_class.ip_address).to be_nil
       expect(described_class.user_agent).to be_nil
       expect(described_class.request_method).to be_nil

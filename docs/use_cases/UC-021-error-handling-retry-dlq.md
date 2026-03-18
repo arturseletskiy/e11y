@@ -34,7 +34,7 @@
 
 - **Retry Policy:** Exponential backoff with jitter
 - **Dead Letter Queue:** Failed events stored for later analysis/replay
-- **Circuit Breaker:** Prevent cascading failures (already covered in UC-011)
+- **Circuit Breaker:** Prevent cascading failures (see [ADR-013 §5](../ADR-013-reliability-error-handling.md#5-circuit-breaker))
 - **Observability:** Metrics for failures, retries, DLQ size
 
 **Result:** Zero data loss, resilient to transient failures.
@@ -150,20 +150,16 @@ E11y::DeadLetterQueue.size  # => 1000 (mostly garbage)
 
 **With DLQ filter (GOOD!):**
 ```ruby
-# Config:
-E11y.configure do |config|
-  config.error_handling.dead_letter_queue.filter do
-    # Don't save health checks to DLQ
-    never_save do
-      event_patterns ['health_check.*', 'ping.*']
-    end
-    
-    # Always save payments
-    always_save do
-      event_patterns ['payment.*', 'order.*']
-    end
-  end
+# Event DSL: declare DLQ behavior per event class
+class Events::HealthCheck < E11y::Event::Base
+  use_dlq false  # Never save to DLQ
 end
+
+class Events::PaymentFailed < E11y::Event::Base
+  use_dlq true  # Always save to DLQ
+end
+
+# Audit events (Presets::AuditEvent) have use_dlq true by default
 
 # Health checks (not saved to DLQ):
 1000.times do
@@ -490,7 +486,7 @@ E11y.configure do |config|
     
     # === CRITICAL: Enable replay metadata (C07) ===
     # Replay service automatically adds flags:
-    # - :replayed => true (skip transformations)
+    # - :dlq_replayed => true (skip transformations)
     # - :pii_filtered => true (already filtered)
     mark_replayed_events true  # ← Default: true
   end
@@ -505,13 +501,13 @@ module E11y
         
         # ✅ CRITICAL: Add replay metadata flags
         event_data[:metadata] ||= {}
-        event_data[:metadata][:replayed] = true
+        event_data[:metadata][:dlq_replayed] = true
         event_data[:metadata][:pii_filtered] = true  # Already filtered!
         event_data[:metadata][:replayed_at] = Time.now.utc.iso8601
         event_data[:metadata][:original_event_id] = event_data[:event_id]
         
         # Send through pipeline
-        # PII filter middleware will skip (checks :replayed flag)
+        # PII filter middleware will skip (checks :dlq_replayed flag)
         E11y::Pipeline.process(event_data)
       end
     end
@@ -535,7 +531,7 @@ class PiiFilter < Base
   
   def already_filtered?(event_data)
     metadata = event_data[:metadata] || {}
-    metadata[:replayed] || metadata[:pii_filtered]
+    metadata[:dlq_replayed] || metadata[:pii_filtered]
   end
 end
 
@@ -603,7 +599,7 @@ E11y::DeadLetterQueue.replay_all
        # Lenient validation for replayed events
        # (user chooses to allow old schema)
        lenient_mode_if do |event_data|
-         event_data.dig(:metadata, :replayed) == true
+         event_data.dig(:metadata, :dlq_replayed) == true
        end
      end
    end
@@ -637,7 +633,7 @@ E11y::DeadLetterQueue.replay_all
 | Decision | Pro | Con | Mitigation |
 |----------|-----|-----|------------|
 | **Metadata flags** | Simple, automatic | Metadata size +24 bytes | Acceptable overhead |
-| **`:replayed` flag** | Clear intent | None | ✅ Best practice |
+| **`:dlq_replayed` flag** | Clear intent | None | ✅ Best practice |
 | **Skip PII filter** | Prevents double-hashing | Must trust DLQ integrity | DLQ stored securely (encrypted) |
 
 **Trade-offs (C15):**

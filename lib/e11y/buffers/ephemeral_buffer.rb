@@ -2,7 +2,7 @@
 
 module E11y
   module Buffers
-    # Request-scoped buffer using thread-local storage for debug event buffering.
+    # Ephemeral buffer (request/job-scoped) using thread-local storage for debug event buffering.
     #
     # This buffer stores debug events in thread-local storage during request processing.
     # Events are flushed only when an error occurs, keeping logs clean during successful requests.
@@ -12,21 +12,21 @@ module E11y
     #
     # @example Basic usage
     #   # In Rails middleware
-    #   RequestScopedBuffer.initialize!
+    #   EphemeralBuffer.initialize!
     #
     #   # Track debug events (buffered)
-    #   RequestScopedBuffer.add_event({ event_name: "debug", severity: :debug })
+    #   EphemeralBuffer.add_event({ event_name: "debug", severity: :debug })
     #
     #   # On error - flush all buffered events
-    #   RequestScopedBuffer.flush_on_error
+    #   EphemeralBuffer.flush_on_error
     #
     #   # On success - discard buffered events
-    #   RequestScopedBuffer.discard
+    #   EphemeralBuffer.discard
     #
     # @see UC-001 Request-Scoped Debug Buffering
-    class RequestScopedBuffer
+    class EphemeralBuffer
       # Thread-local storage keys
-      THREAD_KEY_BUFFER = :e11y_request_buffer
+      THREAD_KEY_BUFFER = :e11y_ephemeral_buffer
       THREAD_KEY_REQUEST_ID = :e11y_request_id
       THREAD_KEY_ERROR_OCCURRED = :e11y_error_occurred
       THREAD_KEY_BUFFER_LIMIT = :e11y_buffer_limit
@@ -42,7 +42,7 @@ module E11y
         # @return [void]
         #
         # @example
-        #   RequestScopedBuffer.initialize!(request_id: "req-123", buffer_limit: 200)
+        #   EphemeralBuffer.initialize!(request_id: "req-123", buffer_limit: 200)
         def initialize!(request_id: nil, buffer_limit: DEFAULT_BUFFER_LIMIT)
           Thread.current[THREAD_KEY_BUFFER] = []
           Thread.current[THREAD_KEY_REQUEST_ID] = request_id || generate_request_id
@@ -60,11 +60,11 @@ module E11y
         #
         # @example
         #   # Debug event - buffered
-        #   RequestScopedBuffer.add_event({ event_name: "test", severity: :debug })
+        #   EphemeralBuffer.add_event({ event_name: "test", severity: :debug })
         #   # => true
         #
         #   # Error event - not buffered, triggers flush
-        #   RequestScopedBuffer.add_event({ event_name: "error", severity: :error })
+        #   EphemeralBuffer.add_event({ event_name: "error", severity: :error })
         #   # => false (and flushes buffer)
         def add_event(event_data)
           return false unless active?
@@ -85,7 +85,7 @@ module E11y
         # @example
         #   # In rescue block
         #   rescue StandardError => e
-        #     RequestScopedBuffer.flush_on_error
+        #     EphemeralBuffer.flush_on_error
         #     raise
         #   end
         def flush_on_error(target: nil)
@@ -105,7 +105,7 @@ module E11y
           end
 
           current_buffer.clear
-          E11y::Metrics.increment(:e11y_request_buffer_total, event: "flushed_on_error", value: flushed_count)
+          E11y::Metrics.increment(:e11y_ephemeral_buffer_total, event: "flushed_on_error", value: flushed_count)
           flushed_count
         end
 
@@ -115,8 +115,8 @@ module E11y
         #
         # @example
         #   # In middleware ensure block (success path)
-        #   unless RequestScopedBuffer.error_occurred?
-        #     RequestScopedBuffer.discard
+        #   unless EphemeralBuffer.error_occurred?
+        #     EphemeralBuffer.discard
         #   end
         def discard
           current_buffer = buffer
@@ -124,7 +124,7 @@ module E11y
 
           discarded_count = current_buffer.size
           current_buffer.clear
-          E11y::Metrics.increment(:e11y_request_buffer_total, event: "discarded", value: discarded_count)
+          E11y::Metrics.increment(:e11y_ephemeral_buffer_total, event: "discarded", value: discarded_count)
           discarded_count
         end
 
@@ -188,12 +188,12 @@ module E11y
 
           event_to_store = event_data.merge(request_id: request_id)
           current_buffer << event_to_store
-          E11y::Metrics.increment(:e11y_request_buffer_total, event: "events_buffered")
+          E11y::Metrics.increment(:e11y_ephemeral_buffer_total, event: "events_buffered")
           true
         end
 
         def record_buffer_overflow # rubocop:disable Naming/PredicateMethod
-          E11y::Metrics.increment(:e11y_request_buffer_total, event: "overflow")
+          E11y::Metrics.increment(:e11y_ephemeral_buffer_total, event: "overflow")
           false
         end
 
@@ -225,7 +225,7 @@ module E11y
         #
         # @return [Array<Object>, nil] Adapter instances to write to, or nil to use pipeline
         def resolve_flush_targets
-          da = E11y.config.request_buffer&.debug_adapters
+          da = E11y.config.ephemeral_buffer_debug_adapters
           return nil unless da&.any?
 
           da.filter_map { |name| E11y.configuration.adapters[name] }
@@ -233,7 +233,7 @@ module E11y
 
         # Flush single event to adapters via pipeline or debug_adapters
         #
-        # When config.request_buffer.debug_adapters is set, sends directly to those
+        # When config.ephemeral_buffer_debug_adapters is set, sends directly to those
         # adapters. Otherwise uses the full pipeline (fallback_adapters).
         #
         # @param event_data [Hash] Event to flush
@@ -243,7 +243,7 @@ module E11y
         def flush_event(event_data, target: nil, flush_targets: nil) # rubocop:disable Lint/UnusedMethodArgument
           return unless event_data
 
-          event_to_send = event_data.merge(from_request_buffer_flush: true)
+          event_to_send = event_data.merge(from_ephemeral_buffer_flush: true)
           targets = flush_targets || resolve_flush_targets
 
           if targets
@@ -252,7 +252,7 @@ module E11y
             E11y.config.built_pipeline.call(event_to_send)
           end
 
-          E11y::Metrics.increment(:e11y_request_buffer_total, event: "event_flushed")
+          E11y::Metrics.increment(:e11y_ephemeral_buffer_total, event: "event_flushed")
         end
       end
     end

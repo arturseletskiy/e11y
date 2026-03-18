@@ -62,10 +62,10 @@ module E11y
 
         # 0. Request-scoped buffer: buffer debug events instead of writing when enabled
         # Skip when event is from a flush (avoid re-buffering)
-        if !event_data[:from_request_buffer_flush] &&
+        if !event_data[:from_ephemeral_buffer_flush] &&
            event_data[:severity] == :debug &&
-           E11y.config.request_buffer&.enabled &&
-           E11y::Buffers::RequestScopedBuffer.active? && E11y::Buffers::RequestScopedBuffer.add_event(event_data)
+           E11y.config.ephemeral_buffer_enabled &&
+           E11y::Buffers::EphemeralBuffer.active? && E11y::Buffers::EphemeralBuffer.add_event(event_data)
           # Buffered — skip adapter writes, pass through
           return @app&.call(event_data)
         end
@@ -87,8 +87,17 @@ module E11y
           adapter = E11y.configuration.adapters[adapter_name]
           next unless adapter
 
+          # Per-adapter payload: merge payload_rewrites only when present (explicit_pii exclude_adapters)
+          data_to_write = if event_data[:payload_rewrites] && event_data[:payload_rewrites][adapter_name]
+                            payload = event_data[:payload]&.dup || {}
+                            payload.merge!(event_data[:payload_rewrites][adapter_name])
+                            event_data.merge(payload: payload)
+                          else
+                            event_data
+                          end
+
           begin
-            adapter.write(event_data)
+            adapter.write(data_to_write)
           rescue StandardError => e
             # Log routing error but don't fail pipeline
             warn "E11y routing error for adapter #{adapter_name}: #{e.message}"

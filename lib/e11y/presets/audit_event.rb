@@ -39,6 +39,8 @@ module E11y
       def self.included(base)
         base.class_eval do
           audit_event true
+          contains_pii false # Preserve all data for signing (Tier 1 = skip filtering)
+          use_dlq true # Audit events always saved to DLQ (compliance)
           # Severity is NOT set by preset - user decides based on event criticality
         end
 

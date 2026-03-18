@@ -49,31 +49,10 @@ RSpec.describe E11y::Generators::InstallGenerator, type: :generator do
       end
     end
 
-    it "initializer mentions pii_filtering configuration" do
+    it "initializer configures Stdout adapter by default" do
       run_generator
       assert_file "config/initializers/e11y.rb" do |content|
-        expect(content.force_encoding("UTF-8")).to match(/pii_filtering/)
-      end
-    end
-
-    it "initializer mentions request_buffer configuration" do
-      run_generator
-      assert_file "config/initializers/e11y.rb" do |content|
-        expect(content.force_encoding("UTF-8")).to match(/request_buffer/)
-      end
-    end
-
-    it "initializer mentions rate_limiting configuration" do
-      run_generator
-      assert_file "config/initializers/e11y.rb" do |content|
-        expect(content.force_encoding("UTF-8")).to match(/rate_limiting/)
-      end
-    end
-
-    it "initializer mentions E11y.start!" do
-      run_generator
-      assert_file "config/initializers/e11y.rb" do |content|
-        expect(content.force_encoding("UTF-8")).to match(/E11y\.start!/)
+        expect(content.force_encoding("UTF-8")).to match(/Stdout\.new/)
       end
     end
 

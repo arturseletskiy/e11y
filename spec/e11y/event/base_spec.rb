@@ -324,6 +324,23 @@ RSpec.describe E11y::Event::Base do
     end
   end
 
+  describe ".pii_filtering_mode" do
+    it "returns :no_pii when contains_pii false" do
+      event_class = Class.new(described_class) { contains_pii false }
+      expect(event_class.pii_filtering_mode).to eq(:no_pii)
+    end
+
+    it "returns :explicit_pii when contains_pii true" do
+      event_class = Class.new(described_class) { contains_pii true }
+      expect(event_class.pii_filtering_mode).to eq(:explicit_pii)
+    end
+
+    it "returns :rails_filters when contains_pii not set (default)" do
+      event_class = Class.new(described_class)
+      expect(event_class.pii_filtering_mode).to eq(:rails_filters)
+    end
+  end
+
   describe ".schema" do
     it "stores schema block" do
       block = proc { required(:test).filled(:string) }
@@ -434,7 +451,7 @@ RSpec.describe E11y::Event::Base do
 
           audit_event true
           adapters :stdout # Explicit adapters for unit test (routing validation)
-          contains_pii false # Tier 1 - skip Rails filter in unit tests (no Rails)
+          contains_pii false # no_pii - skip Rails filter in unit tests (no Rails)
         end
 
         result = audit_class.track(data: "test")
@@ -451,7 +468,7 @@ RSpec.describe E11y::Event::Base do
           audit_event true
           retention_period 7.years
           adapters :stdout # Explicit adapters for unit test (routing validation)
-          contains_pii false # Tier 1 - skip Rails filter in unit tests (no Rails)
+          contains_pii false # no_pii - skip Rails filter in unit tests (no Rails)
         end
 
         result = audit_class.track(user_id: 123)

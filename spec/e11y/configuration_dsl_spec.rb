@@ -8,199 +8,170 @@ RSpec.describe E11y::Configuration do
   after { E11y.reset! }
 
   # ---------------------------------------------------------------------------
-  # rate_limiting block DSL
+  # rate_limiting flat accessors and helpers
   # ---------------------------------------------------------------------------
-  describe "#rate_limiting block DSL" do
-    it "yields the RateLimitingConfig to the block via instance_eval" do
-      # instance_eval means `self` inside the block IS the RateLimitingConfig
-      yielded_self = nil
-      config.rate_limiting { yielded_self = self }
-      expect(yielded_self).to be_a(E11y::RateLimitingConfig)
+  describe "#rate_limiting_* flat accessors" do
+    it "sets rate_limiting_enabled" do
+      config.rate_limiting_enabled = true
+      expect(config.rate_limiting_enabled).to be(true)
     end
 
-    it "sets per_event_limit (global_limit) attribute via assignment" do
-      E11y.configure do |c|
-        c.rate_limiting do
-          @global_limit = 100
-        end
-      end
-      expect(E11y.config.rate_limiting.global_limit).to eq(100)
+    it "sets rate_limiting_global_limit and rate_limiting_global_window" do
+      config.rate_limiting_global_limit = 5000
+      config.rate_limiting_global_window = 30.0
+      expect(config.rate_limiting_global_limit).to eq(5000)
+      expect(config.rate_limiting_global_window).to eq(30.0)
     end
 
-    it "sets global_window attribute via assignment" do
-      E11y.configure do |c|
-        c.rate_limiting do
-          @global_window = 60.0
-        end
-      end
-      expect(E11y.config.rate_limiting.global_window).to eq(60.0)
-    end
-
-    it "configures global limit via #global DSL method" do
-      E11y.configure do |c|
-        c.rate_limiting do
-          global limit: 5000, window: 30.0
-        end
-      end
-      expect(E11y.config.rate_limiting.global_limit).to eq(5000)
-      expect(E11y.config.rate_limiting.global_window).to eq(30.0)
-    end
-
-    it "configures per-event limit via #per_event DSL method" do
-      E11y.configure do |c|
-        c.rate_limiting do
-          per_event "user.login.failed", limit: 50, window: 60.0
-        end
-      end
-      limits = E11y.config.rate_limiting.per_event_limits
+    it "adds per-event limit via add_rate_limit_per_event" do
+      config.add_rate_limit_per_event "user.login.failed", limit: 50, window: 60.0
+      limits = config.rate_limiting_per_event_limits
       expect(limits.size).to eq(1)
       expect(limits.first[:pattern]).to eq("user.login.failed")
       expect(limits.first[:limit]).to eq(50)
       expect(limits.first[:window]).to eq(60.0)
     end
 
-    it "returns the RateLimitingConfig when called without a block" do
-      result = config.rate_limiting
-      expect(result).to be_a(E11y::RateLimitingConfig)
+    it "rate_limit_for returns matching per-event rule" do
+      config.add_rate_limit_per_event "user.login.failed", limit: 50, window: 60.0
+      result = config.rate_limit_for("user.login.failed")
+      expect(result).to eq(limit: 50, window: 60.0)
     end
 
-    it "returns the same object each time (no re-instantiation)" do
-      first  = config.rate_limiting
-      second = config.rate_limiting
-      expect(first).to equal(second)
+    it "rate_limit_for returns per_event_limit fallback when no rule matches" do
+      config.rate_limiting_per_event_limit = 1_000
+      config.rate_limiting_global_window = 1.0
+      result = config.rate_limit_for("unknown.event")
+      expect(result).to eq(limit: 1_000, window: 1.0)
+    end
+
+    it "rate_limit_for matches glob pattern" do
+      config.add_rate_limit_per_event "payment.*", limit: 500, window: 60.0
+      expect(config.rate_limit_for("payment.retry")).to eq(limit: 500, window: 60.0)
+      expect(config.rate_limit_for("payment.charged")).to eq(limit: 500, window: 60.0)
     end
   end
 
   # ---------------------------------------------------------------------------
-  # slo / slo_tracking block DSL
+  # slo_tracking flat accessors and helpers
   # ---------------------------------------------------------------------------
-  describe "#slo block DSL" do
-    it "yields the SLOTrackingConfig to the block via instance_eval" do
-      yielded_self = nil
-      config.slo { yielded_self = self }
-      expect(yielded_self).to be_a(E11y::SLOTrackingConfig)
+  describe "#slo_tracking_* flat accessors" do
+    it "sets slo_tracking_enabled" do
+      config.slo_tracking_enabled = false
+      expect(config.slo_tracking_enabled).to be(false)
     end
 
-    it "sets enabled to false via block assignment" do
-      E11y.configure do |c|
-        c.slo do
-          @enabled = false
-        end
+    it "sets slo_tracking_http_ignore_statuses and slo_tracking_latency_percentiles" do
+      config.slo_tracking_http_ignore_statuses = [404, 401]
+      config.slo_tracking_latency_percentiles = [50, 90, 99]
+      expect(config.slo_tracking_http_ignore_statuses).to eq([404, 401])
+      expect(config.slo_tracking_latency_percentiles).to eq([50, 90, 99])
+    end
+
+    it "adds controller config via add_slo_controller" do
+      config.add_slo_controller "Api::OrdersController", action: "show" do
+        slo_target 0.999
+        latency_target 200
       end
-      expect(E11y.config.slo.enabled).to be(false)
+      cfgs = config.slo_tracking_controller_configs
+      expect(cfgs.keys).to include("Api::OrdersController#show")
+      cfg = cfgs["Api::OrdersController#show"]
+      expect(cfg).to be_a(E11y::ControllerSLOConfig)
+      expect(cfg.slo_target).to eq(0.999)
+      expect(cfg.latency_target).to eq(200)
     end
 
-    it "configures http_ignore_statuses via DSL method" do
-      E11y.configure do |c|
-        c.slo do
-          http_ignore_statuses [404, 401]
-        end
+    it "adds job config via add_slo_job" do
+      config.add_slo_job "ReportGenerationJob" do
+        ignore true
       end
-      # http_ignore_statuses is a DSL setter (requires 1 arg), read via ivar
-      stored = E11y.config.slo.instance_variable_get(:@http_ignore_statuses)
-      expect(stored).to eq([404, 401])
-    end
-
-    it "configures latency_percentiles via DSL method" do
-      E11y.configure do |c|
-        c.slo do
-          latency_percentiles [50, 90, 99]
-        end
-      end
-      # latency_percentiles is a DSL setter (requires 1 arg), read via ivar
-      stored = E11y.config.slo.instance_variable_get(:@latency_percentiles)
-      expect(stored).to eq([50, 90, 99])
-    end
-
-    it "returns the SLOTrackingConfig when called without a block" do
-      result = config.slo
-      expect(result).to be_a(E11y::SLOTrackingConfig)
-    end
-  end
-
-  describe "#slo_tracking block DSL (alias)" do
-    it "yields the SLOTrackingConfig to the block via instance_eval" do
-      yielded_self = nil
-      config.slo_tracking { yielded_self = self }
-      expect(yielded_self).to be_a(E11y::SLOTrackingConfig)
-    end
-
-    it "returns the SLOTrackingConfig when called without a block" do
-      result = config.slo_tracking
-      expect(result).to be_a(E11y::SLOTrackingConfig)
+      cfgs = config.slo_tracking_job_configs
+      expect(cfgs.keys).to include("ReportGenerationJob")
+      cfg = cfgs["ReportGenerationJob"]
+      expect(cfg).to be_a(E11y::JobSLOConfig)
+      expect(cfg.ignore).to be(true)
     end
   end
 
   describe "#slo_tracking= boolean coercion" do
-    it "accepts true — sets enabled to true on the existing SLOTrackingConfig" do
+    it "accepts true — sets slo_tracking_enabled to true" do
+      config.slo_tracking_enabled = false
       config.slo_tracking = true
-      expect(config.slo_tracking.enabled).to be(true)
+      expect(config.slo_tracking_enabled).to be(true)
     end
 
-    it "accepts false — sets enabled to false on the existing SLOTrackingConfig" do
+    it "accepts false — sets slo_tracking_enabled to false" do
       config.slo_tracking = false
-      expect(config.slo_tracking.enabled).to be(false)
-    end
-
-    it "accepts a SLOTrackingConfig directly — replaces the stored config" do
-      custom = E11y::SLOTrackingConfig.new
-      custom.enabled = false
-      config.slo_tracking = custom
-      expect(config.slo_tracking).to equal(custom)
-      expect(config.slo_tracking.enabled).to be(false)
+      expect(config.slo_tracking_enabled).to be(false)
     end
 
     it "does not raise for unknown value types (no TypeError — silent ignore)" do
-      # The implementation uses a case/when without else, so unknown types are
-      # silently ignored rather than raising. This matches the actual code.
       expect { config.slo_tracking = "yes" }.not_to raise_error
     end
   end
 
   # ---------------------------------------------------------------------------
-  # cardinality_protection block DSL
+  # security, tracing, opentelemetry, cardinality_protection flat accessors
   # ---------------------------------------------------------------------------
-  describe "#cardinality_protection block DSL" do
-    it "yields the CardinalityProtectionConfig to the block via instance_eval" do
-      yielded_self = nil
-      config.cardinality_protection { yielded_self = self }
-      expect(yielded_self).to be_a(E11y::CardinalityProtectionConfig)
+  describe "#security_baggage_protection_* flat accessors" do
+    it "sets security_baggage_protection_enabled and allowed_keys" do
+      config.security_baggage_protection_enabled = true
+      config.security_baggage_protection_allowed_keys = %w[trace_id span_id request_id]
+      config.security_baggage_protection_block_mode = :warn
+      expect(config.security_baggage_protection_enabled).to be(true)
+      expect(config.security_baggage_protection_allowed_keys).to eq(%w[trace_id span_id request_id])
+      expect(config.security_baggage_protection_block_mode).to eq(:warn)
     end
 
-    it "configures max_cardinality via DSL method" do
-      E11y.configure do |c|
-        c.cardinality_protection do
-          max_cardinality 500
-        end
-      end
-      expect(E11y.config.cardinality_protection.max_cardinality_limit).to eq(500)
+    it "filter_baggage_for_propagation returns only allowed keys when enabled" do
+      config.security_baggage_protection_enabled = true
+      config.security_baggage_protection_allowed_keys = %w[trace_id experiment]
+      hash = { "trace_id" => "abc", "experiment" => "exp-1", "user_email" => "x@y.com" }
+      expect(config.filter_baggage_for_propagation(hash)).to eq("trace_id" => "abc", "experiment" => "exp-1")
     end
 
-    it "configures denylist via DSL method" do
-      E11y.configure do |c|
-        c.cardinality_protection do
-          denylist %i[user_id email]
-        end
-      end
-      # denylist is a DSL setter (requires 1 arg), read via ivar
-      stored = E11y.config.cardinality_protection.instance_variable_get(:@denylist)
-      expect(stored).to eq(%i[user_id email])
+    it "filter_baggage_for_propagation returns full hash when disabled" do
+      config.security_baggage_protection_enabled = false
+      hash = { "user_email" => "x@y.com" }
+      expect(config.filter_baggage_for_propagation(hash)).to eq(hash)
     end
+  end
 
-    it "configures overflow_strategy via DSL method" do
-      E11y.configure do |c|
-        c.cardinality_protection do
-          overflow_strategy :drop
-        end
-      end
-      # overflow_strategy is a DSL setter (requires 1 arg), read via ivar
-      stored = E11y.config.cardinality_protection.instance_variable_get(:@overflow_strategy)
-      expect(stored).to eq(:drop)
+  describe "#tracing_* flat accessors" do
+    it "sets tracing_source and tracing_default_sample_rate" do
+      config.tracing_source = :opentelemetry
+      config.tracing_default_sample_rate = 0.5
+      expect(config.tracing_source).to eq(:opentelemetry)
+      expect(config.tracing_default_sample_rate).to eq(0.5)
     end
+  end
 
-    it "returns the CardinalityProtectionConfig when called without a block" do
-      result = config.cardinality_protection
-      expect(result).to be_a(E11y::CardinalityProtectionConfig)
+  describe "#opentelemetry_span_creation_patterns" do
+    it "sets opentelemetry_span_creation_patterns" do
+      config.opentelemetry_span_creation_patterns = ["order.*", "payment.*"]
+      expect(config.opentelemetry_span_creation_patterns).to eq(["order.*", "payment.*"])
+    end
+  end
+
+  describe "#dlq_storage and #dlq_filter (top-level)" do
+    it "sets dlq_storage and dlq_filter" do
+      storage = E11y::Reliability::DLQ::FileStorage.new(file_path: "/tmp/e11y_dlq_test.jsonl")
+      filter = E11y::Reliability::DLQ::Filter.new
+      config.dlq_storage = storage
+      config.dlq_filter = filter
+      expect(config.dlq_storage).to equal(storage)
+      expect(config.dlq_filter).to equal(filter)
+    end
+  end
+
+  describe "#cardinality_protection_* flat accessors" do
+    it "sets cardinality_protection_max_cardinality_limit, denylist, overflow_strategy" do
+      config.cardinality_protection_max_cardinality_limit = 500
+      config.cardinality_protection_denylist = %i[user_id email]
+      config.cardinality_protection_overflow_strategy = :drop
+      expect(config.cardinality_protection_max_cardinality_limit).to eq(500)
+      expect(config.cardinality_protection_denylist).to eq(%i[user_id email])
+      expect(config.cardinality_protection_overflow_strategy).to eq(:drop)
     end
   end
 
@@ -298,59 +269,62 @@ RSpec.describe E11y::Configuration do
       expect(middleware_classes).to include(E11y::Middleware::Routing)
     end
 
-    it "registers exactly 9 middlewares" do
-      expect(middleware_classes.size).to eq(9)
+    it "registers exactly 12 middlewares (includes TrackLatency, BaggageProtection, SelfMonitoringEmit)" do
+      expect(middleware_classes.size).to eq(12)
     end
 
-    it "orders middlewares per ADR-015: TraceContext → Versioning → Validation → PIIFilter → AuditSigning → Sampling → RateLimiting → Routing → EventSlo" do # rubocop:disable Layout/LineLength
+    it "orders middlewares per ADR-015: TrackLatency → TraceContext → ... → EventSlo → SelfMonitoringEmit" do
       expected_order = [
+        E11y::Middleware::TrackLatency,
         E11y::Middleware::TraceContext,
-        E11y::Middleware::Versioning,
         E11y::Middleware::Validation,
-        E11y::Middleware::PIIFilter,
+        E11y::Middleware::BaggageProtection,
         E11y::Middleware::AuditSigning,
-        E11y::Middleware::Sampling,
+        E11y::Middleware::PIIFilter,
         E11y::Middleware::RateLimiting,
+        E11y::Middleware::Sampling,
+        E11y::Middleware::Versioning,
         E11y::Middleware::Routing,
-        E11y::Middleware::EventSlo
+        E11y::Middleware::EventSlo,
+        E11y::Middleware::SelfMonitoringEmit
       ]
       expect(middleware_classes).to eq(expected_order)
     end
 
-    it "places TraceContext before Versioning" do
-      trace_idx    = middleware_classes.index(E11y::Middleware::TraceContext)
-      version_idx  = middleware_classes.index(E11y::Middleware::Versioning)
-      expect(trace_idx).to be < version_idx
+    it "places TraceContext before Validation" do
+      trace_idx = middleware_classes.index(E11y::Middleware::TraceContext)
+      valid_idx = middleware_classes.index(E11y::Middleware::Validation)
+      expect(trace_idx).to be < valid_idx
     end
 
-    it "places Versioning before Validation" do
-      version_idx  = middleware_classes.index(E11y::Middleware::Versioning)
-      valid_idx    = middleware_classes.index(E11y::Middleware::Validation)
-      expect(version_idx).to be < valid_idx
+    it "places Validation before Versioning" do
+      valid_idx   = middleware_classes.index(E11y::Middleware::Validation)
+      version_idx = middleware_classes.index(E11y::Middleware::Versioning)
+      expect(valid_idx).to be < version_idx
     end
 
-    it "places PIIFilter before AuditSigning" do
-      pii_idx   = middleware_classes.index(E11y::Middleware::PIIFilter)
+    it "places AuditSigning before PIIFilter (sign original data per GDPR Art. 30)" do
       audit_idx = middleware_classes.index(E11y::Middleware::AuditSigning)
-      expect(pii_idx).to be < audit_idx
+      pii_idx   = middleware_classes.index(E11y::Middleware::PIIFilter)
+      expect(audit_idx).to be < pii_idx
     end
 
-    it "places AuditSigning before Sampling" do
-      audit_idx    = middleware_classes.index(E11y::Middleware::AuditSigning)
+    it "places PIIFilter before Sampling" do
+      pii_idx      = middleware_classes.index(E11y::Middleware::PIIFilter)
       sampling_idx = middleware_classes.index(E11y::Middleware::Sampling)
-      expect(audit_idx).to be < sampling_idx
+      expect(pii_idx).to be < sampling_idx
     end
 
-    it "places Sampling before RateLimiting" do
-      sampling_idx = middleware_classes.index(E11y::Middleware::Sampling)
+    it "places RateLimiting before Sampling (ADR-015 #4 before #5)" do
       rate_idx     = middleware_classes.index(E11y::Middleware::RateLimiting)
-      expect(sampling_idx).to be < rate_idx
+      sampling_idx = middleware_classes.index(E11y::Middleware::Sampling)
+      expect(rate_idx).to be < sampling_idx
     end
 
-    it "places RateLimiting before Routing" do
-      rate_idx    = middleware_classes.index(E11y::Middleware::RateLimiting)
+    it "places Versioning before Routing (Versioning last)" do
+      version_idx = middleware_classes.index(E11y::Middleware::Versioning)
       routing_idx = middleware_classes.index(E11y::Middleware::Routing)
-      expect(rate_idx).to be < routing_idx
+      expect(version_idx).to be < routing_idx
     end
 
     it "places Validation before PIIFilter (pre_processing before security zone)" do

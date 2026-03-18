@@ -46,8 +46,8 @@ RSpec.describe "Event Registry Integration", :integration do
       expect(result).to eq(Events::PaymentFailed)
     end
 
-    it "all five registered classes appear in all_events" do
-      all = registry.all_events
+    it "all five registered classes appear in event_classes" do
+      all = registry.event_classes
       expect(all).to include(
         Events::OrderCreated,
         Events::OrderPaid,

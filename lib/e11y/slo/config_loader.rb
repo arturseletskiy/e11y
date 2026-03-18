@@ -1,0 +1,40 @@
+# frozen_string_literal: true
+
+require "yaml"
+
+module E11y
+  module SLO
+    # Loads SLO configuration from slo.yml files in configurable search paths.
+    class ConfigLoader
+      class << self
+        def load(search_paths: default_search_paths)
+          search_paths.each do |base|
+            path = File.join(base.to_s, "slo.yml")
+            next unless File.file?(path)
+
+            content = File.read(path)
+            return YAML.safe_load(content) || {}
+          end
+          nil
+        end
+
+        # Returns true when e11y_self_monitoring.enabled is true in slo.yml.
+        #
+        # @return [Boolean]
+        def self_monitoring_enabled?
+          config = load
+          return false if config.nil?
+
+          config.dig("e11y_self_monitoring", "enabled") == true
+        end
+
+        private
+
+        def default_search_paths
+          base = defined?(Rails) ? Rails.root.to_s : Dir.pwd
+          [File.join(base, "config"), File.join(base, "config", "e11y"), Dir.pwd]
+        end
+      end
+    end
+  end
+end

@@ -7,7 +7,7 @@ module E11y
   # The registry is always-on (no configuration needed) and is safe for concurrent use.
   #
   # @example Discover all events
-  #   E11y::Registry.all_events
+  #   E11y::Registry.event_classes
   #   # => [Events::OrderCreated, Events::PaymentFailed, ...]
   #
   # @example Find an event class by name
@@ -52,8 +52,8 @@ module E11y
       # Return all registered event classes. Delegates to singleton instance.
       #
       # @return [Array<Class>]
-      def all_events
-        instance.all_events
+      def event_classes
+        instance.event_classes
       end
 
       # Filter events by criteria. Delegates to singleton instance.
@@ -91,6 +91,21 @@ module E11y
       # @return [Array<Hash>]
       def to_documentation
         instance.to_documentation
+      end
+
+      # Return all versions of an event (ADR-012 §6.2).
+      #
+      # @param event_name [String] Event name
+      # @return [Array<Hash>] [{ version: N, class: Klass }, ...] sorted by version
+      def all_versions(event_name)
+        instance.all_versions(event_name)
+      end
+
+      # Return event names that have multiple versions (ADR-012 §6.2).
+      #
+      # @return [Array<String>]
+      def versioned_events
+        instance.versioned_events
       end
 
       # Reset the singleton instance (primarily for test isolation).
@@ -163,7 +178,7 @@ module E11y
     # The returned array is a copy — mutating it does not affect the registry.
     #
     # @return [Array<Class>]
-    def all_events
+    def event_classes
       @mutex.synchronize { @registry.values.flatten.dup }
     end
 
@@ -179,7 +194,7 @@ module E11y
     # @param criteria [Hash]
     # @return [Array<Class>]
     def where(**criteria)
-      all_events.select do |klass|
+      event_classes.select do |klass|
         criteria.all? do |key, value|
           case key
           when :severity
@@ -231,12 +246,34 @@ module E11y
       @mutex.synchronize { @registry.size }
     end
 
+    # Return all versions of an event (ADR-012 §6.2).
+    #
+    # @param event_name [String] Event name
+    # @return [Array<Hash>] [{ version: N, class: Klass }, ...] sorted by version
+    def all_versions(event_name)
+      entries = @mutex.synchronize { @registry[event_name.to_s]&.dup }
+      return [] if entries.nil? || entries.empty?
+
+      entries
+        .map { |klass| { version: klass.respond_to?(:version) ? klass.version : 1, class: klass } }
+        .sort_by { |h| h[:version] }
+    end
+
+    # Return event names that have multiple versions (ADR-012 §6.2).
+    #
+    # @return [Array<String>]
+    def versioned_events
+      @mutex.synchronize do
+        @registry.select { |_name, entries| entries.size >= 2 }.keys
+      end
+    end
+
     # Generate a documentation-friendly hash for every registered event class.
     #
     # @return [Array<Hash>] Each entry contains `:name`, `:class`, `:version`,
     #   `:severity`, and `:schema_keys` (absent when not applicable).
     def to_documentation
-      all_events.map do |klass|
+      event_classes.map do |klass|
         {
           name: klass.respond_to?(:event_name) ? klass.event_name : klass.name,
           class: klass.name,

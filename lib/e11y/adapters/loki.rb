@@ -41,11 +41,8 @@ module E11y
     #     batch_timeout: 5
     #   )
     #
-    # @example With Registry
-    #   E11y::Adapters::Registry.register(
-    #     :loki_logger,
-    #     E11y::Adapters::Loki.new(url: ENV["LOKI_URL"])
-    #   )
+    # @example Configuration
+    #   config.adapters[:loki] = E11y::Adapters::Loki.new(url: ENV["LOKI_URL"])
     #
     # @example With Cardinality Protection (C04 Resolution - Enterprise)
     #   # Enable for high-traffic environments to prevent label explosion
@@ -82,8 +79,9 @@ module E11y
       # @option config [Integer] :batch_timeout (5) Max seconds to wait before flushing batch
       # @option config [Boolean] :compress (true) Enable gzip compression
       # @option config [String] :tenant_id (nil) Loki tenant ID (X-Scope-OrgID header)
-      # @option config [Boolean] :enable_cardinality_protection (false) Enable cardinality protection for labels (C04)
-      # @option config [Integer] :max_label_cardinality (100) Max unique values per label when protection enabled
+      # @option config [Boolean] :enable_cardinality_protection (true) Enable cardinality protection for labels (C04)
+      # @option config [Integer] :max_label_cardinality (1000) Max unique values per label when protection enabled.
+      #   Labels = event_name + severity only (payload stays in log line). 1000 covers ~1000 event types.
       # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
       # Adapter initialization requires many instance variable assignments
       def initialize(config = {})
@@ -95,18 +93,18 @@ module E11y
         @health_check_timeout = [@timeout, 2].min
         @compress = config.fetch(:compress, true)
         @tenant_id = config[:tenant_id]
-        @enable_cardinality_protection = config.fetch(:enable_cardinality_protection, false)
-        @max_label_cardinality = config.fetch(:max_label_cardinality, 100)
+        @enable_cardinality_protection = config.fetch(:enable_cardinality_protection, true)
+        @max_label_cardinality = config.fetch(:max_label_cardinality, 1000)
 
         @buffer = []
         @buffer_mutex = Mutex.new
         @connection = nil
         @last_flush = Time.now
 
-        # C04: Optional cardinality protection (disabled by default for logs)
+        # C04: Cardinality protection for labels (enabled by default per ADR-009 §8)
         if @enable_cardinality_protection
           @cardinality_protection = E11y::Metrics::CardinalityProtection.new(
-            max_unique_values: @max_label_cardinality
+            cardinality_limit: @max_label_cardinality
           )
         end
 
@@ -305,8 +303,8 @@ module E11y
         # Merge static and event labels
         all_labels = @labels.merge(event_labels)
 
-        # C04: Apply cardinality protection if enabled (enterprise use case)
-        # Disabled by default - Loki is a log system, labels are for stream filtering only
+        # C04: Cardinality protection for labels only. Labels = event_name + severity (payload
+        # stays in log line). Filter by user_uuid via LogQL: | json | user_uuid="xxx"
         all_labels = @cardinality_protection.filter(all_labels, "loki.stream") if @enable_cardinality_protection && @cardinality_protection
 
         all_labels.transform_keys(&:to_s)

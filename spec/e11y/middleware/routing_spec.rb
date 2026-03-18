@@ -71,6 +71,26 @@ RSpec.describe E11y::Middleware::Routing do
         expect(result[:routing][:routing_type]).to eq(:explicit)
         expect(result[:routing][:adapters]).to eq([:loki])
       end
+
+      it "merges payload_rewrites when present (explicit_pii per-adapter)" do
+        event_data = {
+          event_name: "user.registered",
+          adapters: %i[loki audit_encrypted],
+          payload: { email: "hashed_xxx", user_id: "u-1" },
+          payload_rewrites: {
+            audit_encrypted: { email: "user@example.com" }
+          }
+        }
+
+        middleware.call(event_data)
+
+        expect(loki_adapter).to have_received(:write).with(
+          hash_including(payload: { email: "hashed_xxx", user_id: "u-1" })
+        )
+        expect(audit_adapter).to have_received(:write).with(
+          hash_including(payload: { email: "user@example.com", user_id: "u-1" })
+        )
+      end
     end
 
     context "with routing rules" do

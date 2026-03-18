@@ -29,13 +29,18 @@ module E11y
             # Store current trace as parent (job will create NEW trace)
             job.e11y_parent_trace_id = E11y::Current.trace_id if E11y::Current.trace_id
             job.e11y_parent_span_id = E11y::Current.span_id if E11y::Current.span_id
+            job.e11y_sampled = E11y::Current.sampled if E11y::Current.respond_to?(:sampled) && !E11y::Current.sampled.nil?
+            if E11y::Current.respond_to?(:baggage) && E11y::Current.baggage&.any?
+              filtered = E11y::Tracing::Propagator.filter_baggage_for_propagation(E11y::Current.baggage)
+              job.e11y_baggage = filtered if filtered.any?
+            end
           end
 
           # Set up job-scoped context around job execution (C17 Hybrid Tracing + C18 Non-Failing)
           around_perform do |job, block|
             # C18: Disable fail_on_error for jobs (observability should not block business logic)
-            original_fail_on_error = E11y.config.error_handling.fail_on_error
-            E11y.config.error_handling.fail_on_error = false
+            original_fail_on_error = E11y.config.error_handling_fail_on_error
+            E11y.config.error_handling_fail_on_error = false
 
             setup_job_context_active_job(job)
             setup_job_buffer_active_job
@@ -59,7 +64,7 @@ module E11y
             cleanup_job_context_active_job
 
             # Restore original setting
-            E11y.config.error_handling.fail_on_error = original_fail_on_error
+            E11y.config.error_handling_fail_on_error = original_fail_on_error
           end
         end
 
@@ -79,13 +84,28 @@ module E11y
           E11y::Current.span_id = span_id
           E11y::Current.parent_trace_id = parent_trace_id
           E11y::Current.request_id = job.job_id
+          E11y::Current.baggage = job.e11y_baggage if job.respond_to?(:e11y_baggage) && job.e11y_baggage.is_a?(Hash)
+
+          # Restore or compute sampling decision (ADR-005 §7)
+          if job.respond_to?(:e11y_sampled) && !job.e11y_sampled.nil?
+            E11y::Current.sampled = job.e11y_sampled
+          else
+            require "e11y/trace_context/sampler"
+            ctx = E11y::Current.to_context.merge(
+              job_class: job.class.name,
+              queue: job.queue_name
+            ).compact
+            E11y::Current.sampled = E11y::TraceContext::Sampler.should_sample?(ctx)
+          end
         end
 
         # Setup job-scoped buffer
         def setup_job_buffer_active_job
-          return unless E11y.config.request_buffer&.enabled
+          return unless E11y.config.ephemeral_buffer_enabled
 
-          E11y::Buffers::RequestScopedBuffer.initialize!
+          limit = E11y.config.ephemeral_buffer_job_buffer_limit ||
+                  E11y::Buffers::EphemeralBuffer::DEFAULT_BUFFER_LIMIT
+          E11y::Buffers::EphemeralBuffer.initialize!(buffer_limit: limit)
         rescue StandardError => e
           # C18: Don't fail job if buffer setup fails
           warn "[E11y] Failed to start job buffer: #{e.message}"
@@ -93,9 +113,9 @@ module E11y
 
         # Handle job error (C18: Non-Failing Event Tracking)
         def handle_job_error_active_job(_error)
-          return unless E11y.config.request_buffer&.enabled
+          return unless E11y.config.ephemeral_buffer_enabled
 
-          E11y::Buffers::RequestScopedBuffer.flush_on_error
+          E11y::Buffers::EphemeralBuffer.flush_on_error
         rescue StandardError => e
           # C18: Don't fail job if buffer flush fails
           warn "[E11y] Failed to flush job buffer on error: #{e.message}"
@@ -104,9 +124,9 @@ module E11y
         # Cleanup job-scoped context
         def cleanup_job_context_active_job
           # Flush buffer on success (not on error, already flushed in rescue)
-          if !$ERROR_INFO && E11y.config.request_buffer&.enabled
+          if !$ERROR_INFO && E11y.config.ephemeral_buffer_enabled
             begin
-              E11y::Buffers::RequestScopedBuffer.discard
+              E11y::Buffers::EphemeralBuffer.discard
             rescue StandardError => e
               # C18: Don't fail job if buffer flush fails
               warn "[E11y] Failed to flush job buffer: #{e.message}"
@@ -141,7 +161,7 @@ module E11y
         # @api private
         # SLO tracking requires config check, duration calculation, method call, and error handling
         def track_job_slo_active_job(job, status, start_time)
-          return unless E11y.config.slo_tracking&.enabled
+          return unless E11y.config.slo_tracking_enabled
 
           duration_ms = ((Time.now - start_time) * 1000).round(2)
 
@@ -192,6 +212,22 @@ module E11y
 
         def e11y_span_id=(value)
           @e11y_span_id = value
+        end
+
+        def e11y_sampled
+          @e11y_sampled
+        end
+
+        def e11y_sampled=(value)
+          @e11y_sampled = value
+        end
+
+        def e11y_baggage
+          @e11y_baggage
+        end
+
+        def e11y_baggage=(value)
+          @e11y_baggage = value
         end
       end
     end

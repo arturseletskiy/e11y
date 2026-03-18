@@ -41,13 +41,13 @@ RSpec.describe "E11y Railtie Integration", :integration, type: :integration do
 
   describe "Rails instrumentation" do
     it "enables Rails instrumentation when configured" do
-      expect(E11y.config.rails_instrumentation.enabled).to be true
+      expect(E11y.config.rails_instrumentation_enabled).to be true
     end
   end
 
   describe "ActiveJob instrumentation" do
     it "enables ActiveJob instrumentation when configured" do
-      expect(E11y.config.active_job.enabled).to be true
+      expect(E11y.config.active_job_enabled).to be true
     end
 
     it "includes E11y callbacks in ActiveJob::Base" do

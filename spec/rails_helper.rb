@@ -124,7 +124,7 @@ RSpec.configure do |config|
     # Rate limiting interferes with tests by blocking events unexpectedly
     # Tests for UC-011 (rate limiting feature) will re-enable it explicitly
     E11y.configure do |config|
-      config.rate_limiting.enabled = false if config.respond_to?(:rate_limiting)
+      config.rate_limiting_enabled = false if config.respond_to?(:rate_limiting_enabled)
     end
 
     # Capture canonical pipeline for restoration between examples (like Cucumber hooks.rb)

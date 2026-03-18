@@ -14,8 +14,8 @@ RSpec.describe E11y::Instruments::Sidekiq::ServerMiddleware, "SLO Integration" d
   before do
     E11y.reset!
     E11y::Metrics.reset_backend!
-    allow(E11y::Buffers::RequestScopedBuffer).to receive(:start!)
-    allow(E11y::Buffers::RequestScopedBuffer).to receive(:flush!)
+    allow(E11y::Buffers::EphemeralBuffer).to receive(:initialize!)
+    allow(E11y::Buffers::EphemeralBuffer).to receive(:flush_on_error)
   end
 
   after do
@@ -25,7 +25,7 @@ RSpec.describe E11y::Instruments::Sidekiq::ServerMiddleware, "SLO Integration" d
   context "when SLO tracking is enabled" do
     before do
       E11y.configure do |config|
-        config.slo_tracking.enabled = true
+        config.slo_tracking_enabled = true
       end
     end
 
@@ -84,7 +84,7 @@ RSpec.describe E11y::Instruments::Sidekiq::ServerMiddleware, "SLO Integration" d
   context "when SLO tracking is disabled" do
     before do
       E11y.configure do |config|
-        config.slo_tracking.enabled = false
+        config.slo_tracking_enabled = false
       end
     end
 
@@ -98,7 +98,7 @@ RSpec.describe E11y::Instruments::Sidekiq::ServerMiddleware, "SLO Integration" d
   context "when testing UC-004 compliance" do
     before do
       E11y.configure do |config|
-        config.slo_tracking.enabled = true
+        config.slo_tracking_enabled = true
       end
     end
 
@@ -129,7 +129,7 @@ RSpec.describe E11y::Instruments::Sidekiq::ServerMiddleware, "SLO Integration" d
   context "when testing ADR-003 compliance" do
     before do
       E11y.configure do |config|
-        config.slo_tracking.enabled = true
+        config.slo_tracking_enabled = true
       end
     end
 

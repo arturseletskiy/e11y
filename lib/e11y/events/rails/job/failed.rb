@@ -12,6 +12,8 @@ module E11y
             optional(:job_class).maybe(:string)
             optional(:job_id).maybe(:string)
             optional(:queue).maybe(:string)
+            optional(:error_class).maybe(:string)
+            optional(:error_message).maybe(:string)
           end
 
           severity :error

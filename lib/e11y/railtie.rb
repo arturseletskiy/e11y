@@ -22,7 +22,7 @@ module E11y
   #   # config/initializers/e11y.rb
   #   E11y.configure do |config|
   #     config.service_name = "my-app"
-  #     config.adapters.register :loki, E11y::Adapters::Loki.new(url: ENV['LOKI_URL'])
+  #     config.adapters[:loki] = E11y::Adapters::Loki.new(url: ENV['LOKI_URL'])
   #   end
   #
   # @see ADR-008 §3 (Railtie & Initialization)
@@ -64,10 +64,10 @@ module E11y
       next unless E11y.config.enabled
 
       # Setup instruments (each can be enabled/disabled separately)
-      E11y::Railtie.setup_rails_instrumentation if E11y.config.rails_instrumentation&.enabled
-      E11y::Railtie.setup_logger_bridge if E11y.config.logger_bridge&.enabled
-      E11y::Railtie.setup_sidekiq if defined?(::Sidekiq) && E11y.config.sidekiq&.enabled
-      E11y::Railtie.setup_active_job if defined?(::ActiveJob) && E11y.config.active_job&.enabled
+      E11y::Railtie.setup_rails_instrumentation if E11y.config.rails_instrumentation_enabled
+      E11y::Railtie.setup_logger_bridge if E11y.config.logger_bridge_enabled
+      E11y::Railtie.setup_sidekiq if defined?(::Sidekiq) && E11y.config.sidekiq_enabled
+      E11y::Railtie.setup_active_job if defined?(::ActiveJob) && E11y.config.active_job_enabled
     end
 
     # Outgoing HTTP trace propagation (UC-009)
@@ -104,10 +104,10 @@ module E11y
 
     # Rake task helpers
     rake_tasks do
-      next unless E11y.config.enabled
-
-      # TODO: Add rake tasks (e11y:stats, e11y:test_event, etc.)
-      # load 'e11y/tasks.rake'
+      load File.expand_path("../tasks/e11y_slo.rake", __dir__)
+      load File.expand_path("../tasks/e11y_lint.rake", __dir__)
+      load File.expand_path("../tasks/e11y_events.rake", __dir__)
+      load File.expand_path("../tasks/e11y_docs.rake", __dir__)
     end
 
     # Setup Rails instrumentation (ActiveSupport::Notifications → E11y)

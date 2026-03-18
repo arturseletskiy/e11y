@@ -14,7 +14,7 @@
 - ⚠️ **PARTIAL:** Cost Tracking - May not be fully implemented (cost calculation, adapter pricing)
 - ⚠️ **PARTIAL:** Budget Enforcement - May not be fully implemented (budget limits, cutoff behavior)
 - ⚠️ **PARTIAL:** Cost Alerts - May not be fully implemented (alerts when budget exceeded)
-- ❌ **NOT Implemented:** Compression - Per ADR-009, compression not started
+- ✅ **Implemented:** Compression - Adapter-level defaults (Loki, OpenTelemetryCollector `compress: true`)
 - ❌ **NOT Implemented:** Payload Minimization - May not be fully implemented
 - ❌ **NOT Implemented:** Tiered Storage - Replaced by Retention-Based Routing (UC-019)
 
@@ -66,7 +66,7 @@
 | Cost Alerts | ⚠️ PARTIAL | May not be fully implemented |
 | Adapter Pricing | ⚠️ PARTIAL | May not be fully implemented |
 | Cutoff Behavior | ⚠️ PARTIAL | May not be fully implemented |
-| Compression | ❌ NOT Implemented | Per ADR-009, compression not started |
+| Compression | ✅ Implemented | Adapter-level (Loki, OpenTelemetryCollector) |
 | Payload Minimization | ❌ NOT Implemented | May not be fully implemented |
 
 ### 1.3. Configuration

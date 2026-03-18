@@ -30,7 +30,7 @@ module E11y
     #
     # @example Critical Event Bypass (C02)
     #   # Payment events bypass rate limiting → DLQ if limited
-    #   config.dlq_filter.always_save_patterns = [/^payment\./]
+    #   config.dlq_filter.should_save?(event_data) # Event DSL: use_dlq
     #
     #   # Result: Rate-limited payment events go to DLQ, not dropped
     #
@@ -40,26 +40,33 @@ module E11y
       # Initialize rate limiting middleware
       #
       # @param app [Object] Next middleware in pipeline
-      # @param global_limit [Integer] Max events/sec globally (default: from E11y.config.rate_limiting)
-      # @param per_event_limit [Integer] Max events/sec per event type (default: from E11y.config.rate_limiting)
-      # @param window [Float] Time window in seconds (default: from E11y.config.rate_limiting)
+      # @param global_limit [Integer] Max events/sec globally (default: from E11y.config)
+      # @param per_event_limit [Integer] Max events/sec per event type (default: from E11y.config)
+      # @param window [Float] Time window in seconds (default: from E11y.config)
       def initialize(app, global_limit: nil, per_event_limit: nil, window: nil)
         super(app)
-        rl_config = E11y.config.rate_limiting
+        config = E11y.config
         # When explicit limits are passed (e.g. from pipeline options), enable for this instance
         explicit_opts = global_limit || per_event_limit || window
-        @enabled = explicit_opts ? true : rl_config.enabled
-        @global_limit = global_limit || rl_config.global_limit
-        @per_event_limit = per_event_limit || rl_config.per_event_limit
-        @window = window || rl_config.window
+        @enabled = explicit_opts ? true : config.rate_limiting_enabled
+        @global_limit = global_limit || config.rate_limiting_global_limit
+        @global_window = window || config.rate_limiting_global_window
+        @window = @global_window # Alias for spec compatibility
+        @per_event_limit = per_event_limit || config.rate_limiting_per_event_limit
+        @explicit_per_event = per_event_limit && window
 
         # Token buckets for rate limiting
-        @global_bucket = TokenBucket.new(capacity: @global_limit, refill_rate: @global_limit, window: @window)
+        @global_bucket = TokenBucket.new(
+          capacity: @global_limit,
+          refill_rate: @global_limit,
+          window: @global_window
+        )
         @per_event_buckets = Hash.new do |hash, event_name|
+          limit_cfg = @explicit_per_event ? { limit: @per_event_limit, window: @window } : config.rate_limit_for(event_name)
           hash[event_name] = TokenBucket.new(
-            capacity: @per_event_limit,
-            refill_rate: @per_event_limit,
-            window: @window
+            capacity: limit_cfg[:limit],
+            refill_rate: limit_cfg[:limit],
+            window: limit_cfg[:window]
           )
         end
 
@@ -141,9 +148,8 @@ module E11y
         dlq_filter = E11y.config.dlq_filter
         return false unless dlq_filter
 
-        # Check if event matches always_save_patterns
-        event_name = event_data[:event_name]
-        dlq_filter.always_save_patterns&.any? { |pattern| pattern.match?(event_name) }
+        # Use DLQ filter (Event DSL: use_dlq, severity, default)
+        dlq_filter.should_save?(event_data)
       end
 
       # Save rate-limited critical event to DLQ (C02 Resolution)
@@ -156,11 +162,12 @@ module E11y
         dlq_storage = E11y.config.dlq_storage
         return unless dlq_storage
 
+        per_event_limit = limit_type == :per_event ? E11y.config.rate_limit_for(event_data[:event_name])[:limit] : @per_event_limit
         dlq_storage.save(event_data, metadata: {
                            reason: "rate_limited_#{limit_type}",
                            limit_type: limit_type,
                            global_limit: @global_limit,
-                           per_event_limit: @per_event_limit,
+                           per_event_limit: per_event_limit,
                            timestamp: Time.now.utc.iso8601
                          })
 

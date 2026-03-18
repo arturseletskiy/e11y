@@ -1038,11 +1038,11 @@ module E11y
     class SidekiqErrorHandlingMiddleware
       def call(worker, job, queue)
         # Save original setting
-        original_fail_on_error = E11y.config.error_handling.fail_on_error
+        original_fail_on_error = E11y.config.error_handling_fail_on_error
         
         # Disable failing on errors for this job
         # Observability should NOT block business logic!
-        E11y.config.error_handling.fail_on_error = false
+        E11y.config.error_handling_fail_on_error = false
         
         E11y.logger.debug(
           "Sidekiq job starting with fail_on_error=false",
@@ -1053,7 +1053,7 @@ module E11y
         yield
       ensure
         # Restore original setting
-        E11y.config.error_handling.fail_on_error = original_fail_on_error
+        E11y.config.error_handling_fail_on_error = original_fail_on_error
       end
     end
   end
@@ -1112,7 +1112,7 @@ module E11y
     
     def self.handle_error(error)
       # Should we raise or swallow?
-      if E11y.config.error_handling.fail_on_error
+      if E11y.config.error_handling_fail_on_error
         # Web request context: RAISE (fast feedback!)
         raise error
       else
@@ -1177,7 +1177,7 @@ class CriticalReportJob < ApplicationJob
   
   def perform(report_id)
     # Temporarily enable fail_on_error
-    E11y.config.error_handling.fail_on_error = true
+    E11y.config.error_handling_fail_on_error = true
     
     # Generate report
     report = Report.generate(report_id)
@@ -1190,7 +1190,7 @@ class CriticalReportJob < ApplicationJob
     # ↑ If this fails, job SHOULD fail (retry later)
   ensure
     # Restore default (will be restored by middleware anyway)
-    E11y.config.error_handling.fail_on_error = false
+    E11y.config.error_handling_fail_on_error = false
   end
 end
 ```
@@ -1501,7 +1501,7 @@ module E11y
           # Re-dispatch event through normal pipeline
           E11y::Pipeline.dispatch(
             entry[:event_data],
-            metadata: entry[:metadata].merge(replayed: true)
+            metadata: entry[:metadata].merge(dlq_replayed: true)
           )
           
           # Delete from DLQ after successful replay
@@ -1665,7 +1665,7 @@ module E11y
           # Re-dispatch
           E11y::Pipeline.dispatch(
             entry[:event_data],
-            metadata: entry[:metadata].merge(replayed: true)
+            metadata: entry[:metadata].merge(dlq_replayed: true)
           )
           
           # Delete from DLQ
@@ -1781,6 +1781,31 @@ module E11y
   end
 end
 ```
+
+### 4.4.1. DLQ Filter: Event DSL (Implemented)
+
+The DLQ filter uses **Event DSL** with a single `use_dlq` flag:
+
+```ruby
+# Audit events (Presets::AuditEvent) have use_dlq true by default
+class Events::UserDeleted < E11y::Events::BaseAuditEvent
+  # use_dlq true from preset — always saved to DLQ
+end
+
+# Explicit opt-in for critical business events
+class Events::PaymentFailed < E11y::Event::Base
+  use_dlq true
+end
+
+# Explicit opt-out for noise
+class Events::DebugTrace < E11y::Event::Base
+  use_dlq false
+end
+
+# Default (nil): severity-based (error/fatal saved) + default_behavior
+```
+
+**Priority order:** 1) `use_dlq false` → 2) `use_dlq true` → 3) severity → 4) default.
 
 ### 4.5. DLQ Configuration
 
@@ -2562,8 +2587,8 @@ module E11y
       end
       
       def check_all_adapters
-        E11y::Adapters::Registry.all.each do |adapter|
-          circuit_breaker = CircuitBreaker.for(adapter.name)
+        E11y.config.adapters.each do |name, adapter|
+          circuit_breaker = CircuitBreaker.for(name)
           
           # Only check adapters with open/half-open circuits
           next if circuit_breaker.healthy?
@@ -2572,11 +2597,11 @@ module E11y
             adapter.health_check
             
             E11y::Metrics.increment('e11y.health_check.success', {
-              adapter: adapter.name
+              adapter: name
             })
           rescue => error
             E11y::Metrics.increment('e11y.health_check.failure', {
-              adapter: adapter.name,
+              adapter: name,
               error: error.class.name
             })
           end

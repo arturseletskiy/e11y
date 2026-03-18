@@ -5,6 +5,8 @@
 **Covers:** Internal observability and reliability of E11y gem itself  
 **Depends On:** ADR-001 (Core), ADR-002 (Metrics), ADR-003 (SLO)
 
+**Implementation (2026-03):** `track_latency` implemented via `E11y::Middleware::TrackLatency` (first in pipeline).
+
 ---
 
 ## 📋 Table of Contents
@@ -163,9 +165,7 @@ graph TB
     end
     
     subgraph "SLO Tracking"
-        Prometheus --> SLOCalc[E11y SLO Calculator]
-        SLOCalc --> ErrorBudget[E11y Error Budget]
-        ErrorBudget --> Alerts[Alertmanager]
+        Prometheus --> Alerts[Alertmanager]
     end
     
     style SelfMetrics fill:#fff3cd
@@ -484,205 +484,7 @@ end
 
 ## 4. Internal SLO Tracking
 
-### 4.1. E11y SLO Definition
-
-**E11y has its own SLO** (separate from application SLO):
-
-```yaml
-# config/e11y_slo.yml
-# 
-# E11y Gem Internal SLO
-# 
-# This defines reliability targets for E11y itself.
-# If E11y violates its SLO → alert SRE immediately!
-
-version: 1
-
-e11y_slo:
-  # === LATENCY SLO ===
-  # E11y.track() must be fast (<1ms p99)
-  latency:
-    enabled: true
-    p99_target: 0.001  # 1ms
-    p95_target: 0.0005 # 0.5ms
-    p50_target: 0.0001 # 0.1ms
-    window: 30d
-    
-    # Multi-window burn rate alerts
-    burn_rate_alerts:
-      fast:
-        enabled: true
-        window: 1h
-        threshold: 14.4
-        alert_after: 5m
-        severity: critical
-      medium:
-        enabled: true
-        window: 6h
-        threshold: 6.0
-        alert_after: 30m
-        severity: warning
-  
-  # === RELIABILITY SLO ===
-  # E11y must deliver 99.9% of events
-  reliability:
-    enabled: true
-    success_rate_target: 0.999  # 99.9%
-    window: 30d
-    
-    # What counts as "success"?
-    success_criteria:
-      - event_tracked: true
-      - not_dropped: true
-      - adapter_delivered: true  # At least 1 adapter succeeded
-    
-    # What counts as "failure"?
-    failure_criteria:
-      - validation_failed: true
-      - all_adapters_failed: true
-      - buffer_overflow: true
-    
-    burn_rate_alerts:
-      fast:
-        enabled: true
-        window: 1h
-        threshold: 14.4
-        alert_after: 5m
-  
-  # === RESOURCE SLO ===
-  # E11y must use <2% CPU, <100MB memory
-  resources:
-    enabled: true
-    
-    cpu_percent_target: 2.0  # <2% CPU
-    memory_mb_target: 100    # <100MB
-    
-    buffer_utilization_target: 80  # <80% full
-    
-    alerts:
-      cpu_high:
-        threshold: 5.0  # Alert if >5% CPU
-        duration: 5m
-      memory_high:
-        threshold: 200  # Alert if >200MB
-        duration: 5m
-      buffer_high:
-        threshold: 90  # Alert if >90% full
-        duration: 1m
-
-# === ERROR BUDGET ===
-error_budget:
-  enabled: true
-  
-  # Latency budget: 0.1% of requests can be >1ms
-  latency_budget: 0.001
-  
-  # Reliability budget: 0.1% of events can be dropped
-  reliability_budget: 0.001
-  
-  # Alert thresholds
-  alert_at_percent_consumed: [50, 80, 90, 100]
-```
-
-### 4.2. SLO Calculator
-
-```ruby
-# lib/e11y/self_monitoring/slo_calculator.rb
-module E11y
-  module SelfMonitoring
-    class SLOCalculator
-      def self.calculate_latency_slo(window: 30.days)
-        # Query Prometheus for E11y latency p99
-        query = <<~PROMQL
-          histogram_quantile(0.99,
-            sum(rate(e11y_track_duration_seconds_bucket[#{window}])) by (le)
-          )
-        PROMQL
-        
-        p99_latency = E11y::Metrics.query_prometheus(query)
-        target = 0.001  # 1ms
-        
-        {
-          current_p99: p99_latency,
-          target_p99: target,
-          slo_met: p99_latency <= target,
-          error_budget_consumed: calculate_latency_budget_consumed(p99_latency, target, window)
-        }
-      end
-      
-      def self.calculate_reliability_slo(window: 30.days)
-        # Query Prometheus for E11y success rate
-        query = <<~PROMQL
-          sum(rate(e11y_events_tracked_total{result="success"}[#{window}]))
-          /
-          sum(rate(e11y_events_tracked_total[#{window}]))
-        PROMQL
-        
-        success_rate = E11y::Metrics.query_prometheus(query)
-        target = 0.999  # 99.9%
-        
-        {
-          current_success_rate: success_rate,
-          target_success_rate: target,
-          slo_met: success_rate >= target,
-          error_budget_consumed: calculate_reliability_budget_consumed(success_rate, target)
-        }
-      end
-      
-      def self.calculate_resource_slo
-        # Query Prometheus for E11y resource usage
-        cpu_query = 'avg(rate(e11y_cpu_seconds_total[5m])) * 100'
-        memory_query = 'e11y_memory_usage_mb'
-        buffer_query = 'e11y_buffer_utilization_percent'
-        
-        cpu_percent = E11y::Metrics.query_prometheus(cpu_query)
-        memory_mb = E11y::Metrics.query_prometheus(memory_query)
-        buffer_percent = E11y::Metrics.query_prometheus(buffer_query)
-        
-        {
-          cpu: {
-            current: cpu_percent,
-            target: 2.0,
-            slo_met: cpu_percent <= 2.0
-          },
-          memory: {
-            current: memory_mb,
-            target: 100,
-            slo_met: memory_mb <= 100
-          },
-          buffer: {
-            current: buffer_percent,
-            target: 80,
-            slo_met: buffer_percent <= 80
-          }
-        }
-      end
-      
-      private
-      
-      def self.calculate_latency_budget_consumed(current, target, window)
-        # Simplified: % of requests exceeding target
-        # In reality, use Prometheus query for exact calculation
-        return 0.0 if current <= target
-        
-        excess = current - target
-        budget = target * 0.001  # 0.1% budget
-        
-        (excess / budget * 100).round(2)
-      end
-      
-      def self.calculate_reliability_budget_consumed(current, target)
-        error_rate = 1.0 - current
-        error_budget = 1.0 - target
-        
-        return 0.0 if error_rate <= error_budget
-        
-        (error_rate / error_budget * 100).round(2)
-      end
-    end
-  end
-end
-```
+**PromQL and alerts:** See [SLO-PROMQL-ALERTS.md](SLO-PROMQL-ALERTS.md) for E11y latency, delivery rate, and alert rules.
 
 ---
 
@@ -780,160 +582,61 @@ end
 
 ## 6. Health Checks
 
-### 6.1. Health Check API
+The gem runs in the host application's main process. E11y does not provide a separate health endpoint — the host application decides how and where to expose health (e.g. its own `/health` or `/ready`).
+
+### 6.1. API: E11y.health and E11y.healthy?
 
 ```ruby
-# lib/e11y/health_check.rb
-module E11y
-  class HealthCheck
-    def self.status
-      {
-        status: overall_status,
-        timestamp: Time.now.iso8601,
-        checks: {
-          latency: check_latency,
-          reliability: check_reliability,
-          resources: check_resources,
-          adapters: check_adapters,
-          buffer: check_buffer
-        },
-        slo: {
-          latency: SelfMonitoring::SLOCalculator.calculate_latency_slo,
-          reliability: SelfMonitoring::SLOCalculator.calculate_reliability_slo,
-          resources: SelfMonitoring::SLOCalculator.calculate_resource_slo
-        }
-      }
-    end
-    
-    def self.healthy?
-      status[:status] == :healthy
-    end
-    
-    private
-    
-    def self.overall_status
-      checks = [
-        check_latency[:status],
-        check_reliability[:status],
-        check_resources[:status],
-        check_adapters[:status],
-        check_buffer[:status]
-      ]
-      
-      return :unhealthy if checks.include?(:unhealthy)
-      return :degraded if checks.include?(:degraded)
-      :healthy
-    end
-    
-    def self.check_latency
-      slo = SelfMonitoring::SLOCalculator.calculate_latency_slo(window: 5.minutes)
-      
-      {
-        status: slo[:slo_met] ? :healthy : :degraded,
-        current_p99: slo[:current_p99],
-        target_p99: slo[:target_p99],
-        message: slo[:slo_met] ? 'Latency within SLO' : 'Latency exceeds SLO'
-      }
-    end
-    
-    def self.check_reliability
-      slo = SelfMonitoring::SLOCalculator.calculate_reliability_slo(window: 5.minutes)
-      
-      {
-        status: slo[:slo_met] ? :healthy : :unhealthy,
-        current_success_rate: slo[:current_success_rate],
-        target_success_rate: slo[:target_success_rate],
-        message: slo[:slo_met] ? 'Reliability within SLO' : 'Reliability below SLO'
-      }
-    end
-    
-    def self.check_resources
-      slo = SelfMonitoring::SLOCalculator.calculate_resource_slo
-      
-      cpu_ok = slo[:cpu][:slo_met]
-      memory_ok = slo[:memory][:slo_met]
-      buffer_ok = slo[:buffer][:slo_met]
-      
-      status = (cpu_ok && memory_ok && buffer_ok) ? :healthy : :degraded
-      
-      {
-        status: status,
-        cpu_percent: slo[:cpu][:current],
-        memory_mb: slo[:memory][:current],
-        buffer_percent: slo[:buffer][:current],
-        message: status == :healthy ? 'Resources within limits' : 'Resource usage high'
-      }
-    end
-    
-    def self.check_adapters
-      # Check circuit breaker states
-      adapters = E11y.config.adapters.all
-      
-      failed_adapters = adapters.select do |name, adapter|
-        adapter.circuit_breaker&.open?
-      end
-      
-      {
-        status: failed_adapters.empty? ? :healthy : :degraded,
-        total_adapters: adapters.size,
-        failed_adapters: failed_adapters.keys,
-        message: failed_adapters.empty? ? 'All adapters healthy' : "#{failed_adapters.size} adapters failed"
-      }
-    end
-    
-    def self.check_buffer
-      buffer = E11y::Buffer.instance
-      utilization = (buffer.size.to_f / buffer.max_size * 100).round(2)
-      
-      status = case utilization
-      when 0..80 then :healthy
-      when 81..90 then :degraded
-      else :unhealthy
-      end
-      
-      {
-        status: status,
-        current_size: buffer.size,
-        max_size: buffer.max_size,
-        utilization_percent: utilization,
-        message: "Buffer #{utilization}% full"
-      }
-    end
-  end
-end
+# Module methods on E11y
+E11y.health    # => Hash with details
+E11y.healthy?  # => true/false
 ```
 
-### 6.2. Health Check Endpoint
+**Structure of `E11y.health`:**
 
 ```ruby
-# config/routes.rb (for Web UI)
-E11y::WebUI::Engine.routes.draw do
-  # ... existing routes ...
-  
-  get '/health', to: 'health#show'
-  get '/health/detailed', to: 'health#detailed'
-end
+{
+  status: :healthy | :degraded | :unhealthy,
+  timestamp: "2026-03-13T12:00:00Z",  # ISO8601
+  adapters: {
+    loki:   { healthy: true,  circuit_breaker: :closed },
+    sentry: { healthy: false, circuit_breaker: :open }
+  }
+}
+```
 
-# app/controllers/e11y/web_ui/health_controller.rb
-module E11y
-  module WebUI
-    class HealthController < ApplicationController
-      def show
-        status = E11y::HealthCheck.status
-        
-        render json: {
-          status: status[:status],
-          timestamp: status[:timestamp]
-        }, status: status[:status] == :healthy ? 200 : 503
-      end
-      
-      def detailed
-        status = E11y::HealthCheck.status
-        
-        render json: status, status: status[:status] == :healthy ? 200 : 503
-      end
-    end
-  end
+- **`status`** — overall telemetry status (see below).
+- **`adapters`** — per registered adapter:
+  - **`healthy`** — result of `adapter.healthy?` (backend reachability: Loki pings, Sentry validates DSN, etc.).
+  - **`circuit_breaker`** — `:closed` | `:open` | `:half_open` (adapter circuit breaker state).
+
+### 6.2. What Does "Telemetry Healthy" Mean?
+
+**Telemetry is healthy** = we can deliver events to at least one backend.
+
+| status      | Condition |
+|-------------|-----------|
+| **:healthy**   | All adapters have `healthy? == true` and `circuit_breaker == :closed`. |
+| **:degraded**  | At least one adapter is unhealthy or circuit open, but at least one is healthy + closed. |
+| **:unhealthy** | No adapter is healthy + closed — nowhere to deliver events. |
+
+**`E11y.healthy?`** returns `true` only when `status == :healthy`.
+
+### 6.3. Integration into Host Application Health
+
+```ruby
+# config/routes.rb
+get "/health", to: "health#show"
+
+# app/controllers/health_controller.rb
+def show
+  e11y = E11y.health
+  overall = e11y[:status] == :healthy ? :ok : :degraded
+
+  render json: {
+    app: check_app,
+    e11y: e11y
+  }, status: overall == :ok ? 200 : 503
 end
 ```
 

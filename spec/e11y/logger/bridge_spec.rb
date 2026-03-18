@@ -165,6 +165,42 @@ RSpec.describe E11y::Logger::Bridge do
       bridge.info { "block message" }
     end
 
+    it "skips tracking when severity not in track_severities" do
+      allow(original_logger).to receive(:debug)
+      allow(E11y.config).to receive_messages(logger_bridge_track_severities: %i[info warn error fatal], logger_bridge_ignore_patterns: [])
+
+      expect(E11y::Events::Rails::Log::Debug).not_to receive(:track)
+      described_class.new(original_logger).debug("debug message")
+    end
+
+    it "tracks when severity in track_severities" do
+      allow(original_logger).to receive(:warn)
+      allow(E11y.config).to receive_messages(logger_bridge_track_severities: %i[warn error], logger_bridge_ignore_patterns: [])
+
+      expect(E11y::Events::Rails::Log::Warn).to receive(:track).with(
+        hash_including(message: "warn message")
+      )
+      described_class.new(original_logger).warn("warn message")
+    end
+
+    it "skips tracking when message matches ignore_patterns" do
+      allow(original_logger).to receive(:info)
+      allow(E11y.config).to receive_messages(logger_bridge_track_severities: nil, logger_bridge_ignore_patterns: [/Started GET/, /Completed \d+ OK/])
+
+      expect(E11y::Events::Rails::Log::Info).not_to receive(:track)
+      described_class.new(original_logger).info("Started GET \"/posts\" for 127.0.0.1 at 2024-01-15 10:00:00")
+    end
+
+    it "tracks when message does not match ignore_patterns" do
+      allow(original_logger).to receive(:info)
+      allow(E11y.config).to receive_messages(logger_bridge_track_severities: nil, logger_bridge_ignore_patterns: [/Started GET/])
+
+      expect(E11y::Events::Rails::Log::Info).to receive(:track).with(
+        hash_including(message: "Order created")
+      )
+      described_class.new(original_logger).info("Order created")
+    end
+
     it "silently handles E11y tracking errors" do
       allow(original_logger).to receive(:info)
       allow(E11y::Events::Rails::Log::Info).to receive(:track).and_raise(StandardError, "tracking failed")
@@ -201,10 +237,8 @@ RSpec.describe E11y::Logger::Bridge do
   end
 
   describe ".setup!" do
-    let(:logger_bridge_config) { instance_double(E11y::LoggerBridgeConfig, enabled: enabled) }
-
     before do
-      allow(E11y.config).to receive(:logger_bridge).and_return(logger_bridge_config)
+      allow(E11y.config).to receive(:logger_bridge_enabled).and_return(enabled)
 
       # Reset Rails.logger if it exists
       if defined?(Rails)

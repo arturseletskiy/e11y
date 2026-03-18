@@ -100,14 +100,15 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
         hash_including(
           event_name: "payment.processed",
           slo_status: "success"
-        )
+        ),
+        hash_including(value: a_kind_of(Numeric))
       )
 
       # Event should still be stored (after Versioning middleware, event_name is normalized)
-      all_events = memory_adapter.events
+      adapter_events = memory_adapter.events
       valid_names = ["payment.processed", "Events::PaymentProcessed"]
-      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
-      event_names_msg = "Total events: #{all_events.count}, event_names: #{all_events.map do |e|
+      events = adapter_events.select { |e| valid_names.include?(e[:event_name]) }
+      event_names_msg = "Total events: #{adapter_events.count}, event_names: #{adapter_events.map do |e|
         e[:event_name]
       end.uniq.inspect}"
       msg = format("Event should be stored. %s", event_names_msg)
@@ -155,7 +156,8 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
           slo_status: "success",
           slo_name: "order_success_rate",
           group_by: "card"
-        )
+        ),
+        hash_including(value: a_kind_of(Numeric))
       )
     end
   end
@@ -196,7 +198,8 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
 
       expect(E11y::Metrics).to have_received(:increment).with(
         :slo_event_result_total,
-        hash_including(slo_status: "success")
+        hash_including(slo_status: "success"),
+        hash_including(value: a_kind_of(Numeric))
       )
     end
 
@@ -235,7 +238,8 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
 
       expect(E11y::Metrics).to have_received(:increment).with(
         :slo_event_result_total,
-        hash_including(slo_status: "failure")
+        hash_including(slo_status: "failure"),
+        hash_including(value: a_kind_of(Numeric))
       )
     end
 
@@ -307,9 +311,9 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
       expect(E11y::Metrics).not_to have_received(:increment).with(:slo_event_result_total, anything)
 
       # Event should still be stored (after Versioning middleware, event_name is normalized)
-      all_events = memory_adapter.events
+      adapter_events = memory_adapter.events
       valid_names = ["health.check", "Events::HealthCheck"]
-      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
+      events = adapter_events.select { |e| valid_names.include?(e[:event_name]) }
       expect(events.count).to eq(1)
     end
 
@@ -347,9 +351,9 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
       expect(E11y::Metrics).not_to have_received(:increment).with(:slo_event_result_total, anything)
 
       # Event should still be stored (after Versioning middleware, event_name is normalized)
-      all_events = memory_adapter.events
+      adapter_events = memory_adapter.events
       valid_names = ["disabled.slo.event", "Events::DisabledSLOEvent"]
-      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
+      events = adapter_events.select { |e| valid_names.include?(e[:event_name]) }
       expect(events.count).to eq(1)
     end
   end
@@ -392,9 +396,9 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
       end.not_to raise_error
 
       # Event should still be stored (after Versioning middleware, event_name is normalized)
-      all_events = memory_adapter.events
+      adapter_events = memory_adapter.events
       valid_names = ["error.slo.event", "Events::ErrorSLOEvent"]
-      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
+      events = adapter_events.select { |e| valid_names.include?(e[:event_name]) }
       expect(events.count).to eq(1)
     end
 
@@ -438,9 +442,9 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
       end.not_to raise_error
 
       # Event should still be stored (after Versioning middleware, event_name is normalized)
-      all_events = memory_adapter.events
+      adapter_events = memory_adapter.events
       valid_names = ["metric.error.event", "Events::MetricErrorEvent"]
-      events = all_events.select { |e| valid_names.include?(e[:event_name]) }
+      events = adapter_events.select { |e| valid_names.include?(e[:event_name]) }
       expect(events.count).to eq(1)
     end
   end

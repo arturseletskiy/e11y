@@ -33,6 +33,10 @@ RSpec.describe E11y::Events do
       expect(described_class.audit_event?).to be true
     end
 
+    it "has use_dlq true from preset" do
+      expect(described_class.use_dlq?).to be true
+    end
+
     it "does NOT set default severity (user must set explicitly)" do
       event_without_severity = Class.new(E11y::Events::BaseAuditEvent) do
         def self.name

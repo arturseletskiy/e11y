@@ -34,20 +34,13 @@ Rails.logger.info "Processing order #{order_id}"
 
 ### E11y Solution
 
-**Gradual, safe migration strategy:**
+**Logger Bridge — logs go to both Rails.logger and E11y:**
 ```ruby
-# ✅ AFTER: Coexistence mode (Phase 1)
+# ✅ AFTER: Enable logger bridge
 E11y.configure do |config|
-  config.rails_logger do
-    # Intercept Rails.logger calls
-    intercept_rails_logger true
-    
-    # Mirror to both systems during migration
-    mirror_to_rails_logger true
-    
-    # Convert to structured events
-    auto_convert_to_events true
-  end
+  config.logger_bridge_enabled = true
+  config.logger_bridge_track_severities = [:info, :warn, :error, :fatal]
+  config.logger_bridge_ignore_patterns = [/Started GET/, /Completed \d+ OK/]
 end
 
 # Existing code works unchanged!
@@ -57,17 +50,13 @@ Rails.logger.info "Order created"
 # New code uses E11y directly
 Events::OrderCreated.track(order_id: order.id)
 # → Only E11y (no duplication) ✅
-
-# Phase 2: Turn off mirroring
-config.mirror_to_rails_logger = false
-# → All logs now go to E11y only ✅
 ```
 
 ---
 
 ## 🎯 Migration Strategy
 
-> **Implementation:** See [ADR-008 Section 7: Rails Logger Bridge](../ADR-008-rails-integration.md#7-rails-logger-bridge) for Logger::Bridge architecture, dual logging, and 3-phase migration strategy (shadow → conversion → full).
+> **Implementation:** See [ADR-008 Section 7: Rails Logger Bridge](../ADR-008-rails-integration.md#7-rails-logger-bridge) for Logger::Bridge architecture.
 
 ### Phase 1: Shadow Mode (Week 1-2)
 
@@ -75,30 +64,9 @@ config.mirror_to_rails_logger = false
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  # Phase 1: Shadow mode
-  config.rails_logger do
-    # Intercept Rails.logger (but keep original too!)
-    intercept_rails_logger true
-    mirror_to_rails_logger true  # ← Keep Rails.logger working!
-    
-    # Auto-convert to E11y events
-    auto_convert_to_events true
-    
-    # Map severity levels
-    severity_mapping do
-      debug -> :debug
-      info -> :info
-      warn -> :warn
-      error -> :error
-      fatal -> :fatal
-    end
-  end
-  
-  # Send to both Stdout (Rails.logger) and Loki (E11y)
-  config.adapters = [
-    E11y::Adapters::StdoutAdapter.new,  # Development
-    E11y::Adapters::LokiAdapter.new(...)  # E11y backend
-  ]
+  config.logger_bridge_enabled = true
+  config.logger_bridge_track_severities = [:info, :warn, :error, :fatal]
+  config.logger_bridge_ignore_patterns = [/Started GET/, /Completed \d+ OK/, /CACHE/]
 end
 
 # Existing code continues to work!
@@ -168,94 +136,25 @@ end
 
 ---
 
-### Phase 3: Full Migration (Week 7+)
-
-**Turn off Rails.logger mirroring, E11y only:**
-```ruby
-# config/initializers/e11y.rb
-E11y.configure do |config|
-  config.rails_logger do
-    intercept_rails_logger true
-    mirror_to_rails_logger false  # ← Turn off mirroring!
-    
-    # Auto-convert remaining Rails.logger calls
-    auto_convert_to_events true
-  end
-end
-
-# Now:
-# - E11y events → E11y only ✅
-# - Rails.logger calls → Auto-converted to E11y ✅
-# - No more duplication ✅
-
-# Optional: Deprecation warnings for remaining Rails.logger
-config.rails_logger do
-  warn_on_rails_logger_usage true
-  # → Logs warning when Rails.logger is used
-  # "DEPRECATION: Rails.logger at app/controllers/users_controller.rb:42"
-end
-```
-
 ---
 
 ## 💻 Implementation Examples
 
-### Example 1: Auto-Conversion (Quick Start)
+### Example 1: Logger Bridge (Quick Start)
 
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.rails_logger do
-    # Intercept ALL Rails.logger calls
-    intercept_rails_logger true
-    
-    # Auto-convert to E11y events
-    auto_convert_to_events true
-    
-    # Extract structured data from log messages
-    extract_structured_data do
-      # Pattern: "Order 123 created by user 456"
-      pattern /Order (\d+) created by user (\d+)/ do |match|
-        {
-          event_name: 'order.created',
-          order_id: match[1],
-          user_id: match[2]
-        }
-      end
-      
-      # Pattern: "Payment failed: Card declined"
-      pattern /Payment failed: (.+)/ do |match|
-        {
-          event_name: 'payment.failed',
-          error: match[1],
-          severity: :error
-        }
-      end
-      
-      # Default: Generic log event
-      fallback do |message, severity|
-        {
-          event_name: 'rails.log',
-          message: message,
-          severity: severity
-        }
-      end
-    end
-  end
+  config.logger_bridge_enabled = true
+  config.logger_bridge_track_severities = [:info, :warn, :error, :fatal]
+  config.logger_bridge_ignore_patterns = [/Started GET/, /Completed \d+ OK/]
 end
 
-# Existing code (unchanged):
-Rails.logger.info "Order 123 created by user 456"
-
-# Auto-converted to:
-Events::OrderCreated.track(
-  order_id: '123',
-  user_id: '456'
-)
-
-# In Grafana:
-# {event_name="order.created",order_id="123",user_id="456"}
+# Rails.logger calls → Events::Rails::Log::Info/Warn/Error/Fatal (structured)
+# Context (trace_id, request_id) from E11y::Current is auto-attached
 ```
+
+**Note:** The Bridge converts Rails.logger to Events::Rails::Log::* (generic log events). For structured extraction, use manual Events (Example 2).
 
 ---
 
@@ -494,69 +393,16 @@ end
 
 ## 🔧 Configuration
 
-### Migration Configuration
-
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.rails_logger do
-    # === PHASE 1: SHADOW MODE ===
-    # Intercept Rails.logger but keep original behavior
-    intercept_rails_logger true
-    mirror_to_rails_logger true  # ← Both systems!
-    
-    # === PHASE 2: GRADUAL CONVERSION ===
-    # Auto-convert Rails.logger to E11y events
-    auto_convert_to_events true
-    
-    # Pattern extraction (parse log messages)
-    extract_patterns do
-      # Order events
-      pattern /Order (\d+) created/, event: 'order.created' do |match|
-        { order_id: match[1] }
-      end
-      
-      # User events
-      pattern /User (\d+) logged in/, event: 'user.logged_in' do |match|
-        { user_id: match[1] }
-      end
-      
-      # Payment events
-      pattern /Payment (\w+) for order (\d+)/, event: 'payment.status' do |match|
-        { status: match[1], order_id: match[2] }
-      end
-      
-      # Generic fallback
-      fallback event: 'rails.log' do |message, severity|
-        { message: message, original_severity: severity }
-      end
-    end
-    
-    # Severity mapping
-    severity_mapping do
-      debug -> :debug
-      info -> :info
-      warn -> :warn
-      error -> :error
-      fatal -> :fatal
-      unknown -> :warn
-    end
-    
-    # === PHASE 3: FULL MIGRATION ===
-    # Turn off mirroring (E11y only!)
-    # mirror_to_rails_logger false
-    
-    # Deprecation warnings
-    warn_on_rails_logger_usage true
-    deprecation_message "Please use E11y events instead of Rails.logger"
-    
-    # Exceptions (still use Rails.logger)
-    ignore_callers [
-      /vendor\/bundle/,      # Gems
-      /config\/initializers/, # Initializers
-      /health_check/         # Health checks
-    ]
-  end
+  config.logger_bridge_enabled = true
+  config.logger_bridge_track_severities = [:info, :warn, :error, :fatal]
+  config.logger_bridge_ignore_patterns = [
+    /Started GET/,
+    /Completed \d+ OK/,
+    /CACHE/
+  ]
 end
 ```
 
@@ -589,23 +435,11 @@ end
 ## 🧪 Testing
 
 ```ruby
-# spec/support/e11y_migration_helper.rb
-RSpec.configure do |config|
-  config.around(:each, :e11y_migration) do |example|
-    # Test both modes
-    
-    # Test 1: Shadow mode (both systems)
-    E11y.configure do |c|
-      c.rails_logger.mirror_to_rails_logger = true
-    end
-    example.run
-    
-    # Test 2: E11y only mode
-    E11y.configure do |c|
-      c.rails_logger.mirror_to_rails_logger = false
-    end
-    example.run
-  end
+# Logger Bridge is enabled in test via config
+E11y.configure do |config|
+  config.logger_bridge_enabled = true
+  config.logger_bridge_track_severities = [:info, :warn, :error, :fatal]
+  config.logger_bridge_ignore_patterns = []
 end
 
 # spec/controllers/orders_controller_spec.rb
@@ -663,9 +497,8 @@ end
 **1. Migrate in phases (safe!)**
 ```ruby
 # ✅ GOOD: Gradual migration
-# Week 1-2: Shadow mode (both systems)
-# Week 3-6: Convert high-value areas
-# Week 7+: Turn off mirroring
+# Week 1-2: Shadow mode (Logger Bridge enabled, both Rails.logger + E11y)
+# Week 3-6: Convert high-value areas to Events::*
 ```
 
 **2. Start with new features**
@@ -688,12 +521,11 @@ end
 # 5. Everything else
 ```
 
-**4. Use auto-conversion for long tail**
+**4. Use Logger Bridge for remaining Rails.logger**
 ```ruby
-# ✅ GOOD: Auto-convert remaining Rails.logger
-config.rails_logger do
-  auto_convert_to_events true  # Handles stragglers
-end
+# ✅ GOOD: Bridge converts Rails.logger to Events::Rails::Log::*
+config.logger_bridge_enabled = true
+config.logger_bridge_ignore_patterns = [/Started GET/, /Completed \d+ OK/]
 ```
 
 ---
@@ -716,13 +548,8 @@ end
 
 **2. Don't break existing functionality**
 ```ruby
-# ❌ BAD: Turn off Rails.logger immediately
-config.rails_logger.mirror_to_rails_logger = false
-# → Existing code breaks! 💥
-
-# ✅ GOOD: Keep mirroring during migration
-config.rails_logger.mirror_to_rails_logger = true
-# → Both systems work ✅
+# Logger Bridge always delegates to Rails.logger — logs always appear in log/production.log
+# No "turn off mirroring" — both systems receive logs
 ```
 
 **3. Don't lose log context**
@@ -758,8 +585,7 @@ Events::OrderCreated.track(
 |-------|----------|------|--------|
 | **Phase 1: Shadow Mode** | 1-2 weeks | Low (no changes) | Both systems run |
 | **Phase 2: Gradual Conversion** | 4-6 weeks | Low (incremental) | Convert high-value areas |
-| **Phase 3: Full Migration** | 1+ weeks | Medium (turn off mirror) | E11y only |
-| **TOTAL** | **6-9 weeks** | **Low overall** | Gradual, safe |
+| **TOTAL** | **6-8 weeks** | **Low overall** | Gradual, safe |
 
 ### Benefits After Migration
 

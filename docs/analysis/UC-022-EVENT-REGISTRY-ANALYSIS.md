@@ -83,7 +83,7 @@ E11y.configure do |config|
 end
 
 # Usage (not implemented)
-E11y::Registry.all_events
+E11y::Registry.event_classes
 # => [Events::OrderCreated, Events::OrderPaid, ...]
 
 E11y::Registry.find('order.created')
@@ -207,13 +207,13 @@ end
 - Multiple event classes defined
 
 **Test Steps:**
-1. List all: `E11y::Registry.all_events`
+1. List all: `E11y::Registry.event_classes`
 2. Verify: Returns all registered events
 3. Filter: `E11y::Registry.where(adapter: :sentry)`
 4. Verify: Returns only events with Sentry adapter
 
 **Assertions:**
-- List: `expect(E11y::Registry.all_events.size).to eq(10)`
+- List: `expect(E11y::Registry.event_classes.size).to eq(10)`
 - Filter: `expect(E11y::Registry.where(adapter: :sentry).size).to eq(3)`
 
 **Note:** Feature not implemented. Tests should note limitation.

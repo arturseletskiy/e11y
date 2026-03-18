@@ -55,22 +55,15 @@ matrix:
 ### Negative
 - CI time: 5min → 15min (3× Rails versions)
 - Maintenance: 3 Rails versions to test
-- Conditional code (2 places only)
+- Conditional code: 1 place (sqlite3 in Gemfile)
 
 ---
 
 ## Version-Specific Code
 
-**1. Exception handling (Rails 8.0 changed behavior):**
-```ruby
-if Rails.version.to_f >= 8.0
-  expect(response.status).to eq(500) # Rails 8.0: caught
-else
-  expect { get '/error' }.to raise_error # Rails 7.x: raised
-end
-```
+**1. Exception handling** — не нужна: `show_exceptions = :all` в dummy app даёт одинаковое поведение (исключения → 500) на 7.x и 8.x. Тесты без ветвления по версии.
 
-**2. sqlite3 dependency (Gemfile only)**
+**2. sqlite3 dependency (Gemfile only)** — разные версии для 7.x (~> 1.4) и 8.x (~> 2.0).
 
 ---
 
@@ -99,5 +92,5 @@ end
 |--------|--------|---------|
 | Test pass rate | 100% | 100% ✅ |
 | Code coverage | ≥95% | 96.46% ✅ |
-| Version checks | <10 | 2 ✅ |
+| Version checks | <10 | 1 ✅ |
 | CI time | <20min | ~15min ✅ |

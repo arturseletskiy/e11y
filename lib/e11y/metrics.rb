@@ -33,26 +33,26 @@ module E11y
     class << self
       # Track a counter metric (monotonically increasing value).
       #
-      # Accepts dotted names (e.g., "e11y.request_buffer.flushed") and normalizes to
+      # Accepts dotted names (e.g., "e11y.ephemeral_buffer.flushed") and normalizes to
       # underscores. DLQ metrics get _total suffix. Labels[:events] is used as value if present.
       # Safe: no-op when backend unavailable, rescues errors.
       #
-      # @param name [Symbol, String] Metric name (e.g., :http_requests_total or "e11y.request_buffer.flushed")
+      # @param name [Symbol, String] Metric name (e.g., :http_requests_total or "e11y.ephemeral_buffer.flushed")
       # @param labels [Hash] Metric labels (e.g., { method: 'GET', status: 200 })
       # @param value [Integer] Increment value (default: 1, overridden by labels[:events] if present)
       # @return [void]
       #
       # @example
       #   E11y::Metrics.increment(:e11y_events_tracked, event_type: 'order.created')
-      #   E11y::Metrics.increment("e11y.request_buffer.flushed_on_error", value: 5)
+      #   E11y::Metrics.increment("e11y.ephemeral_buffer.flushed_on_error", value: 5)
       def increment(name, labels = {}, value: 1, **labels_kw)
         return unless backend
 
-        labels = labels.merge(labels_kw)
+        labels = labels.merge(labels_kw) unless labels_kw.empty?
         value = labels.delete(:events) if labels.key?(:events)
         value ||= 1
 
-        normalized = normalize_metric_name(name)
+        normalized = normalized_metric_name(name)
         backend.increment(normalized, labels, value: value)
       rescue StandardError => e
         E11y.logger&.debug("E11y metrics: #{e.message}")
@@ -71,8 +71,8 @@ module E11y
       def histogram(name, value, labels = {}, buckets: nil, **labels_kw)
         return unless backend
 
-        labels = labels.merge(labels_kw)
-        normalized = normalize_metric_name(name)
+        labels = labels.merge(labels_kw) unless labels_kw.empty?
+        normalized = normalized_metric_name(name)
         backend.histogram(normalized, value, labels, buckets: buckets)
       rescue StandardError => e
         E11y.logger&.debug("E11y metrics: #{e.message}")
@@ -110,15 +110,22 @@ module E11y
       # @api private
       def reset_backend!
         remove_instance_variable(:@backend) if defined?(@backend)
+        @name_cache = nil if defined?(@name_cache)
       end
 
       private
 
       # Normalize metric name: dots to underscores, DLQ metrics get _total suffix.
+      # Cached to avoid repeated string allocations for hot-path metrics.
       #
       # @param name [Symbol, String] Raw metric name
-      # @return [Symbol] Normalized name for Prometheus (e.g., e11y_request_buffer_flushed_on_error)
-      def normalize_metric_name(name)
+      # @return [Symbol] Normalized name for Prometheus (e.g., e11y_ephemeral_buffer_flushed_on_error)
+      def normalized_metric_name(name)
+        @name_cache ||= {}
+        @name_cache[name] ||= compute_normalized_name(name)
+      end
+
+      def compute_normalized_name(name)
         s = name.to_s.tr(".", "_")
         s = "#{s}_total" if s.include?("e11y_dlq_") && !s.end_with?("_total")
         s.to_sym
