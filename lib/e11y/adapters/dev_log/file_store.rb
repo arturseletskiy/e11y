@@ -28,27 +28,36 @@ module E11y
           @keep_rotated = keep_rotated
           @mutex        = Mutex.new
           @line_count   = nil
+          @dir_ensured  = false
         end
 
         # Append a JSON line to the log file. Thread-safe.
         def append(json_line)
           @mutex.synchronize do
             ensure_dir!
+            # Warm the line count before writing so the post-write increment is accurate.
+            # If @line_count is nil (cold start or after clear!), scan the file now.
+            warm_count = @line_count || count_lines
             ::File.open(@path, "a") do |f|
               f.flock(::File::LOCK_EX)
-              f.write("#{json_line}\n")
-              f.flock(::File::LOCK_UN)
+              begin
+                f.write("#{json_line}\n")
+              ensure
+                f.flock(::File::LOCK_UN)
+              end
             end
-            @line_count = (@line_count || 0) + 1
+            @line_count = warm_count + 1
             rotate_if_needed!
           end
         end
 
-        # Remove log file and reset state.
+        # Remove log file, rotated archives, and reset state.
         def clear!
           @mutex.synchronize do
             ::FileUtils.rm_f(@path)
+            ::Dir.glob("#{@path}.*.gz").each { |f| ::FileUtils.rm_f(f) }
             @line_count = nil
+            @dir_ensured = false
           end
         end
 
@@ -61,13 +70,16 @@ module E11y
 
         # Number of lines in current file.
         def line_count
-          @mutex.synchronize { count_lines }
+          @mutex.synchronize { @line_count || count_lines }
         end
 
         private
 
         def ensure_dir!
+          return if @dir_ensured
+
           ::FileUtils.mkdir_p(::File.dirname(@path))
+          @dir_ensured = true
         end
 
         def rotate_if_needed!
@@ -83,7 +95,11 @@ module E11y
         end
 
         def rotate!
-          # Shift: N.gz → (N+1).gz, drop beyond keep_rotated
+          shift_rotated_files!
+          compress_current_file!
+        end
+
+        def shift_rotated_files!
           @keep_rotated.downto(1) do |n|
             src = rotated_path(n)
             next unless ::File.exist?(src)
@@ -94,12 +110,19 @@ module E11y
               ::File.rename(src, rotated_path(n + 1))
             end
           end
+        end
 
-          # Gzip current file → .1.gz, then start fresh
+        def compress_current_file!
           return unless ::File.exist?(@path)
 
-          ::Zlib::GzipWriter.open(rotated_path(1)) do |gz|
-            gz.write(::File.read(@path))
+          tmp_path = "#{rotated_path(1)}.tmp"
+          begin
+            ::Zlib::GzipWriter.open(tmp_path) do |gz|
+              ::File.open(@path, "rb") { |f| ::IO.copy_stream(f, gz) }
+            end
+            ::File.rename(tmp_path, rotated_path(1))
+          ensure
+            ::FileUtils.rm_f(tmp_path)
           end
           # Truncate rather than delete so the file always exists after rotation
           ::File.open(@path, "w") { |f| f.truncate(0) }
