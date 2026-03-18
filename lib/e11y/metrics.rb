@@ -48,7 +48,7 @@ module E11y
       def increment(name, labels = {}, value: 1, **labels_kw)
         return unless backend
 
-        labels = labels_kw.empty? ? labels : labels.merge(labels_kw)
+        labels = labels.merge(labels_kw) unless labels_kw.empty?
         value = labels.delete(:events) if labels.key?(:events)
         value ||= 1
 
@@ -71,7 +71,7 @@ module E11y
       def histogram(name, value, labels = {}, buckets: nil, **labels_kw)
         return unless backend
 
-        labels = labels_kw.empty? ? labels : labels.merge(labels_kw)
+        labels = labels.merge(labels_kw) unless labels_kw.empty?
         normalized = normalized_metric_name(name)
         backend.histogram(normalized, value, labels, buckets: buckets)
       rescue StandardError => e

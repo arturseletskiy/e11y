@@ -15,10 +15,10 @@ module E11y
     #   E11y::SelfMonitoring::PerformanceMonitor.track_latency(0.5, event_class: 'Events::OrderPaid', severity: 'info', result: :success)
     #   E11y::SelfMonitoring::PerformanceMonitor.track_adapter_latency('E11y::Adapters::Loki', 42)
     module PerformanceMonitor
-      TRACK_BUCKETS = [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1].freeze   # 0.1ms to 100ms
-      ADAPTER_BUCKETS = [0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0].freeze        # 1ms to 5s
-      RESULT_SUCCESS = "success".freeze
-      RESULT_DROPPED = "dropped".freeze
+      TRACK_BUCKETS = [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1].freeze # 0.1ms to 100ms
+      ADAPTER_BUCKETS = [0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0].freeze # 1ms to 5s
+      RESULT_SUCCESS = "success"
+      RESULT_DROPPED = "dropped"
 
       # Track Event.track() pipeline latency (from entry to exit).
       #

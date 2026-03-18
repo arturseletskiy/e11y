@@ -1,5 +1,6 @@
 # Cursor
 .cursor/*
+.worktrees/
 
 # Research docs (temporary, will be removed after Phase 0)
 docs/research
