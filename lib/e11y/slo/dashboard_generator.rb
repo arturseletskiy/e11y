@@ -4,6 +4,7 @@ require "json"
 
 module E11y
   module SLO
+    # Generates Grafana dashboard JSON from SLO config (endpoints, event SLOs, app-wide).
     class DashboardGenerator
       class << self
         def generate(config)
@@ -34,7 +35,8 @@ module E11y
             title: "HTTP Availability (Per-Endpoint)",
             type: "timeseries",
             targets: [{
-              expr: "sum(rate(e11y_slo_http_requests_total{status=~\"2..|3..\"}[30d])) by (controller, action) / sum(rate(e11y_slo_http_requests_total[30d])) by (controller, action)",
+              expr: "sum(rate(e11y_slo_http_requests_total{status=~\"2..|3..\"}[30d])) " \
+                    "by (controller, action) / sum(rate(e11y_slo_http_requests_total[30d])) by (controller, action)",
               legendFormat: '{{controller}}#{{action}}'
             }]
           }]
@@ -62,7 +64,8 @@ module E11y
               title: "Event SLO: #{name}",
               type: "timeseries",
               targets: [{
-                expr: "sum(rate(e11y_slo_event_result_total{slo_name=\"#{name}\",slo_status=\"success\"}[30d])) / sum(rate(e11y_slo_event_result_total{slo_name=\"#{name}\"}[30d]))",
+                expr: "sum(rate(e11y_slo_event_result_total{slo_name=\"#{name}\",slo_status=\"success\"}[30d])) / " \
+                      "sum(rate(e11y_slo_event_result_total{slo_name=\"#{name}\"}[30d]))",
                 legendFormat: "success_rate"
               }]
             }
@@ -98,7 +101,7 @@ module E11y
 
         def build_weighted_expr(components, window)
           parts = components.map do |c|
-            weight = c["weight"] || 1.0 / components.size
+            weight = c["weight"] || (1.0 / components.size)
             metric = (c["metric"] || "").gsub(/\[\d+d\]/, "[#{window}]")
             metric = metric.strip
             "(#{weight} * (#{metric}))"
@@ -111,7 +114,7 @@ module E11y
             metric = (c["metric"] || "").gsub(/\[\d+d\]/, "[#{window}]")
             metric.strip
           end
-          "min(#{parts.join(", ")})"
+          "min(#{parts.join(', ')})"
         end
       end
     end

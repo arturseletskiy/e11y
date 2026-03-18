@@ -26,11 +26,11 @@ RSpec.describe "SpanCreator Integration", :integration do
       }
 
       span = nil
-      ::OpenTelemetry.tracer_provider.tracer("test", "1.0").in_span("parent") do
+      OpenTelemetry.tracer_provider.tracer("test", "1.0").in_span("parent") do
         span = E11y::OpenTelemetry::SpanCreator.create_span_from_event(event_data)
       end
 
-      expect(span).to be_a(::OpenTelemetry::Trace::Span)
+      expect(span).to be_a(OpenTelemetry::Trace::Span)
     end
 
     it "creates span for pattern-matched events" do
@@ -44,11 +44,11 @@ RSpec.describe "SpanCreator Integration", :integration do
       }
 
       span = nil
-      ::OpenTelemetry.tracer_provider.tracer("test", "1.0").in_span("parent") do
+      OpenTelemetry.tracer_provider.tracer("test", "1.0").in_span("parent") do
         span = E11y::OpenTelemetry::SpanCreator.create_span_from_event(event_data)
       end
 
-      expect(span).to be_a(::OpenTelemetry::Trace::Span)
+      expect(span).to be_a(OpenTelemetry::Trace::Span)
     end
 
     it "does not create span for non-matching events when patterns empty" do
@@ -75,11 +75,11 @@ RSpec.describe "SpanCreator Integration", :integration do
       }
 
       span = nil
-      ::OpenTelemetry.tracer_provider.tracer("test", "1.0").in_span("parent") do
+      OpenTelemetry.tracer_provider.tracer("test", "1.0").in_span("parent") do
         span = E11y::OpenTelemetry::SpanCreator.create_span_from_event(event_data)
       end
 
-      expect(span).to be_a(::OpenTelemetry::Trace::Span)
+      expect(span).to be_a(OpenTelemetry::Trace::Span)
     end
 
     it "creates child span under parent context" do
@@ -93,12 +93,12 @@ RSpec.describe "SpanCreator Integration", :integration do
       parent_ctx = nil
       child_span = nil
 
-      ::OpenTelemetry.tracer_provider.tracer("test", "1.0").in_span("parent") do |parent_span|
+      OpenTelemetry.tracer_provider.tracer("test", "1.0").in_span("parent") do |parent_span|
         parent_ctx = parent_span.context
         child_span = E11y::OpenTelemetry::SpanCreator.create_span_from_event(event_data)
       end
 
-      expect(child_span).to be_a(::OpenTelemetry::Trace::Span)
+      expect(child_span).to be_a(OpenTelemetry::Trace::Span)
       expect(child_span.context.trace_id).to eq(parent_ctx.trace_id)
     end
 
@@ -113,11 +113,11 @@ RSpec.describe "SpanCreator Integration", :integration do
       }
 
       span = nil
-      ::OpenTelemetry.tracer_provider.tracer("test", "1.0").in_span("parent") do
+      OpenTelemetry.tracer_provider.tracer("test", "1.0").in_span("parent") do
         span = E11y::OpenTelemetry::SpanCreator.create_span_from_event(event_data)
       end
 
-      expect(span).to be_a(::OpenTelemetry::Trace::Span)
+      expect(span).to be_a(OpenTelemetry::Trace::Span)
     end
   end
 end

@@ -2,7 +2,6 @@
 
 require "spec_helper"
 
-# rubocop:disable RSpec/SpecFilePathFormat
 # Organized under configuration/ directory for logical grouping.
 # Tests flat error_handling_fail_on_error on E11y::Configuration (Task 2 refactor).
 RSpec.describe "E11y::Configuration#error_handling_fail_on_error" do
@@ -54,4 +53,3 @@ RSpec.describe "E11y::Configuration#error_handling_fail_on_error" do
     end
   end
 end
-# rubocop:enable RSpec/SpecFilePathFormat

@@ -57,6 +57,7 @@ namespace :e11y do
       schema_errors = []
       E11y::Registry.event_classes.each do |klass|
         next if klass.respond_to?(:compiled_schema) && klass.compiled_schema
+
         name = klass.respond_to?(:event_name) ? klass.event_name : klass.name
         schema_errors << "#{klass.name} (#{name}): missing schema"
       end
@@ -67,7 +68,7 @@ namespace :e11y do
       else
         puts "✅ Schema check OK"
       end
-    rescue => e
+    rescue StandardError => e
       puts "❌ Schema check failed: #{e.message}"
       all_ok = false
     end

@@ -25,8 +25,7 @@ RSpec.describe E11y::TraceContext::Sampler do
     end
 
     it "ignores parent when respect_parent_sampling false" do
-      allow(config_double).to receive(:tracing_respect_parent_sampling).and_return(false)
-      allow(config_double).to receive(:tracing_default_sample_rate).and_return(1.0)
+      allow(config_double).to receive_messages(tracing_respect_parent_sampling: false, tracing_default_sample_rate: 1.0)
       expect(described_class.should_sample?(sampled: false)).to be true
     end
 
@@ -36,22 +35,23 @@ RSpec.describe E11y::TraceContext::Sampler do
     end
 
     it "always samples when always_sample_if proc returns true" do
-      allow(config_double).to receive(:tracing_always_sample_if).and_return(->(ctx) { ctx[:request_path]&.include?("admin") })
-      allow(config_double).to receive(:tracing_default_sample_rate).and_return(0.0)
+      allow(config_double).to receive_messages(tracing_always_sample_if: lambda { |ctx|
+        ctx[:request_path]&.include?("admin")
+      }, tracing_default_sample_rate: 0.0)
       expect(described_class.should_sample?(request_path: "/admin/users")).to be true
       expect(described_class.should_sample?(request_path: "/api/users")).to be false
     end
 
     it "always samples by user_id via always_sample_if" do
-      allow(config_double).to receive(:tracing_always_sample_if).and_return(->(ctx) { [42, 123].include?(ctx[:user_id]) })
-      allow(config_double).to receive(:tracing_default_sample_rate).and_return(0.0)
+      allow(config_double).to receive_messages(tracing_always_sample_if: lambda { |ctx|
+        [42, 123].include?(ctx[:user_id])
+      }, tracing_default_sample_rate: 0.0)
       expect(described_class.should_sample?(user_id: 42)).to be true
       expect(described_class.should_sample?(user_id: 999)).to be false
     end
 
     it "uses per_event_sample_rates when event_name matches" do
-      allow(config_double).to receive(:tracing_per_event_sample_rates).and_return("payment.x" => 1.0)
-      allow(config_double).to receive(:tracing_default_sample_rate).and_return(0.0)
+      allow(config_double).to receive_messages(tracing_per_event_sample_rates: { "payment.x" => 1.0 }, tracing_default_sample_rate: 0.0)
       expect(described_class.should_sample?(event_name: "payment.x")).to be true
     end
 

@@ -4,6 +4,17 @@ require "e11y/middleware/baggage_protection"
 
 RSpec.describe E11y::Middleware::BaggageProtection do
   let(:app) { ->(event_data) { event_data } }
+  let(:config_double) do
+    dbl = instance_double(
+      E11y::Configuration,
+      security_baggage_protection_enabled: true,
+      security_baggage_protection_allowed_keys: %w[trace_id span_id request_id],
+      security_baggage_protection_block_mode: :silent
+    )
+    allow(dbl).to receive(:built_pipeline).and_return(->(e) { e })
+    dbl
+  end
+  let(:logger) { instance_double(Logger, debug: nil, warn: nil) }
   let(:middleware) { described_class.new(app) }
 
   let(:event_data) do
@@ -15,22 +26,8 @@ RSpec.describe E11y::Middleware::BaggageProtection do
   end
 
   before do
-    allow(E11y).to receive(:config).and_return(config_double)
-    allow(E11y).to receive(:logger).and_return(logger)
+    allow(E11y).to receive_messages(config: config_double, logger: logger)
   end
-
-  let(:config_double) do
-    dbl = instance_double(
-      E11y::Configuration,
-      security_baggage_protection_enabled: true,
-      security_baggage_protection_allowed_keys: %w[trace_id span_id request_id],
-      security_baggage_protection_block_mode: :silent
-    )
-    allow(dbl).to receive(:built_pipeline).and_return(->(e) { e })
-    dbl
-  end
-
-  let(:logger) { instance_double(Logger, debug: nil, warn: nil) }
 
   describe "#call" do
     it "passes event_data through to next middleware" do

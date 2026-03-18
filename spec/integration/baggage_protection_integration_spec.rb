@@ -13,20 +13,16 @@ RSpec.describe "BaggageProtection OpenTelemetry Integration", :integration do
       skip "OpenTelemetry SDK not available (bundle config set --local with integration)"
     end
     skip "OpenTelemetry::Baggage not available" unless defined?(OpenTelemetry::Baggage)
-  end
-
-  let(:app) { ->(event_data) { event_data } }
-  let(:middleware) { E11y::Middleware::BaggageProtection.new(app) }
-  let(:event_data) { { event_name: "test.event", severity: :info, payload: {} } }
-
-  before do
-    # Use real config for integration; ensure baggage_protection allows only safe keys
     E11y.configure do |config|
       config.security_baggage_protection_enabled = true
       config.security_baggage_protection_allowed_keys = %w[trace_id span_id request_id]
       config.security_baggage_protection_block_mode = :silent
     end
   end
+
+  let(:app) { ->(event_data) { event_data } }
+  let(:middleware) { E11y::Middleware::BaggageProtection.new(app) }
+  let(:event_data) { { event_name: "test.event", severity: :info, payload: {} } }
 
   it "blocks PII keys from OpenTelemetry Baggage" do
     expect(E11y.config.security_baggage_protection_enabled).to be(true)

@@ -100,11 +100,11 @@ Pipeline is built in `lib/e11y/pipeline/builder.rb`. Middleware order matters �
 | `lib/e11y/reliability/` | Circuit breaker, DLQ (dead letter queue), retry logic |
 | `lib/e11y/slo/` | Event-driven SLO tracking |
 | `lib/e11y/metrics/` | Prometheus metrics registry with cardinality protection |
-| `lib/e11y/adapters/dev_log.rb` | DevLog adapter — JSONL write+read, shared by all devtools viewers |
-| `gems/e11y-devtools/` | Developer tools gem (TUI, Browser Overlay, MCP Server) |
+| `gems/e11y-devtools/` | Developer tools gem (TUI, Browser Overlay, MCP) — dev-only |
 | `gems/e11y-devtools/lib/e11y/devtools/tui/` | ratatui_ruby TUI — interaction-centric log viewer |
 | `gems/e11y-devtools/lib/e11y/devtools/overlay/` | Rails Engine — floating badge + slide-in panel |
 | `gems/e11y-devtools/lib/e11y/devtools/mcp/` | MCP Server — AI integration for Cursor/Claude Code |
+| `lib/e11y/adapters/dev_log.rb` | DevLog adapter — JSONL write+read, shared by all viewers |
 
 ### Event Definition Pattern
 

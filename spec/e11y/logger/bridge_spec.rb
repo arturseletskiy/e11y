@@ -167,8 +167,7 @@ RSpec.describe E11y::Logger::Bridge do
 
     it "skips tracking when severity not in track_severities" do
       allow(original_logger).to receive(:debug)
-      allow(E11y.config).to receive(:logger_bridge_track_severities).and_return(%i[info warn error fatal])
-      allow(E11y.config).to receive(:logger_bridge_ignore_patterns).and_return([])
+      allow(E11y.config).to receive_messages(logger_bridge_track_severities: %i[info warn error fatal], logger_bridge_ignore_patterns: [])
 
       expect(E11y::Events::Rails::Log::Debug).not_to receive(:track)
       described_class.new(original_logger).debug("debug message")
@@ -176,8 +175,7 @@ RSpec.describe E11y::Logger::Bridge do
 
     it "tracks when severity in track_severities" do
       allow(original_logger).to receive(:warn)
-      allow(E11y.config).to receive(:logger_bridge_track_severities).and_return(%i[warn error])
-      allow(E11y.config).to receive(:logger_bridge_ignore_patterns).and_return([])
+      allow(E11y.config).to receive_messages(logger_bridge_track_severities: %i[warn error], logger_bridge_ignore_patterns: [])
 
       expect(E11y::Events::Rails::Log::Warn).to receive(:track).with(
         hash_including(message: "warn message")
@@ -187,8 +185,7 @@ RSpec.describe E11y::Logger::Bridge do
 
     it "skips tracking when message matches ignore_patterns" do
       allow(original_logger).to receive(:info)
-      allow(E11y.config).to receive(:logger_bridge_track_severities).and_return(nil)
-      allow(E11y.config).to receive(:logger_bridge_ignore_patterns).and_return([/Started GET/, /Completed \d+ OK/])
+      allow(E11y.config).to receive_messages(logger_bridge_track_severities: nil, logger_bridge_ignore_patterns: [/Started GET/, /Completed \d+ OK/])
 
       expect(E11y::Events::Rails::Log::Info).not_to receive(:track)
       described_class.new(original_logger).info("Started GET \"/posts\" for 127.0.0.1 at 2024-01-15 10:00:00")
@@ -196,8 +193,7 @@ RSpec.describe E11y::Logger::Bridge do
 
     it "tracks when message does not match ignore_patterns" do
       allow(original_logger).to receive(:info)
-      allow(E11y.config).to receive(:logger_bridge_track_severities).and_return(nil)
-      allow(E11y.config).to receive(:logger_bridge_ignore_patterns).and_return([/Started GET/])
+      allow(E11y.config).to receive_messages(logger_bridge_track_severities: nil, logger_bridge_ignore_patterns: [/Started GET/])
 
       expect(E11y::Events::Rails::Log::Info).to receive(:track).with(
         hash_including(message: "Order created")

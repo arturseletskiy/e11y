@@ -5,8 +5,9 @@ require "e11y/middleware/self_monitoring_emit"
 require "e11y/slo/config_loader"
 
 RSpec.describe E11y::Middleware::SelfMonitoringEmit do
-  let(:app) { instance_double(Proc, call: nil) }
   subject(:middleware) { described_class.new(app) }
+
+  let(:app) { instance_double(Proc, call: nil) }
 
   describe "#call" do
     context "when event_data is nil" do

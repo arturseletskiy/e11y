@@ -305,7 +305,7 @@ module E11y
       #   def retriable_error?(error)
       #     super || error.is_a?(CustomTransientError)
       #   end
-      # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+      # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
       # This method checks many different error types for retryability - splitting would reduce clarity
       def retriable_error?(error)
         # Network timeout errors
@@ -333,7 +333,7 @@ module E11y
 
         false
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+      # rubocop:enable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
       # Calculate exponential backoff delay with jitter
       #

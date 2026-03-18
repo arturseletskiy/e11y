@@ -100,7 +100,8 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
         hash_including(
           event_name: "payment.processed",
           slo_status: "success"
-        )
+        ),
+        hash_including(value: a_kind_of(Numeric))
       )
 
       # Event should still be stored (after Versioning middleware, event_name is normalized)
@@ -155,7 +156,8 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
           slo_status: "success",
           slo_name: "order_success_rate",
           group_by: "card"
-        )
+        ),
+        hash_including(value: a_kind_of(Numeric))
       )
     end
   end
@@ -196,7 +198,8 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
 
       expect(E11y::Metrics).to have_received(:increment).with(
         :slo_event_result_total,
-        hash_including(slo_status: "success")
+        hash_including(slo_status: "success"),
+        hash_including(value: a_kind_of(Numeric))
       )
     end
 
@@ -235,7 +238,8 @@ RSpec.describe "EventSLO Middleware Integration", :integration do
 
       expect(E11y::Metrics).to have_received(:increment).with(
         :slo_event_result_total,
-        hash_including(slo_status: "failure")
+        hash_including(slo_status: "failure"),
+        hash_including(value: a_kind_of(Numeric))
       )
     end
 

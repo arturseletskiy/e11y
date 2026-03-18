@@ -14,7 +14,13 @@ namespace :e11y do
       end
 
       json = E11y::SLO::DashboardGenerator.generate(config)
-      out = defined?(Rails) && Rails.respond_to?(:root) ? Rails.root.join("config", "grafana", "e11y_slo_dashboard.json") : Pathname.new(File.join(Dir.pwd, "config", "grafana", "e11y_slo_dashboard.json"))
+      out = if defined?(Rails) && Rails.respond_to?(:root)
+              Rails.root.join("config", "grafana",
+                              "e11y_slo_dashboard.json")
+            else
+              Pathname.new(File.join(Dir.pwd, "config",
+                                     "grafana", "e11y_slo_dashboard.json"))
+            end
       FileUtils.mkdir_p(out.dirname)
       File.write(out, json)
       puts "✅ Dashboard written to #{out}"

@@ -35,7 +35,7 @@ module E11y
         s_id = SecureRandom.hex(8) if s_id.nil? || s_id.empty?
 
         sampled = E11y::Current.respond_to?(:sampled) ? E11y::Current.sampled : true
-        flags = (sampled != false) ? SAMPLED_FLAG : "00"
+        flags = sampled == false ? "00" : SAMPLED_FLAG
         "#{TRACEPARENT_VERSION}-#{t_id}-#{s_id}-#{flags}"
       end
 
@@ -81,7 +81,7 @@ module E11y
       def self.build_tracestate(baggage_hash)
         return "" unless baggage_hash.is_a?(Hash) && baggage_hash.any?
 
-        baggage_hash.map { |k, v| "#{k.to_s}=#{v.to_s}" }.join(",")
+        baggage_hash.map { |k, v| "#{k}=#{v}" }.join(",")
       end
 
       # Filter baggage to allowed keys only (ADR-006 §5.5, PII protection).

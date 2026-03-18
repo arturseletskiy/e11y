@@ -52,7 +52,7 @@ RSpec.describe E11y::Linters::SLO::ConfigConsistencyLinter do
       slo do
         enabled true
         contributes_to "other_slo_name"
-        slo_status_from { |p| "success" }
+        slo_status_from { |_p| "success" }
       end
 
       def self.name

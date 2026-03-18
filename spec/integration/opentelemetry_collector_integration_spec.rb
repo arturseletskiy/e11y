@@ -17,7 +17,7 @@ RSpec.describe "OpenTelemetry Collector Adapter Integration", :integration do
       E11y::Adapters::OpenTelemetryCollector.new(
         endpoint: collector_url,
         service_name: "e11y-integration-test",
-        compress: false  # Stub expects JSON; production uses compress: true (default)
+        compress: false # Stub expects JSON; production uses compress: true (default)
       )
     end
 
@@ -36,7 +36,10 @@ RSpec.describe "OpenTelemetry Collector Adapter Integration", :integration do
       request_body = nil
       stub_request(:post, "#{collector_url}/v1/logs")
         .to_return(status: 200, body: "")
-        .with { |req| request_body = JSON.parse(req.body); true }
+        .with do |req|
+        request_body = JSON.parse(req.body)
+        true
+      end
 
       result = adapter.write(event_data)
 
@@ -52,7 +55,10 @@ RSpec.describe "OpenTelemetry Collector Adapter Integration", :integration do
       request_body = nil
       stub_request(:post, "#{collector_url}/v1/logs")
         .to_return(status: 200, body: "")
-        .with { |req| request_body = JSON.parse(req.body); true }
+        .with do |req|
+        request_body = JSON.parse(req.body)
+        true
+      end
 
       adapter.write(event_data)
 
@@ -65,12 +71,15 @@ RSpec.describe "OpenTelemetry Collector Adapter Integration", :integration do
       request_body = nil
       stub_request(:post, "#{collector_url}/v1/logs")
         .to_return(status: 200, body: "")
-        .with { |req| request_body = JSON.parse(req.body); true }
+        .with do |req|
+        request_body = JSON.parse(req.body)
+        true
+      end
 
       adapter.write(event_data)
 
       log_record = request_body["resourceLogs"].first["scopeLogs"].first["logRecords"].first
-      attrs = log_record["attributes"].map { |a| [a["key"], a["value"]] }.to_h
+      attrs = log_record["attributes"].to_h { |a| [a["key"], a["value"]] }
       expect(attrs).to have_key("event.name")
       expect(attrs).to have_key("event.order_id")
     end
