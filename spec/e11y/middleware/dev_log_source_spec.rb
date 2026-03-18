@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
-require "rack/mock_request"
+require "rack/mock"
 
 RSpec.describe E11y::Middleware::DevLogSource do
   subject(:middleware) { described_class.new(inner_app) }
