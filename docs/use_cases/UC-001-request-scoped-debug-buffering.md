@@ -401,6 +401,12 @@ module E11y::RequestScope
 end
 ```
 
+> **DevLog integration (development/test):** When the debug buffer is flushed on request
+> failure, events are delivered to all registered adapters — including
+> `E11y::Adapters::DevLog` (auto-registered in development/test via Railtie). Debug
+> events from failed requests automatically appear in `log/e11y_dev.jsonl` and become
+> visible in the TUI and Browser Overlay. See [UC-017](UC-017-local-development.md).
+
 ---
 
 ## 📈 Performance Impact
