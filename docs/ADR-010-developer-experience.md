@@ -304,7 +304,38 @@ The MCP server exposes 8 tools backed by `DevLog::Query`:
 | `errors` | All events with severity `error` or `fatal` |
 | `clear` | Truncate the log file |
 
-### 6.3. Server Context
+### 6.3 AI Tool Setup
+
+**Cursor** (`.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "e11y": {
+      "command": "bundle",
+      "args": ["exec", "e11y", "mcp"],
+      "cwd": "/path/to/your/rails/app"
+    }
+  }
+}
+```
+
+**Claude Code** (`.claude/mcp.json` or `claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "e11y": {
+      "command": "bundle",
+      "args": ["exec", "e11y", "mcp"]
+    }
+  }
+}
+```
+
+Once connected, ask your AI assistant: *"What errors happened in the last request?"* or *"Show me all events for trace abc-123"*.
+
+### 6.4. Server Context
 
 The `server_context` passed to every tool handler contains:
 
@@ -358,7 +389,25 @@ e11y/                              ← root
                     └── mcp/       ← MCP server tools
 ```
 
-### 8.1. Gem Dependencies
+### 8.1 Why Two Gems?
+
+The write-path (`DevLog` adapter, `FileStore`, `Query`, `DevLogSource` middleware) is
+**production-safe**: it has zero viewer dependencies and runs in any environment.
+It lives in `gem 'e11y'` so production apps can enable it if needed (e.g., for
+log-based observability pipelines).
+
+The viewers (TUI via ratatui_ruby, Browser Overlay, MCP Server) are **dev-only** by
+design. `ratatui_ruby` ships Rust-compiled binaries; adding it to production gems
+inflates deploy size and introduces native-extension compilation. Keeping viewers in
+a separate gem makes the dependency opt-in:
+
+```ruby
+# Gemfile
+gem "e11y"                             # always
+gem "e11y-devtools", group: :development  # never reaches production
+```
+
+### 8.2. Gem Dependencies
 
 **`e11y.gemspec`** (production gem — no devtools dependencies):
 ```ruby
