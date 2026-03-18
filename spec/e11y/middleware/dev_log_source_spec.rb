@@ -4,6 +4,8 @@ require "spec_helper"
 require "rack/mock_request"
 
 RSpec.describe E11y::Middleware::DevLogSource do
+  subject(:middleware) { described_class.new(inner_app) }
+
   let(:captured_source) { [] }
   let(:inner_app) do
     lambda do |_env|
@@ -11,8 +13,6 @@ RSpec.describe E11y::Middleware::DevLogSource do
       [200, { "Content-Type" => "text/html" }, ["OK"]]
     end
   end
-
-  subject(:middleware) { described_class.new(inner_app) }
 
   def env_for(path = "/")
     Rack::MockRequest.env_for(path)
@@ -39,7 +39,10 @@ RSpec.describe E11y::Middleware::DevLogSource do
     it "passes env['e11y.trace_id'] from Thread.current[:e11y_trace_id]" do
       Thread.current[:e11y_trace_id] = "trace-abc"
       captured_env = []
-      tracing_app  = ->(e) { captured_env << e; [200, {}, ["OK"]] }
+      tracing_app  = lambda { |e|
+        captured_env << e
+        [200, {}, ["OK"]]
+      }
       described_class.new(tracing_app).call(env_for)
       expect(captured_env.first["e11y.trace_id"]).to eq("trace-abc")
     ensure
@@ -47,7 +50,7 @@ RSpec.describe E11y::Middleware::DevLogSource do
     end
 
     it "returns the response from the inner app unchanged" do
-      status, headers, body = middleware.call(env_for)
+      status, _, body = middleware.call(env_for)
       expect(status).to eq(200)
       expect(body).to eq(["OK"])
     end

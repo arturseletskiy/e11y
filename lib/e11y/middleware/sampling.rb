@@ -190,7 +190,6 @@ module E11y
         if @trace_aware && event_data[:trace_id]
           return E11y::Current.sampled if E11y::Current.respond_to?(:sampled) && !E11y::Current.sampled.nil?
 
-
           return trace_sampling_decision(event_data[:trace_id], event_class, event_data)
         end
 

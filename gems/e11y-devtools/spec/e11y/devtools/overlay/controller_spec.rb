@@ -8,7 +8,8 @@ require "e11y/adapters/dev_log/query"
 require "e11y/devtools/overlay/controller"
 
 RSpec.describe E11y::Devtools::Overlay::Controller do
-  let(:dir)     { Dir.mktmpdir("e11y_ctrl") }
+  let(:dir) { Dir.mktmpdir("e11y_ctrl") }
+  let(:controller) { described_class.new(query) }
   let(:path)    { File.join(dir, "e11y_dev.jsonl") }
   let(:query)   { E11y::Adapters::DevLog::Query.new(path) }
 
@@ -22,8 +23,6 @@ RSpec.describe E11y::Devtools::Overlay::Controller do
     }
     File.open(path, "a") { |f| f.puts(JSON.generate(data)) }
   end
-
-  let(:controller) { described_class.new(query) }
 
   describe "#events_for" do
     it "returns events_by_trace when trace_id given" do

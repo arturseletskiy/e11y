@@ -16,9 +16,10 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_dependency "e11y", "~> #{E11y::Devtools::CORE_VERSION}"
-  spec.add_dependency "ratatui_ruby", "~> 1.4"
   spec.add_dependency "mcp",          ">= 1.0"
+  spec.add_dependency "ratatui_ruby", "~> 1.4"
 
   # Optional but recommended for performance
   spec.add_development_dependency "oj"
+  spec.metadata["rubygems_mfa_required"] = "true"
 end

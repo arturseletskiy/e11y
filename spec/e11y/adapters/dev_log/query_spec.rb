@@ -7,6 +7,8 @@ require "json"
 require "time"
 
 RSpec.describe E11y::Adapters::DevLog::Query do
+  subject(:query) { described_class.new(path) }
+
   let(:dir)  { Dir.mktmpdir("e11y_query") }
   let(:path) { File.join(dir, "e11y_dev.jsonl") }
 
@@ -18,18 +20,16 @@ RSpec.describe E11y::Adapters::DevLog::Query do
 
   def build_event(overrides = {})
     {
-      "id"         => SecureRandom.uuid,
-      "timestamp"  => Time.now.iso8601(3),
+      "id" => SecureRandom.uuid,
+      "timestamp" => Time.now.iso8601(3),
       "event_name" => "test.event",
-      "severity"   => "info",
-      "trace_id"   => SecureRandom.hex(8),
-      "span_id"    => SecureRandom.hex(4),
-      "payload"    => { "key" => "value" },
-      "metadata"   => { "source" => "web", "path" => "/test", "duration_ms" => 10 }
+      "severity" => "info",
+      "trace_id" => SecureRandom.hex(8),
+      "span_id" => SecureRandom.hex(4),
+      "payload" => { "key" => "value" },
+      "metadata" => { "source" => "web", "path" => "/test", "duration_ms" => 10 }
     }.merge(overrides.transform_keys(&:to_s))
   end
-
-  subject(:query) { described_class.new(path) }
 
   describe "#stored_events" do
     it "returns empty array when file does not exist" do
@@ -207,7 +207,7 @@ RSpec.describe E11y::Adapters::DevLog::Query do
   describe "caching" do
     it "returns same result on second call without re-reading file" do
       write_events(build_event)
-      query.stored_events  # prime cache
+      query.stored_events # prime cache
       # Poison the file but preserve mtime so cache key doesn't change
       original_mtime = File.mtime(path)
       File.write(path, "INVALID JSON\n")
@@ -218,7 +218,7 @@ RSpec.describe E11y::Adapters::DevLog::Query do
 
     it "invalidates cache when file mtime changes" do
       write_events(build_event)
-      query.stored_events  # prime cache
+      query.stored_events # prime cache
       sleep 0.01
       write_events(build_event)
       FileUtils.touch(path)

@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "delegate"
-require "set"
 
 module E11y
   module Logger

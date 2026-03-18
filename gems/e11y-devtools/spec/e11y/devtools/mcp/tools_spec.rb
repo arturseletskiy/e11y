@@ -9,15 +9,16 @@ require "fileutils"
 require "e11y/adapters/dev_log/query"
 
 # Load tool files (guarded in case mcp gem is absent)
-[
-  "recent_events", "events_by_trace", "search", "stats", "errors", "clear"
+%w[
+  recent_events events_by_trace search stats errors clear
 ].each do |name|
   require "e11y/devtools/mcp/tools/#{name}"
 end
 
-RSpec.describe "MCP Tools" do
+RSpec.describe E11y::Devtools::Mcp::Tools do
+  let(:error_severities) { %w[error fatal] }
   let(:dir)   { Dir.mktmpdir("e11y_mcp") }
-  let(:path)  { ::File.join(dir, "e11y_dev.jsonl") }
+  let(:path)  { File.join(dir, "e11y_dev.jsonl") }
   let(:store) { E11y::Adapters::DevLog::Query.new(path) }
   let(:ctx)   { { store: store } }
 
@@ -25,15 +26,15 @@ RSpec.describe "MCP Tools" do
 
   def write_event(overrides = {})
     data = {
-      "id"         => SecureRandom.uuid,
-      "timestamp"  => Time.now.iso8601(3),
+      "id" => SecureRandom.uuid,
+      "timestamp" => Time.now.iso8601(3),
       "event_name" => "test.event",
-      "severity"   => "info",
-      "trace_id"   => "t1",
-      "payload"    => {},
-      "metadata"   => {}
+      "severity" => "info",
+      "trace_id" => "t1",
+      "payload" => {},
+      "metadata" => {}
     }.merge(overrides)
-    ::File.open(path, "a") { |f| f.puts(JSON.generate(data)) }
+    File.open(path, "a") { |f| f.puts(JSON.generate(data)) }
   end
 
   describe E11y::Devtools::Mcp::Tools::RecentEvents do
@@ -91,7 +92,7 @@ RSpec.describe "MCP Tools" do
       write_event("severity" => "info")
       write_event("severity" => "error")
       result = described_class.call(limit: 10, server_context: ctx)
-      expect(result.all? { |e| %w[error fatal].include?(e["severity"]) }).to be true
+      expect(result.all? { |e| error_severities.include?(e["severity"]) }).to be true
     end
   end
 

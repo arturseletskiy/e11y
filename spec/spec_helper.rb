@@ -4,6 +4,9 @@
 
 # Load local lib path FIRST (before any requires)
 $LOAD_PATH.unshift File.expand_path("../lib", __dir__)
+# Devtools gem (for gems/e11y-devtools/spec/)
+devtools_lib = File.expand_path("../gems/e11y-devtools/lib", __dir__)
+$LOAD_PATH.unshift(devtools_lib) if File.directory?(devtools_lib)
 
 # SimpleCov setup (must be at the very top)
 if ENV["COVERAGE"]

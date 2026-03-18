@@ -3,6 +3,7 @@
 require "spec_helper"
 require "tmpdir"
 require "e11y/adapters/dev_log/query"
+require "e11y/devtools/tui/grouping"
 require "e11y/devtools/tui/app"
 
 RSpec.describe E11y::Devtools::Tui::App do
@@ -19,13 +20,15 @@ RSpec.describe E11y::Devtools::Tui::App do
   end
 
   describe "#handle_key" do
-    context "in :interactions view" do
+    context "when in :interactions view" do
       it "drills into :events on Enter" do
         query = instance_double(E11y::Adapters::DevLog::Query, events_by_trace: [])
-        app.instance_variable_set(:@query, query)
-        allow(app).to receive(:selected_interaction).and_return(
-          double(trace_ids: ["t1"])
+        interaction = E11y::Devtools::Tui::Grouping::Interaction.new(
+          Time.now, ["t1"], false, "web"
         )
+        app.instance_variable_set(:@query, query)
+        app.instance_variable_set(:@interactions, [interaction])
+        app.instance_variable_set(:@selected_ix, 0)
         app.handle_key("enter")
         expect(app.current_view).to eq(:events)
       end
@@ -47,7 +50,7 @@ RSpec.describe E11y::Devtools::Tui::App do
       end
     end
 
-    context "in :events view" do
+    context "when in :events view" do
       before do
         app.instance_variable_set(:@current_view, :events)
         app.instance_variable_set(:@current_trace_id, "t1")
@@ -65,7 +68,7 @@ RSpec.describe E11y::Devtools::Tui::App do
       end
     end
 
-    context "in :detail view" do
+    context "when in :detail view" do
       before { app.instance_variable_set(:@current_view, :detail) }
 
       it "goes back to :events on Esc" do

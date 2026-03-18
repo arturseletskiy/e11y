@@ -7,12 +7,11 @@ require "tmpdir"
 
 RSpec.describe "DevTools E2E", :integration do
   let(:tmpdir) { Dir.mktmpdir("e11y_e2e") }
-  let(:path)   { ::File.join(tmpdir, "e11y_dev.jsonl") }
-
-  after { FileUtils.remove_entry(tmpdir) }
-
   let(:adapter) { E11y::Adapters::DevLog.new(path: path) }
   let(:query)   { E11y::Adapters::DevLog::Query.new(path) }
+  let(:path) { File.join(tmpdir, "e11y_dev.jsonl") }
+
+  after { FileUtils.remove_entry(tmpdir) }
 
   describe "write → read → search pipeline" do
     before do
@@ -91,8 +90,8 @@ RSpec.describe "DevTools E2E", :integration do
         small_adapter.write(event_name: "e#{i}", severity: "info",
                             trace_id: "t#{i}", payload: {}, metadata: {})
       end
-      expect(::File.exist?("#{path}.1.gz")).to be true
-      expect(::File.exist?("#{path}.3.gz")).to be false  # beyond keep_rotated: 2
+      expect(File.exist?("#{path}.1.gz")).to be true
+      expect(File.exist?("#{path}.3.gz")).to be false # beyond keep_rotated: 2
     end
   end
 

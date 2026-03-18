@@ -4,21 +4,21 @@ require "spec_helper"
 require "tmpdir"
 
 RSpec.describe E11y::Adapters::DevLog do
+  subject(:adapter) { described_class.new(path: path) }
+
   let(:dir)  { Dir.mktmpdir("e11y_devlog") }
   let(:path) { File.join(dir, "e11y_dev.jsonl") }
 
   after { FileUtils.remove_entry(dir) }
 
-  subject(:adapter) { described_class.new(path: path) }
-
   describe "#write" do
     let(:event_data) do
       {
         event_name: "order.created",
-        severity:   "info",
-        trace_id:   "abc123",
-        payload:    { order_id: 1 },
-        metadata:   {}
+        severity: "info",
+        trace_id: "abc123",
+        payload: { order_id: 1 },
+        metadata: {}
       }
     end
 

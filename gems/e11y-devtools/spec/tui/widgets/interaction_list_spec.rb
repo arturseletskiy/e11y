@@ -15,15 +15,15 @@ RSpec.describe "E11y::Devtools::Tui::Widgets::InteractionList" do
   def make_interaction(trace_ids:, has_error: false)
     E11y::Devtools::Tui::Grouping::Interaction.new(
       started_at: t0,
-      trace_ids:  trace_ids,
+      trace_ids: trace_ids,
       has_error?: has_error,
-      source:     "web"
+      source: "web"
     )
   end
 
   it "renders bullet as ● red when interaction has error" do
     widget = E11y::Devtools::Tui::Widgets::InteractionList.new(
-      interactions:   [make_interaction(trace_ids: ["t1"], has_error: true)],
+      interactions: [make_interaction(trace_ids: ["t1"], has_error: true)],
       selected_index: 0
     )
     with_test_terminal(40, 5) do |terminal|
@@ -34,7 +34,7 @@ RSpec.describe "E11y::Devtools::Tui::Widgets::InteractionList" do
 
   it "renders bullet as ○ when interaction is clean" do
     widget = E11y::Devtools::Tui::Widgets::InteractionList.new(
-      interactions:   [make_interaction(trace_ids: ["t1"], has_error: false)],
+      interactions: [make_interaction(trace_ids: ["t1"], has_error: false)],
       selected_index: 0
     )
     with_test_terminal(40, 5) do |terminal|

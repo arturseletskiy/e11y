@@ -7,10 +7,10 @@ require "e11y/devtools/tui/grouping"
 RSpec.describe E11y::Devtools::Tui::Grouping do
   def make_trace(id, offset_ms, severity: "info", source: "web")
     {
-      trace_id:   id,
+      trace_id: id,
       started_at: Time.now + (offset_ms / 1000.0),
-      severity:   severity,
-      source:     source
+      severity: severity,
+      source: source
     }
   end
 

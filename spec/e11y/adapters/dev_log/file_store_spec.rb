@@ -6,14 +6,14 @@ require "zlib"
 require "e11y/adapters/dev_log/file_store"
 
 RSpec.describe E11y::Adapters::DevLog::FileStore do
+  subject(:store) do
+    described_class.new(path: path, max_size: 1024, max_lines: 10, keep_rotated: 3)
+  end
+
   let(:dir)  { Dir.mktmpdir("e11y_file_store") }
   let(:path) { File.join(dir, "e11y_dev.jsonl") }
 
   after { FileUtils.remove_entry(dir) }
-
-  subject(:store) do
-    described_class.new(path: path, max_size: 1024, max_lines: 10, keep_rotated: 3)
-  end
 
   describe "#append" do
     it "creates the file and writes a JSON line" do
@@ -29,7 +29,7 @@ RSpec.describe E11y::Adapters::DevLog::FileStore do
     end
 
     it "is thread-safe under concurrent writes" do
-      threads = 10.times.map { |i| Thread.new { store.append("{\"id\":#{i}}") } }
+      threads = Array.new(10) { |i| Thread.new { store.append("{\"id\":#{i}}") } }
       threads.each(&:join)
       lines = File.readlines(path)
       expect(lines.size).to eq(10)
@@ -47,7 +47,7 @@ RSpec.describe E11y::Adapters::DevLog::FileStore do
     it "compresses rotated file with gzip" do
       11.times { |i| store.append("{\"id\":#{i}}") }
       gz_path = "#{path}.1.gz"
-      expect { Zlib::GzipReader.open(gz_path) { |f| f.read } }.not_to raise_error
+      expect { Zlib::GzipReader.open(gz_path, &:read) }.not_to raise_error
     end
 
     it "shifts existing rotated files (1.gz -> 2.gz)" do
@@ -68,8 +68,8 @@ RSpec.describe E11y::Adapters::DevLog::FileStore do
 
   describe "rotation by max_size" do
     it "rotates when file size exceeds max_size" do
-      long_line = "{\"id\":\"#{"x" * 512}\"}"
-      3.times { store.append(long_line) }  # >1024 bytes
+      long_line = "{\"id\":\"#{'x' * 512}\"}"
+      3.times { store.append(long_line) } # >1024 bytes
       expect(File.exist?("#{path}.1.gz")).to be true
     end
   end
