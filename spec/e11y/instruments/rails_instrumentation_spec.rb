@@ -48,13 +48,7 @@ RSpec.describe E11y::Instruments::RailsInstrumentation do
   end
 
   describe ".setup!" do
-    it "returns early if rails_instrumentation not enabled" do
-      allow(E11y.config).to receive(:rails_instrumentation_enabled).and_return(false)
-      expect(described_class).not_to receive(:event_mapping)
-      described_class.setup!
-    end
-
-    it "returns early if rails_instrumentation_enabled is false" do
+    it "returns early when rails_instrumentation is disabled" do
       allow(E11y.config).to receive(:rails_instrumentation_enabled).and_return(false)
       expect(described_class).not_to receive(:event_mapping)
       described_class.setup!

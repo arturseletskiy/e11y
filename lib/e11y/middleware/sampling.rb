@@ -213,7 +213,7 @@ module E11y
       # @param event_class [Class] The event class
       # @param event_data [Hash] Event payload (for value-based sampling)
       # @return [Float] Sample rate (0.0-1.0)
-      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+      # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
       # Sample rate determination follows a 6-step priority chain:
       # error spike (0) → pattern-based (0.5) → value-based (1) →
       # load-based (2) → severity (3) → event-level (4) → default (5)
@@ -268,7 +268,7 @@ module E11y
         # 4. Default/load-based rate
         base_rate
       end
-      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+      # rubocop:enable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
       # Trace-aware sampling decision (C05 Resolution)
       #

@@ -76,13 +76,9 @@ module E11y
 
         def otel_value(value)
           case value
-          when TrueClass, FalseClass then value
-          when Integer then value
-          when Float then value
-          when String then value
-          when Symbol then value.to_s
+          when TrueClass, FalseClass, Integer, Float, String then value
           when Array then value.map(&:to_s)
-          else value.to_s
+          else value.to_s # Symbol, NilClass, Hash, etc.
           end
         end
 

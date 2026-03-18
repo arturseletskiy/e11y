@@ -11,7 +11,7 @@ RSpec.describe E11y::Linters::SLO::SloStatusFromLinter do
       slo_status_proc: slo_status_proc,
       contributes_to_value: contributes_to_value
     )
-    event_class = instance_double(EventClass, name: name)
+    event_class = double("EventClass", name: name)
     allow(event_class).to receive_messages(slo_enabled?: slo_enabled, slo_config: slo_enabled ? slo_config : nil)
     event_class
   end

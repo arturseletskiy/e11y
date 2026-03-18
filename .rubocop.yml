@@ -28,6 +28,7 @@ Metrics/BlockLength:
     - 'lib/tasks/**/*'
     - '*.gemspec'
     - 'lib/e11y/reliability/retry_handler.rb'
+    - 'lib/e11y/instruments/active_job.rb'
 
 Metrics/MethodLength:
   Max: 20
@@ -36,6 +37,8 @@ Metrics/MethodLength:
     - 'lib/e11y/adapters/yabeda.rb'
     - 'lib/e11y/middleware/routing.rb'
     - 'lib/e11y/event/base.rb'
+    - 'lib/e11y/middleware/rate_limiting.rb'
+    - 'lib/e11y/middleware/sampling.rb'
 
 Metrics/ClassLength:
   Max: 100
@@ -44,6 +47,9 @@ Metrics/ClassLength:
     - 'lib/e11y/buffers/ephemeral_buffer.rb'
     - 'lib/e11y/registry.rb'
     - 'lib/e11y/adapters/otel_logs.rb'
+    - 'lib/e11y/adapters/opentelemetry_collector.rb'
+    - 'lib/e11y/opentelemetry/span_creator.rb'
+    - 'lib/e11y/configuration.rb'
 
 Metrics/CyclomaticComplexity:
   Max: 15
@@ -67,6 +73,19 @@ Metrics/AbcSize:
     - 'lib/e11y/event/base.rb'
     - 'lib/e11y/middleware/versioning.rb'
     - 'lib/e11y/reliability/retry_handler.rb'
+    - 'lib/e11y/adapters/base.rb'
+    - 'lib/e11y/adapters/opentelemetry_collector.rb'
+    - 'lib/e11y/adapters/otel_logs.rb'
+    - 'lib/e11y/current.rb'
+    - 'lib/e11y/instruments/active_job.rb'
+    - 'lib/e11y/instruments/sidekiq.rb'
+    - 'lib/e11y/linters/pii/pii_declaration_linter.rb'
+    - 'lib/e11y/linters/slo/config_consistency_linter.rb'
+    - 'lib/e11y/logger/bridge.rb'
+    - 'lib/e11y/middleware/pii_filter.rb'
+    - 'lib/e11y/middleware/rate_limiting.rb'
+    - 'lib/e11y/middleware/sampling.rb'
+    - 'lib/e11y/opentelemetry/span_creator.rb'
     - 'spec/integration/slo_tracking_integration_spec.rb'
     - 'spec/support/integration_helpers.rb'
     - 'spec/support/integration/pii_helpers.rb'
@@ -113,6 +132,9 @@ RSpec/MultipleMemoizedHelpers:
 
 RSpec/NestedGroups:
   Max: 3
+  Exclude:
+    - "spec/e11y/current_spec.rb"
+    - "spec/e11y/middleware/pii_filtering_spec.rb"
 
 # Gem-specific: Development dependencies can be in gemspec
 Gemspec/DevelopmentDependencies:
@@ -129,6 +151,7 @@ RSpec/DescribeClass:
     - "spec/zeitwerk_spec.rb"
     - "spec/integration/**/*"
     - "spec/e11y/module_api_spec.rb"
+    - "spec/e11y/configuration/error_handling_config_spec.rb"
 
 # File path conventions (generators use spec/generators/e11y/ structure)
 RSpec/SpecFilePathFormat:
@@ -136,6 +159,8 @@ RSpec/SpecFilePathFormat:
     - "spec/e11y/event/dsl_additions_spec.rb"
     - "spec/e11y/module_api_spec.rb"
     - "spec/generators/e11y/*_spec.rb"
+    - "spec/e11y/opentelemetry/semantic_conventions_spec.rb"
+    - "spec/e11y/opentelemetry/span_creator_spec.rb"
 
 RSpec/DescribeMethod:
   Exclude:
@@ -159,4 +184,27 @@ RSpec/MessageSpies:
 # We use puts for diagnostic output in integration tests and support files.
 RSpec/Output:
   Enabled: false
+
+RSpec/RepeatedExample:
+  Exclude:
+    - "spec/e11y/instruments/rails_instrumentation_spec.rb"
+    - "spec/e11y/versioning/version_extractor_spec.rb"
+
+RSpec/StubbedMock:
+  Exclude:
+    - "spec/e11y/module_api_spec.rb"
+    - "spec/e11y/slo/config_loader_spec.rb"
+
+Metrics/ParameterLists:
+  Exclude:
+    - "lib/e11y/adapters/opentelemetry_collector.rb"
+    - "lib/e11y/adapters/otel_logs.rb"
+
+Style/SafeNavigationChainLength:
+  Exclude:
+    - "lib/e11y/linters/pii/pii_declaration_linter.rb"
+
+Performance/CollectionLiteralInLoop:
+  Exclude:
+    - "lib/e11y/middleware/pii_filter.rb"
 

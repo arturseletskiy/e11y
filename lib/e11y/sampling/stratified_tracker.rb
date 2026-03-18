@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
+# Stratified sampling for SLO accuracy (FEAT-4851, C11 Resolution).
+# Tracks sampling statistics per severity stratum for sampling correction.
 module E11y
+  # Stratified sampling module — provides StratifiedTracker for SLO correction.
   module Sampling
     # Module-level singleton for StratifiedTracker (C11 Resolution).
     # Used by Sampling middleware and EventSlo for sampling correction.

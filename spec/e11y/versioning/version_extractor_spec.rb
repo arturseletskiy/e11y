@@ -21,8 +21,8 @@ RSpec.describe E11y::Versioning::VersionExtractor do
       expect(described_class.extract_version(nil)).to eq(1)
     end
 
-    it "ignores V in middle of name" do
-      expect(described_class.extract_version("Events::OrderPaidV2")).to eq(2)
+    it "ignores V in middle of name (returns 1 when V2 is not at end)" do
+      expect(described_class.extract_version("Events::OrderV2Created")).to eq(1)
     end
   end
 

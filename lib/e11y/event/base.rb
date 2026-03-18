@@ -752,7 +752,7 @@ module E11y
               attr_reader :opts
 
               def initialize(opts) = @opts = opts
-              def strategy(s) = @opts.[]=(:strategy, s)
+              def strategy(val) = @opts.[]=(:strategy, val)
               def exclude_adapters(adapters) = @opts.[]=(:exclude_adapters, Array(adapters).map(&:to_sym))
             end.new(opts)
             dsl.instance_eval(&)
