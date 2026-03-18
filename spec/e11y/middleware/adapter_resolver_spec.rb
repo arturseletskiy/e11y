@@ -5,24 +5,23 @@ require "e11y/middleware/adapter_resolver"
 
 RSpec.describe E11y::Middleware::AdapterResolver do
   let(:event_data) { { event_name: "test.event", severity: :info, payload: {} } }
+  let(:config_double) do
+    instance_double(E11y::Configuration, routing_rules: [], fallback_adapters: [:stdout])
+  end
 
   before do
     allow(E11y).to receive(:configuration).and_return(config_double)
   end
 
-  let(:config_double) do
-    instance_double(E11y::Configuration, routing_rules: [], fallback_adapters: [:stdout])
-  end
-
   describe ".resolve" do
     context "when event_data has explicit adapters" do
       it "returns symbolized adapter names" do
-        event_data[:adapters] = ["loki", "sentry"]
+        event_data[:adapters] = %w[loki sentry]
         expect(described_class.resolve(event_data)).to eq(%i[loki sentry])
       end
 
       it "handles symbol adapters" do
-        event_data[:adapters] = [:file, :stdout]
+        event_data[:adapters] = %i[file stdout]
         expect(described_class.resolve(event_data)).to eq(%i[file stdout])
       end
     end
@@ -49,7 +48,7 @@ RSpec.describe E11y::Middleware::AdapterResolver do
     context "with routing rules that match" do
       it "returns the matched adapters (deduplicated)" do
         rule1 = ->(_e) { [:loki] }
-        rule2 = ->(_e) { [:loki, :sentry] }
+        rule2 = ->(_e) { %i[loki sentry] }
         allow(config_double).to receive(:routing_rules).and_return([rule1, rule2])
 
         expect(described_class.apply_routing_rules(event_data)).to eq(%i[loki sentry])
