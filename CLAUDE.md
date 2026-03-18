@@ -60,7 +60,7 @@ bundle exec e11y
 # Start MCP server (for Cursor / Claude Code)
 bundle exec e11y mcp
 
-# Stream events to stdout (pipe-friendly)
+# Stream events to stdout
 bundle exec e11y tail
 ```
 

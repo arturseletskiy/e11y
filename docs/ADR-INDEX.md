@@ -15,7 +15,7 @@ This document provides an index of all architectural decisions made for the E11y
 | [ADR-007](ADR-007-opentelemetry-integration.md) | OpenTelemetry Integration | ✅ Accepted | 3 |
 | [ADR-008](ADR-008-rails-integration.md) | Rails Integration Strategy | ✅ Accepted | 3 |
 | [ADR-009](ADR-009-cost-optimization.md) | Cost Optimization Strategies | ✅ Accepted | 4 |
-| [ADR-010](ADR-010-developer-experience.md) | Developer Experience (DX) | ✅ Accepted | 5 |
+| [ADR-010](ADR-010-developer-experience.md) | Developer Experience: DevLog adapter, TUI (ratatui_ruby), Browser Overlay, MCP Server (Hub-and-Spoke) | ✅ Accepted | 5 |
 | [ADR-011](ADR-011-testing-strategy.md) | Testing Strategy | ✅ Accepted | 5 |
 | [ADR-012](ADR-012-event-evolution.md) | Event Schema Evolution | ✅ Accepted | 1 |
 | [ADR-013](ADR-013-reliability-error-handling.md) | Reliability & Error Handling | ✅ Accepted | 4 |
@@ -56,7 +56,7 @@ This document provides an index of all architectural decisions made for the E11y
 - **ADR-005**: Trace context propagation
 
 ### Developer Experience
-- **ADR-010**: Developer experience priorities (5-min setup, conventions)
+- **ADR-010**: Hub-and-Spoke devtools — JSONL DevLog adapter + TUI (ratatui_ruby) + Browser Overlay (Rails Engine + Shadow DOM badge) + MCP Server (8 tools, stdio/HTTP transport, AI integration)
 - **ADR-011**: Testing strategy (RSpec, integration tests, benchmarks)
 - **ADR-015**: Middleware execution order guarantees
 
