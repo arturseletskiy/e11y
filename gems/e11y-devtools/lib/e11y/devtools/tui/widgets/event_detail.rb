@@ -13,18 +13,20 @@ module E11y
             @event = event
           end
 
-          def render(frame, area)
+          def render(tui, frame, area)
             popup_area = centered_rect(area, percent_x: 80, percent_y: 70)
 
-            frame.render_widget(frame.clear, popup_area)
+            frame.render_widget(tui.clear, popup_area)
 
             sev   = @event["severity"] || "info"
             title = " #{@event['event_name']} · #{sev.upcase} "
 
             frame.render_widget(
-              frame.paragraph(text: build_lines)
-                   .block(title: title, borders: :all)
-                   .scroll(0),
+              tui.paragraph(
+                text: build_lines,
+                block: tui.block(title: title, borders: :all),
+                scroll: [0, 0]
+              ),
               popup_area
             )
           end

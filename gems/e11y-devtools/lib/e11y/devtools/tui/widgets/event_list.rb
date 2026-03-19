@@ -22,27 +22,28 @@ module E11y
             @selected_index = selected_index
           end
 
-          def render(frame, area)
+          def render(tui, frame, area)
             frame.render_widget(
-              frame.table(
+              tui.table(
                 header: ["#", "Severity", "Event Name", "Duration", "At"],
-                rows: build_rows(frame),
-                highlight_style: { bg: :dark_gray },
-                selected: @selected_index
-              ).block(title: " #{@trace_id} ", borders: :all),
+                rows: build_rows(tui),
+                row_highlight_style: { bg: :dark_gray },
+                selected_row: @selected_index,
+                block: tui.block(title: " #{@trace_id} ", borders: :all)
+              ),
               area
             )
           end
 
           private
 
-          def build_rows(frame)
+          def build_rows(tui)
             @events.each_with_index.map do |e, i|
               sev   = e["severity"] || "info"
               color = SEVERITY_COLORS.fetch(sev, :white)
               [
                 (i + 1).to_s,
-                frame.span(sev.upcase, style: { fg: color }),
+                tui.span(content: sev.upcase, style: { fg: color }),
                 e["event_name"].to_s,
                 duration_str(e),
                 timestamp_short(e["timestamp"])

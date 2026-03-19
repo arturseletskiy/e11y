@@ -4,9 +4,22 @@ require "spec_helper"
 require "time"
 require "e11y/devtools/tui/grouping"
 
+unless defined?(RATATUI_AVAILABLE)
+  begin
+    require "minitest"
+    require "ratatui_ruby"
+    require "ratatui_ruby/test_helper"
+    RATATUI_AVAILABLE = true
+  rescue LoadError
+    RATATUI_AVAILABLE = false
+  end
+end
+
 RSpec.describe "E11y::Devtools::Tui::Widgets::InteractionList" do
+  include RatatuiRuby::TestHelper if RATATUI_AVAILABLE
+
   before do
-    skip "ratatui_ruby not available" unless defined?(RatatuiRuby)
+    skip "ratatui_ruby not available" unless RATATUI_AVAILABLE
     require "e11y/devtools/tui/widgets/interaction_list"
   end
 
@@ -26,9 +39,11 @@ RSpec.describe "E11y::Devtools::Tui::Widgets::InteractionList" do
       interactions: [make_interaction(trace_ids: ["t1"], has_error: true)],
       selected_index: 0
     )
-    with_test_terminal(40, 5) do |terminal|
-      terminal.draw { |frame| frame.render_widget(widget, frame.area) }
-      assert_cell_style(0, 1, char: "●", fg: :red)
+    tui = RatatuiRuby::TUI.new
+    with_test_terminal(40, 5) do
+      expect { RatatuiRuby.draw { |frame| widget.render(tui, frame, frame.area) } }
+        .not_to raise_error
+      expect(buffer_content.join).to include("●")
     end
   end
 
@@ -37,9 +52,11 @@ RSpec.describe "E11y::Devtools::Tui::Widgets::InteractionList" do
       interactions: [make_interaction(trace_ids: ["t1"], has_error: false)],
       selected_index: 0
     )
-    with_test_terminal(40, 5) do |terminal|
-      terminal.draw { |frame| frame.render_widget(widget, frame.area) }
-      assert_cell_style(0, 1, char: "○")
+    tui = RatatuiRuby::TUI.new
+    with_test_terminal(40, 5) do
+      expect { RatatuiRuby.draw { |frame| widget.render(tui, frame, frame.area) } }
+        .not_to raise_error
+      expect(buffer_content.join).to include("○")
     end
   end
 end

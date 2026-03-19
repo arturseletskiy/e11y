@@ -40,7 +40,7 @@ module E11y
           RatatuiRuby.run do |tui|
             loop do
               reload_if_changed!
-              tui.draw { |frame| render(frame) }
+              tui.draw { |frame| render(tui, frame) }
               event = tui.poll_event(timeout_ms: POLL_INTERVAL_MS)
               break if quit_event?(event)
 
@@ -67,29 +67,29 @@ module E11y
 
         # --- Rendering ---
 
-        def render(frame)
+        def render(tui, frame)
           case @current_view
-          when :interactions then render_interactions(frame)
-          when :events       then render_events(frame)
+          when :interactions then render_interactions(tui, frame)
+          when :events       then render_events(tui, frame)
           when :detail
-            render_events(frame)
-            Widgets::EventDetail.new(event: @current_event).render(frame, frame.area)
+            render_events(tui, frame)
+            Widgets::EventDetail.new(event: @current_event).render(tui, frame, frame.area)
           end
         end
 
-        def render_interactions(frame)
+        def render_interactions(tui, frame)
           Widgets::InteractionList.new(
             interactions: @interactions,
             selected_index: @selected_ix
-          ).render(frame, frame.area)
+          ).render(tui, frame, frame.area)
         end
 
-        def render_events(frame)
+        def render_events(tui, frame)
           Widgets::EventList.new(
             events: @events,
             trace_id: @current_trace_id || "",
             selected_index: @selected_ix
-          ).render(frame, frame.area)
+          ).render(tui, frame, frame.area)
         end
 
         # --- Key handlers per view ---

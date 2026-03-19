@@ -16,23 +16,27 @@ module E11y
             @source_filter  = source_filter
           end
 
-          def render(frame, area)
+          def render(tui, frame, area)
             rows = @interactions.map do |ix|
               bullet    = ix.has_error? ? "●" : "○"
               bullet_fg = ix.has_error? ? :red : :gray
               time_str  = ix.started_at.strftime("%H:%M:%S")
-              count_str = "#{ix.traces_count} req"
+              count_str = "#{ix.trace_ids.size} req"
               error_str = ix.has_error? ? "  ● err" : ""
 
-              "#{frame.span(bullet, style: { fg: bullet_fg })} #{time_str}  #{count_str}#{error_str}"
+              tui.line(spans: [
+                         tui.span(content: bullet, style: { fg: bullet_fg }),
+                         tui.span(content: " #{time_str}  #{count_str}#{error_str}")
+                       ])
             end
 
             frame.render_widget(
-              frame.list(
+              tui.list(
                 items: rows,
                 highlight_style: { bg: :dark_gray },
-                selected: @selected_index
-              ).block(title: " INTERACTIONS ", borders: :all),
+                selected_index: @selected_index,
+                block: tui.block(title: " INTERACTIONS ", borders: :all)
+              ),
               area
             )
           end

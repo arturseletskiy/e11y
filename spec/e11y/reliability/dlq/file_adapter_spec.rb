@@ -39,12 +39,12 @@ RSpec.describe E11y::Reliability::DLQ::FileAdapter do
     end
 
     it "uses default file path if not provided" do
-      # Use a writable temporary directory for testing
       temp_dir = Dir.mktmpdir
-      allow(Rails).to receive(:root).and_return(Pathname.new(temp_dir)) if defined?(Rails)
+      root_path = Pathname.new(temp_dir)
+      fake_rails = double("Rails", root: root_path)
+      stub_const("Rails", fake_rails) unless defined?(Rails)
 
       dlq_default = described_class.new
-      # Should not crash
       expect(dlq_default).to be_a(described_class)
     ensure
       FileUtils.rm_rf(temp_dir) if temp_dir

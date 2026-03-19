@@ -65,7 +65,7 @@ Then("the DLQ entry should have a metadata field") do
 end
 
 # ---------------------------------------------------------------------------
-# Replay steps (@wip — stub bug)
+# Replay steps
 # ---------------------------------------------------------------------------
 
 Given("a secondary working adapter is configured") do
@@ -81,12 +81,11 @@ end
 
 Then("the event should appear in the secondary adapter") do
   expect(@secondary_adapter.event_count).to be >= 1,
-                                            "Expected replayed event in secondary adapter, got 0. " \
-                                            "BUG: DLQ#replay is a stub — E11y::Pipeline.dispatch is commented out."
+                                            "Expected replayed event in secondary adapter, got 0."
 end
 
 # ---------------------------------------------------------------------------
-# Delete steps (@wip — always returns false bug)
+# Delete steps
 # ---------------------------------------------------------------------------
 
 When("I delete the DLQ entry by ID") do
@@ -95,8 +94,7 @@ end
 
 Then("the delete result should be true") do
   expect(@delete_result).to be(true),
-                            "Expected delete to return true, got #{@delete_result.inspect}. " \
-                            "BUG: DLQ#delete always returns false (unimplemented TODO)."
+                            "Expected delete to return true, got #{@delete_result.inspect}."
 end
 
 # ---------------------------------------------------------------------------
@@ -123,13 +121,12 @@ Then("the DLQ file should contain valid JSONL content") do
 end
 
 # ---------------------------------------------------------------------------
-# Default path steps (@wip — Rails.root dependency bug)
+# Default path steps
 # ---------------------------------------------------------------------------
 
 When("I create a FileStorage without an explicit path") do
   @dlq_init_error = nil
   begin
-    # Hide Rails.root so we can test without Rails in scope
     E11y::Reliability::DLQ::FileStorage.new
   rescue NameError => e
     @dlq_init_error = e
@@ -138,6 +135,5 @@ end
 
 Then("no NameError should be raised") do
   expect(@dlq_init_error).to be_nil,
-                             "Got NameError: #{@dlq_init_error&.message}. " \
-                             "BUG: DLQ::FileStorage#default_file_path calls Rails.root — requires Rails to be loaded."
+                             "Got NameError: #{@dlq_init_error&.message}."
 end

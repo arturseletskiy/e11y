@@ -509,7 +509,6 @@ module E11y
         # Web request context: RAISE (fast feedback)
 
         # Background job context: SWALLOW (don't fail business logic)
-        # TODO: Track metric e11y.event.tracking_failed_silent
         false
       end
       # rubocop:enable Naming/PredicateMethod
