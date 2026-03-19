@@ -12,7 +12,7 @@
 **E11y** (easy telemetry) - production-ready Ruby gem для структурированных бизнес-событий с уникальными killer features:
 
 1. **Request-scoped debug buffering** - debug events только при ошибках (89% reduction)
-2. **Pattern-based metrics** - автоматические метрики без boilerplate
+2. **Event-level metrics DSL** - автоматические метрики без boilerplate
 3. **Zero-config SLO tracking** - built-in monitoring одной строкой конфига
 
 **Target Market:** Ruby/Rails teams (5-100 engineers)  
@@ -160,14 +160,19 @@ E11y.configure { |config| config.slo_tracking = true }
 
 #### 3. Automatic Metrics
 
-**Pattern-based metrics:**
+**Event-level metrics DSL:**
 ```ruby
-# Define event once
-Events::OrderPaid.track(order_id: '123', amount: 99, currency: 'USD')
+# Define event once with metrics
+class Events::OrderPaid < E11y::Event::Base
+  schema { required(:order_id).filled(:string); required(:amount).filled(:float); optional(:currency).maybe(:string) }
+  metrics do
+    counter :orders_paid_total, tags: [:currency]
+    histogram :order_amount, value: :amount, tags: [:currency]
+  end
+end
 
-# Get metrics automatically (configured via patterns)
-# - orders.paid.total{currency="USD"} = 1
-# - orders.paid.amount{currency="USD"} = 99
+Events::OrderPaid.track(order_id: '123', amount: 99, currency: 'USD')
+# → orders_paid_total{currency="USD"} = 1, order_amount{currency="USD"} = 99
 ```
 
 **Result:** No boilerplate, no duplication, consistent.
@@ -243,7 +248,7 @@ end
 | **Setup complexity** | High (5+ pages) | Low (1 line) |
 | **Rails integration** | Manual | Automatic |
 | **Request-scoped buffering** | ❌ | ✅ |
-| **Pattern-based metrics** | ❌ | ✅ |
+| **Event-level metrics DSL** | ❌ | ✅ |
 | **SLO tracking** | Manual setup | One-line config |
 | **Target audience** | Polyglot teams | Rails teams |
 
@@ -363,7 +368,7 @@ end
 ✅ <1ms p99 latency
 
 **v1.0 (Phase 5):**
-✅ Pattern-based metrics (Yabeda)  
+✅ Event-level metrics (Yabeda)  
 ✅ Zero-config SLO tracking  
 ✅ OpenTelemetry integration  
 ✅ Cardinality protection  

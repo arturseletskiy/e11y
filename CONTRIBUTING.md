@@ -522,7 +522,6 @@ Our RuboCop config (`.rubocop.yml`) enforces:
 - [Architecture Decisions (ADRs)](docs/ADR-INDEX.md)
 - [Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
 - [Quick Start](docs/QUICK-START.md)
-- [Comprehensive Configuration](docs/COMPREHENSIVE-CONFIGURATION.md)
 
 ### Code Documentation
 

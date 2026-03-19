@@ -39,7 +39,7 @@
 - High cardinality costs (Datadog, New Relic bills exploding)
 
 **What They Need:**
-- ✅ Pattern-based metrics (reduce boilerplate)
+- ✅ Event-level metrics DSL (reduce boilerplate)
 - ✅ Cardinality protection (prevent cost explosions)
 - ✅ Multi-adapter support (integrate with existing stack)
 - ✅ Team-wide conventions (event schemas, PII filtering)
@@ -135,10 +135,10 @@
 
 ### Phase 2: Yabeda Integration (Weeks 9-12)
 **Target:** April 2025
-**Goal:** Pattern-based metrics automation
+**Goal:** Event-level metrics automation
 
-**Week 9-10: Pattern Engine**
-- [ ] Pattern matching (`*`, `order.*`, `*.paid`)
+**Week 9-10: Metrics DSL**
+- [ ] Event-level `metrics do ... end` DSL
 - [ ] Label extraction from events
 - [ ] Counter metrics
 - [ ] Histogram metrics (with buckets)
@@ -261,7 +261,7 @@
 **Focus:** Feature-complete release candidate
 
 **New Features:**
-- ✅ Pattern-based metrics (Yabeda)
+- ✅ Event-level metrics (Yabeda)
 - ✅ Cardinality protection
 - ✅ SLO tracking (zero-config)
 - ✅ OpenTelemetry integration
@@ -424,7 +424,7 @@
 - ✅ Rails-first design (vs OTel's language-agnostic complexity)
 - ✅ Zero-config SLO tracking (unique feature)
 - ✅ Request-scoped debug buffering (unique feature)
-- ✅ Pattern-based metrics (less boilerplate)
+- ✅ Event-level metrics DSL (less boilerplate)
 - ✅ Cost optimization built-in (vs expensive SaaS)
 
 ---

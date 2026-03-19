@@ -12,92 +12,20 @@ This document captures promising ideas for future versions of `e11y` that are no
 
 ---
 
-## 1. Quick Start Presets
+## Status: What's Already Done (as of v0.2.0)
 
-### Problem
-
-Configuration complexity can be overwhelming for new users. Setting up production-ready configuration requires understanding multiple subsystems (sampling, compression, retention, payload optimization).
-
-### Proposal
-
-Provide pre-configured profiles for common scenarios:
-
-```ruby
-E11y.configure do |config|
-  # Option 1: Use a preset
-  config.use_preset :production_high_traffic
-  
-  # Option 2: Use a preset with overrides
-  config.use_preset :production_high_traffic do |preset|
-    preset.sampling.max_events_per_sec = 5_000  # Override default
-  end
-end
-```
-
-### Available Presets
-
-| Preset | Description | Sample Rate | Compression | Retention |
-|--------|-------------|-------------|-------------|-----------|
-| `:development` | Local dev, no sampling | 100% | None | 1 day |
-| `:staging` | Pre-prod testing | 50% | Gzip | 7 days |
-| `:production_low_traffic` | < 1K events/sec | 80% | Gzip | 30 days |
-| `:production_high_traffic` | > 10K events/sec | 10% | Zstd | 7 days hot, 90 days warm |
-| `:production_cost_optimized` | Aggressive cost reduction | 5% | Zstd level 9 | 3 days hot, 30 days warm |
-
-### Implementation Example
-
-```ruby
-module E11y
-  module Presets
-    PRODUCTION_HIGH_TRAFFIC = {
-      adaptive_sampling: {
-        enabled: true,
-        load_based: { max_events_per_sec: 10_000 },
-        error_based: { enabled: true },
-        value_based: {
-          high_value_patterns: [/^payment\./, /^order\./, /^error\./],
-          low_value_patterns: [/^debug\./, /^health_check/]
-        }
-      },
-      compression: {
-        enabled: true,
-        algorithm: :zstd,
-        level: 3
-      },
-      retention_tagging: {
-        enabled: true,
-        default_retention: 7.days,
-        retention_by_pattern: {
-          'audit.*' => 7.years,
-          'payment.*' => 1.year,
-          'debug.*' => 1.day
-        }
-      },
-      payload_minimization: {
-        enabled: true,
-        truncate_strings_at: 1000,
-        truncate_arrays_at: 100,
-        remove_null_fields: true
-      }
-    }.freeze
-  end
-end
-```
-
-### Benefits
-
-- ✅ Faster onboarding (< 5 minutes to production-ready config)
-- ✅ Best practices baked in
-- ✅ Easy to customize (override specific settings)
-- ✅ Reduces configuration errors
-
-### Priority
-
-**Medium (v1.1)**
+| Backlog Item | Status | Notes |
+|--------------|--------|-------|
+| **§1 Sampling Budget** | ❌ Not done | |
+| **§2 Global Async** | ❌ Not done | |
+| **§3 Ring Buffer** | ⚠️ Implemented, not integrated | `E11y::Buffers::RingBuffer` exists; Loki uses `[]` + Mutex |
+| **§4 Multi-Tenant** | ⚠️ Partial | Loki adapter has `tenant_id` (X-Scope-OrgID); baggage allows `tenant` key. No full multi-tenant isolation |
 
 ---
 
-## 2. Sampling Budget
+## 1. Sampling Budget
+
+> **Related (implemented):** Adaptive sampling (error-spike, load-based), value-based (`sample_by_value`), per-event `sample_rate`. No budget/cap, no Redis state.
 
 ### Problem
 
@@ -196,15 +124,113 @@ monthly_cost = $1,000 * 30 = $30,000/month
 
 ---
 
-## 3. Additional Ideas (Placeholder)
+## 2. Global Async Mode and Queue
+
+### Problem
+
+Current pipeline is **synchronous**: `Event.track() → Pipeline → Routing → Adapter.write()`. Batching happens only inside individual adapters (Loki, OTel). There is no global async layer between `track()` and adapters.
+
+The [01-SCALE-REQUIREMENTS.md](../prd/01-SCALE-REQUIREMENTS.md) document specifies a global async configuration that is **not implemented**:
+
+```ruby
+# Specified but NOT implemented
+E11y.configure do |config|
+  config.async do
+    queue_size 10_000        # 10k events buffer
+    batch_size 500           # Moderate batching
+    flush_interval 200       # ms
+    worker_threads 1         # Single worker
+  end
+end
+```
+
+### Missing Self-Monitoring Metrics
+
+The scale requirements also specify metrics that are not wired:
+
+- `E11y.stats.drops_total` — total dropped events
+- `E11y.stats.events_processed_total` — total events processed
+- `e11y_internal_queue_utilization_ratio` — buffer fill level (0–1)
+- `e11y_internal_queue_size` / `e11y_internal_queue_capacity`
+
+### Proposal
+
+1. **Add global async config** — optional `config.async` block with `queue_size`, `batch_size`, `flush_interval`, `worker_threads`
+2. **Use `RingBuffer`** — `E11y::Buffers::RingBuffer` exists but is unused; it could be the backing store for the global queue
+3. **Worker thread(s)** — background consumer that pops from `RingBuffer` and writes to adapters in batches
+4. **Self-monitoring** — expose `e11y_internal_*` metrics for queue health, drops, throughput
+
+### Architecture Options
+
+| Option | Description | Complexity |
+|--------|-------------|------------|
+| **A: Keep current** | Batching stays in adapters only | None |
+| **B: Global queue** | Single RingBuffer before routing, worker threads | Medium |
+| **C: Per-adapter queues** | Each adapter has its own RingBuffer + worker | High |
+
+### Benefits
+
+- ✅ Decouples `track()` from I/O (network, disk)
+- ✅ Predictable latency under load (<1ms p99 for track)
+- ✅ Backpressure handling (drop_oldest when full)
+- ✅ Self-monitoring (queue utilization, drops)
+
+### Trade-offs
+
+- ⚠️ Complexity (thread management, shutdown)
+- ⚠️ Data loss window (events in buffer on crash)
+- ⚠️ Memory overhead (buffer capacity × avg event size)
+
+### Priority
+
+**Medium (v1.1)** — Required for small teams at scale; optional for MVP
+
+---
+
+## 3. In-Memory Ring Buffer (Integration)
+
+### Problem
+
+`E11y::Buffers::RingBuffer` is **fully implemented** (`lib/e11y/buffers/ring_buffer.rb`) but **not used** anywhere in the pipeline:
+
+- **Loki adapter** uses `@buffer = []` + `Mutex` (not RingBuffer)
+- **EphemeralBuffer** uses `Concurrent::Array` in `Thread.current`
+- **RingBuffer** exists only in unit tests and benchmarks
+
+PRD Phase 1 (00-ICP-AND-TIMELINE.md) specifies "In-memory ring buffer (SPSC)" as a Week 1–2 deliverable, but it was never integrated.
+
+### RingBuffer Spec
+
+- Lock-free SPSC (Single-Producer, Single-Consumer)
+- 100K events capacity (default)
+- Overflow strategies: `:drop_oldest`, `:drop_newest`, `:block`
+- Target: 100K+ events/sec, <10μs p99 per push/pop
+
+### Proposal
+
+1. **Option A: Integrate into global async** — Use RingBuffer as the backing store when `config.async` is enabled (see §2)
+2. **Option B: Replace Loki buffer** — Swap `[]` + Mutex for RingBuffer in Loki adapter for better throughput
+3. **Option C: Remove from PRD** — Document that RingBuffer is "future-ready" for async mode; adapter-level batching is sufficient for MVP
+
+### Recommendation
+
+**Option A** — RingBuffer is the natural choice for global async queue. Integrate when implementing §2 (Global Async Mode).
+
+### Priority
+
+**Medium (v1.1)** — Depends on §2 (Global Async Mode)
+
+---
+
+## 4. Additional Ideas (Placeholder)
 
 Future ideas to be added:
 
 - **ML-Based Anomaly Detection:** Automatically detect unusual patterns in events
 - **Event Replay from Storage:** Replay events from cold storage for debugging
-- **Multi-Tenant Support:** Isolate events by tenant/customer
-- **Event Transformation Rules:** Transform events before sending to adapters
-- **Custom Retention Policies:** More granular control over data lifecycle
+- **Multi-Tenant Support:** Isolate events by tenant/customer — *Loki has `tenant_id`; baggage allows `tenant`*
+- **Event Transformation Rules:** Transform events before sending to adapters — *routing + PII filter exist*
+- **Custom Retention Policies:** More granular control over data lifecycle — *`retention_period` per event exists*
 
 ---
 
@@ -217,7 +243,13 @@ Future ideas to be added:
 
 ## Related ADRs
 
-- [ADR-009: Cost Optimization](../ADR-009-cost-optimization.md) - Current implementation
+- [ADR-009: Cost Optimization](../architecture/ADR-009-cost-optimization.md) - Current implementation
+- [ADR-001: Architecture](../architecture/ADR-001-architecture.md) - RingBuffer specification (§3.3.1)
+
+## Related Documents
+
+- [01-SCALE-REQUIREMENTS.md](../prd/01-SCALE-REQUIREMENTS.md) - Specifies `config.async`, self-monitoring metrics
+- [00-ICP-AND-TIMELINE.md](../prd/00-ICP-AND-TIMELINE.md) - Phase 1 "In-memory ring buffer (SPSC)"
 
 ---
 

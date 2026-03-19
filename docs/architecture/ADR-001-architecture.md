@@ -2577,10 +2577,6 @@ end
 - **[ADR-006: Security & Compliance](ADR-006-security-compliance.md)** - PII filtering, rate limiting
 - **[ADR-011: Testing Strategy](ADR-011-testing-strategy.md)** - Testing approach
 
-**Configuration:**
-- **[COMPREHENSIVE-CONFIGURATION.md](COMPREHENSIVE-CONFIGURATION.md)** - Complete configuration examples
-- **[CONFLICT-ANALYSIS.md](CONFLICT-ANALYSIS.md)** - Feature conflict resolutions
-
 **Use Cases:**
 - **[docs/use_cases/](use_cases/)** - All 22 use cases documented
 

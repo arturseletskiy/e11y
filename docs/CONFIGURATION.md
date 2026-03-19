@@ -50,5 +50,3 @@ E11y.configure do |config|
   config.pipeline.use E11y::Middleware::TraceContext
 end
 ```
-
-For full configuration options, see [COMPREHENSIVE-CONFIGURATION.md](COMPREHENSIVE-CONFIGURATION.md).

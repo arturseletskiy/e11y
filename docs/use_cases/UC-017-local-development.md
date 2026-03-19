@@ -10,7 +10,7 @@
 
 ## Overview
 
-During local development, e11y automatically registers a **DevLog adapter** that writes all events to a local log file (default: `log/e11y_dev.log`). No configuration is required — the Railtie activates the adapter in `development` and `test` environments on startup.
+During local development, e11y automatically registers a **DevLog adapter** that writes all events to a local log file (default: `log/e11y_dev.jsonl`). No configuration is required — the Railtie activates the adapter in `development` and `test` environments on startup.
 
 Three complementary interfaces let you inspect those events:
 
@@ -41,7 +41,7 @@ The Railtie auto-registers the DevLog adapter and respects three ENV vars:
 
 ```bash
 bundle exec rails server
-# DevLog active: log/e11y_dev.log (max 10 000 events, 50 MB)
+# DevLog active: log/e11y_dev.jsonl (max 10 000 events, 50 MB)
 ```
 
 ---
@@ -258,7 +258,7 @@ Example: raise the cap for a long debugging session:
 E11Y_MAX_EVENTS=50000 bundle exec rails server
 ```
 
-The DevLog file is written to `log/e11y_dev.log` by default. Add it to `.gitignore`:
+The DevLog file is written to `log/e11y_dev.jsonl` by default. Add it to `.gitignore`:
 
 ```
 # .gitignore

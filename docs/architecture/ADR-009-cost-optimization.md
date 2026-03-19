@@ -251,8 +251,6 @@
 10. [Trade-offs](#10-trade-offs)
 11. [Complete Configuration Example](#11-complete-configuration-example)
 12. [Backlog (Future Enhancements)](#12-backlog-future-enhancements)
-   - [12.1. Quick Start Presets](#121-quick-start-presets)
-   - [12.2. Sampling Budget](#122-sampling-budget)
 
 ---
 
@@ -3092,7 +3090,6 @@ end
 ## 12. Future Enhancements
 
 See [Backlog](use_cases/backlog.md) for future enhancement ideas including:
-- Quick Start Presets (v1.1)
 - Sampling Budget (v1.2+)
 
 ---

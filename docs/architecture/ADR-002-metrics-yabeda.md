@@ -177,21 +177,7 @@ end
 
 ### 0.5. Global Metrics via Registry
 
-**Pattern-based metrics for multiple events:**
-
-```ruby
-# config/initializers/e11y.rb
-E11y.configure do |config|
-  # Global metric for all order.* events
-  E11y::Metrics::Registry.instance.register(
-    type: :counter,
-    pattern: 'order.*',  # Matches order.created, order.paid, etc.
-    name: :orders_total,
-    tags: [:currency, :status],
-    source: 'config/initializers/e11y.rb'
-  )
-end
-```
+**Event-level metrics** — each event class defines its own metrics via `metrics do ... end` DSL. The Registry validates and registers them at boot time.
 
 ### 0.6. Key Benefits
 

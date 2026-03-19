@@ -1037,8 +1037,6 @@ end
 - **ADR-012: Event Evolution & Versioning** - Full versioning design
 - **ADR-013: Reliability & Error Handling** - DLQ replay considerations
 - **UC-012: Audit Trail** - Audit event use cases
-- **COMPREHENSIVE-CONFIGURATION.md** - Complete configuration examples
-- **CONFLICT-ANALYSIS.md** - Complete conflict analysis
 
 ---
 

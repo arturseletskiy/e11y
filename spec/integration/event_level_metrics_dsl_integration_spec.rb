@@ -13,17 +13,17 @@ rescue LoadError => e
 end
 
 # Event metrics integration tests for UC-003
-# Tests pattern matching, label extraction, value extraction, and Yabeda integration
+# Tests event-level metrics DSL, label extraction, value extraction, and Yabeda integration
 #
 # Scenarios:
-# 1. Counter metrics (pattern matching, label extraction, Yabeda export)
+# 1. Counter metrics (label extraction, Yabeda export)
 # 2. Gauge metrics (value extraction, Yabeda export)
 # 3. Histogram metrics (value extraction, buckets, Yabeda export)
 # 4. Custom labels (tags extraction from event payload)
-# 5. Pattern matching (exact, *, ** patterns)
-# 6. Regex performance (pattern matching speed benchmarks)
+# 5. Registry pattern matching (exact, *, ** — internal implementation detail)
+# 6. Registry lookup performance
 
-RSpec.describe "Pattern-Based Metrics Integration", :integration do
+RSpec.describe "Event-Level Metrics Integration", :integration do
   let(:memory_adapter) { E11y.config.adapters[:memory] }
   let(:yabeda_adapter) { E11y.config.adapters[:yabeda] }
   let(:registry) { E11y::Metrics::Registry.instance }
