@@ -17,7 +17,7 @@ This ADR covers **HTTP/Job SLO** (infrastructure reliability):
 - ✅ Zero-config SLO for HTTP requests (99.9% availability)
 - ✅ Zero-config SLO for Sidekiq/ActiveJob (99.5% success rate)
 - ✅ Per-endpoint SLO configuration in `slo.yml`
-- ✅ PromQL queries and alert rules — see [SLO-PROMQL-ALERTS.md](SLO-PROMQL-ALERTS.md)
+- ✅ PromQL queries and alert rules — see [SLO-PROMQL-ALERTS.md](../SLO-PROMQL-ALERTS.md)
 
 **For Event-based SLO** (business logic reliability like "order creation success rate"), see **ADR-014**.
 
@@ -1228,7 +1228,7 @@ end
 
 ## 5. PromQL & Alerts
 
-PromQL queries and Prometheus alert rules: see [SLO-PROMQL-ALERTS.md](SLO-PROMQL-ALERTS.md).
+PromQL queries and Prometheus alert rules: see [SLO-PROMQL-ALERTS.md](../SLO-PROMQL-ALERTS.md).
 
 ---
 
@@ -2858,7 +2858,7 @@ advanced:
 ✅ **Throughput SLO**: Min/max requests per second  
 ✅ **Config validation & linting**: Prevents drift from reality  
 ✅ **Full implementation**: ConfigLoader, Validator with edge cases  
-✅ **PromQL & alerts**: See [SLO-PROMQL-ALERTS.md](SLO-PROMQL-ALERTS.md)  
+✅ **PromQL & alerts**: See [SLO-PROMQL-ALERTS.md](../SLO-PROMQL-ALERTS.md)  
 ✅ **RSpec testing**: Comprehensive test coverage  
 ✅ **Production best practices**: Rollout strategy, edge case handling, self-monitoring  
 ✅ **Real-world examples**: E-commerce, SaaS API, Admin tool configurations  

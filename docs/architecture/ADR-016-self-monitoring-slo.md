@@ -484,7 +484,7 @@ end
 
 ## 4. Internal SLO Tracking
 
-**PromQL and alerts:** See [SLO-PROMQL-ALERTS.md](SLO-PROMQL-ALERTS.md) for E11y latency, delivery rate, and alert rules.
+**PromQL and alerts:** See [SLO-PROMQL-ALERTS.md](../SLO-PROMQL-ALERTS.md) for E11y latency, delivery rate, and alert rules.
 
 ---
 

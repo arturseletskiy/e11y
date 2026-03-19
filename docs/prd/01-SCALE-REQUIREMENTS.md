@@ -66,11 +66,11 @@ E11y.configure do |config|
     worker_threads 2         # Multiple workers
   end
   
-  # Adaptive sampling для cost control
+  # Adaptive sampling for cost control
   config.sampling do
     strategy :adaptive
     target_samples_per_second 200  # Cap at 200/sec
-    min_rate 0.1  # Minimum 10% даже при высокой нагрузке
+    min_rate 0.1  # Minimum 10% even under high load
   end
 end
 ```
@@ -112,13 +112,13 @@ E11y.configure do |config|
     worker_threads 4         # Multiple workers
   end
   
-  # Агрессивный sampling
+  # Aggressive sampling
   config.sampling do
     strategy :adaptive
     target_samples_per_second 1_000  # Cap at 1k/sec
-    min_rate 0.01  # 1% минимум
+    min_rate 0.01  # 1% minimum
     
-    # Tail-based sampling для критичных событий
+    # Tail-based sampling for critical events
     tail do
       enabled true
       sample_if do |events|
@@ -481,7 +481,7 @@ E11y.configure do |config|
     target_samples_per_second 1_000
     min_rate 0.01  # 1% minimum
     
-    # Tail-based sampling для критичных событий
+    # Tail-based sampling for critical events
     tail do
       enabled true
       sample_if do |events|

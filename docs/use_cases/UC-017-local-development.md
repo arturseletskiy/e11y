@@ -290,4 +290,4 @@ log/e11y_dev*.log
 
 ---
 
-**Related:** [ADR-010: Developer Experience](../ADR-010-developer-experience.md) | [UC-018: Testing Events](./UC-018-testing-events.md)
+**Related:** [ADR-010: Developer Experience](../architecture/ADR-010-developer-experience.md) | [UC-018: Testing Events](./UC-018-testing-events.md)

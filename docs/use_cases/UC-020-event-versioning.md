@@ -186,7 +186,7 @@ end
 
 ## 🏗️ Architecture
 
-> **Implementation:** See [ADR-012: Event Evolution](../ADR-012-event-evolution.md) for complete versioning architecture, including [Section 3: Naming Convention](../ADR-012-event-evolution.md#3-naming-convention), [Section 4: Version in Payload](../ADR-012-event-evolution.md#4-version-in-payload), [Section 6: Event Registry Integration](../ADR-012-event-evolution.md#6-event-registry-integration), and [Section 7: Migration Strategy](../ADR-012-event-evolution.md#7-migration-strategy).
+> **Implementation:** See [ADR-012: Event Evolution](../architecture/ADR-012-event-evolution.md) for complete versioning architecture, including [Section 3: Naming Convention](../architecture/ADR-012-event-evolution.md#3-naming-convention), [Section 4: Version in Payload](../architecture/ADR-012-event-evolution.md#4-version-in-payload), [Section 6: Event Registry Integration](../architecture/ADR-012-event-evolution.md#6-event-registry-integration), and [Section 7: Migration Strategy](../architecture/ADR-012-event-evolution.md#7-migration-strategy).
 
 ### Version Management
 

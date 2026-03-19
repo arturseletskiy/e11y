@@ -52,7 +52,7 @@ end
 
 ## 🎯 Features
 
-> **Implementation:** See [ADR-011: Testing Strategy](../ADR-011-testing-strategy.md) for complete testing architecture, including [Section 3: RSpec Matchers](../ADR-011-testing-strategy.md#3-rspec-matchers), [Section 4: Test Adapters](../ADR-011-testing-strategy.md#4-test-adapters), [Section 6: Snapshot Testing](../ADR-011-testing-strategy.md#6-snapshot-testing), and [Section 8: Integration Testing](../ADR-011-testing-strategy.md#8-integration-testing).
+> **Implementation:** See [ADR-011: Testing Strategy](../architecture/ADR-011-testing-strategy.md) for complete testing architecture, including [Section 3: RSpec Matchers](../architecture/ADR-011-testing-strategy.md#3-rspec-matchers), [Section 4: Test Adapters](../architecture/ADR-011-testing-strategy.md#4-test-adapters), [Section 6: Snapshot Testing](../architecture/ADR-011-testing-strategy.md#6-snapshot-testing), and [Section 8: Integration Testing](../architecture/ADR-011-testing-strategy.md#8-integration-testing).
 
 ### 1. RSpec Matchers
 
@@ -325,7 +325,7 @@ end
 
 ### 6. Test Environment Configuration (C13)
 
-> **Implementation:** See [ADR-011 Section 10: Test Environment Configuration](../ADR-011-testing-strategy.md#10-test-environment-configuration) for detailed rationale on disabling production features in tests.
+> **Implementation:** See [ADR-011 Section 10: Test Environment Configuration](../architecture/ADR-011-testing-strategy.md#10-test-environment-configuration) for detailed rationale on disabling production features in tests.
 
 **Critical: Production features MUST be disabled in tests for predictability.**
 

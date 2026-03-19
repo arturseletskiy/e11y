@@ -234,7 +234,7 @@ end
 > config.pipeline.use RoutingMiddleware         # 6. Buffer routing (LAST!)
 > ```
 > 
-> **See:** [ADR-001 Section 4.1: Middleware Execution Order](../ADR-001-architecture.md#41-middleware-execution-order-critical) and [ADR-015: Middleware Order Reference](../ADR-015-middleware-order.md) for detailed explanation.
+> **See:** [ADR-001 Section 4.1: Middleware Execution Order](../architecture/ADR-001-architecture.md#41-middleware-execution-order-critical) and [ADR-015: Middleware Order Reference](../architecture/ADR-015-middleware-order.md) for detailed explanation.
 
 ---
 
@@ -275,7 +275,7 @@ end
 
 ### Dual-Buffer Architecture
 
-**E11y использует ДВА независимых буфера:**
+**E11y uses TWO independent buffers:**
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -318,7 +318,7 @@ Background Flush Thread (200ms interval):
 ### Buffer Routing Logic
 
 ```ruby
-# Pseudo-code для понимания
+# Pseudo-code for understanding
 def track_event(event)
   if event.severity == :debug && E11y.request_scope.active?
     # → Request-scoped buffer (Thread-local)
@@ -326,7 +326,7 @@ def track_event(event)
   else
     # → Main buffer (Global SPSC ring buffer)
     E11y.main_buffer << event
-    # Фоновый поток заберет через 200ms (или раньше если батч заполнится)
+    # Background thread will pick up in 200ms (or sooner if batch fills)
   end
 end
 ```
@@ -411,7 +411,7 @@ end
 
 ## 📈 Performance Impact
 
-> **Implementation:** See [ADR-001 Section 8.3: Resource Limits](../ADR-001-architecture.md#83-resource-limits) for architectural details and [ADR-002 Section 6: Self-Monitoring](../ADR-002-metrics-yabeda.md#6-self-monitoring) for metrics implementation.
+> **Implementation:** See [ADR-001 Section 8.3: Resource Limits](../architecture/ADR-001-architecture.md#83-resource-limits) for architectural details and [ADR-002 Section 6: Self-Monitoring](../ADR-002-metrics-yabeda.md#6-self-monitoring) for metrics implementation.
 
 ### Buffer Metrics
 
@@ -615,13 +615,13 @@ end
 
 ---
 
-## 🔄 Взаимодействие с Flush Interval (200ms)
+## 🔄 Interaction with Flush Interval (200ms)
 
-### Вопрос: Не конфликтуют ли буферы?
+### Question: Do the buffers conflict?
 
-**Ответ: НЕТ. Они независимы.**
+**Answer: NO. They are independent.**
 
-### Детальная Логика
+### Detailed Logic
 
 ```ruby
 # config/initializers/e11y.rb
@@ -642,9 +642,9 @@ E11y.configure do |config|
 end
 ```
 
-### Поток Событий
+### Event Flow
 
-**Scenario 1: Обычный запрос (успешный)**
+**Scenario 1: Normal request (successful)**
 ```ruby
 # Request starts
 Events::DebugEvent.track(...)          # → Request buffer (thread-local)
@@ -656,7 +656,7 @@ Events::DebugEvent.track(...)          # → Request buffer (thread-local)
 # → Main buffer flushed every 200ms (success event sent)
 ```
 
-**Scenario 2: Запрос с ошибкой**
+**Scenario 2: Request with error**
 ```ruby
 # Request starts
 Events::DebugEvent.track(...)          # → Request buffer
@@ -668,20 +668,20 @@ Events::DebugEvent.track(...)          # → Request buffer
 # → Main buffer continues flush every 200ms (error event sent)
 ```
 
-**Scenario 3: Высоконагруженный сервис**
+**Scenario 3: High-load service**
 ```ruby
-# 1000 requests/sec, каждый с 5 debug events
-# → 5000 debug events/sec в request buffers (thread-local)
-# → 99% успешных → 4950 debug events/sec DISCARDED
-# → 1% ошибок → 50 debug events/sec FLUSHED
+# 1000 requests/sec, each with 5 debug events
+# → 5000 debug events/sec in request buffers (thread-local)
+# → 99% successful → 4950 debug events/sec DISCARDED
+# → 1% errors → 50 debug events/sec FLUSHED
 # 
-# Параллельно:
+# In parallel:
 # → 1000 info/success events/sec → Main buffer
-# → Flush каждые 200ms = 5 batches/sec
-# → 200 events per batch (в среднем)
+# → Flush every 200ms = 5 batches/sec
+# → 200 events per batch (on average)
 ```
 
-### Итого: Никакого Конфликта!
+### Summary: No Conflict!
 
 | Event Type | Buffer | Flush Trigger | Latency |
 |------------|--------|---------------|---------|
@@ -692,14 +692,14 @@ Events::DebugEvent.track(...)          # → Request buffer
 | `:error` | Main buffer (Global SPSC) | Every 200ms (background thread) | <200ms |
 | `:fatal` | Main buffer (Global SPSC) | Every 200ms (background thread) | <200ms |
 
-**Преимущества двойного буфера:**
-1. ✅ Debug события не засоряют main buffer
-2. ✅ Важные события (info+) идут быстро (200ms)
-3. ✅ Debug события идут мгновенно при ошибке (flush triggered)
-4. ✅ 99% debug событий вообще не обрабатываются (discard = zero cost)
-5. ✅ Thread-safety: request buffer изолирован в Thread.current
+**Benefits of dual buffer:**
+1. ✅ Debug events don't clutter main buffer
+2. ✅ Important events (info+) go fast (200ms)
+3. ✅ Debug events go instantly on error (flush triggered)
+4. ✅ 99% of debug events are never processed (discard = zero cost)
+5. ✅ Thread-safety: request buffer isolated in Thread.current
 
-### Визуальная Диаграмма
+### Visual Diagram
 
 ```
 Time: ──────────────────────────────────────────────────>
@@ -726,14 +726,14 @@ Background Flush Thread:   │  │
               200ms          400ms
 ```
 
-### Пример с Цифрами
+### Example with Numbers
 
-**Нагрузка:**
+**Load:**
 - 100 requests/sec
-- Каждый запрос: 3 debug события + 1 success событие
+- Each request: 3 debug events + 1 success event
 - Error rate: 1%
 
-**Что происходит:**
+**What happens:**
 
 | Time | Request Buffer (Thread-local) | Main Buffer (Global) | Flush |
 |------|------------------------------|---------------------|-------|
@@ -745,8 +745,8 @@ Background Flush Thread:   │  │
 | 210ms | Req21: [D, D, D] ERROR! | [S21, E21, **D, D, D from Req21**] | **Immediate flush debug** |
 | 400ms | - | [S21...S40] | **Flush next batch** |
 
-**Результат:**
-- Success events: ~100/sec → flush каждые 200ms → latency <200ms ✅
+**Result:**
+- Success events: ~100/sec → flush every 200ms → latency <200ms ✅
 - Debug events (99%): DISCARDED → zero overhead ✅
 - Debug events (1% errors): flushed IMMEDIATELY with error context ✅
 
@@ -810,7 +810,7 @@ end
 
 - **[UC-002: Business Event Tracking](./UC-002-business-event-tracking.md)** - Define structured events
 - **[UC-010: Background Job Tracking](./UC-010-background-job-tracking.md)** - Buffering in Sidekiq/ActiveJob
-- **[UC-015: Local Development](./UC-015-local-development.md)** - Test buffering locally
+- **[UC-017: Local Development](./UC-017-local-development.md)** - Test buffering locally
 
 ---
 

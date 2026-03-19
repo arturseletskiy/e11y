@@ -1,18 +1,18 @@
 # E11y Use Cases Documentation
 
-Эта папка содержит детальные use cases для различных сценариев использования E11y gem.
+This folder contains detailed use cases for various E11y gem usage scenarios.
 
-## 📁 Структура
+## 📁 Structure
 
 ### Core Use Cases
-- **[UC-001: Request-Scoped Debug Buffering](./UC-001-request-scoped-debug-buffering.md)** - Killer feature: debug events только при ошибках
-- **[UC-002: Business Event Tracking](./UC-002-business-event-tracking.md)** - Структурированные бизнес-события
-- **[UC-003: Event Metrics](./UC-003-event-metrics.md)** - Метрики в event-классах
+- **[UC-001: Request-Scoped Debug Buffering](./UC-001-request-scoped-debug-buffering.md)** - Killer feature: debug events only on errors
+- **[UC-002: Business Event Tracking](./UC-002-business-event-tracking.md)** - Structured business events
+- **[UC-003: Event Metrics](./UC-003-event-metrics.md)** - Metrics in event classes
 - **[UC-004: Zero-Config SLO Tracking](./UC-004-zero-config-slo-tracking.md)** - Built-in SLO monitoring
 
 ### Integration Use Cases
-- **[UC-005: Sentry Integration](./UC-005-sentry-integration.md)** - Error tracking с автоматическими breadcrumbs
-- **[UC-006: Trace Context Management](./UC-006-trace-context-management.md)** - Автоматическая корреляция через trace_id
+- **[UC-005: Sentry Integration](./UC-005-sentry-integration.md)** - Error tracking with automatic breadcrumbs
+- **[UC-006: Trace Context Management](./UC-006-trace-context-management.md)** - Automatic correlation via trace_id
 - **[UC-007: PII Filtering](./UC-007-pii-filtering.md)** - Rails-compatible PII filtering
 - **[UC-008: OpenTelemetry Integration](./UC-008-opentelemetry-integration.md)** - OTel compatibility
 - **[UC-009: Multi-Service Tracing](./UC-009-multi-service-tracing.md)** - Distributed tracing
@@ -42,15 +42,15 @@
 
 **Ruby/Rails Developers:**
 - UC-002 (Business Event Tracking)
-- UC-014 (Rails Logger Migration)
-- UC-015 (Local Development)
-- UC-016 (Testing Events)
+- UC-016 (Rails Logger Migration)
+- UC-017 (Local Development)
+- UC-018 (Testing Events)
 
 **DevOps/SRE Engineers:**
 - UC-001 (Request-Scoped Debug Buffering)
 - UC-004 (Zero-Config SLO Tracking)
 - UC-008 (OpenTelemetry Integration)
-- UC-011 (Adaptive Sampling)
+- UC-014 (Adaptive Sampling)
 
 **Security/Compliance Teams:**
 - UC-007 (PII Filtering)
@@ -89,9 +89,9 @@
 
 ### For New Users
 Start with:
-1. UC-002 (Business Event Tracking) - понять основы
-2. UC-015 (Local Development) - настроить локально
-3. UC-004 (Zero-Config SLO Tracking) - получить метрики
+1. UC-002 (Business Event Tracking) - learn the basics
+2. UC-017 (Local Development) - set up locally
+3. UC-004 (Zero-Config SLO Tracking) - get metrics
 
 ### For Production Deployment
 Review:
@@ -103,15 +103,14 @@ Review:
 ### For Migration from Existing Tools
 See:
 1. UC-016 (Rails Logger Migration)
-2. UC-008 (OpenTelemetry Integration) - если уже используете OTel
-3. UC-009 (Multi-Service Tracing) - если microservices
+2. UC-008 (OpenTelemetry Integration) - if you already use OTel
+3. UC-009 (Multi-Service Tracing) - for microservices
 
 ## 🔗 Related Documentation
 
-- **[Quick Start Guide](../E11Y-QUICK-START.md)** - 5-minute setup
-- **[API Reference](../api/README.md)** - Detailed API docs
-- **[Architecture Overview](../architecture/README.md)** - System design
-- **[Configuration Guide](../configuration/README.md)** - All config options
+- **[Quick Start Guide](../QUICK-START.md)** - 5-minute setup
+- **[Architecture Overview](../architecture/ADR-INDEX.md)** - System design
+- **[Configuration Guide](../CONFIGURATION.md)** - All config options
 
 ---
 

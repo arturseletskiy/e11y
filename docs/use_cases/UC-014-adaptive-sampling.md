@@ -1026,7 +1026,7 @@ end
 
 ### Strategy 8: Stratified Sampling for Accurate SLO (C11 Resolution) ⚠️
 
-> **Reference:** See [ADR-009 §3.7: Stratified Sampling for SLO Accuracy](../ADR-009-cost-optimization.md#37-stratified-sampling-for-slo-accuracy-c11-resolution) for full architecture and [UC-004: SLO Tracking with Sampling Correction](./UC-004-zero-config-slo-tracking.md#sampling-correction-for-accurate-slo-c11-resolution) for SLO calculation details.
+> **Reference:** See [ADR-009 §3.7: Stratified Sampling for SLO Accuracy](../architecture/ADR-009-cost-optimization.md#37-stratified-sampling-for-slo-accuracy-c11-resolution) for full architecture and [UC-004: SLO Tracking with Sampling Correction](./UC-004-zero-config-slo-tracking.md#sampling-correction-for-accurate-slo-c11-resolution) for SLO calculation details.
 
 **Problem with Random Sampling:** Breaks SLO metrics! Errors are rare (5%) → random 10% sampling drops 90% of errors → SLO appears better than reality.
 
@@ -1046,7 +1046,7 @@ E11y.configure do |config|
       stratified_rates do
         error 1.0    # 100% - Keep ALL errors (critical for SLO!)
         warn  0.5    # 50%  - Medium priority
-        info  0.1    # 10%  - Low priority (успешные запросы)
+        info  0.1    # 10%  - Low priority (successful requests)
         debug 0.05   # 5%   - Very low priority
       end
     end

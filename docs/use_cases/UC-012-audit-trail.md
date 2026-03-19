@@ -240,7 +240,7 @@ end
 > - ✅ Separate storage (isolated from app DB)
 > - ✅ Long retention (7-10 years)
 >  
-> **Implementation:** See [ADR-015 §3.3: Audit Event Pipeline Separation](../ADR-015-middleware-order.md#33-audit-event-pipeline-separation-c01-resolution) for full architecture.
+> **Implementation:** See [ADR-015 §3.3: Audit Event Pipeline Separation](../architecture/ADR-015-middleware-order.md#33-audit-event-pipeline-separation-c01-resolution) for full architecture.
 
 ---
 
@@ -1234,7 +1234,7 @@ end
 
 ## 🔧 Implementation Details
 
-> **Implementation:** See [ADR-006 Section 5: Audit Trail](../ADR-006-security-compliance.md#5-audit-trail) for detailed architecture.
+> **Implementation:** See [ADR-006 Section 5: Audit Trail](../architecture/ADR-006-security-compliance.md#5-audit-trail) for detailed architecture.
 
 ### Audit Middleware Architecture
 
@@ -1690,7 +1690,7 @@ end
 
 ## ⚡ Performance Guarantees
 
-> **Implementation:** See [ADR-006 Section 5.2: Cryptographic Signing](../ADR-006-security-compliance.md#52-cryptographic-signing) for detailed architecture.
+> **Implementation:** See [ADR-006 Section 5.2: Cryptographic Signing](../architecture/ADR-006-security-compliance.md#52-cryptographic-signing) for detailed architecture.
 
 E11y audit trail is designed for **high-performance production environments** with strict SLOs. Audit events must not significantly impact application latency.
 

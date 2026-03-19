@@ -519,8 +519,7 @@ Our RuboCop config (`.rubocop.yml`) enforces:
 
 ### Project Documentation
 
-- [Architecture Decisions (ADRs)](docs/ADR-INDEX.md)
-- [Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
+- [Architecture Decisions (ADRs)](docs/architecture/ADR-INDEX.md)
 - [Quick Start](docs/QUICK-START.md)
 
 ### Code Documentation
@@ -564,8 +563,8 @@ buffer = RingBuffer.new
 For significant architectural decisions, create an ADR in `docs/`:
 
 ```bash
-# Create new ADR (see docs/ADR-INDEX.md for numbering)
-# Follow format of existing ADRs (ADR-001-architecture.md, etc.)
+# Create new ADR (see docs/architecture/ADR-INDEX.md for numbering)
+# Follow format of existing ADRs (docs/architecture/ADR-001-architecture.md, etc.)
 ```
 
 **When to create ADR:**

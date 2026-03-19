@@ -1560,7 +1560,7 @@ end
 
 ### 3.7.5. Configuration
 
-**Вариант 1: Единый простой конфиг (рекомендуется) 🎯**
+**Option 1: Single simple config (recommended) 🎯**
 
 ```ruby
 # config/initializers/e11y.rb
@@ -1570,38 +1570,38 @@ E11y.configure do |config|
       # ✅ Stratified sampling - smart sampling for accurate SLO
       strategy :stratified_adaptive
       
-      # Cost budget (как и раньше)
+      # Cost budget (as before)
       cost_budget 100_000  # events/month
       
-      # 🎯 ЕДИНЫЙ конфиг: sample_rate по severity (default: never drop errors!)
+      # 🎯 SINGLE config: sample_rate by severity (default: never drop errors!)
       stratified_rates do
-        error 1.0    # 100% - keep all errors (критично для SLO!)
+        error 1.0    # 100% - keep all errors (critical for SLO!)
         warn  0.5    # 50%  - medium priority
-        info  0.1    # 10%  - low priority (успешные запросы)
-        debug 0.05   # 5%   - очень low priority
+        info  0.1    # 10%  - low priority (successful requests)
+        debug 0.05   # 5%   - very low priority
       end
     end
   end
   
-  # SLO tracking с автоматической коррекцией (включено по умолчанию!)
+  # SLO tracking with automatic correction (enabled by default!)
   config.slo do
     enable_sampling_correction true  # ✅ Automatic correction in SLO calculations
   end
 end
 ```
 
-**Как это работает:**
-- `error`/`fatal` severity → sample_rate **1.0** (100%, никогда не drop!)
+**How it works:**
+- `error`/`fatal` severity → sample_rate **1.0** (100%, never drop!)
 - `warn` severity → sample_rate **0.5** (50%)
 - `info`/`success` severity → sample_rate **0.1** (10%)
 - `debug` severity → sample_rate **0.05** (5%)
 
-**SLO коррекция автоматическая:**
+**SLO correction is automatic:**
 ```ruby
-# Пользователь пишет как раньше:
-E11y::SLO.error_rate  # ✅ Автоматически скорректировано!
+# User writes as before:
+E11y::SLO.error_rate  # ✅ Automatically corrected!
 
-# Внутри:
+# Internally:
 observed_errors = 50
 corrected_errors = observed_errors / error_sample_rate  # 50 / 1.0 = 50
 
@@ -1614,9 +1614,9 @@ corrected_error_rate = corrected_errors / (corrected_errors + corrected_success)
 
 ---
 
-**Вариант 2: Продвинутый конфиг (для сложных случаев)**
+**Option 2: Advanced config (for complex cases)**
 
-Если нужна гибкость (например, разные sample_rate для HTTP 4xx vs 5xx):
+If you need flexibility (e.g., different sample_rate for HTTP 4xx vs 5xx):
 
 ```ruby
 E11y.configure do |config|
@@ -1625,7 +1625,7 @@ E11y.configure do |config|
       strategy :stratified_adaptive
       cost_budget 100_000
       
-      # Продвинутая стратификация по severities + http_statuses
+      # Advanced stratification by severities + http_statuses
       stratification do
         stratum :critical_errors do
           severities [:error, :fatal]
@@ -1636,7 +1636,7 @@ E11y.configure do |config|
         stratum :client_errors do
           severities [:warn]
           http_statuses (400..499).to_a
-          sample_rate 0.3  # 30% (меньше чем warn, т.к. 4xx не так критично)
+          sample_rate 0.3  # 30% (less than warn, since 4xx is less critical)
         end
         
         stratum :success do
@@ -3089,7 +3089,7 @@ end
 
 ## 12. Future Enhancements
 
-See [Backlog](use_cases/backlog.md) for future enhancement ideas including:
+See [Backlog](../use_cases/backlog.md) for future enhancement ideas including:
 - Sampling Budget (v1.2+)
 
 ---

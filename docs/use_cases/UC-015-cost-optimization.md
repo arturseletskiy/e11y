@@ -90,7 +90,7 @@ end
 
 ## 🎯 Cost Optimization Strategies
 
-> **Note:** This UC focuses on proven, low-overhead optimizations. **Deduplication is intentionally NOT included** as a strategy. While it may seem like an obvious cost optimization, [ADR-009 Section 9.2.D](../ADR-009-cost-optimization.md#alternatives-considered) explains why it was rejected: high computational overhead (hash + Redis lookup per event), large memory cost (3.6GB for 1000 events/sec), false positives on legitimate retries, and debug confusion. Better alternatives (sampling + compression) achieve the same cost goals without these drawbacks.
+> **Note:** This UC focuses on proven, low-overhead optimizations. **Deduplication is intentionally NOT included** as a strategy. While it may seem like an obvious cost optimization, [ADR-009 Section 9.2.D](../architecture/ADR-009-cost-optimization.md#alternatives-considered) explains why it was rejected: high computational overhead (hash + Redis lookup per event), large memory cost (3.6GB for 1000 events/sec), false positives on legitimate retries, and debug confusion. Better alternatives (sampling + compression) achieve the same cost goals without these drawbacks.
 
 ### Strategy 1: Intelligent Sampling by Value
 

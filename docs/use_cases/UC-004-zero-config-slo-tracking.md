@@ -126,7 +126,7 @@ yabeda_slo_sidekiq_job_duration_seconds{class="ProcessOrderJob"}
 
 **Event-driven SLO** tracks business logic reliability (e.g., order created vs failed, payment processed vs rejected). Opt-in via `slo { enabled true }` in Event classes.
 
-> **Implementation:** See [ADR-014 Event-Driven SLO](../ADR-014-event-driven-slo.md) for full architecture.
+> **Implementation:** See [ADR-014 Event-Driven SLO](../architecture/ADR-014-event-driven-slo.md) for full architecture.
 
 **Enable Event SLO in Event class:**
 

@@ -185,7 +185,7 @@ RSpec.describe E11y::Middleware::AuditSigning do
           end
 
           audit_event true
-          signing enabled: false # ← Согласованный DSL с конфигом
+          signing enabled: false # ← DSL consistent with config
 
           schema do
             required(:log_id).filled(:integer)
@@ -221,7 +221,7 @@ RSpec.describe E11y::Middleware::AuditSigning do
           end
 
           audit_event true
-          signing enabled: true # ← Согласованный DSL: явно включаем
+          signing enabled: true # ← DSL consistent: explicitly enabled
 
           schema do
             required(:action).filled(:string)

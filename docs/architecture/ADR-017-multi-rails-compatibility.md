@@ -61,9 +61,9 @@ matrix:
 
 ## Version-Specific Code
 
-**1. Exception handling** — не нужна: `show_exceptions = :all` в dummy app даёт одинаковое поведение (исключения → 500) на 7.x и 8.x. Тесты без ветвления по версии.
+**1. Exception handling** — not needed: `show_exceptions = :all` in dummy app gives identical behavior (exceptions → 500) on 7.x and 8.x. Tests without version branching.
 
-**2. sqlite3 dependency (Gemfile only)** — разные версии для 7.x (~> 1.4) и 8.x (~> 2.0).
+**2. sqlite3 dependency (Gemfile only)** — different versions for 7.x (~> 1.4) and 8.x (~> 2.0).
 
 ---
 

@@ -2468,7 +2468,7 @@ end
 - ❌ **Complexity:** Adds external dependency and infrastructure overhead
 - ❌ **Latency:** Network round-trip adds ~0.25ms per event (83x slower)
 - ❌ **Not needed:** Per-process rate limiting is sufficient for event tracking
-- ✅ **User feedback:** "устаревшее решение" (outdated solution)
+- ✅ **User feedback:** "outdated solution"
 
 **Note:** In-memory rate limiting is sufficient for most use cases. Each application process maintains its own rate limits, which is appropriate for event tracking workloads. If distributed rate limiting is needed in the future, it can be added as an optional feature.
 

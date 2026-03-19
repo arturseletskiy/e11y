@@ -80,4 +80,4 @@ Edit `docker-compose.yml` and change port mappings.
 
 ⚠️ **This is for TESTING ONLY!** Do not use these configurations in production.
 
-For production setup, see `docs/guides/production-deployment.md` (Phase 5).
+For production setup, see [QUICK-START](../docs/QUICK-START.md) and [CONFIGURATION](../docs/CONFIGURATION.md).

@@ -160,7 +160,7 @@ Integration tests use `DatabaseCleaner` and require `--with integration` bundle 
 
 ## Architecture Decision Records
 
-The `docs/ADR-*.md` files document design decisions. Key ones:
+The `docs/architecture/ADR-*.md` files document design decisions. Key ones:
 - **ADR-004**: Adapter architecture
 - **ADR-011**: Testing strategy
 - **ADR-013**: Reliability and error handling

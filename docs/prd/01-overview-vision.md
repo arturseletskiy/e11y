@@ -9,15 +9,15 @@
 
 ## 📋 Executive Summary
 
-**E11y** (easy telemetry) - production-ready Ruby gem для структурированных бизнес-событий с уникальными killer features:
+**E11y** (easy telemetry) - production-ready Ruby gem for structured business events with unique killer features:
 
-1. **Request-scoped debug buffering** - debug events только при ошибках (89% reduction)
-2. **Event-level metrics DSL** - автоматические метрики без boilerplate
-3. **Zero-config SLO tracking** - built-in monitoring одной строкой конфига
+1. **Request-scoped debug buffering** - debug events only on errors (89% reduction)
+2. **Event-level metrics DSL** - automatic metrics without boilerplate
+3. **Zero-config SLO tracking** - built-in monitoring with a single config line
 
 **Target Market:** Ruby/Rails teams (5-100 engineers)  
-**Problem:** Observability сложна, дорога и перегружена шумом  
-**Solution:** Простой, Rails-first gem с production-ready defaults
+**Problem:** Observability is complex, expensive, and overloaded with noise  
+**Solution:** Simple, Rails-first gem with production-ready defaults
 
 ---
 
