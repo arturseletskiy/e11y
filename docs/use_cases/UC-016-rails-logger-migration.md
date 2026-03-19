@@ -56,7 +56,7 @@ Events::OrderCreated.track(order_id: order.id)
 
 ## 🎯 Migration Strategy
 
-> **Implementation:** See [ADR-008 Section 7: Rails Logger Bridge](../ADR-008-rails-integration.md#7-rails-logger-bridge) for Logger::Bridge architecture.
+> **Implementation:** See [ADR-008 Section 7: Rails Logger Bridge](../architecture/ADR-008-rails-integration.md#7-rails-logger-bridge) for Logger::Bridge architecture.
 
 ### Phase 1: Shadow Mode (Week 1-2)
 

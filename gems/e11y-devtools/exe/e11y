@@ -1,0 +1,34 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "e11y/devtools"
+
+command = ARGV.shift || "tui"
+
+case command
+when "tui"
+  require "e11y/devtools/tui/app"
+  E11y::Devtools::Tui::App.new.run
+when "mcp"
+  require "e11y/devtools/mcp/server"
+  E11y::Devtools::Mcp::Server.new.run(
+    transport: ARGV.include?("--port") ? :http : :stdio,
+    port: (ARGV[ARGV.index("--port") + 1] if ARGV.include?("--port"))&.to_i
+  )
+when "tail"
+  require "e11y/devtools/tui/tail"
+  E11y::Devtools::Tui::Tail.new.run
+when "help", "--help", "-h"
+  puts <<~HELP
+    bundle exec e11y [command]
+
+    Commands:
+      tui   (default)  Interactive TUI — browse events and traces
+      mcp              MCP server for Cursor / Claude Code AI integration
+      tail             Stream new events to stdout (pipe-friendly)
+      help             Show this help
+  HELP
+else
+  warn "Unknown command: #{command}. Run `bundle exec e11y help`."
+  exit 1
+end

@@ -826,10 +826,7 @@ E11y.config.adapters[:logs].healthy?
 
 ## 📚 Full Documentation
 
-- **ADRs**: `docs/ADR-*.md` — architecture decision records
-- **API Reference**: `docs/API-REFERENCE-L28.md`
-- **Configuration**: `docs/COMPREHENSIVE-CONFIGURATION.md`
-- **Audit**: `docs/analysis/DOCUMENTATION_VS_REALITY_AUDIT.md` — implementation status per feature
+- **ADRs**: `docs/architecture/ADR-*.md` — architecture decision records
 - **GitHub**: https://github.com/arturseletskiy/e11y
 
 ---

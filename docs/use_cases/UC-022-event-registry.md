@@ -247,7 +247,7 @@ end
 
 ## 📝 Registry API
 
-> **Implementation:** See [ADR-010 Section 5: Event Registry](../ADR-010-developer-experience.md#5-event-registry) for full registry architecture (find, event_classes, where, to_documentation).
+> **Implementation:** See [ADR-010 Section 5: Event Registry](../architecture/ADR-010-developer-experience.md#5-event-registry) for full registry architecture (find, event_classes, where, to_documentation).
 
 ### Query Events
 

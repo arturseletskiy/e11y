@@ -34,12 +34,9 @@ end
 # ---------------------------------------------------------------------------
 
 Given("E11y::Middleware::EventSlo is added to the pipeline") do
-  # BUG: EventSlo is absent from the default pipeline.
-  # Verify it exists as a class; attempting to insert it exposes the missing integration.
   raise "E11y::Middleware::EventSlo is not defined — event-level SLO cannot be tested" \
     unless defined?(E11y::Middleware::EventSlo)
 
-  # Add EventSlo to the pipeline for this scenario
   E11y.config.pipeline.use(E11y::Middleware::EventSlo)
   # Invalidate cached pipeline so new middleware takes effect
   E11y.config.instance_variable_set(:@built_pipeline, nil) if E11y.config.instance_variable_defined?(:@built_pipeline)

@@ -3,7 +3,7 @@
 # features/step_definitions/ephemeral_buffer_steps.rb
 #
 # Step definitions for ephemeral_buffer.feature.
-# Exercises the Config and the (stub) flush_event mechanism.
+# Exercises the Config and flush_event mechanism.
 
 Then("request buffering should be disabled in the configuration") do
   msg = "Expected request buffering to be disabled by default, but it was enabled. " \
@@ -26,15 +26,13 @@ Then("{int} events with severity {string} should be in the adapter") do |count, 
     memory_adapter.events.select { |e| e[:severity].to_s == severity }
   end
   expect(events.size).to eq(count),
-                         "Expected #{count} #{severity}-severity events in adapter, got #{events.size}. " \
-                         "BUG: flush_event in EphemeralBuffer is a stub — buffered events are never written."
+                         "Expected #{count} #{severity}-severity events in adapter, got #{events.size}."
 end
 
 Then("events with severity {string} should be in the adapter") do |severity|
   events = memory_adapter.events.select { |e| e[:severity].to_s == severity }
   expect(events.size).to be >= 1,
-                         "Expected at least 1 #{severity}-severity event in adapter after failed request, got 0. " \
-                         "BUG: flush_event stub in lib/e11y/buffers/ephemeral_buffer.rb:226."
+                         "Expected at least 1 #{severity}-severity event in adapter after failed request, got 0."
 end
 
 Then("those debug events should have been generated during that request") do

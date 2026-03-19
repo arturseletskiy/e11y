@@ -25,7 +25,8 @@ module E11y
         # @param file_path [String] Path to DLQ file (default: log/e11y_dlq.jsonl)
         # @param max_file_size_mb [Integer] Maximum file size in MB before rotation (default: 100)
         # @param retention_days [Integer] Days to retain DLQ files (default: 30)
-        def initialize(file_path: nil, max_file_size_mb: 100, retention_days: 30) # rubocop:todo Lint/MissingSuper
+        def initialize(file_path: nil, max_file_size_mb: 100, retention_days: 30)
+          super()
           @file_path = file_path || default_file_path
           @max_file_size_bytes = max_file_size_mb * 1024 * 1024
           @retention_days = retention_days
@@ -177,7 +178,8 @@ module E11y
         # @param event_id [String] Event ID to delete
         # @return [Boolean] true if deleted
         # delete is an action method returning boolean status, not a predicate query
-        def delete(event_id) # rubocop:todo Metrics/AbcSize
+        # rubocop:disable Metrics/AbcSize -- file rewrite with mutex, filters, error handling
+        def delete(event_id)
           return false unless File.exist?(@file_path)
 
           deleted = false
@@ -202,6 +204,7 @@ module E11y
           E11y.logger.error("DLQ delete failed for #{event_id}: #{e.message}")
           false
         end
+        # rubocop:enable Metrics/AbcSize
 
         private
 
@@ -287,10 +290,9 @@ module E11y
           }
         end
 
-        # Increment DLQ metric.
+        # Increment DLQ metric (no-op when E11y::Metrics backend not configured).
         def increment_metric(metric_name, tags = {})
-          # TODO: Integrate with Yabeda metrics
-          # E11y::Metrics.increment(metric_name, tags)
+          E11y::Metrics.increment(metric_name, **tags)
         end
       end
       # rubocop:enable Metrics/ClassLength

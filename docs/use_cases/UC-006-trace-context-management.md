@@ -55,7 +55,7 @@ Events::EmailSent.track(order_id: '123')
 
 ## 🎯 Features
 
-> **Implementation:** See [ADR-005: Tracing Context](../ADR-005-tracing-context.md) for complete architecture, including [Section 3: Current (Thread-Local Storage)](../ADR-005-tracing-context.md#3-current-thread-local-storage), [Section 4: Trace ID Generation](../ADR-005-tracing-context.md#4-trace-id-generation-idgenerator), and [Section 5: W3C Trace Context](../ADR-005-tracing-context.md#5-w3c-trace-context).
+> **Implementation:** See [ADR-005: Tracing Context](../architecture/ADR-005-tracing-context.md) for complete architecture, including [Section 3: Current (Thread-Local Storage)](../architecture/ADR-005-tracing-context.md#3-current-thread-local-storage), [Section 4: Trace ID Generation](../architecture/ADR-005-tracing-context.md#4-trace-id-generation-idgenerator), and [Section 5: W3C Trace Context](../architecture/ADR-005-tracing-context.md#5-w3c-trace-context).
 
 ### 1. Automatic Trace ID Propagation
 
@@ -105,7 +105,7 @@ end
 
 ### 2. Background Job Propagation
 
-> **Implementation:** See [ADR-005 Section 6.2: Job Propagator](../ADR-005-tracing-context.md#62-job-propagator-sidekiqactivejob) for Sidekiq/ActiveJob integration details.
+> **Implementation:** See [ADR-005 Section 6.2: Job Propagator](../architecture/ADR-005-tracing-context.md#62-job-propagator-sidekiqactivejob) for Sidekiq/ActiveJob integration details.
 
 **Problem:** Background jobs lose trace_id context
 
@@ -187,7 +187,7 @@ end
 
 ### 3. Cross-Service Propagation
 
-> **Implementation:** See [ADR-005 Section 6.1: HTTP Propagator](../ADR-005-tracing-context.md#61-http-propagator-outgoing-requests) for outgoing request integration (Faraday, HTTP.rb).
+> **Implementation:** See [ADR-005 Section 6.1: HTTP Propagator](../architecture/ADR-005-tracing-context.md#61-http-propagator-outgoing-requests) for outgoing request integration (Faraday, HTTP.rb).
 
 **Microservices scenario:**
 ```ruby
@@ -509,7 +509,7 @@ end
 
 ### 6. Trace-Consistent Sampling Integration
 
-> **Implementation:** See [ADR-005 Section 7: Sampling Decisions](../ADR-005-tracing-context.md#7-sampling-decisions-trace-consistent-sampling) for trace-consistent sampling architecture.
+> **Implementation:** See [ADR-005 Section 7: Sampling Decisions](../architecture/ADR-005-tracing-context.md#7-sampling-decisions-trace-consistent-sampling) for trace-consistent sampling architecture.
 
 **Critical Feature:** Sampling decisions must be consistent across trace boundaries
 

@@ -441,7 +441,7 @@ end
 
 ## 🔐 Explicit PII Declaration
 
-> **Implementation:** See [ADR-006 Section 3.0.3: Explicit PII Declaration](../ADR-006-security-compliance.md#303-explicit-pii-declaration) for detailed architecture.
+> **Implementation:** See [ADR-006 Section 3.0.3: Explicit PII Declaration](../architecture/ADR-006-security-compliance.md#303-explicit-pii-declaration) for detailed architecture.
 
 **Critical Design Principle:** Event classes MUST explicitly declare whether they contain PII. This enables E11y to apply the appropriate filtering tier (see Performance Tiers below) and allows linter validation.
 
@@ -918,7 +918,7 @@ end
 
 ## ⚡ DSL Shortcuts (Rails-Style)
 
-> **Implementation:** See [ADR-006 Section 3.4.4: Configuration API (Rails-Style DSL)](../ADR-006-security-compliance.md#344-configuration-api-rails-style-dsl) for detailed architecture.
+> **Implementation:** See [ADR-006 Section 3.4.4: Configuration API (Rails-Style DSL)](../architecture/ADR-006-security-compliance.md#344-configuration-api-rails-style-dsl) for detailed architecture.
 
 E11y provides **Rails-style DSL shortcuts** to simplify PII declarations. Instead of verbose `field` blocks, use one-liner shortcuts like `masks`, `hashes`, `skips` – similar to Rails validations.
 
@@ -1346,7 +1346,7 @@ masks :password, :token
 
 ## 🔍 Linter Enforcement
 
-> **Implementation:** See [ADR-006 Section 3.0.5: PII Declaration Linter](../ADR-006-security-compliance.md#305-pii-declaration-linter) for detailed architecture.
+> **Implementation:** See [ADR-006 Section 3.0.5: PII Declaration Linter](../architecture/ADR-006-security-compliance.md#305-pii-declaration-linter) for detailed architecture.
 
 E11y includes a **PII Declaration Linter** that validates PII handling at boot time and in CI. This catches missing declarations, typos, and incomplete coverage BEFORE code reaches production.
 
@@ -1718,7 +1718,7 @@ end
 
 ## ⚡ Performance Tiers
 
-> **Implementation:** See [ADR-006 Section 3.0: PII Filtering Strategy](../ADR-006-security-compliance.md#30-pii-filtering-strategy) for detailed architecture.
+> **Implementation:** See [ADR-006 Section 3.0: PII Filtering Strategy](../architecture/ADR-006-security-compliance.md#30-pii-filtering-strategy) for detailed architecture.
 
 E11y uses a **3-tier filtering strategy** to balance security and performance. Filtering ALL events by default would create massive overhead (1M events × 0.2ms = 200 seconds CPU/day). Instead, events are categorized into 3 tiers based on PII content.
 

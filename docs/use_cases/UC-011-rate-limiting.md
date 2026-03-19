@@ -381,7 +381,7 @@ end
 
 ### Layer 4: DLQ Filter Integration (C02 Resolution) ⚠️
 
-> **Reference:** See [ADR-013 §4.6: Rate Limiting × DLQ Filter](../ADR-013-reliability-error-handling.md#46-rate-limiting--dlq-filter-interaction-c02-resolution) for full architecture.
+> **Reference:** See [ADR-013 §4.6: Rate Limiting × DLQ Filter](../architecture/ADR-013-reliability-error-handling.md#46-rate-limiting--dlq-filter-interaction-c02-resolution) for full architecture.
 
 **Problem:** Rate limiting drops events BEFORE they reach DLQ filter. Critical events (e.g., payments) may be lost during traffic spikes, even though DLQ filter says "always save payments".
 
@@ -472,7 +472,7 @@ end
 
 ### Layer 5: Retry Rate Limiting (C06 Resolution) ⚠️
 
-> **Reference:** See [ADR-013 §3.5: Retry Rate Limiting](../ADR-013-reliability-error-handling.md#35-retry-rate-limiting-c06-resolution) for full architecture.
+> **Reference:** See [ADR-013 §3.5: Retry Rate Limiting](../architecture/ADR-013-reliability-error-handling.md#35-retry-rate-limiting-c06-resolution) for full architecture.
 
 **Problem:** Adapter failures trigger retries. If 1000 events fail → 3000 retry attempts (thundering herd) → buffer overflow.
 
@@ -810,7 +810,7 @@ end
 
 ## 🔧 Implementation Details
 
-> **Implementation:** See [ADR-006 Section 4.0: Rate Limiting + Retry Policy Resolution](../ADR-006-security-compliance.md#40-rate-limiting--retry-policy-resolution-conflict-14) for detailed architecture.
+> **Implementation:** See [ADR-006 Section 4.0: Rate Limiting + Retry Policy Resolution](../architecture/ADR-006-security-compliance.md#40-rate-limiting--retry-policy-resolution-conflict-14) for detailed architecture.
 
 ### Middleware Flow
 
@@ -1125,7 +1125,7 @@ end
 
 ## 📊 Self-Monitoring & Metrics
 
-> **Implementation:** See [ADR-006 Section 4: Rate Limiting](../ADR-006-security-compliance.md#4-rate-limiting) for detailed architecture.
+> **Implementation:** See [ADR-006 Section 4: Rate Limiting](../architecture/ADR-006-security-compliance.md#4-rate-limiting) for detailed architecture.
 
 E11y provides comprehensive self-monitoring metrics for rate limiting. These metrics help you understand rate limit behavior, detect attacks, and optimize limits.
 

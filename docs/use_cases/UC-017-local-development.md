@@ -1,867 +1,293 @@
-# UC-017: Local Development
+# UC-017: Local Development with e11y-devtools
 
-**Status:** MVP Feature  
-**Complexity:** Beginner  
-**Setup Time:** 5-10 minutes  
-**Target Users:** All Developers
-
----
-
-## 📋 Overview
-
-### Problem Statement
-
-**The local development pain:**
-```ruby
-# ❌ BEFORE: Poor development experience
-# - Events go to production backends (Loki, Sentry)
-# - Can't see events in console (hidden in logs)
-# - No colored output (hard to read)
-# - No pretty-printing (JSON blobs)
-# - Debug events flood console
-# - Can't easily filter what you see
-
-# Terminal output:
-# {"event":"order.created","order_id":"123","timestamp":"2026-01-12T10:00:00Z"}
-# {"event":"payment.processing","order_id":"123","timestamp":"2026-01-12T10:00:01Z"}
-# {"event":"debug.sql","query":"SELECT...","timestamp":"2026-01-12T10:00:02Z"}
-# → Hard to read! 😞
-```
-
-### E11y Solution
-
-**Developer-friendly local setup:**
-```ruby
-# ✅ AFTER: Beautiful, readable output
-E11y.configure do |config|
-  if Rails.env.development?
-    # Beautiful colored console output
-    config.adapters = [
-      E11y::Adapters::ConsoleAdapter.new(
-        colored: true,
-        pretty: true,
-        show_payload: true,
-        show_context: true
-      )
-    ]
-    
-    # Show all severities (including debug)
-    config.severity = :debug
-    
-    # No rate limiting in dev
-    config.rate_limiting_enabled = false
-  end
-end
-
-# Terminal output (beautiful! 🎨):
-# ╭─────────────────────────────────────────────────────────╮
-# │ 🎉 order.created                     [SUCCESS] 10:00:00 │
-# ├─────────────────────────────────────────────────────────┤
-# │ order_id: 123                                           │
-# │ user_id: 456                                            │
-# │ amount: $99.99                                          │
-# │ trace_id: abc-123-def                                   │
-# ╰─────────────────────────────────────────────────────────╯
-```
+**Status:** Implemented
+**Complexity:** Beginner
+**Setup Time:** 2 minutes
+**Target Users:** All Rails Developers
+**Related ADR:** ADR-010
 
 ---
 
-## 🎯 Features
+## Overview
 
-> **Implementation:** See [ADR-010: Developer Experience](../ADR-010-developer-experience.md) for complete architecture, including [Section 3: Console Output](../ADR-010-developer-experience.md#3-console-output), [Section 4: Web UI](../ADR-010-developer-experience.md#4-web-ui), [Section 5: Event Registry](../ADR-010-developer-experience.md#5-event-registry), and [Section 6: Debug Helpers](../ADR-010-developer-experience.md#6-debug-helpers).
+During local development, e11y automatically registers a **DevLog adapter** that writes all events to a local log file (default: `log/e11y_dev.jsonl`). No configuration is required — the Railtie activates the adapter in `development` and `test` environments on startup.
 
-### 1. Console Adapter (Pretty Output)
+Three complementary interfaces let you inspect those events:
 
-**Beautiful colored terminal output:**
-```ruby
-# config/environments/development.rb
-Rails.application.configure do
-  config.after_initialize do
-    E11y.configure do |config|
-      config.adapters = [
-        E11y::Adapters::ConsoleAdapter.new(
-          # Colors
-          colored: true,
-          color_scheme: :solarized,  # :default, :solarized, :monokai
-          
-          # Formatting
-          pretty: true,
-          compact: false,
-          
-          # What to show
-          show_payload: true,
-          show_context: true,
-          show_metadata: false,  # timestamps, etc.
-          show_trace_id: true,
-          
-          # Filtering
-          severity_filter: :debug,  # Show all
-          event_filter: nil,  # Show all events
-          
-          # Grouping
-          group_by_trace_id: true,  # Group events with same trace_id
-          
-          # Performance
-          max_payload_length: 1000,  # Truncate long payloads
-          max_array_items: 10  # Limit array display
-        )
-      ]
-    end
-  end
-end
+| Interface | How to access | Best for |
+|-----------|--------------|----------|
+| TUI (terminal) | `bundle exec e11y` | Browsing interactions, drilling into traces |
+| Browser Overlay | Included with `e11y-devtools` gem | Checking events for the page you just loaded |
+| MCP Server | `bundle exec e11y mcp` | AI-assisted debugging in Cursor / Claude Code |
 
-# Output examples:
-# ✅ SUCCESS event (green)
-# 🎉 order.created [SUCCESS] 10:00:00
-#    order_id: 123
-#    amount: $99.99
-#    ⚡ Duration: 45ms
-
-# ⚠️  WARN event (yellow)
-# ⚠️  payment.retry [WARN] 10:00:05
-#    order_id: 123
-#    attempt: 2
-#    reason: "Card declined"
-
-# ❌ ERROR event (red)
-# ❌ payment.failed [ERROR] 10:00:10
-#    order_id: 123
-#    error: "Insufficient funds"
-#    trace_id: abc-123-def
-```
+**Debug buffer note:** debug-severity events are held in memory during a request and flushed to the DevLog only when the request fails. A successful request discards the debug buffer, keeping the log free of noise. Error events always write immediately.
 
 ---
 
-### 2. Event Inspector (Interactive)
+## Setup
 
-**Interactive console for exploring events:**
-```ruby
-# rails console
-> E11y::Inspector.start
-E11y Inspector started. Type 'help' for commands.
-
-# Watch events in real-time
-e11y> watch
-Watching events... (Ctrl+C to stop)
-[10:00:00] order.created { order_id: 123 }
-[10:00:01] payment.processing { order_id: 123 }
-[10:00:02] payment.succeeded { transaction_id: 'tx_123' }
-
-# Filter by pattern
-e11y> watch pattern: 'order.*'
-Watching events matching 'order.*'...
-[10:00:00] order.created { order_id: 123 }
-[10:00:05] order.shipped { order_id: 123, tracking: 'TRACK123' }
-
-# Filter by severity
-e11y> watch severity: :error
-Watching ERROR events...
-[10:00:10] payment.failed { error: "Card declined" }
-
-# Show last N events
-e11y> last 10
-Showing last 10 events:
-1. [10:00:00] order.created
-2. [10:00:01] payment.processing
-3. [10:00:02] payment.succeeded
-...
-
-# Search events
-e11y> search order_id: '123'
-Found 5 events:
-1. [10:00:00] order.created
-2. [10:00:01] payment.processing
-3. [10:00:02] payment.succeeded
-4. [10:00:05] order.shipped
-5. [10:00:10] order.delivered
-
-# Show event details
-e11y> show 1
-Event: order.created
-Severity: SUCCESS
-Timestamp: 2026-01-12 10:00:00
-Trace ID: abc-123-def
-Payload:
-  order_id: 123
-  user_id: 456
-  amount: 99.99
-  currency: USD
-Context:
-  request_id: req-789
-  user_agent: Mozilla/5.0...
-Duration: 45ms
-```
-
----
-
-### 3. Debug Helper
-
-**Quick debugging methods:**
-```ruby
-# app/controllers/orders_controller.rb
-class OrdersController < ApplicationController
-  def create
-    # Quick debug (only in development!)
-    E11y.debug("Creating order", order_params)
-    # → Pretty-printed to console immediately
-    
-    order = Order.create!(order_params)
-    
-    # Breakpoint with context
-    E11y.breakpoint(
-      "Order created",
-      order: order.attributes,
-      user: current_user.attributes
-    )
-    # → Pauses execution, shows data, waits for Enter
-    
-    # Measure block
-    result = E11y.measure("Payment processing") do
-      process_payment(order)
-    end
-    # → Logs duration automatically
-    
-    render json: order
-  end
-end
-
-# Console output:
-# 🔍 [DEBUG] Creating order
-#    user_id: 456
-#    items: [...]
-#    total: 99.99
-#
-# ⏸️  [BREAKPOINT] Order created
-#    order: { id: 123, status: "pending", ... }
-#    user: { id: 456, email: "user@example.com", ... }
-#    Press Enter to continue...
-#
-# ⏱️  [MEASURE] Payment processing → 1.2s
-```
-
----
-
-### 4. Event Recorder (Playback)
-
-**Record and replay events for testing:**
-```ruby
-# Record events during a request
-# rails console
-> recorder = E11y::Recorder.new
-> recorder.start
-Recording events...
-
-# Make request
-> app.post '/orders', params: { order: {...} }
-
-> recorder.stop
-Recorded 15 events
-Saved to tmp/e11y_recordings/2026-01-12_10-00-00.json
-
-# Replay events
-> recorder.replay('tmp/e11y_recordings/2026-01-12_10-00-00.json')
-Replaying 15 events...
-[1/15] order.creation.started
-[2/15] inventory.checked
-[3/15] payment.processing
-...
-[15/15] order.created
-
-# Compare recordings (regression testing)
-> diff = E11y::Recorder.diff(
-    'recordings/baseline.json',
-    'recordings/current.json'
-  )
-> puts diff
-+ payment.retry (NEW in current)
-- payment.succeeded (MISSING in current)
-~ payment.processing.duration_ms: 120ms → 1500ms (12.5x slower!)
-```
-
----
-
-### 5. Visual Timeline (Web UI)
-
-**Mini web UI for development:**
-```ruby
-# config/routes.rb (development only)
-Rails.application.routes.draw do
-  if Rails.env.development?
-    mount E11y::Web => '/e11y'
-  end
-end
-
-# Visit: http://localhost:3000/e11y
-# Features:
-# - Real-time event stream
-# - Timeline view (Gantt chart)
-# - Filtering by severity, pattern
-# - Trace visualization
-# - Event details modal
-# - Export to JSON/CSV
-# - Search & filter
-
-# Example UI:
-# ╔══════════════════════════════════════════════════════════╗
-# ║ E11y Event Dashboard                    🔄 Auto-refresh ║
-# ╠══════════════════════════════════════════════════════════╣
-# ║ Filters: [All Severities ▾] [All Events ▾] [Search...] ║
-# ╠══════════════════════════════════════════════════════════╣
-# ║ Timeline (Last 5 minutes)                                ║
-# ║ ┌────────────────────────────────────────────────────┐ ║
-# ║ │ 10:00:00 ████ order.created                        │ ║
-# ║ │ 10:00:01   ███████ payment.processing              │ ║
-# ║ │ 10:00:02          ██ payment.succeeded             │ ║
-# ║ │ 10:00:05             ████ shipment.created         │ ║
-# ║ └────────────────────────────────────────────────────┘ ║
-# ╠══════════════════════════════════════════════════════════╣
-# ║ Recent Events                                            ║
-# ║ ✅ order.created      10:00:00  trace: abc-123          ║
-# ║ ⏳ payment.processing 10:00:01  trace: abc-123          ║
-# ║ ✅ payment.succeeded  10:00:02  trace: abc-123          ║
-# ╚══════════════════════════════════════════════════════════╝
-```
-
----
-
-### 6. Environment-Specific Configuration Recommendations (C14)
-
-> **Implementation:** See [ADR-010 Section 2: Development vs Production](../ADR-010-developer-experience.md#2-development-vs-production-configuration) for detailed architecture rationale.
-
-**Critical differences between development and production configurations:**
-
-**Development: Immediate Feedback (Zero Delay)**
+Add the devtools gem to your `Gemfile`:
 
 ```ruby
-# config/environments/development.rb
-E11y.configure do |config|
-  # === BUFFERING: DISABLED (immediate writes) ===
-  # ✅ Events appear INSTANTLY in console
-  # ✅ No need to wait for flush
-  # ⚠️  Trade-off: Slightly slower per-request performance (acceptable in dev)
-  config.buffering.enabled = false
-  
-  # OR: Very short interval (near-immediate)
-  # config.buffering do
-  #   enabled true
-  #   flush_interval 0.1.seconds  # Flush every 100ms
-  # end
-  
-  # === SAMPLING: DISABLED (keep all events) ===
-  # ✅ See EVERY event for complete debugging
-  # ✅ No data loss during development
-  # ⚠️  Trade-off: More console noise (filter with ignore_events)
-  config.sampling.enabled = false
-  
-  # === RATE LIMITING: DISABLED (no throttling) ===
-  # ✅ Rapid testing won't hit limits
-  config.rate_limiting_enabled = false
-  
-  # === PII FILTERING: DISABLED (optional) ===
-  # ✅ See real data for easier debugging
-  # ⚠️  Only disable if you're NOT using production data in dev!
-  config.pii_filtering.enabled = false
-  
-  # === FLUSH HELPER: Available for manual testing ===
-  # Sometimes you want to force-flush buffered events:
-  # E11y.flush  # ← Forces immediate flush
+# Gemfile
+group :development, :test do
+  gem "e11y-devtools"
 end
 ```
 
-**Production: Performance & Cost Optimization**
+Run `bundle install`. That is all — no `config/environments/development.rb` changes needed.
 
-```ruby
-# config/environments/production.rb
-E11y.configure do |config|
-  # === BUFFERING: ENABLED (batch writes) ===
-  # ✅ 10× performance improvement (batching)
-  # ✅ 50% cost reduction (fewer network calls)
-  # ⚠️  Trade-off: Events delayed by up to 10s
-  config.buffering do
-    enabled true
-    flush_interval 10.seconds
-    max_buffer_size 1000
-  end
-  
-  # === SAMPLING: ENABLED (cost savings) ===
-  # ✅ 50-80% cost reduction
-  # ✅ Errors always kept (100% sampling)
-  # ⚠️  Trade-off: Some success events dropped
-  config.sampling do
-    enabled true
-    strategy :adaptive
-    base_rate 0.1  # Keep 10% of success events
-    error_rate 1.0  # Keep 100% of errors
-  end
-  
-  # === RATE LIMITING: ENABLED (DDoS protection) ===
-  # ✅ Prevents cost explosions
-  # ✅ Protects backend from overload
-  config.rate_limiting do
-    enabled true
-    limit 1000
-    window 1.minute
-  end
-  
-  # === PII FILTERING: ENABLED (GDPR compliance) ===
-  # ✅ GDPR/CCPA compliant
-  # ✅ Protects sensitive data
-  config.pii_filtering.enabled true
-end
-```
+The Railtie auto-registers the DevLog adapter and respects three ENV vars:
 
-**Comparison Table:**
-
-| Feature | Development | Production | Why Different? |
-|---------|-------------|------------|----------------|
-| **Buffering** | ❌ Disabled (immediate) | ✅ Enabled (10s batches) | Dev needs instant feedback, prod needs performance |
-| **Sampling** | ❌ Disabled (100%) | ✅ Enabled (10-50%) | Dev needs complete data, prod needs cost savings |
-| **Rate Limiting** | ❌ Disabled | ✅ Enabled (1000/min) | Dev needs rapid testing, prod needs DDoS protection |
-| **PII Filtering** | ⚠️ Optional (easier debugging) | ✅ Enabled (GDPR) | Dev may use fake data, prod has real user data |
-| **Flush Helper** | ✅ `E11y.flush` available | ⚠️ Available but rarely needed | Dev uses for manual testing |
-
-**Manual Flush Helper (Development Testing):**
-
-```ruby
-# Scenario: Testing event delivery in specs
-RSpec.describe 'Order creation' do
-  it 'tracks order.created event' do
-    # Event is buffered (not sent yet)
-    post '/orders', params: { order: {...} }
-    
-    # Force immediate flush (for testing)
-    E11y.flush
-    
-    # Now event is available in test adapter
-    expect(E11y.test_adapter.events).to include(
-      hash_including(event_name: 'order.created')
-    )
-  end
-end
-
-# Rails console manual testing:
-> Events::OrderCreated.track(order_id: 123)
-# → Event buffered, not visible yet
-
-> E11y.flush
-# → Forces immediate flush, event now visible in console
-
-> E11y.buffer.size
-# => 0 (buffer is empty after flush)
-```
-
-**Trade-offs & Gotchas:**
-
-**⚠️ Warning: Development ≠ Production Behavior**
-
-```ruby
-# ❌ GOTCHA: Event appears instantly in dev, delayed in prod
-# Development (buffering disabled):
-Events::OrderCreated.track(order_id: 123)
-# → Appears in console IMMEDIATELY ✅
-
-# Production (buffering enabled, 10s flush):
-Events::OrderCreated.track(order_id: 123)
-# → Buffered, appears after 10 seconds ⏱️
-# → Or when buffer full (1000 events)
-# → Or when E11y.flush called manually
-
-# Solution: If you need instant delivery in prod (e.g., critical alerts):
-Events::CriticalAlert.track(
-  alert_type: 'payment_failure',
-  severity: :fatal
-)
-E11y.flush  # ← Force immediate delivery (bypasses buffer)
-```
-
-**⚠️ Warning: Sampling Differences**
-
-```ruby
-# ❌ GOTCHA: All events visible in dev, some dropped in prod
-# Development (sampling disabled):
-100.times { Events::UserLogin.track(user_id: rand(1000)) }
-# → See ALL 100 events in console ✅
-
-# Production (sampling enabled, 10% rate):
-100.times { Events::UserLogin.track(user_id: rand(1000)) }
-# → Only ~10 events reach Loki (90 dropped) ❌
-# → Errors ALWAYS kept (100% sampling) ✅
-
-# Solution: Test sampling behavior in staging:
-# config/environments/staging.rb
-config.sampling do
-  enabled true  # ← Test production-like sampling
-  base_rate 0.1
-end
-```
-
-**Staging Environment (Recommended Middle Ground):**
-
-```ruby
-# config/environments/staging.rb
-E11y.configure do |config|
-  # Balanced config: production-like but easier to debug
-  
-  # Buffering: Shorter interval (faster feedback than prod)
-  config.buffering do
-    enabled true
-    flush_interval 1.second  # vs 10s in prod
-  end
-  
-  # Sampling: Higher rate (more data than prod)
-  config.sampling do
-    enabled true
-    base_rate 0.5  # vs 0.1 in prod (keep 50% of events)
-    error_rate 1.0  # Always keep errors
-  end
-  
-  # Rate limiting: Higher limits (easier testing)
-  config.rate_limiting do
-    enabled true
-    limit 10_000  # vs 1000 in prod
-  end
-  
-  # PII: Enabled (test GDPR compliance)
-  config.pii_filtering.enabled true
-end
-```
-
-**Key Takeaways:**
-
-1. **Development:** Disable buffering & sampling for instant, complete feedback
-2. **Production:** Enable buffering & sampling for performance & cost savings
-3. **Staging:** Middle ground - production-like but easier to debug
-4. **Use `E11y.flush`:** For manual testing when buffering is enabled
-5. **Test in staging:** Catch production behavior differences before deployment
-
----
-
-## 💻 Implementation Examples
-
-### Example 1: Full Development Config
-
-```ruby
-# config/environments/development.rb
-Rails.application.configure do
-  config.after_initialize do
-    E11y.configure do |config|
-      # === CONSOLE OUTPUT ===
-      config.adapters = [
-        E11y::Adapters::ConsoleAdapter.new(
-          colored: true,
-          pretty: true,
-          show_payload: true,
-          show_context: true,
-          show_trace_id: true,
-          group_by_trace_id: true
-        )
-      ]
-      
-      # === SEVERITY ===
-      # Show everything in development
-      config.severity = :debug
-      
-      # === FEATURES ===
-      # Disable production features
-      config.rate_limiting_enabled = false
-      config.sampling.enabled = false
-      config.pii_filtering.enabled = false  # Easier debugging
-      
-      # === DEBUGGING ===
-      # Enable debug helpers
-      config.debug_mode = true
-      
-      # === BUFFERING ===
-      # Immediate flush (no buffering)
-      config.buffer.enabled = false  # Or flush_interval: 0.1.seconds
-      
-      # === WEB UI ===
-      config.web_ui do
-        enabled true
-        port 3001  # Or use Rails server
-        auto_refresh true
-        refresh_interval 2.seconds
-      end
-      
-      # === RECORDING ===
-      config.recording do
-        enabled true
-        save_path Rails.root.join('tmp', 'e11y_recordings')
-        auto_save_on_error true
-      end
-      
-      # === PERFORMANCE ===
-      # Verbose self-monitoring
-      config.self_monitoring do
-        enabled true
-        log_internal_events true
-      end
-    end
-  end
-end
+```bash
+bundle exec rails server
+# DevLog active: log/e11y_dev.jsonl (max 10 000 events, 50 MB)
 ```
 
 ---
 
-### Example 2: Debug Helpers in Code
+## TUI — Interactive Log Viewer
 
-```ruby
-# app/services/order_processing_service.rb
-class OrderProcessingService
-  def call(order_id)
-    # Debug checkpoint
-    E11y.debug("Starting order processing", order_id: order_id)
-    
-    order = Order.find(order_id)
-    
-    # Show complex data structure
-    E11y.inspect(order, depth: 2)
-    # → Pretty-printed with colors, max depth 2
-    
-    # Measure performance
-    inventory_result = E11y.measure("Inventory check") do
-      check_inventory(order)
-    end
-    
-    # Conditional breakpoint
-    E11y.breakpoint_if(
-      -> { inventory_result.low_stock? },
-      "Low stock detected!",
-      order: order.attributes,
-      inventory: inventory_result
-    )
-    
-    # Trace execution
-    E11y.trace("Processing payment") do
-      process_payment(order)
-    end
-    # → Logs entry/exit automatically
-    
-    # Count invocations
-    E11y.count("order_processing")
-    # → Logs: "order_processing called 5 times"
-    
-    # Diff objects
-    before = order.attributes
-    order.update!(status: 'processed')
-    E11y.diff(before, order.attributes)
-    # → Shows: { status: "pending" → "processed" }
-    
-    order
-  end
-end
+Launch the terminal UI from your project root:
 
-# Console output:
-# 🔍 [DEBUG] Starting order processing
-#    order_id: 123
-#
-# 📦 [INSPECT] Order #123
-#    id: 123
-#    status: "pending"
-#    items: [
-#      { id: 1, product_id: 456, quantity: 2 },
-#      { id: 2, product_id: 789, quantity: 1 }
-#    ]
-#    total: 99.99
-#
-# ⏱️  [MEASURE] Inventory check → 45ms
-#
-# ⏸️  [BREAKPOINT] Low stock detected!
-#    order: { ... }
-#    inventory: { low_stock: true, product_id: 456 }
-#    Press Enter to continue...
-#
-# 🔀 [TRACE] Processing payment
-#    → Entered at 10:00:01
-#    → Exited at 10:00:02 (1.2s)
-#
-# 📊 [COUNT] order_processing called 5 times
-#
-# 🔄 [DIFF] Order #123
-#    - status: "pending"
-#    + status: "processed"
+```bash
+bundle exec e11y
+```
+
+### Views
+
+The TUI has three nested views. Navigation is always the same two keys: Enter to drill in, Esc or `b` to go back.
+
+```
+:interactions  →  :events  →  :detail
+```
+
+### Interactions view (default)
+
+Parallel traces that start within 500 ms are grouped into one row. A red dot (●) means the interaction contains at least one error; a gray dot (○) means it is clean.
+
+```
+e11y  [w] web  [j] jobs  [a] all                    r=reload  q=quit
+────────────────────────────────────────────────────────────────────
+  #   time      source   dur     events  status
+────────────────────────────────────────────────────────────────────
+  1   10:04:12  web      312ms      14   ○  GET /orders
+  2   10:03:58  web       89ms       6   ○  GET /orders/123
+  3   10:03:41  web      541ms      22   ●  POST /checkout
+  4   10:02:15  jobs      2.1s       8   ○  OrderFulfillmentJob
+  5   10:01:07  web       73ms       3   ○  GET /products
+────────────────────────────────────────────────────────────────────
+↓/↑ navigate   Enter drill-in
+```
+
+### Events view (after Enter on an interaction)
+
+```
+e11y  >  POST /checkout  (trace: f3a9b2c1)
+────────────────────────────────────────────────────────────────────
+  #   time      severity  event name
+────────────────────────────────────────────────────────────────────
+  1   10:03:41  info      order.validation.started
+  2   10:03:41  info      inventory.checked
+  3   10:03:41  debug     db.query  (buffered — shown because request failed)
+  4   10:03:42  warn      payment.retry
+  5   10:03:42  error     payment.failed
+────────────────────────────────────────────────────────────────────
+↓/↑ navigate   Enter detail   Esc/b back
+```
+
+### Detail view (after Enter on an event)
+
+```
+e11y  >  POST /checkout  >  payment.failed
+────────────────────────────────────────────────────────────────────
+event_name:   payment.failed
+severity:     error
+timestamp:    2026-03-18T10:03:42.317Z
+trace_id:     f3a9b2c1-...
+duration_ms:  541
+
+payload:
+  order_id:   "ord_8812"
+  amount:     99.99
+  currency:   "USD"
+  reason:     "Card declined"
+  attempt:    2
+────────────────────────────────────────────────────────────────────
+Esc/b back   c=copy JSON
+```
+
+### Keyboard reference
+
+| Key | Action |
+|-----|--------|
+| `↓` / `↑` | Navigate list |
+| `Enter` | Drill into interaction or event |
+| `Esc` / `b` | Go back one level |
+| `w` | Filter: web requests only (default) |
+| `j` | Filter: background jobs only |
+| `a` | Filter: all sources |
+| `r` | Reload from log file |
+| `c` | Copy event JSON to clipboard (detail view) |
+| `q` | Quit |
+
+File watching polls `mtime` every 250 ms — new events appear without pressing `r`.
+
+---
+
+## Browser Overlay
+
+When `e11y-devtools` is present in the Gemfile, a lightweight JavaScript snippet is injected into every development page response. It requires no route configuration.
+
+### Badge
+
+A small badge appears in the bottom-right corner of every page:
+
+```
+╭─────────────╮
+│  e11y  14 ● 1│
+╰─────────────╯
+```
+
+- The first number is the total event count for the current page's trace.
+- The second number (after ●) is the error count.
+- The badge border turns red when errors are present.
+
+### Slide-in panel
+
+Clicking the badge opens a panel on the right side of the screen:
+
+```
+╔══════════════════════════════════════════╗
+║  e11y — trace: f3a9b2c1                  ║
+╠══════════════════════════════════════════╣
+║  10:03:41  info   order.validation.start ║
+║  10:03:41  info   inventory.checked      ║
+║  10:03:42  warn   payment.retry          ║
+║  10:03:42  error  payment.failed         ║
+╠══════════════════════════════════════════╣
+║  [clear log]          [copy trace_id]    ║
+╚══════════════════════════════════════════╝
+```
+
+The panel shows only events that share the current page's trace ID. It auto-polls every 2 seconds.
+
+The overlay endpoint returns 404 outside the `development` environment, so it cannot leak into staging or production.
+
+---
+
+## MCP Server — AI-Assisted Debugging
+
+The MCP server exposes the DevLog over the Model Context Protocol so AI assistants can query your local events directly.
+
+### Start the server
+
+```bash
+# Default port 3099
+bundle exec e11y mcp
+
+# Custom port
+bundle exec e11y mcp --port 3099
+```
+
+### Available tools
+
+| Tool | Description |
+|------|-------------|
+| `recent_events` | Return the N most recent events (default 50) |
+| `events_by_trace` | Return all events for a given `trace_id` |
+| `search` | Full-text search across event names and payload fields |
+| `stats` | Event counts by severity and source for a time window |
+| `interactions` | List grouped interactions (same view as TUI :interactions) |
+| `event_detail` | Return full JSON for a single event by ID |
+| `errors` | Return all error/fatal events since a given timestamp |
+| `clear` | Truncate the DevLog (useful before reproducing a bug) |
+
+### Cursor configuration
+
+Create or update `.cursor/mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "e11y": {
+      "command": "bundle",
+      "args": ["exec", "e11y", "mcp"]
+    }
+  }
+}
+```
+
+### Claude Code configuration
+
+Create or update `.claude/mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "e11y": {
+      "command": "bundle",
+      "args": ["exec", "e11y", "mcp"]
+    }
+  }
+}
+```
+
+### Example prompts
+
+- "What errors happened in the last request?"
+- "Show me all events for trace f3a9b2c1"
+- "Why is the checkout slow? Look at recent interactions."
+- "Compare event counts from the last two POST /checkout traces."
+
+---
+
+## Configuration Reference
+
+All settings are controlled via ENV vars. No code changes are needed for the defaults.
+
+| ENV var | Default | Description |
+|---------|---------|-------------|
+| `E11Y_MAX_EVENTS` | `10000` | Maximum number of events retained in the DevLog (oldest are dropped) |
+| `E11Y_MAX_SIZE` | `52428800` (50 MB) | Maximum DevLog file size in bytes before rotation |
+| `E11Y_KEEP_ROTATED` | `5` | Number of rotated log files to retain |
+
+Example: raise the cap for a long debugging session:
+
+```bash
+E11Y_MAX_EVENTS=50000 bundle exec rails server
+```
+
+The DevLog file is written to `log/e11y_dev.jsonl` by default. Add it to `.gitignore`:
+
+```
+# .gitignore
+log/e11y_dev*.log
 ```
 
 ---
 
-### Example 3: Event Filtering
+## Acceptance Criteria
 
-```ruby
-# config/environments/development.rb
-E11y.configure do |config|
-  config.adapters = [
-    E11y::Adapters::ConsoleAdapter.new(
-      colored: true,
-      pretty: true,
-      
-      # === FILTERING ===
-      # Only show events matching patterns
-      event_filter: ->(event) {
-        # Show orders & payments, hide everything else
-        event.event_name.match?(/^(order|payment)\./)
-      },
-      
-      # Only show warn/error/success
-      severity_filter: [:warn, :error, :fatal, :success],
-      
-      # Hide noisy events
-      ignore_events: [
-        'health_check',
-        'heartbeat',
-        'metrics.collected'
-      ],
-      
-      # Hide debug SQL queries
-      ignore_patterns: [
-        /^debug\./,
-        /\.sql$/
-      ]
-    )
-  ]
-end
-
-# Result:
-# ✅ Shows: order.created, payment.succeeded
-# ❌ Hides: debug.sql, health_check, heartbeat
-```
+- [x] Railtie auto-registers DevLog adapter in `development` and `test` — no manual configuration required
+- [x] DevLog respects `E11Y_MAX_EVENTS`, `E11Y_MAX_SIZE`, and `E11Y_KEEP_ROTATED` ENV vars
+- [x] TUI launches with `bundle exec e11y` and shows the `:interactions` view by default
+- [x] Interactions group parallel traces within a 500 ms window into a single row
+- [x] Red dot (●) on interactions that contain at least one error; gray dot (○) otherwise
+- [x] Source filter toggles: web requests (`w`), background jobs (`j`), all (`a`)
+- [x] TUI supports drill-down: `:interactions` → `:events` → `:detail`
+- [x] Detail view provides `c` to copy event JSON to clipboard
+- [x] TUI polls log `mtime` every 250 ms and refreshes automatically
+- [x] Browser overlay badge appears in bottom-right corner with event count and error count
+- [x] Badge border turns red when the current trace contains errors
+- [x] Panel shows only events for the current page's trace ID
+- [x] Panel auto-polls every 2 seconds
+- [x] Browser overlay endpoint returns 404 outside `development`
+- [x] MCP server starts with `bundle exec e11y mcp` (default port 3099)
+- [x] MCP server exposes 8 tools: `recent_events`, `events_by_trace`, `search`, `stats`, `interactions`, `event_detail`, `errors`, `clear`
+- [x] Cursor and Claude Code JSON configs work with `command: "bundle", args: ["exec", "e11y", "mcp"]`
+- [x] Debug events are buffered per-request and flushed to DevLog only on request failure
 
 ---
 
-## 🔧 Configuration
-
-### Development Config Template
-
-```ruby
-# config/environments/development.rb
-Rails.application.configure do
-  config.after_initialize do
-    E11y.configure do |config|
-      # === OUTPUT ===
-      config.adapters = [
-        E11y::Adapters::ConsoleAdapter.new(
-          colored: true,
-          pretty: true,
-          color_scheme: :solarized,
-          show_payload: true,
-          show_context: true,
-          show_trace_id: true,
-          group_by_trace_id: true,
-          max_payload_length: 1000
-        )
-      ]
-      
-      # === LEVEL ===
-      config.severity = :debug
-      
-      # === FEATURES ===
-      config.rate_limiting_enabled = false
-      config.sampling.enabled = false
-      config.buffering.enabled = false
-      
-      # === DEBUG ===
-      config.debug_mode = true
-      config.debug_helpers.enabled = true
-      
-      # === WEB UI ===
-      config.web_ui.enabled = true
-      config.web_ui.auto_refresh = true
-      
-      # === RECORDING ===
-      config.recording.enabled = true
-      config.recording.auto_save_on_error = true
-    end
-  end
-end
-```
-
----
-
-## 💡 Best Practices
-
-### ✅ DO
-
-**1. Use colored console output**
-```ruby
-# ✅ GOOD: Easy to read
-config.adapters = [
-  E11y::Adapters::ConsoleAdapter.new(
-    colored: true,
-    pretty: true
-  )
-]
-```
-
-**2. Filter noise in development**
-```ruby
-# ✅ GOOD: Hide irrelevant events
-config.adapters = [
-  E11y::Adapters::ConsoleAdapter.new(
-    ignore_events: ['health_check', 'heartbeat']
-  )
-]
-```
-
-**3. Use debug helpers**
-```ruby
-# ✅ GOOD: Quick debugging
-E11y.debug("User logged in", user_id: user.id)
-E11y.breakpoint("Check this", data: complex_data)
-```
-
----
-
-### ❌ DON'T
-
-**1. Don't use production adapters**
-```ruby
-# ❌ BAD: Production adapters in development
-config.adapters = [
-  E11y::Adapters::LokiAdapter.new(...)  # Slow!
-]
-
-# ✅ GOOD: Console adapter
-config.adapters = [
-  E11y::Adapters::ConsoleAdapter.new(...)
-]
-```
-
-**2. Don't forget to disable features**
-```ruby
-# ❌ BAD: Production features enabled
-config.rate_limiting_enabled = true  # Annoying in dev!
-config.sampling.enabled = true       # Lose events!
-
-# ✅ GOOD: Disable in development
-config.rate_limiting_enabled = false
-config.sampling.enabled = false
-```
-
----
-
-## 📚 Related Use Cases
-
-- **[UC-016: Rails Logger Migration](./UC-016-rails-logger-migration.md)** - Migration guide
-- **[UC-018: Testing Events](./UC-018-testing-events.md)** - Testing helpers
-
----
-
-## 🎯 Summary
-
-### Development Experience
-
-| Feature | Before | After |
-|---------|--------|-------|
-| **Output** | JSON blobs | Colored, pretty |
-| **Filtering** | None | By severity, pattern |
-| **Debugging** | `puts` | Debug helpers |
-| **Inspection** | Manual | Interactive inspector |
-| **Recording** | None | Record & replay |
-| **Visualization** | None | Web UI |
-
-**Setup Time:** 5-10 minutes (one-time config)
-
----
-
-**Document Version:** 1.0  
-**Last Updated:** January 12, 2026  
-**Status:** ✅ Complete
+**Related:** [ADR-010: Developer Experience](../architecture/ADR-010-developer-experience.md) | [UC-018: Testing Events](./UC-018-testing-events.md)

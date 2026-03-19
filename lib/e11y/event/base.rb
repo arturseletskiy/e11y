@@ -513,7 +513,7 @@ module E11y
         def resolve_rate_limit
           case severity
           when :error, :fatal
-            nil # Unlimited - не теряем ошибки
+            nil # Unlimited - never drop errors
           else
             1000 # 1000 events/sec
           end

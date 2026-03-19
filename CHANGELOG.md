@@ -176,7 +176,7 @@ Initial release of E11y - Event-driven observability for Rails applications.
   - Audit log (encrypted storage)
 
 - **Advanced Features**
-  - Pattern-based metrics extraction
+  - Event-level metrics (metrics DSL)
   - PII filtering with configurable rules
   - Stratified sampling
   - Rate limiting

@@ -15,6 +15,7 @@ gem "rubocop", "~> 1.21"
 
 # Development tools
 group :development do
+  gem "e11y-devtools", path: "gems/e11y-devtools"
   gem "pry", "~> 0.14"
   gem "pry-byebug", "~> 3.10"
 
@@ -32,6 +33,7 @@ end
 group :test do
   gem "climate_control", "~> 1.2" # ENV manipulation for tests
   gem "memory_profiler", "~> 1.0"
+  gem "minitest" # Required by ratatui_ruby/test_helper
   gem "rspec-benchmark", "~> 0.6"
   gem "timecop", "~> 0.9"
   gem "webmock", "~> 3.18"

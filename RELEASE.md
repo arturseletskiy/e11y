@@ -20,13 +20,28 @@ For more control, see [Step-by-Step Release](#step-by-step-release) below.
 
 ## Pre-Release Checklist
 
+### Core
 - [ ] All changes documented in CHANGELOG.md under `[Unreleased]`
 - [ ] Version bumped: `rake release:bump`
-- [ ] All tests passing: `rake spec`
+- [ ] All tests passing: `rake spec:all` (unit + integration)
+- [ ] RuboCop clean: `bundle exec rubocop`
 - [ ] Changes committed
 - [ ] Git tag created
 - [ ] Published to RubyGems.org
 - [ ] GitHub release created
+
+### Documentation & Links
+- [ ] All doc links valid (ADRs in `docs/architecture/`, use cases in `docs/use_cases/`)
+- [ ] No broken references to deleted files (e.g. `docs/analysis/`, `docs/IMPLEMENTATION_PLAN.md`)
+- [ ] README, CONTRIBUTING, CLAUDE.md reference correct paths
+- [ ] All user-facing text in English (no Russian in docs/code comments)
+
+### Production Readiness
+- [ ] SECURITY.md present (if handling sensitive data)
+- [ ] LICENSE file present and correct
+- [ ] No TODO/FIXME in critical paths
+- [ ] Deprecation warnings documented (if any)
+- [ ] Breaking changes clearly called out in CHANGELOG
 
 ## Step-by-Step Release
 
@@ -181,7 +196,7 @@ bundle install
 ## 📚 Documentation
 
 - **Quick Start**: [README.md](https://github.com/arturseletskiy/e11y#quick-start)
-- **Architecture**: [docs/ADR-INDEX.md](https://github.com/arturseletskiy/e11y/blob/main/docs/ADR-INDEX.md)
+- **Architecture**: [docs/architecture/ADR-INDEX.md](https://github.com/arturseletskiy/e11y/blob/main/docs/architecture/ADR-INDEX.md)
 - **Benchmarks**: [benchmarks/README.md](https://github.com/arturseletskiy/e11y/blob/main/benchmarks/README.md)
 
 ## 🔥 What's New

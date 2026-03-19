@@ -195,7 +195,7 @@ RSpec.describe E11y::Event::Base, ".track memory profile", :memory do
 
       expect(per_event).to be <= 90,
                            "#{per_event.round(2)} allocations/event exceeds <=90 target " \
-                           "(validation_mode :always default). See docs/ADR-001-architecture.md §5."
+                           "(validation_mode :always default). See docs/architecture/ADR-001-architecture.md §5."
     end
   end
 

@@ -77,6 +77,26 @@ module E11y
       E11y::Tracing.patch_net_http!
     end
 
+    # Auto-register DevLog adapter in development and test environments.
+    # Skipped if the user has already registered :dev_log in their initializer.
+    initializer "e11y.setup_development", after: :load_config_initializers do |app|
+      next unless Rails.env.development? || Rails.env.test?
+      next if E11y.configuration.adapters.key?(:dev_log)
+
+      E11y.configure do |config|
+        config.register_adapter :dev_log, E11y::Adapters::DevLog.new(
+          path: Rails.root.join("log", "e11y_dev.jsonl"),
+          max_lines: ENV.fetch("E11Y_MAX_EVENTS", "10000").to_i,
+          max_size: ENV.fetch("E11Y_MAX_SIZE", "50").to_i * 1024 * 1024,
+          keep_rotated: ENV.fetch("E11Y_KEEP_ROTATED", "5").to_i,
+          enable_watcher: !Rails.env.test?
+        )
+      end
+
+      require "e11y/middleware/dev_log_source"
+      app.middleware.use E11y::Middleware::DevLogSource
+    end
+
     # Middleware insertion
     initializer "e11y.middleware" do |app|
       next unless E11y.config.enabled

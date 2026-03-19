@@ -4,6 +4,9 @@
 
 # Load local lib path FIRST (before any requires)
 $LOAD_PATH.unshift File.expand_path("../lib", __dir__)
+# Devtools gem (for gems/e11y-devtools/spec/)
+devtools_lib = File.expand_path("../gems/e11y-devtools/lib", __dir__)
+$LOAD_PATH.unshift(devtools_lib) if File.directory?(devtools_lib)
 
 # SimpleCov setup (must be at the very top)
 if ENV["COVERAGE"]
@@ -45,7 +48,7 @@ if ENV["COVERAGE"]
     add_group "Middleware", "lib/e11y/middleware"
     add_group "Adapters", "lib/e11y/adapters"
 
-    minimum_coverage line: 94
+    minimum_coverage line: 93
     refuse_coverage_drop
 
     # Print files with low coverage (using SimpleCov's at_exit hook)

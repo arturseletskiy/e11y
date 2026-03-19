@@ -12,7 +12,7 @@
 - ✅ Trace context propagation (trace_id, span_id)
 - ✅ User context support
 - ✅ 39 comprehensive tests
-- 📖 See [ADR-004 §4.4](../ADR-004-adapter-architecture.md#44-sentry-adapter) for technical details
+- 📖 See [ADR-004 §4.4](../architecture/ADR-004-adapter-architecture.md#44-sentry-adapter) for technical details
 
 ---
 
@@ -72,7 +72,7 @@ end
 
 ### 1. Automatic Exception Capture
 
-> **Implementation:** See [ADR-004 Section 4.4: Sentry Adapter](../ADR-004-adapter-architecture.md#44-sentry-adapter) for technical details.
+> **Implementation:** See [ADR-004 Section 4.4: Sentry Adapter](../architecture/ADR-004-adapter-architecture.md#44-sentry-adapter) for technical details.
 
 **Configuration (2026-01-19 - Actual Implementation):**
 ```ruby
@@ -184,7 +184,7 @@ Events::PaymentFailed.track(
 
 ### 4. Custom Fingerprinting
 
-> **Implementation:** See [ADR-004 Section 4.4: Sentry Adapter](../ADR-004-adapter-architecture.md#44-sentry-adapter) for technical details.
+> **Implementation:** See [ADR-004 Section 4.4: Sentry Adapter](../architecture/ADR-004-adapter-architecture.md#44-sentry-adapter) for technical details.
 
 **Group similar errors in Sentry:**
 ```ruby
@@ -217,7 +217,7 @@ end
 
 ### 5. Sampling Control
 
-> **Implementation:** See [ADR-004 Section 4.4: Sentry Adapter](../ADR-004-adapter-architecture.md#44-sentry-adapter) for technical details.
+> **Implementation:** See [ADR-004 Section 4.4: Sentry Adapter](../architecture/ADR-004-adapter-architecture.md#44-sentry-adapter) for technical details.
 
 **Avoid Sentry quota exhaustion:**
 ```ruby
@@ -748,7 +748,7 @@ end
 **See Also:**
 - Implementation: `lib/e11y/adapters/sentry.rb` (211 lines)
 - Tests: `spec/e11y/adapters/sentry_spec.rb` (39 tests)
-- ADR: [ADR-004 §4.4](../ADR-004-adapter-architecture.md#44-sentry-adapter)
+- ADR: [ADR-004 §4.4](../architecture/ADR-004-adapter-architecture.md#44-sentry-adapter)
 
 ---
 

@@ -20,6 +20,12 @@ require "bundler/gem_tasks"
 require "rspec/core/rake_task"
 require "rubocop/rake_task"
 
+def e11y_devtools_specs_available?
+  # Devtools specs live in monorepo; run them when the directory exists
+  # (no need for gem in bundle — spec_helper loads lib via path)
+  File.directory?(File.join(__dir__, "gems/e11y-devtools/spec"))
+end
+
 RSpec::Core::RakeTask.new(:spec)
 
 RuboCop::RakeTask.new
@@ -54,6 +60,15 @@ namespace :spec do
     puts "Running UNIT tests (spec/e11y + top-level specs)..."
     puts "#{'=' * 80}\n"
     Rake::Task["spec:unit"].invoke
+
+    if e11y_devtools_specs_available?
+      puts "\n#{'=' * 80}"
+      puts "Running E11Y-DEVTOOLS unit tests (gems/e11y-devtools/spec/)..."
+      puts "#{'=' * 80}\n"
+      Rake::Task["spec:devtools"].invoke
+    else
+      puts "\n⏭️  Skipping e11y-devtools specs (gems/e11y-devtools/spec/ not found)"
+    end
 
     puts "\n#{'=' * 80}"
     puts "Running MEMORY tests (allocations, leaks, consumption)..."
@@ -107,12 +122,18 @@ namespace :spec do
        "--tag memory --format documentation"
   end
 
+  desc "Run e11y-devtools unit tests (gems/e11y-devtools/spec/)"
+  task :devtools do
+    sh "bundle exec rspec gems/e11y-devtools/spec/ --tag ~integration --format progress"
+  end
+
   desc "Run ALL tests including benchmarks and cucumber (very slow)"
   task :everything do
     puts "\n#{'=' * 80}"
     puts "Running ALL tests (unit + integration + railtie + cucumber + benchmarks)"
     puts "#{'=' * 80}\n"
     Rake::Task["spec:unit"].invoke
+    Rake::Task["spec:devtools"].invoke if e11y_devtools_specs_available?
     Rake::Task["spec:integration"].invoke
     Rake::Task["spec:railtie"].invoke
     Rake::Task["cucumber:passing"].invoke if Rake::Task.task_defined?("cucumber:passing")

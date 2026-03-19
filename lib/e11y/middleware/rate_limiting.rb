@@ -172,7 +172,6 @@ module E11y
                          })
 
         E11y.logger&.warn("[E11y] Rate-limited critical event saved to DLQ: #{event_data[:event_name]}")
-        # TODO: Track metric e11y.rate_limiter.dlq_saved
       rescue StandardError => e
         # Don't fail if DLQ save fails (C18 Resolution)
         E11y.logger&.warn("[E11y] Failed to save rate-limited event to DLQ: #{e.message}")

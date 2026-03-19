@@ -34,7 +34,7 @@
 
 - **Retry Policy:** Exponential backoff with jitter
 - **Dead Letter Queue:** Failed events stored for later analysis/replay
-- **Circuit Breaker:** Prevent cascading failures (see [ADR-013 §5](../ADR-013-reliability-error-handling.md#5-circuit-breaker))
+- **Circuit Breaker:** Prevent cascading failures (see [ADR-013 §5](../architecture/ADR-013-reliability-error-handling.md#5-circuit-breaker))
 - **Observability:** Metrics for failures, retries, DLQ size
 
 **Result:** Zero data loss, resilient to transient failures.
@@ -179,7 +179,7 @@ E11y::DeadLetterQueue.size  # => 1 (only payment)
 
 ## 🏗️ Architecture
 
-> **Implementation:** See [ADR-013: Reliability & Error Handling](../ADR-013-reliability-error-handling.md) for complete error handling architecture, including retry policy with exponential backoff and jitter, circuit breaker pattern, Dead Letter Queue (DLQ) storage strategies, and self-monitoring metrics.
+> **Implementation:** See [ADR-013: Reliability & Error Handling](../architecture/ADR-013-reliability-error-handling.md) for complete error handling architecture, including retry policy with exponential backoff and jitter, circuit breaker pattern, Dead Letter Queue (DLQ) storage strategies, and self-monitoring metrics.
 
 ### Retry Pipeline
 
@@ -441,7 +441,7 @@ E11y::DeadLetterQueue.replay(
 ### DLQ Replay with PII & Schema Considerations (C07, C15)
 
 > **⚠️ CRITICAL:** DLQ replay requires special handling for PII filtering and schema migrations.  
-> **See:** [ADR-006 Section 5.6](../ADR-006-security-compliance.md#56-pii-handling-for-event-replay-from-dlq-c07-resolution) for C07 (PII double-hashing), [ADR-012 Section 8](../ADR-012-event-evolution.md#8-schema-migrations-and-dlq-replay-c15-resolution--critical) for C15 (schema migrations).
+> **See:** [ADR-006 Section 5.6](../architecture/ADR-006-security-compliance.md#56-pii-handling-for-event-replay-from-dlq-c07-resolution) for C07 (PII double-hashing), [ADR-012 Section 8](../architecture/ADR-012-event-evolution.md#8-schema-migrations-and-dlq-replay-c15-resolution--critical) for C15 (schema migrations).
 
 **Problem 1: PII Double-Hashing on Replay (C07)**
 

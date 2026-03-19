@@ -65,7 +65,7 @@ end
 
 ## 🎯 Features
 
-> **Implementation:** See [ADR-007: OpenTelemetry Integration](../ADR-007-opentelemetry-integration.md) for complete architecture, including [Section 3: OTel Collector Adapter](../ADR-007-opentelemetry-integration.md#3-otel-collector-adapter), [Section 4: Semantic Conventions](../ADR-007-opentelemetry-integration.md#4-semantic-conventions), and [Section 5: Logs Signal Export](../ADR-007-opentelemetry-integration.md#5-logs-signal-export).
+> **Implementation:** See [ADR-007: OpenTelemetry Integration](../architecture/ADR-007-opentelemetry-integration.md) for complete architecture, including [Section 3: OTel Collector Adapter](../architecture/ADR-007-opentelemetry-integration.md#3-otel-collector-adapter), [Section 4: Semantic Conventions](../architecture/ADR-007-opentelemetry-integration.md#4-semantic-conventions), and [Section 5: Logs Signal Export](../architecture/ADR-007-opentelemetry-integration.md#5-logs-signal-export).
 
 ### 1. OpenTelemetry Collector Adapter
 
@@ -93,7 +93,7 @@ end
 
 ### 2. Semantic Conventions Mapping
 
-> **Implementation:** See [ADR-007 Section 4: Semantic Conventions](../ADR-007-opentelemetry-integration.md#4-semantic-conventions) for automatic field mapping across HTTP, DB, RPC, Messaging, and Exception patterns.
+> **Implementation:** See [ADR-007 Section 4: Semantic Conventions](../architecture/ADR-007-opentelemetry-integration.md#4-semantic-conventions) for automatic field mapping across HTTP, DB, RPC, Messaging, and Exception patterns.
 
 **Automatic field mapping to OTel standards:**
 ```ruby
@@ -154,7 +154,7 @@ Events::HttpRequest.track(
 
 ### 3. Automatic Span Creation
 
-> **Implementation:** See [ADR-007 Section 6: Traces Signal Export](../ADR-007-opentelemetry-integration.md#6-traces-signal-export) for automatic span creation rules and parent-child relationships.
+> **Implementation:** See [ADR-007 Section 6: Traces Signal Export](../architecture/ADR-007-opentelemetry-integration.md#6-traces-signal-export) for automatic span creation rules and parent-child relationships.
 
 **Create spans from E11y events:**
 ```ruby
@@ -190,7 +190,7 @@ Events::OrderProcessingStarted.track(
 
 ### 4. W3C Trace Context Integration
 
-> **Implementation:** See [ADR-007 Section 8: Trace Context Integration](../ADR-007-opentelemetry-integration.md#8-trace-context-integration) for OTel SDK as primary trace context source.
+> **Implementation:** See [ADR-007 Section 8: Trace Context Integration](../architecture/ADR-007-opentelemetry-integration.md#8-trace-context-integration) for OTel SDK as primary trace context source.
 
 **Automatic trace context from OpenTelemetry SDK:**
 ```ruby
@@ -223,7 +223,7 @@ Events::OrderCreated.track(order_id: '123')
 
 ### 5. OTel Logs Signal Export
 
-> **Implementation:** See [ADR-007 Section 5: Logs Signal Export](../ADR-007-opentelemetry-integration.md#5-logs-signal-export) for OTLP JSON format and trace correlation details.
+> **Implementation:** See [ADR-007 Section 5: Logs Signal Export](../architecture/ADR-007-opentelemetry-integration.md#5-logs-signal-export) for OTLP JSON format and trace correlation details.
 
 **Export E11y events as OpenTelemetry Logs:**
 ```ruby
@@ -280,7 +280,7 @@ Events::OrderCreated.track(order_id: '123')
 ### 6. Baggage PII Protection (C08 Resolution) ⚠️ CRITICAL
 
 > **⚠️ CRITICAL: C08 Conflict Resolution - PII Leaking via OpenTelemetry Baggage**  
-> **See:** [ADR-006 Section 5.5](../ADR-006-security-compliance.md#55-opentelemetry-baggage-pii-protection-c08-resolution--critical) for detailed architecture and GDPR compliance rationale.  
+> **See:** [ADR-006 Section 5.5](../architecture/ADR-006-security-compliance.md#55-opentelemetry-baggage-pii-protection-c08-resolution--critical) for detailed architecture and GDPR compliance rationale.  
 > **Problem:** OpenTelemetry Baggage propagates data via HTTP headers (`baggage: key1=value1,key2=value2`), bypassing E11y's PII filtering. If a developer accidentally adds PII to baggage, it leaks across all services.  
 > **Solution:** Block ALL baggage keys by default, allow ONLY safe keys via allowlist.
 

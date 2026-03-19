@@ -551,7 +551,7 @@ p99 latency <70µs (`:always`), <10µs (`:sampled`), <50µs (`:never`). Full ben
 | [Limitations](docs/LIMITATIONS.md) | Rails only, Ruby 3.2+, tradeoffs |
 | [Comparison](docs/COMPARISON.md) | vs Datadog, OTel, Sentry, AppSignal, etc. |
 
-Also: [ADRs](docs/ADR-INDEX.md), [Use Cases](docs/use_cases/README.md), [QUICK-START](docs/QUICK-START.md)
+Also: [ADRs](docs/architecture/ADR-INDEX.md), [Use Cases](docs/use_cases/README.md), [QUICK-START](docs/QUICK-START.md)
 
 ---
 

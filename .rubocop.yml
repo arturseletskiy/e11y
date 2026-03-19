@@ -20,7 +20,6 @@ AllCops:
     - 'benchmarks/**/*'
 
 # Metrics
-# TODO: Refactor lib yabeda/event_slo/routing to reduce complexity (see ADR-015)
 Metrics/BlockLength:
   Exclude:
     - 'spec/**/*'

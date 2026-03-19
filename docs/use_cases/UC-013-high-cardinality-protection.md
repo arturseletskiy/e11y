@@ -263,7 +263,7 @@ end
 
 ### Layer Processing Flow
 
-> **Implementation:** See [ADR-002 Section 4.1: Four-Layer Defense](../ADR-002-metrics-yabeda.md#41-four-layer-defense) for detailed architecture.
+> **Implementation:** See [ADR-002 Section 4.1: Four-Layer Defense](../architecture/ADR-002-metrics-yabeda.md#41-four-layer-defense) for detailed architecture.
 
 **🔑 Critical: Layers execute SEQUENTIALLY (not simultaneously).**
 
@@ -379,7 +379,7 @@ Events::OrderPlaced.track(
 ### Layer 1: Denylist (Hard Block)
 
 > **⚠️ CRITICAL: Adapter-Specific Filtering**  
-> **Implementation:** See [ADR-002 Section 4.2: Layer 1 - Universal Denylist](../ADR-002-metrics-yabeda.md#42-layer-1-universal-denylist) for detailed architecture.
+> **Implementation:** See [ADR-002 Section 4.2: Layer 1 - Universal Denylist](../architecture/ADR-002-metrics-yabeda.md#42-layer-1-universal-denylist) for detailed architecture.
 >
 > **Cardinality protection (denylist/allowlist) applies ONLY to metrics adapters (Yabeda/Prometheus), NOT to other adapters:**
 >
@@ -427,7 +427,7 @@ Events::OrderPlaced.track(
 
 #### Thread Safety
 
-> **Implementation:** See [ADR-002 Section 4.4: Layer 3 - Per-Metric Cardinality Limits](../ADR-002-metrics-yabeda.md#44-layer-3-per-metric-cardinality-limits) for detailed architecture.
+> **Implementation:** See [ADR-002 Section 4.4: Layer 3 - Per-Metric Cardinality Limits](../architecture/ADR-002-metrics-yabeda.md#44-layer-3-per-metric-cardinality-limits) for detailed architecture.
 > 
 > **Sources:**
 > - [Ruby Hash thread safety - Stack Overflow](https://stackoverflow.com/questions/22674498/thread-safety-for-hashes-in-ruby)
@@ -578,7 +578,7 @@ end
 
 #### Action Selection Guide
 
-> **Implementation:** See [ADR-002 Section 4.5: Layer 4 - Dynamic Actions](../ADR-002-metrics-yabeda.md#45-layer-4-dynamic-actions) for detailed architecture.
+> **Implementation:** See [ADR-002 Section 4.5: Layer 4 - Dynamic Actions](../architecture/ADR-002-metrics-yabeda.md#45-layer-4-dynamic-actions) for detailed architecture.
 
 **🎯 When cardinality limit is exceeded, which action should you choose?**
 
@@ -724,7 +724,7 @@ rate(e11y_cardinality_actions_total{action="alert"}[5m])
 
 ### 1. Aggregation (Best ROI - 99% Reduction)
 
-> **Note:** This section describes **relabeling/normalization** (e.g., `user_id` → `user_segment`) via `tag_extractors`, which is different from `overflow_strategy`. Aggregation reduces cardinality **before** metrics are created, while overflow handling (`drop`/`alert`) deals with exceeding limits **after** creation. See [ADR-002 Section 4.5](../ADR-002-metrics-yabeda.md#45-cardinality-protection) for implementation details.
+> **Note:** This section describes **relabeling/normalization** (e.g., `user_id` → `user_segment`) via `tag_extractors`, which is different from `overflow_strategy`. Aggregation reduces cardinality **before** metrics are created, while overflow handling (`drop`/`alert`) deals with exceeding limits **after** creation. See [ADR-002 Section 4.5](../architecture/ADR-002-metrics-yabeda.md#45-cardinality-protection) for implementation details.
 
 **Problem:** 1M users = 1M metric series
 
@@ -901,7 +901,7 @@ end
 ### 6. Universal Cardinality Protection (C04 Resolution) ⚠️ CRITICAL
 
 > **⚠️ CRITICAL: C04 Conflict Resolution - Cardinality Protection for ALL Backends**  
-> **See:** [ADR-009 Section 8](../ADR-009-cost-optimization.md#8-cardinality-protection-c04-resolution--critical) for detailed architecture and cost impact analysis.  
+> **See:** [ADR-009 Section 8](../architecture/ADR-009-cost-optimization.md#8-cardinality-protection-c04-resolution--critical) for detailed architecture and cost impact analysis.  
 > **Problem:** Original UC-013 cardinality protection applied ONLY to Yabeda/Prometheus metrics, but NOT to OpenTelemetry span attributes or Loki log labels. High-cardinality values (`user_id`, `order_id`) bypassed protection and caused cost explosions in OTLP backends (Datadog, Honeycomb).  
 > **Solution:** Universal `CardinalityFilter` middleware applies protection to **ALL backends** (Yabeda, OpenTelemetry, Loki) with optional per-backend overrides.
 
@@ -1485,7 +1485,7 @@ after = calculate_cardinality_cost(
 
 ## ❓ Frequently Asked Questions
 
-> **Technical Details:** See [ADR-002 Section 11: FAQ & Critical Clarifications](../ADR-002-metrics-yabeda.md#11-faq--critical-clarifications) for architectural rationale.
+> **Technical Details:** See [ADR-002 Section 11: FAQ & Critical Clarifications](../architecture/ADR-002-metrics-yabeda.md#11-faq--critical-clarifications) for architectural rationale.
 
 ### Q1: Does cardinality protection apply to all my logs and metrics?
 
