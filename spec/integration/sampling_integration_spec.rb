@@ -532,11 +532,11 @@ RSpec.describe "Sampling Middleware Integration", :integration do
       final_events = memory_adapter.find_events("Events::TestTraceIndependent")
       final_count = final_events.count
 
-      # Should be approximately 50% (allow 35-65% range for statistical variance)
-      # Each trace gets independent decision, so overall should be ~50%
-      expect(final_count).to be_between(35, 65),
+      # Should be approximately 50%. With n=100 independent traces, counts outside a tight
+      # band still occur (~3σ is ~35–65; CI occasionally sees 34). Use a slightly wider band.
+      expect(final_count).to be_between(30, 70),
                              "Different traces should get independent decisions. " \
-                             "Expected ~50% sampled (35-65 events), got #{final_count}"
+                             "Expected ~50% sampled (30–70 events), got #{final_count}"
     end
 
     it "caches trace sampling decisions for performance" do
