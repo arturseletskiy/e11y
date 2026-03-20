@@ -1,0 +1,20 @@
+[
+  {
+    "id": "evt-001",
+    "event_name": "Events::RequestStarted",
+    "severity": "info",
+    "timestamp": "2026-03-20T10:00:01.100Z",
+    "trace_id": "tr-aaa",
+    "metadata": { "source": "web", "started_at": "2026-03-20T10:00:01.100Z" },
+    "payload": { "path": "/orders" }
+  },
+  {
+    "id": "evt-002",
+    "event_name": "Events::CheckoutValidated",
+    "severity": "warn",
+    "timestamp": "2026-03-20T10:00:01.250Z",
+    "trace_id": "tr-aaa",
+    "metadata": { "source": "web", "duration_ms": 45 },
+    "payload": { "coupon": "stale" }
+  }
+]

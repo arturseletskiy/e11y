@@ -1,0 +1,23 @@
+[
+  {
+    "started_at": "2026-03-20T10:00:05.000Z",
+    "trace_ids": ["tr-ccc"],
+    "has_error": false,
+    "source": "web",
+    "traces_count": 1
+  },
+  {
+    "started_at": "2026-03-20T10:00:04.500Z",
+    "trace_ids": ["tr-job-1"],
+    "has_error": true,
+    "source": "job",
+    "traces_count": 1
+  },
+  {
+    "started_at": "2026-03-20T10:00:02.000Z",
+    "trace_ids": ["tr-aaa", "tr-bbb"],
+    "has_error": true,
+    "source": "web",
+    "traces_count": 2
+  }
+]
