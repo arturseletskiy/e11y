@@ -16,7 +16,8 @@ Add to your Gemfile (development group only):
 
 ```ruby
 # Gemfile
-gem "e11y-devtools", "~> 0.1", group: :development
+gem "e11y", "~> 1.0"
+gem "e11y-devtools", "~> 0.1.0", group: :development
 ```
 
 Then run `bundle install`.
