@@ -109,6 +109,13 @@
   display: flex;
   align-items: stretch;
   justify-content: stretch;
+  will-change: clip-path;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .e11y-backdrop {
+    will-change: auto;
+  }
 }
 
 .e11y-sheet {

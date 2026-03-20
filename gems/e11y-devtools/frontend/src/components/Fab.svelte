@@ -1,7 +1,7 @@
 <script lang="ts">
   type Props = {
     label: string
-    onclick: () => void
+    onclick: (e: MouseEvent) => void
     stateClass: "" | "e11y-fab--state-warn" | "e11y-fab--state-err"
     pulseClass: "" | "e11y-fab--pulse-warn" | "e11y-fab--pulse-error"
   }

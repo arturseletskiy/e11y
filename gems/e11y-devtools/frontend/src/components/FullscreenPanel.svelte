@@ -1,25 +1,37 @@
 <script lang="ts">
-  import { cubicOut } from "svelte/easing"
-  import { fade, scale } from "svelte/transition"
   import type { Snippet } from "svelte"
+  import { circleCollapse, circleExpand, type CircleOrigin } from "../lib/transitions"
+  import { originFallbackFabCorner } from "../lib/viewportOrigin"
 
   type Props = {
     open: boolean
     onclose: () => void
     title: string
+    /** Circle reveal origin (FAB center + radius); falls back if null. */
+    origin: CircleOrigin | null
     headerExtra?: Snippet
     children: Snippet
   }
 
-  let { open, onclose, title, headerExtra, children }: Props = $props()
+  let { open, onclose, title, headerExtra, children, origin }: Props = $props()
 
   function motionOk(): boolean {
     return typeof matchMedia === "undefined" || !matchMedia("(prefers-reduced-motion: reduce)").matches
   }
 
-  const fadeMs = $derived(motionOk() ? 220 : 0)
-  const sheetMs = $derived(motionOk() ? 460 : 0)
-  const sheetDelay = $derived(motionOk() ? 40 : 0)
+  const o = $derived(origin ?? originFallbackFabCorner())
+  const openMs = $derived(motionOk() ? 440 : 0)
+  const closeMs = $derived(motionOk() ? 360 : 0)
+
+  function handleKeydown(e: KeyboardEvent): void {
+    if (e.key === "Escape") onclose()
+  }
+
+  $effect(() => {
+    if (!open) return
+    window.addEventListener("keydown", handleKeydown)
+    return () => window.removeEventListener("keydown", handleKeydown)
+  })
 </script>
 
 {#if open}
@@ -28,8 +40,8 @@
     class="e11y-backdrop"
     role="presentation"
     onclick={onclose}
-    in:fade={{ duration: fadeMs }}
-    out:fade={{ duration: Math.min(fadeMs, 160) }}
+    in:circleExpand={{ ...o, duration: openMs }}
+    out:circleCollapse={{ ...o, duration: closeMs }}
   >
     <div
       class="e11y-sheet"
@@ -38,19 +50,6 @@
       aria-label={title}
       tabindex="-1"
       onclick={(e) => e.stopPropagation()}
-      in:scale={{
-        duration: sheetMs,
-        delay: sheetDelay,
-        start: 0.06,
-        opacity: 0.88,
-        easing: cubicOut,
-      }}
-      out:scale={{
-        duration: Math.min(sheetMs, 280),
-        start: 0.92,
-        opacity: 0.9,
-        easing: cubicOut,
-      }}
     >
       <div class="e11y-panel-header">
         <span class="e11y-panel-title">{title}</span>

@@ -5,8 +5,12 @@
   import { formatInteractionStarted, summarizeTraceIds } from "./lib/format"
   import { eventKey } from "./lib/eventIdentity"
   import type { OverlayRoute, SourceFilter } from "./lib/router"
+  import type { CircleOrigin } from "./lib/transitions"
+  import { originFallbackFabCorner, originFromFabButton } from "./lib/viewportOrigin"
 
   let panelOpen = $state(false)
+  /** Circle reveal/collapse origin (Magic UI–style); updated on each open/close from FAB when possible. */
+  let panelCircleOrigin = $state<CircleOrigin | null>(null)
   let source = $state<SourceFilter>("web")
   let route = $state<OverlayRoute>({ screen: "interactions" })
   let interactions = $state<Record<string, unknown>[]>([])
@@ -123,12 +127,21 @@
     }
   }
 
-  function togglePanel(): void {
-    panelOpen = !panelOpen
+  function fabClick(e: MouseEvent): void {
+    const el = e.currentTarget
     if (panelOpen) {
-      route = { screen: "interactions" }
-      void loadInteractionsList()
+      if (el instanceof HTMLButtonElement) panelCircleOrigin = originFromFabButton(el)
+      panelOpen = false
+      return
     }
+    if (el instanceof HTMLButtonElement) {
+      panelCircleOrigin = originFromFabButton(el)
+    } else {
+      panelCircleOrigin = originFallbackFabCorner()
+    }
+    panelOpen = true
+    route = { screen: "interactions" }
+    void loadInteractionsList()
   }
 
   async function copyDetailJson(): Promise<void> {
@@ -203,21 +216,17 @@
     source
     if (panelOpen) void loadInteractionsList()
   })
-
-  $effect(() => {
-    if (!panelOpen) return
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") panelOpen = false
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  })
 </script>
 
 <div class="e11y-dt">
-  <Fab label={badgeLabel} onclick={togglePanel} stateClass={fabStateClass} pulseClass={fabPulseClass} />
+  <Fab label={badgeLabel} onclick={fabClick} stateClass={fabStateClass} pulseClass={fabPulseClass} />
 
-  <FullscreenPanel open={panelOpen} onclose={() => (panelOpen = false)} title={panelTitle}>
+  <FullscreenPanel
+    open={panelOpen}
+    onclose={() => (panelOpen = false)}
+    title={panelTitle}
+    origin={panelCircleOrigin}
+  >
     {#snippet headerExtra()}
       <div class="e11y-chip-row">
         {#each ["web", "job", "all"] as s (s)}
