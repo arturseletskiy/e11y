@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+### Changed
+
+### Fixed
+
+### Deprecated
+
+### Removed
+
+### Security
+
+## [1.0.0] - 2026-03-20
+
 ### BREAKING: Configuration — Flat config API
 
 **Nested config objects removed.** All configuration options are now flat accessors on `config`.
