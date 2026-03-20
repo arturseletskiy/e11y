@@ -418,3 +418,123 @@
   color: var(--e11y-err);
   padding: 8px;
 }
+
+.e11y-header-nav {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.e11y-tab-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.e11y-tab {
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--e11y-border);
+  background: transparent;
+  color: var(--e11y-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.e11y-tab:hover {
+  color: var(--e11y-text);
+  border-color: #555;
+}
+
+.e11y-tab--active {
+  color: var(--e11y-text);
+  border-color: var(--e11y-accent);
+  background: rgba(99, 179, 237, 0.12);
+}
+
+.e11y-tab-badge {
+  display: inline-block;
+  min-width: 1.25em;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(229, 62, 62, 0.25);
+  color: var(--e11y-err);
+  font-size: 10px;
+  vertical-align: middle;
+}
+
+.e11y-chip-row--header {
+  justify-content: flex-end;
+}
+
+.e11y-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 12px;
+  align-items: start;
+  min-height: min(60vh, 520px);
+}
+
+@media (max-width: 899px) {
+  .e11y-split {
+    display: block;
+  }
+}
+
+.e11y-split-primary,
+.e11y-split-secondary {
+  min-height: 120px;
+  max-height: min(65vh, 560px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.e11y-split-secondary {
+  border-left: 1px solid var(--e11y-border);
+  padding-left: 12px;
+}
+
+@media (max-width: 899px) {
+  .e11y-split-secondary {
+    border-left: none;
+    padding-left: 0;
+  }
+}
+
+.e11y-split-placeholder {
+  margin: 24px 8px;
+  color: var(--e11y-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.e11y-ix--selected {
+  border-color: rgba(99, 179, 237, 0.65);
+  box-shadow: 0 0 0 1px rgba(99, 179, 237, 0.25);
+}
+
+.e11y-problems-hint {
+  margin: 0 0 12px;
+  font-size: 11px;
+  color: var(--e11y-muted);
+  line-height: 1.45;
+}
+
+.e11y-empty {
+  margin: 8px 0 12px;
+}
+
+.e11y-row--problem {
+  flex-wrap: wrap;
+}
+
+.e11y-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+}

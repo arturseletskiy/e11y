@@ -8,8 +8,9 @@
   import type { CircleOrigin } from "./lib/transitions"
   import { originFallbackFabCorner, originFromFabButton } from "./lib/viewportOrigin"
 
+  const SPLIT_MIN_PX = 900
+
   let panelOpen = $state(false)
-  /** Circle reveal/collapse origin (Magic UI–style); updated on each open/close from FAB when possible. */
   let panelCircleOrigin = $state<CircleOrigin | null>(null)
   let source = $state<SourceFilter>("web")
   let route = $state<OverlayRoute>({ screen: "interactions" })
@@ -17,6 +18,9 @@
   let events = $state<Record<string, unknown>[]>([])
   let recentEvents = $state<Record<string, unknown>[]>([])
   let loadError = $state<string | null>(null)
+  /** Selected interaction row key when using wide split layout. */
+  let splitSelectedKey = $state<string | null>(null)
+  let layoutWide = $state(false)
 
   let prevRecentKeys = $state<Set<string>>(new Set())
   let firstRecentPoll = $state(true)
@@ -25,6 +29,28 @@
 
   const POLL_MS = 2000
   const PULSE_MS = 3000
+
+  let problemEvents = $derived.by(() =>
+    recentEvents.filter((e) => e.severity === "error" || e.severity === "fatal")
+  )
+
+  $effect(() => {
+    const mq = window.matchMedia(`(min-width: ${SPLIT_MIN_PX}px)`)
+    const sync = (): void => {
+      layoutWide = mq.matches
+    }
+    sync()
+    mq.addEventListener("change", sync)
+    return () => mq.removeEventListener("change", sync)
+  })
+
+  /** If viewport becomes narrow while split view had a selection, fall back to full-screen events list. */
+  $effect(() => {
+    if (layoutWide) return
+    if (route.screen !== "interactions" || !splitSelectedKey) return
+    const tid = events[0] && String((events[0] as Record<string, unknown>).trace_id ?? "")
+    if (tid) route = { screen: "events", traceId: tid }
+  })
 
   function severityRank(s: "none" | "error" | "warn"): number {
     if (s === "error") return 2
@@ -102,27 +128,66 @@
     }
   }
 
-  async function openTraceFromInteraction(row: Record<string, unknown>): Promise<void> {
+  function goTabProblems(): void {
+    splitSelectedKey = null
+    route = { screen: "problems" }
+  }
+
+  function goTabInteractions(): void {
+    splitSelectedKey = null
+    events = []
+    route = { screen: "interactions" }
+    void loadInteractionsList()
+  }
+
+  async function onInteractionRowClick(row: Record<string, unknown>): Promise<void> {
     const ids = row.trace_ids as string[] | undefined
     const tid = ids?.[0]
     if (!tid) return
+    const key = interactionRowKey(row)
     try {
       events = await fetchTraceEvents(tid)
-      route = { screen: "events", traceId: tid }
+      if (layoutWide) {
+        splitSelectedKey = key
+        route = { screen: "interactions" }
+      } else {
+        splitSelectedKey = null
+        route = { screen: "events", traceId: tid }
+      }
     } catch (e) {
       loadError = String(e)
     }
   }
 
+  function openProblemDetail(ev: Record<string, unknown>): void {
+    const tid = String(ev.trace_id ?? "")
+    route = { screen: "detail", traceId: tid, event: ev, detailFrom: "problems" }
+  }
+
   function selectEvent(ev: Record<string, unknown>): void {
-    if (route.screen !== "events") return
-    route = { screen: "detail", traceId: route.traceId, event: ev }
+    const tid = String(ev.trace_id ?? "")
+    if (route.screen === "events") {
+      route = { screen: "detail", traceId: route.traceId, event: ev, detailFrom: "events" }
+      return
+    }
+    if (route.screen === "interactions" && layoutWide && splitSelectedKey) {
+      route = { screen: "detail", traceId: tid, event: ev, detailFrom: "events" }
+    }
   }
 
   function back(): void {
     if (route.screen === "detail") {
-      route = { screen: "events", traceId: route.traceId }
-    } else if (route.screen === "events") {
+      if (route.detailFrom === "problems") {
+        route = { screen: "problems" }
+      } else if (layoutWide && splitSelectedKey) {
+        route = { screen: "interactions" }
+      } else {
+        route = { screen: "events", traceId: route.traceId }
+      }
+      return
+    }
+    if (route.screen === "events") {
+      splitSelectedKey = null
       route = { screen: "interactions" }
     }
   }
@@ -140,7 +205,13 @@
       panelCircleOrigin = originFallbackFabCorner()
     }
     panelOpen = true
-    route = { screen: "interactions" }
+    splitSelectedKey = null
+    const { err } = countsFromRecent(recentEvents)
+    if (err > 0) {
+      route = { screen: "problems" }
+    } else {
+      route = { screen: "interactions" }
+    }
     void loadInteractionsList()
   }
 
@@ -155,9 +226,11 @@
   }
 
   let panelTitle = $derived.by(() => {
+    if (route.screen === "problems") return "e11y — problems"
     if (route.screen === "interactions") return "e11y — interactions"
     if (route.screen === "events") return `e11y — trace ${route.traceId}`
-    return "e11y — event"
+    if (route.screen === "detail") return `e11y — ${String(route.event.event_name ?? "event")}`
+    return "e11y"
   })
 
   let badgeLabel = $derived.by(() => {
@@ -181,6 +254,22 @@
     if (pulseKind === "warn") return "e11y-fab--pulse-warn"
     return ""
   })
+
+  let tabProblemsActive = $derived.by(
+    () => route.screen === "problems" || (route.screen === "detail" && route.detailFrom === "problems")
+  )
+  let tabInteractionsActive = $derived.by(
+    () =>
+      route.screen === "interactions" ||
+      route.screen === "events" ||
+      (route.screen === "detail" && route.detailFrom === "events")
+  )
+
+  let showEventsToolbar = $derived.by(
+    () => route.screen === "events" || route.screen === "detail"
+  )
+
+  let errCount = $derived.by(() => countsFromRecent(recentEvents).err)
 
   function sevClass(sev: unknown): string {
     const s = String(sev ?? "info")
@@ -228,17 +317,43 @@
     origin={panelCircleOrigin}
   >
     {#snippet headerExtra()}
-      <div class="e11y-chip-row">
-        {#each ["web", "job", "all"] as s (s)}
+      <div class="e11y-header-nav">
+        <div class="e11y-tab-row" role="tablist">
           <button
             type="button"
-            class="e11y-chip"
-            class:e11y-chip--active={source === s}
-            onclick={() => (source = s as SourceFilter)}
+            role="tab"
+            class="e11y-tab"
+            class:e11y-tab--active={tabProblemsActive}
+            aria-selected={tabProblemsActive}
+            onclick={goTabProblems}
           >
-            {s}
+            Problems{#if errCount > 0}&nbsp;<span class="e11y-tab-badge">{errCount}</span>{/if}
           </button>
-        {/each}
+          <button
+            type="button"
+            role="tab"
+            class="e11y-tab"
+            class:e11y-tab--active={tabInteractionsActive}
+            aria-selected={tabInteractionsActive}
+            onclick={goTabInteractions}
+          >
+            Interactions
+          </button>
+        </div>
+        {#if tabInteractionsActive && route.screen === "interactions"}
+          <div class="e11y-chip-row e11y-chip-row--header">
+            {#each ["web", "job", "all"] as s (s)}
+              <button
+                type="button"
+                class="e11y-chip"
+                class:e11y-chip--active={source === s}
+                onclick={() => (source = s as SourceFilter)}
+              >
+                {s}
+              </button>
+            {/each}
+          </div>
+        {/if}
       </div>
     {/snippet}
 
@@ -247,55 +362,149 @@
         <p class="e11y-err-msg">{loadError}</p>
       {/if}
 
-      {#if route.screen !== "interactions"}
+      {#if showEventsToolbar}
         <div class="e11y-toolbar">
           <button type="button" class="e11y-btn" onclick={back}>← Back</button>
+          {#if route.screen === "detail"}
+            <button type="button" class="e11y-btn" onclick={() => void copyDetailJson()}>Copy JSON</button>
+          {/if}
         </div>
       {/if}
 
-      {#if route.screen === "interactions"}
-        {#each interactions as row (interactionRowKey(row))}
-          {@const ids = (row.trace_ids as string[] | undefined) ?? []}
-          {@const tc = Number(row.traces_count ?? ids.length)}
-          {@const { absolute, relative } = formatInteractionStarted(String(row.started_at ?? ""))}
-          {@const { primary, extra, preview } = summarizeTraceIds(ids)}
-          <div
-            class="e11y-ix"
-            class:e11y-ix--error={!!row.has_error}
-            role="button"
-            tabindex="0"
-            onclick={() => void openTraceFromInteraction(row)}
-            onkeydown={(e) => e.key === "Enter" && void openTraceFromInteraction(row)}
-          >
-            <div class="e11y-ix-main">
-              <div class="e11y-ix-time">
-                <span class="e11y-ix-time-abs">{absolute}</span>
-                {#if relative}
-                  <span class="e11y-ix-time-rel">{relative}</span>
-                {/if}
-              </div>
-              <div class="e11y-ix-trace-line">
-                <code class="e11y-ix-trace-primary" title="First trace_id (drill-down target)">{primary}</code>
-                {#if extra > 0}
-                  <span class="e11y-muted">+{extra} parallel</span>
-                {/if}
-              </div>
-              {#if preview && ids.length > 1}
-                <div class="e11y-ix-preview" title="All trace ids in this interaction window">{preview}</div>
-              {/if}
-              <div class="e11y-ix-hint">Click → events for first trace (same as TUI)</div>
+      {#if route.screen === "problems"}
+        <p class="e11y-problems-hint">Recent error / fatal events from the dev log (newest first).</p>
+        {#if problemEvents.length === 0}
+          <p class="e11y-muted e11y-empty">No errors in the recent buffer.</p>
+          <button type="button" class="e11y-btn" onclick={goTabInteractions}>Open interactions</button>
+        {:else}
+          {#each problemEvents as ev, i (eventKey(ev, i))}
+            {@const tr = String(ev.trace_id ?? "")}
+            <div
+              class="e11y-row e11y-row--problem"
+              role="button"
+              tabindex="0"
+              onclick={() => openProblemDetail(ev)}
+              onkeydown={(e) => e.key === "Enter" && openProblemDetail(ev)}
+            >
+              <span class="e11y-sev {sevClass(ev.severity)}">{String(ev.severity ?? "?")}</span>
+              <span class="e11y-row-title">{String(ev.event_name ?? "")}</span>
+              <span class="e11y-row-meta e11y-mono" title={tr || undefined}
+                >{tr.length > 14 ? `${tr.slice(0, 12)}…` : tr || "—"}</span
+              >
+              <span class="e11y-row-meta">{String(ev.timestamp ?? "")}</span>
             </div>
-            <div class="e11y-ix-aside">
-              <span class={sourcePillClass(row.source)}>{String(row.source ?? "?")}</span>
-              {#if row.has_error}
-                <span class="e11y-pill e11y-pill--err">Has errors</span>
+          {/each}
+        {/if}
+      {:else if route.screen === "interactions"}
+        {#if layoutWide}
+          <div class="e11y-split">
+            <div class="e11y-split-primary">
+              {#each interactions as row (interactionRowKey(row))}
+                {@const ids = (row.trace_ids as string[] | undefined) ?? []}
+                {@const tc = Number(row.traces_count ?? ids.length)}
+                {@const { absolute, relative } = formatInteractionStarted(String(row.started_at ?? ""))}
+                {@const { primary, extra, preview } = summarizeTraceIds(ids)}
+                {@const ikey = interactionRowKey(row)}
+                <div
+                  class="e11y-ix"
+                  class:e11y-ix--error={!!row.has_error}
+                  class:e11y-ix--selected={splitSelectedKey === ikey}
+                  role="button"
+                  tabindex="0"
+                  onclick={() => void onInteractionRowClick(row)}
+                  onkeydown={(e) => e.key === "Enter" && void onInteractionRowClick(row)}
+                >
+                  <div class="e11y-ix-main">
+                    <div class="e11y-ix-time">
+                      <span class="e11y-ix-time-abs">{absolute}</span>
+                      {#if relative}
+                        <span class="e11y-ix-time-rel">{relative}</span>
+                      {/if}
+                    </div>
+                    <div class="e11y-ix-trace-line">
+                      <code class="e11y-ix-trace-primary">{primary}</code>
+                      {#if extra > 0}
+                        <span class="e11y-muted">+{extra}</span>
+                      {/if}
+                    </div>
+                    {#if preview && ids.length > 1}
+                      <div class="e11y-ix-preview">{preview}</div>
+                    {/if}
+                  </div>
+                  <div class="e11y-ix-aside">
+                    <span class={sourcePillClass(row.source)}>{String(row.source ?? "?")}</span>
+                    {#if row.has_error}
+                      <span class="e11y-pill e11y-pill--err">err</span>
+                    {/if}
+                    <span class="e11y-ix-count">{tc}×</span>
+                  </div>
+                </div>
+              {/each}
+            </div>
+            <div class="e11y-split-secondary">
+              {#if !splitSelectedKey}
+                <p class="e11y-split-placeholder">Select an interaction to see events.</p>
               {:else}
-                <span class="e11y-pill e11y-pill--ok">Clean</span>
+                {#each events as ev, j (eventKey(ev, j))}
+                  <div
+                    class="e11y-row"
+                    role="button"
+                    tabindex="0"
+                    onclick={() => selectEvent(ev)}
+                    onkeydown={(e) => e.key === "Enter" && selectEvent(ev)}
+                  >
+                    <span class="e11y-sev {sevClass(ev.severity)}">{String(ev.severity ?? "?")}</span>
+                    <span class="e11y-row-title">{String(ev.event_name ?? "")}</span>
+                    <span class="e11y-row-meta">{String(ev.timestamp ?? "")}</span>
+                  </div>
+                {/each}
               {/if}
-              <span class="e11y-ix-count" title="Traces in group">{tc} trace{tc === 1 ? "" : "s"}</span>
             </div>
           </div>
-        {/each}
+        {:else}
+          {#each interactions as row (interactionRowKey(row))}
+            {@const ids = (row.trace_ids as string[] | undefined) ?? []}
+            {@const tc = Number(row.traces_count ?? ids.length)}
+            {@const { absolute, relative } = formatInteractionStarted(String(row.started_at ?? ""))}
+            {@const { primary, extra, preview } = summarizeTraceIds(ids)}
+            <div
+              class="e11y-ix"
+              class:e11y-ix--error={!!row.has_error}
+              role="button"
+              tabindex="0"
+              onclick={() => void onInteractionRowClick(row)}
+              onkeydown={(e) => e.key === "Enter" && void onInteractionRowClick(row)}
+            >
+              <div class="e11y-ix-main">
+                <div class="e11y-ix-time">
+                  <span class="e11y-ix-time-abs">{absolute}</span>
+                  {#if relative}
+                    <span class="e11y-ix-time-rel">{relative}</span>
+                  {/if}
+                </div>
+                <div class="e11y-ix-trace-line">
+                  <code class="e11y-ix-trace-primary" title="First trace_id">{primary}</code>
+                  {#if extra > 0}
+                    <span class="e11y-muted">+{extra} parallel</span>
+                  {/if}
+                </div>
+                {#if preview && ids.length > 1}
+                  <div class="e11y-ix-preview" title="Trace ids in group">{preview}</div>
+                {/if}
+                <div class="e11y-ix-hint">Click → events for first trace</div>
+              </div>
+              <div class="e11y-ix-aside">
+                <span class={sourcePillClass(row.source)}>{String(row.source ?? "?")}</span>
+                {#if row.has_error}
+                  <span class="e11y-pill e11y-pill--err">Has errors</span>
+                {:else}
+                  <span class="e11y-pill e11y-pill--ok">Clean</span>
+                {/if}
+                <span class="e11y-ix-count" title="Traces in group">{tc} trace{tc === 1 ? "" : "s"}</span>
+              </div>
+            </div>
+          {/each}
+        {/if}
       {:else if route.screen === "events"}
         {#each events as ev, i (eventKey(ev, i))}
           <div
@@ -311,9 +520,6 @@
           </div>
         {/each}
       {:else if route.screen === "detail"}
-        <div class="e11y-toolbar">
-          <button type="button" class="e11y-btn" onclick={() => void copyDetailJson()}>Copy JSON</button>
-        </div>
         <pre class="e11y-detail-pre">{JSON.stringify(route.event, null, 2)}</pre>
       {/if}
     {/snippet}

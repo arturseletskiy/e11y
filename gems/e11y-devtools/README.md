@@ -53,7 +53,9 @@ When `gem "e11y-devtools"` is in your Gemfile, the overlay appears automatically
 The UI is a **Svelte** bundle (`overlay.js`) with:
 
 - **FAB** (bottom-right): total events, warn/error counts; brief **pulse** when **new** `warn` or `error`/`fatal` rows appear (not on every poll).
-- **Fullscreen panel**: interactions → events (first `trace_id` per group, same as TUI) → event detail with **Copy JSON**. Source filter chips: web / job / all.
+- **Fullscreen panel**: tabs **Problems** (error/fatal from recent buffer, 1-click → JSON) and **Interactions** (grouped traces like TUI). If there are errors in the recent snapshot, the panel opens on **Problems** first.
+- **Wide viewport** (~900px+): interactions use a **split view** (list left, events right); narrow screens keep the stacked flow.
+- Source filter chips (web / job / all) apply to **Interactions** only.
 - **JSON API** under `/_e11y/v1/`: `GET interactions`, `GET traces/:trace_id/events`, `GET events/recent`.
 
 ### Rebuild the overlay asset
