@@ -2,6 +2,7 @@
   import Fab from "./components/Fab.svelte"
   import FullscreenPanel from "./components/FullscreenPanel.svelte"
   import { fetchInteractions, fetchRecent, fetchTraceEvents } from "./lib/api"
+  import { formatInteractionStarted, summarizeTraceIds } from "./lib/format"
   import { eventKey } from "./lib/eventIdentity"
   import type { OverlayRoute, SourceFilter } from "./lib/router"
 
@@ -175,6 +176,18 @@
     return "e11y-sev--info"
   }
 
+  function interactionRowKey(row: Record<string, unknown>): string {
+    const ids = (row.trace_ids as string[] | undefined) ?? []
+    return `${row.started_at ?? ""}|${ids.join(",")}`
+  }
+
+  function sourcePillClass(src: unknown): string {
+    const s = String(src ?? "")
+    if (s === "web") return "e11y-pill e11y-pill--web"
+    if (s === "job") return "e11y-pill e11y-pill--job"
+    return "e11y-pill"
+  }
+
   $effect(() => {
     const id = setInterval(() => void pollRecent(), POLL_MS)
     void pollRecent()
@@ -232,22 +245,46 @@
       {/if}
 
       {#if route.screen === "interactions"}
-        {#each interactions as row, i (i)}
+        {#each interactions as row (interactionRowKey(row))}
+          {@const ids = (row.trace_ids as string[] | undefined) ?? []}
+          {@const tc = Number(row.traces_count ?? ids.length)}
+          {@const { absolute, relative } = formatInteractionStarted(String(row.started_at ?? ""))}
+          {@const { primary, extra, preview } = summarizeTraceIds(ids)}
           <div
-            class="e11y-row"
+            class="e11y-ix"
+            class:e11y-ix--error={!!row.has_error}
             role="button"
             tabindex="0"
             onclick={() => void openTraceFromInteraction(row)}
             onkeydown={(e) => e.key === "Enter" && void openTraceFromInteraction(row)}
           >
-            <span class="e11y-row-meta">{String(row.started_at ?? "")}</span>
-            <span class="e11y-row-title">
-              {String((row.trace_ids as string[])?.length ?? 0)} traces
-              {#if row.has_error}
-                <span class="e11y-sev e11y-sev--error">ERR</span>
+            <div class="e11y-ix-main">
+              <div class="e11y-ix-time">
+                <span class="e11y-ix-time-abs">{absolute}</span>
+                {#if relative}
+                  <span class="e11y-ix-time-rel">{relative}</span>
+                {/if}
+              </div>
+              <div class="e11y-ix-trace-line">
+                <code class="e11y-ix-trace-primary" title="First trace_id (drill-down target)">{primary}</code>
+                {#if extra > 0}
+                  <span class="e11y-muted">+{extra} parallel</span>
+                {/if}
+              </div>
+              {#if preview && ids.length > 1}
+                <div class="e11y-ix-preview" title="All trace ids in this interaction window">{preview}</div>
               {/if}
-            </span>
-            <span class="e11y-row-meta">{String(row.source ?? "")}</span>
+              <div class="e11y-ix-hint">Click → events for first trace (same as TUI)</div>
+            </div>
+            <div class="e11y-ix-aside">
+              <span class={sourcePillClass(row.source)}>{String(row.source ?? "?")}</span>
+              {#if row.has_error}
+                <span class="e11y-pill e11y-pill--err">Has errors</span>
+              {:else}
+                <span class="e11y-pill e11y-pill--ok">Clean</span>
+              {/if}
+              <span class="e11y-ix-count" title="Traces in group">{tc} trace{tc === 1 ? "" : "s"}</span>
+            </div>
           </div>
         {/each}
       {:else if route.screen === "events"}
