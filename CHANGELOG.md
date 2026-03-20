@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+### Changed
+
+### Fixed
+
+### Deprecated
+
+### Removed
+
+### Security
+
+## [1.0.0] - 2026-03-20
+
 ### BREAKING: Configuration — Flat config API
 
 **Nested config objects removed.** All configuration options are now flat accessors on `config`.
@@ -50,7 +64,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Monorepo release tooling: `rake release:build_gems` and `rake release:gem_push` build/publish **e11y** and **e11y-devtools**; optional `release:rubygems:push_core` / `push_devtools`; GitHub Release workflow attaches both `.gem` files.
+
 ### Changed
+
+- **e11y-devtools** 0.1.1 — depends on **e11y** `~> 1.0` (`CORE_VERSION`); README Gemfile example updated.
 
 ### Fixed
 

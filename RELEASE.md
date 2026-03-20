@@ -68,7 +68,7 @@ git commit -m "Bump version to 0.2.0"
 
 ### Step 1: Prepare Release
 
-Run tests, build gem, create tag:
+Run tests, build both gems, create tag:
 
 ```bash
 rake release:prep
@@ -77,8 +77,14 @@ rake release:prep
 This will:
 - ✅ Check git status (fails if uncommitted changes)
 - ✅ Run full test suite
-- ✅ Build gem file
-- ✅ Create annotated git tag
+- ✅ Build **e11y** and **e11y-devtools** `.gem` files (devtools is built under `gems/e11y-devtools/`)
+- ✅ Create annotated git tag `v<e11y-version>` (tag follows the core gem only)
+
+Build gems without tests (e.g. after a failed spec run you already trust):
+
+```bash
+rake release:build_gems
+```
 
 Or manually:
 
@@ -86,8 +92,9 @@ Or manually:
 # Run all tests
 bundle exec rspec
 
-# Build gem
+# Build gems
 gem build e11y.gemspec
+(cd gems/e11y-devtools && gem build e11y-devtools.gemspec)
 
 # Create and push tag
 git tag -a v0.2.0 -m "Release v0.2.0"
@@ -114,10 +121,16 @@ rake release:gem_push
 ```
 
 This will:
-- ✅ Verify gem file exists
-- ✅ Prompt for confirmation
-- ✅ Push gem to RubyGems (requires MFA)
-- ✅ Show verification URL
+- ✅ Verify both `.gem` files exist (e11y in repo root, e11y-devtools under `gems/e11y-devtools/`)
+- ✅ Prompt once for confirmation
+- ✅ Push **e11y** first, then **e11y-devtools** (each `gem push` may ask for MFA)
+
+Push only one gem if needed:
+
+```bash
+rake release:rubygems:push_core      # e11y only
+rake release:rubygems:push_devtools  # e11y-devtools only
+```
 
 Or manually:
 
@@ -133,8 +146,9 @@ Or manually:
 # Sign in to RubyGems (one-time setup)
 gem signin
 
-# Push the gem (requires MFA)
+# Push the gems (requires MFA; e11y first — devtools depends on it)
 gem push e11y-0.1.0.gem
+gem push gems/e11y-devtools/e11y-devtools-0.1.0.gem
 ```
 
 Expected output:

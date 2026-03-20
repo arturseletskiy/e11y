@@ -9,7 +9,8 @@
 #   rake release:full      # Complete release workflow (prep + git_push + gem_push)
 #   rake release:prep      # Run tests, build gem, create tag
 #   rake release:git_push  # Push to GitHub
-#   rake release:gem_push  # Publish to RubyGems
+#   rake release:gem_push  # Publish e11y + e11y-devtools to RubyGems
+#   rake release:build_gems # Build both .gem packages (no tests)
 #   rake spec:all          # Run all test suites
 #   rake spec:unit         # Run unit tests only (fast)
 #   rake spec:integration  # Run integration tests
@@ -25,6 +26,9 @@ def e11y_devtools_specs_available?
   # (no need for gem in bundle — spec_helper loads lib via path)
   File.directory?(File.join(__dir__, "gems/e11y-devtools/spec"))
 end
+
+# Built with: (cd gems/e11y-devtools && gem build …) — .gem stays in this directory
+E11Y_DEVTOOLS_GEM_DIR = File.expand_path("gems/e11y-devtools", __dir__).freeze
 
 RSpec::Core::RakeTask.new(:spec)
 
@@ -277,6 +281,31 @@ namespace :release do
     puts "#{'=' * 80}\n"
   end
 
+  desc "Build e11y and e11y-devtools .gem files (no tests; devtools built in its directory)"
+  task :build_gems do
+    require_relative "lib/e11y/version"
+    require_relative "gems/e11y-devtools/lib/e11y/devtools/version"
+
+    puts "\n[build] e11y v#{E11y::VERSION}..."
+    unless system("gem build e11y.gemspec")
+      puts "❌ Error: Failed to build e11y gem"
+      exit 1
+    end
+
+    puts "\n[build] e11y-devtools v#{E11y::Devtools::VERSION}..."
+    Dir.chdir(E11Y_DEVTOOLS_GEM_DIR) do
+      unless system("gem build e11y-devtools.gemspec")
+        puts "❌ Error: Failed to build e11y-devtools gem"
+        exit 1
+      end
+    end
+
+    devtools_artifact = File.join(E11Y_DEVTOOLS_GEM_DIR, "e11y-devtools-#{E11y::Devtools::VERSION}.gem")
+    puts "\n✅ Built:"
+    puts "   - e11y-#{E11y::VERSION}.gem"
+    puts "   - #{devtools_artifact}"
+  end
+
   desc "Prepare release: run tests, build gem, create git tag (safe)"
   task :prep do
     require_relative "lib/e11y/version"
@@ -302,13 +331,11 @@ namespace :release do
     end
     puts "✅ All tests passed"
 
-    # Step 3: Build gem
-    puts "\n[3/5] Building gem..."
-    unless system("gem build e11y.gemspec")
-      puts "❌ Error: Failed to build gem"
-      exit 1
-    end
-    puts "✅ Gem built: e11y-#{version}.gem"
+    # Step 3: Build gems (e11y + e11y-devtools)
+    puts "\n[3/5] Building gems..."
+    Rake::Task["release:build_gems"].invoke
+    require_relative "gems/e11y-devtools/lib/e11y/devtools/version"
+    puts "✅ Gems built: e11y-#{version}.gem + e11y-devtools-#{E11y::Devtools::VERSION}.gem"
 
     # Step 4: Create git tag
     puts "\n[4/5] Creating git tag..."
@@ -336,28 +363,108 @@ namespace :release do
     puts "     git push origin main"
     puts "     git push origin #{tag_name}"
     puts "  3. Publish to RubyGems:"
-    puts "     rake release:publish"
+    puts "     rake release:gem_push"
     puts "\n"
   end
 
-  desc "Publish gem to RubyGems.org (requires authentication, safe)"
+  namespace :rubygems do
+    desc "Publish e11y gem only"
+    task :push_core do
+      require_relative "lib/e11y/version"
+      gem_file = "e11y-#{E11y::VERSION}.gem"
+
+      puts "\n#{'=' * 80}"
+      puts "📤 Publishing e11y v#{E11y::VERSION} to RubyGems.org"
+      puts "#{'=' * 80}\n"
+
+      unless File.exist?(gem_file)
+        puts "❌ Error: Gem file not found: #{gem_file}"
+        puts "Run 'rake release:build_gems' or 'rake release:prep' first"
+        exit 1
+      end
+
+      puts "This will publish #{gem_file}"
+      puts "You may be prompted for RubyGems credentials and MFA."
+      puts "\nContinue? (y/N)"
+
+      response = $stdin.gets.chomp.downcase
+      unless %w[y yes].include?(response)
+        puts "❌ Publication cancelled"
+        exit 0
+      end
+
+      unless system("gem push #{gem_file}")
+        puts "\n❌ Error: Failed to publish e11y"
+        exit 1
+      end
+
+      puts "\n✅ Published e11y v#{E11y::VERSION}"
+      puts "Verify: https://rubygems.org/gems/e11y/versions/#{E11y::VERSION}"
+    end
+
+    desc "Publish e11y-devtools gem only"
+    task :push_devtools do
+      require_relative "gems/e11y-devtools/lib/e11y/devtools/version"
+      version = E11y::Devtools::VERSION
+      gem_file = File.join(E11Y_DEVTOOLS_GEM_DIR, "e11y-devtools-#{version}.gem")
+
+      puts "\n#{'=' * 80}"
+      puts "📤 Publishing e11y-devtools v#{version} to RubyGems.org"
+      puts "#{'=' * 80}\n"
+
+      unless File.exist?(gem_file)
+        puts "❌ Error: Gem file not found: #{gem_file}"
+        puts "Run 'rake release:build_gems' or 'rake release:prep' first"
+        exit 1
+      end
+
+      puts "This will publish #{gem_file}"
+      puts "You may be prompted for RubyGems credentials and MFA."
+      puts "\nContinue? (y/N)"
+
+      response = $stdin.gets.chomp.downcase
+      unless %w[y yes].include?(response)
+        puts "❌ Publication cancelled"
+        exit 0
+      end
+
+      unless system("gem push #{gem_file}")
+        puts "\n❌ Error: Failed to publish e11y-devtools"
+        exit 1
+      end
+
+      puts "\n✅ Published e11y-devtools v#{version}"
+      puts "Verify: https://rubygems.org/gems/e11y-devtools/versions/#{version}"
+    end
+  end
+
+  desc "Publish e11y then e11y-devtools to RubyGems.org (requires authentication, MFA)"
   task :gem_push do
     require_relative "lib/e11y/version"
-    version = E11y::VERSION
-    gem_file = "e11y-#{version}.gem"
+    require_relative "gems/e11y-devtools/lib/e11y/devtools/version"
+
+    core_gem = "e11y-#{E11y::VERSION}.gem"
+    devtools_gem = File.join(E11Y_DEVTOOLS_GEM_DIR, "e11y-devtools-#{E11y::Devtools::VERSION}.gem")
 
     puts "\n#{'=' * 80}"
-    puts "📤 Publishing e11y v#{version} to RubyGems.org"
+    puts "📤 Publishing to RubyGems.org"
     puts "#{'=' * 80}\n"
 
-    unless File.exist?(gem_file)
-      puts "❌ Error: Gem file not found: #{gem_file}"
-      puts "Run 'rake release:prep' first"
+    unless File.exist?(core_gem)
+      puts "❌ Error: Gem file not found: #{core_gem}"
+      puts "Run 'rake release:build_gems' or 'rake release:prep' first"
+      exit 1
+    end
+    unless File.exist?(devtools_gem)
+      puts "❌ Error: Gem file not found: #{devtools_gem}"
+      puts "Run 'rake release:build_gems' or 'rake release:prep' first"
       exit 1
     end
 
-    puts "This will publish #{gem_file} to RubyGems.org"
-    puts "You will be prompted for your RubyGems credentials and MFA code."
+    puts "This will publish (e11y first, then e11y-devtools):"
+    puts "  1. #{core_gem}"
+    puts "  2. #{devtools_gem}"
+    puts "\nYou may be prompted for RubyGems credentials and MFA for each push."
     puts "\nContinue? (y/N)"
 
     response = $stdin.gets.chomp.downcase
@@ -366,17 +473,19 @@ namespace :release do
       exit 0
     end
 
-    unless system("gem push #{gem_file}")
-      puts "\n❌ Error: Failed to publish gem"
-      puts "Make sure you have:"
-      puts "  1. RubyGems account (https://rubygems.org/sign_up)"
-      puts "  2. Signed in: gem signin"
-      puts "  3. MFA enabled on your account"
+    unless system("gem push #{core_gem}")
+      puts "\n❌ Error: Failed to publish e11y"
       exit 1
     end
 
-    puts "\n✅ Successfully published e11y v#{version} to RubyGems.org!"
-    puts "\nVerify: https://rubygems.org/gems/e11y/versions/#{version}"
+    unless system("gem push #{devtools_gem}")
+      puts "\n❌ Error: Failed to publish e11y-devtools (e11y may already be on RubyGems)"
+      exit 1
+    end
+
+    puts "\n✅ Successfully published both gems!"
+    puts "  e11y:         https://rubygems.org/gems/e11y/versions/#{E11y::VERSION}"
+    puts "  e11y-devtools: https://rubygems.org/gems/e11y-devtools/versions/#{E11y::Devtools::VERSION}"
   end
 
   desc "Push git changes and tag to GitHub (safe)"
@@ -442,16 +551,20 @@ namespace :release do
     puts "=" * 80
     puts "\nPost-release tasks:"
     puts "  1. Create GitHub release: https://github.com/arturseletskiy/e11y/releases/new"
-    puts "  2. Verify on RubyGems: https://rubygems.org/gems/e11y"
+    puts "  2. Verify on RubyGems: https://rubygems.org/gems/e11y and /gems/e11y-devtools"
     puts "  3. Update README badges"
     puts "  4. Announce on social media"
     puts "\n"
   end
 
-  desc "Clean up built gems"
+  desc "Clean up built gem files (repo root + gems/e11y-devtools)"
   task :clean do
     puts "🧹 Cleaning up gem files..."
     FileList["*.gem"].each do |gem_file|
+      File.delete(gem_file)
+      puts "  Deleted: #{gem_file}"
+    end
+    FileList[File.join(E11Y_DEVTOOLS_GEM_DIR, "*.gem")].each do |gem_file|
       File.delete(gem_file)
       puts "  Deleted: #{gem_file}"
     end
