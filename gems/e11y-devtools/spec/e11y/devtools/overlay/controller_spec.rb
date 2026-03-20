@@ -55,4 +55,37 @@ RSpec.describe E11y::Devtools::Overlay::Controller do
       expect(File.exist?(path)).to be false
     end
   end
+
+  describe "#v1_interactions" do
+    it "returns hashes with trace_ids and traces_count" do
+      write_event(name: "a", trace_id: "t1", severity: "info")
+      write_event(name: "b", trace_id: "t2", severity: "error")
+      rows = controller.v1_interactions(source: nil, limit: 10, window_ms: 500)
+      expect(rows).to be_an(Array)
+      expect(rows.first).to include("started_at", "trace_ids", "has_error", "source", "traces_count")
+      expect(rows.first["trace_ids"]).to be_an(Array)
+      expect(rows.first["traces_count"]).to eq(rows.first["trace_ids"].size)
+    end
+  end
+
+  describe "#v1_trace_events" do
+    it "returns events for trace in order" do
+      write_event(name: "first", trace_id: "tx")
+      write_event(name: "second", trace_id: "tx")
+      rows = controller.v1_trace_events("tx")
+      expect(rows.map { |e| e["event_name"] }).to eq(%w[first second])
+    end
+
+    it "returns empty array for blank trace id" do
+      expect(controller.v1_trace_events("")).to eq([])
+    end
+  end
+
+  describe "#v1_recent_events" do
+    it "respects limit clamp" do
+      5.times { write_event }
+      rows = controller.v1_recent_events(limit: 2)
+      expect(rows.size).to eq(2)
+    end
+  end
 end

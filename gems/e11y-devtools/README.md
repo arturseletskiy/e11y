@@ -48,12 +48,31 @@ bundle exec e11y help      # Show help
 
 ## Browser Overlay
 
-When `gem "e11y-devtools"` is in your Gemfile, the overlay badge appears automatically in development. No configuration needed — the Railtie mounts it.
+When `gem "e11y-devtools"` is in your Gemfile, the overlay appears automatically in development (Rails mounts `E11y::Devtools::Overlay::Engine` at `/_e11y`).
 
-The badge shows:
-- Total event count for the current request
-- Error count (red badge when errors present)
-- Click to expand the slide-in panel with full event list
+The UI is a **Svelte** bundle (`overlay.js`) with:
+
+- **FAB** (bottom-right): total events, warn/error counts; brief **pulse** when **new** `warn` or `error`/`fatal` rows appear (not on every poll).
+- **Fullscreen panel**: interactions → events (first `trace_id` per group, same as TUI) → event detail with **Copy JSON**. Source filter chips: web / job / all.
+- **JSON API** under `/_e11y/v1/`: `GET interactions`, `GET traces/:trace_id/events`, `GET events/recent`.
+
+### Rebuild the overlay asset
+
+After changing `gems/e11y-devtools/frontend/`:
+
+```bash
+cd gems/e11y-devtools/frontend && npm install && npm run build
+```
+
+Output: `lib/e11y/devtools/overlay/assets/overlay.js` (served at `/_e11y/overlay.js`).
+
+### Local UI prototype (mocks)
+
+```bash
+cd gems/e11y-devtools/frontend && npm run dev
+```
+
+Uses `public/mocks/v1/*.json` — see `frontend/README.md`.
 
 ## MCP Server — AI Integration
 

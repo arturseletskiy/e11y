@@ -27,6 +27,31 @@ module E11y
           render json: overlay_ctrl.stats
         end
 
+        def overlay_js
+          path = E11y::Devtools::Overlay::Engine.root.join(
+            "lib/e11y/devtools/overlay/assets/overlay.js"
+          )
+          return head :not_found unless path.file?
+
+          send_file path, type: "application/javascript", disposition: "inline"
+        end
+
+        def v1_interactions
+          render json: overlay_ctrl.v1_interactions(
+            source: params[:source],
+            limit: params[:limit],
+            window_ms: params[:window_ms]
+          )
+        end
+
+        def v1_trace_events
+          render json: overlay_ctrl.v1_trace_events(params[:trace_id])
+        end
+
+        def v1_events_recent
+          render json: overlay_ctrl.v1_recent_events(limit: params[:limit])
+        end
+
         private
 
         def overlay_ctrl
