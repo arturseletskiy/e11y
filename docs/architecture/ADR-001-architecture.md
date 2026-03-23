@@ -2351,7 +2351,7 @@ end
 **Middleware checks opt-out flag before processing:**
 
 ```ruby
-# E11y::Middleware::PIIFiltering
+# E11y::Middleware::PIIFilter
 def call(event_data)
   event_class = event_data[:event_class]
   

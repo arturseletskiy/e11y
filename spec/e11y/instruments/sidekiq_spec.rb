@@ -36,6 +36,14 @@ RSpec.describe E11y::Instruments::Sidekiq do
         E11y::Current.reset
       end
 
+      it "injects user_id into e11y_baggage from Current.user_id" do
+        E11y::Current.user_id = 99
+        middleware.call(nil, job, nil, nil) {} # rubocop:todo Lint/EmptyBlock
+        expect(job["e11y_baggage"]).to eq("user_id" => "99")
+      ensure
+        E11y::Current.reset
+      end
+
       it "does not inject metadata if E11y::Current is empty" do
         empty_job = {}
         middleware.call(nil, empty_job, nil, nil) {} # rubocop:todo Lint/EmptyBlock
@@ -138,6 +146,15 @@ RSpec.describe E11y::Instruments::Sidekiq do
 
         middleware.call(worker, job, queue) do
           expect(E11y::Current.baggage).to eq("experiment" => "exp-42")
+        end
+      end
+
+      it "restores Current.user_id from e11y_baggage user_id" do
+        job["e11y_baggage"] = { "user_id" => "55" }
+
+        middleware.call(worker, job, queue) do
+          expect(E11y::Current.user_id).to eq("55")
+          expect(E11y::Current.baggage["user_id"]).to eq("55")
         end
       end
     end

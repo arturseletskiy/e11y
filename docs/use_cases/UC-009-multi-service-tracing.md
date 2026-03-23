@@ -356,40 +356,16 @@ ORDER BY timestamp ASC;
 
 ### 4. Cross-Service Latency Measurement
 
-**Automatic service-to-service timing:**
+**Service-to-service timing** is not switched on by a `config.distributed_tracing` block (that DSL does not exist). Model it with **event payloads and your metrics stack** (timestamps, `trace_id`, PromQL / LogQL), or extend tracing per [ADR-005](../architecture/ADR-005-tracing-context.md).
+
 ```ruby
-# config/initializers/e11y.rb
-E11y.configure do |config|
-  config.distributed_tracing do
-    # Measure cross-service latency
-    measure_service_latency true
-    
-    # Track service hops
-    track_service_hops true
-  end
-end
-
+# Example only: emit your own correlation fields from each service
 # Service A: API Gateway
-Events::OrderCreated.track(
-  order_id: '789',
-  timestamp_sent: Time.current  # Auto-added!
-)
-
+Events::OrderCreated.track(order_id: "789", timestamp_sent: Time.current.iso8601)
 # Service B: Payment Service
-Events::PaymentReceived.track(
-  order_id: '789',
-  timestamp_received: Time.current  # Auto-added!
-)
+Events::PaymentReceived.track(order_id: "789", timestamp_received: Time.current.iso8601)
 
-# E11y automatically calculates:
-# - Network latency: timestamp_received - timestamp_sent
-# - Service hop count: 1 (API → Payment)
-# - Total trace duration: last event - first event
-
-# Metrics (automatic!):
-# e11y_service_to_service_latency_ms{from="api",to="payment"} = 50
-# e11y_service_hops{trace_id="abc-123"} = 3
-# e11y_trace_duration_ms{trace_id="abc-123"} = 5020
+# You derive latency / hop counts in Loki, Prometheus, or SQL — not from a magic config block.
 ```
 
 ---
@@ -707,7 +683,7 @@ class OrdersController < ApplicationController
       key: order.id,
       value: order.to_json,
       headers: {
-        'traceparent' => E11y::TraceContext.current.to_traceparent
+        "traceparent" => E11y::Tracing::Propagator.build_traceparent
         # ↑ W3C Trace Context header in Kafka message!
       }
     )
@@ -777,126 +753,23 @@ end
 
 ## 🔧 Configuration
 
-### Full Configuration
+Older revisions of this document showed nested `config.distributed_tracing do`, `background_jobs do`, `message_queues do`, and similar blocks—**that DSL is not implemented** in the current gem. Do not paste those snippets into an app.
+
+### What exists today
 
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.distributed_tracing do
-    # === TRACE PROPAGATION ===
-    propagation do
-      # W3C Trace Context (standard)
-      w3c_trace_context enabled: true
-      
-      # B3 (Zipkin)
-      b3 enabled: true, single_header: true
-      
-      # Jaeger
-      jaeger enabled: false
-      
-      # Datadog
-      datadog enabled: false
-    end
-    
-    # === HTTP CLIENTS ===
-    http_clients do
-      # Faraday
-      faraday do
-        enabled true
-        inject_headers true
-        extract_headers true
-      end
-      
-      # Net::HTTP
-      net_http do
-        enabled true
-        inject_headers true
-      end
-      
-      # HTTParty
-      httparty do
-        enabled true
-        inject_headers true
-      end
-      
-      # RestClient
-      rest_client do
-        enabled true
-        inject_headers true
-      end
-    end
-    
-    # === BACKGROUND JOBS ===
-    background_jobs do
-      # Sidekiq
-      sidekiq do
-        enabled true
-        propagate_trace_context true
-        store_in_job_metadata true
-      end
-      
-      # ActiveJob
-      active_job do
-        enabled true
-        propagate_trace_context true
-      end
-    end
-    
-    # === MESSAGE QUEUES ===
-    message_queues do
-      # Kafka
-      kafka do
-        enabled true
-        inject_headers true
-        extract_headers true
-        header_name 'traceparent'
-      end
-      
-      # RabbitMQ
-      rabbitmq do
-        enabled true
-        inject_headers true
-        extract_headers true
-      end
-      
-      # AWS SQS
-      sqs do
-        enabled true
-        use_message_attributes true
-      end
-    end
-    
-    # === SERVICE MESH ===
-    service_mesh do
-      auto_detect true
-      
-      # Istio
-      istio do
-        enabled true
-        use_headers true
-      end
-      
-      # Linkerd
-      linkerd do
-        enabled true
-        use_headers true
-      end
-    end
-    
-    # === METRICS ===
-    metrics do
-      # Service-to-service latency
-      measure_service_latency true
-      
-      # Service hops
-      track_service_hops true
-      
-      # Trace duration
-      measure_trace_duration true
-    end
-  end
+  config.rails_instrumentation_enabled = true
+  config.sidekiq_enabled = true
+  config.active_job_enabled = true
+
+  # Optional outgoing Net::HTTP trace propagation (see Railtie + lib/e11y/tracing/)
+  config.enable_http_tracing = true
 end
 ```
+
+W3C `traceparent` on the **inbound** request is handled by `E11y::Middleware::Request`. Multi-protocol propagation (Faraday-only, Kafka, mesh) is described in [ADR-005](../architecture/ADR-005-tracing-context.md) and [DISTRIBUTED_TRACING.md](../DISTRIBUTED_TRACING.md)—implement or enable per what is actually merged in your `e11y` version.
 
 ---
 
@@ -936,15 +809,7 @@ histogram_quantile(0.95,
 
 ### ✅ DO
 
-**1. Use W3C Trace Context (standard)**
-```ruby
-# ✅ GOOD: Industry standard
-config.distributed_tracing do
-  propagation do
-    w3c_trace_context enabled: true
-  end
-end
-```
+**1. Use W3C Trace Context (standard)** — inbound requests are parsed in `E11y::Middleware::Request` when clients send `traceparent`; propagate the same header on outgoing HTTP where supported (`enable_http_tracing` for Net::HTTP, or your client middleware).
 
 **2. Mark service boundaries**
 ```ruby
@@ -962,11 +827,10 @@ end
 
 **3. Propagate context in async jobs**
 ```ruby
-# ✅ GOOD: Preserve trace_id in jobs
-config.background_jobs do
-  sidekiq do
-    propagate_trace_context true
-  end
+# Enable the shipped Sidekiq / Active Job integration (trace + metadata on jobs)
+E11y.configure do |config|
+  config.sidekiq_enabled = true
+  config.active_job_enabled = true
 end
 ```
 
@@ -975,20 +839,8 @@ end
 ### ❌ DON'T
 
 **1. Don't use different context formats**
-```ruby
-# ❌ BAD: Mixed formats (incompatible!)
-# Service A: W3C Trace Context
-# Service B: B3 format
-# Service C: Custom format
-# → Can't correlate!
 
-# ✅ GOOD: Single format everywhere
-config.distributed_tracing do
-  propagation do
-    w3c_trace_context enabled: true  # All services!
-  end
-end
-```
+Mixing B3, vendor headers, and W3C in one system breaks correlation. Standardize on **W3C `traceparent`** wherever you control the client and server.
 
 **2. Don't forget message queue propagation**
 ```ruby
@@ -1001,7 +853,7 @@ KafkaProducer.publish(
   topic: 'orders',
   value: order.to_json,
   headers: {
-    'traceparent' => E11y::TraceContext.current.to_traceparent
+    "traceparent" => E11y::Tracing::Propagator.build_traceparent
   }
 )
 ```

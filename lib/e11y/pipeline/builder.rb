@@ -12,7 +12,7 @@ module E11y
     #
     #   builder.use E11y::Middleware::TraceContext
     #   builder.use E11y::Middleware::Validation
-    #   builder.use E11y::Middleware::PIIFiltering
+    #   builder.use E11y::Middleware::PIIFilter
     #
     #   builder.validate_zones! # Boot-time validation
     #
@@ -26,7 +26,7 @@ module E11y
     #   end
     #
     #   builder.zone(:security) do
-    #     use E11y::Middleware::PIIFiltering
+    #     use E11y::Middleware::PIIFilter
     #   end
     #
     # @see E11y::Middleware::Base
@@ -80,7 +80,7 @@ module E11y
       #
       # @example
       #   builder.zone(:security) do
-      #     use E11y::Middleware::PIIFiltering
+      #     use E11y::Middleware::PIIFilter
       #   end
       #
       # @see ADR-015 §3.4.2 Middleware Zones

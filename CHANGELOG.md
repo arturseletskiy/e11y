@@ -19,6 +19,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [1.1.0] - 2026-03-23
+
+### Added
+
+- Sidekiq and Active Job: propagate **`user_id`** into **`e11y_baggage`** (and restore **`E11y::Current.user_id`** when the job runs). Key **`user_id`** is included in default baggage allowlist.
+
+### Changed
+
+### Fixed
+
+- **Rails Railtie:** `config.enabled` is defaulted with `!Rails.env.test?` **only when still `nil`**, so an explicit `true`/`false` from `E11y.configure` in `config/application.rb` (or any code that runs before `before_initialize`) is no longer overwritten.
+
+### Deprecated
+
+### Removed
+
+- **`E11y.track`** — removed. Call **`YourEvent.track(...)`** on the event class only.
+
+### Security
+
 ## [1.0.0] - 2026-03-20
 
 ### BREAKING: Configuration — Flat config API

@@ -1,0 +1,169 @@
+[
+  {
+    "id": "b34aa692-4b2f-88cf-0482db381193",
+    "timestamp": "2026-03-20T09:47:17.058Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "c44649ac76701b4558927cd2305ab535",
+    "span_id": "e3181897678dd835",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:17Z",
+    "payload": {
+      "message": "Started GET \"/sidekiq/busy\" for ::1 at 2026-03-20 09:47:17 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:17.046Z",
+      "request_id": "req-c44649ac-4",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 3
+    }
+  },
+  {
+    "id": "29607fc7-45a3-a5a5-d0679b3eef53",
+    "timestamp": "2026-03-20T09:47:17.072Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "c44649ac76701b4558927cd2305ab535",
+    "span_id": "94a7e0fd025abce2",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:17Z",
+    "payload": {
+      "endpoint": "GET /sidekiq/busy",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:17.046Z",
+      "request_id": "req-c44649ac-4",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 112
+    }
+  },
+  {
+    "id": "014bb75c-4b91-b77f-536d8c79d151",
+    "timestamp": "2026-03-20T09:47:17.086Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "c44649ac76701b4558927cd2305ab535",
+    "span_id": "7c512ec1b1200b35",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:17Z",
+    "payload": {
+      "message": "  → Render /sidekiq/busy — 16.8ms"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:17.046Z",
+      "request_id": "req-c44649ac-4",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 4
+    }
+  },
+  {
+    "id": "2dc7532f-4f93-a5f7-577fbe81f587",
+    "timestamp": "2026-03-20T09:47:17.099Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "c44649ac76701b4558927cd2305ab535",
+    "span_id": "d966b486b88f84c2",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:17Z",
+    "payload": {
+      "message": "  → CACHE — /sidekiq/busy id=4736"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:17.046Z",
+      "request_id": "req-c44649ac-4",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 1
+    }
+  },
+  {
+    "id": "5e229f72-41d5-8d76-44153e761aed",
+    "timestamp": "2026-03-20T09:47:17.110Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "c44649ac76701b4558927cd2305ab535",
+    "span_id": "9701c69df9173825",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:17Z",
+    "payload": {
+      "order_id": "ord_698377",
+      "status": "completed",
+      "customer": {
+        "id": 3437,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-662",
+          "qty": 1,
+          "unit_price": 445.67
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:17.046Z",
+      "request_id": "req-c44649ac-4",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 27
+    }
+  },
+  {
+    "id": "ab3e9b6e-43bf-95e0-71c43aed6bfb",
+    "timestamp": "2026-03-20T09:47:17.123Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "c44649ac76701b4558927cd2305ab535",
+    "span_id": "b8f29f3c7fcb232f",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:17Z",
+    "payload": {
+      "message": "Completed GET /sidekiq/busy in 670ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:17.046Z",
+      "request_id": "req-c44649ac-4",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 11
+    }
+  }
+]

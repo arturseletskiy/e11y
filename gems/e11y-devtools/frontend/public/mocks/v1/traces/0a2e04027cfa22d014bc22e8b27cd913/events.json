@@ -1,0 +1,86 @@
+[
+  {
+    "id": "b600fb43-4712-a2d3-c0e0bc7ab213",
+    "timestamp": "2026-03-20T09:47:29.935Z",
+    "event_name": "Events::BackgroundJobStarted",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "0a2e04027cfa22d014bc22e8b27cd913",
+    "span_id": "3e0e907087a3988b",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:29Z",
+    "payload": {
+      "job_class": "SearchIndexJob",
+      "job_id": "92553587-4c19-b5b2-58acc4fd7d2b",
+      "queue": "low",
+      "arguments": [
+        {
+          "batch_id": 67585,
+          "shard": 9
+        }
+      ],
+      "enqueued_at": "2026-03-20T09:47:28.920Z"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:29.920Z",
+      "duration_ms": 119
+    }
+  },
+  {
+    "id": "8190077d-408a-bdfe-ff6352159b4c",
+    "timestamp": "2026-03-20T09:47:30.494Z",
+    "event_name": "Events::ReportCreated",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "0a2e04027cfa22d014bc22e8b27cd913",
+    "span_id": "8857c7ea9808b902",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:30Z",
+    "payload": {
+      "title": "Export batch 4744",
+      "description": "Queued by SearchIndexJob",
+      "employee_ids": [
+        134,
+        178
+      ],
+      "author": "system"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:29.920Z",
+      "duration_ms": 806
+    }
+  },
+  {
+    "id": "fd6e08ab-4b81-880c-14a7cf53ee81",
+    "timestamp": "2026-03-20T09:47:31.057Z",
+    "event_name": "Events::ReportExportCompleted",
+    "severity": "fatal",
+    "version": 1,
+    "trace_id": "0a2e04027cfa22d014bc22e8b27cd913",
+    "span_id": "167e865341302140",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:31Z",
+    "payload": {
+      "report_id": 2342,
+      "error": "No space left on device",
+      "exception": {
+        "class": "Errno::ENOSPC",
+        "message": "No space left on device @ rb_sysopen",
+        "backtrace": [
+          "app/jobs/search_index_job.rb:120:in `perform'",
+          "activejob (6.0.0) lib/active_job/execution.rb:68:in `perform_now'"
+        ]
+      }
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:29.920Z",
+      "duration_ms": 262
+    }
+  }
+]

@@ -1,0 +1,194 @@
+[
+  {
+    "id": "5f91331f-4309-85c9-ffd2a4dd276d",
+    "timestamp": "2026-03-20T09:47:37.093Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "8a81ada42834d15f287bb40010043605",
+    "span_id": "86cdd8a168a2cd7b",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:37Z",
+    "payload": {
+      "message": "Started POST \"/webhooks/stripe\" for ::1 at 2026-03-20 09:47:37 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:37.077Z",
+      "request_id": "req-8a81ada4-18",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 0
+    }
+  },
+  {
+    "id": "ddf34d86-4d5c-ac07-c3408d3db138",
+    "timestamp": "2026-03-20T09:47:37.109Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "8a81ada42834d15f287bb40010043605",
+    "span_id": "38d32af640fed742",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:37Z",
+    "payload": {
+      "endpoint": "POST /webhooks/stripe",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:37.077Z",
+      "request_id": "req-8a81ada4-18",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 88
+    }
+  },
+  {
+    "id": "98552147-4c35-baf8-4cee91c70ce4",
+    "timestamp": "2026-03-20T09:47:37.122Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "8a81ada42834d15f287bb40010043605",
+    "span_id": "2db51a42e3309c32",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:37Z",
+    "payload": {
+      "message": "  → CACHE /webhooks/stripe — 28.7ms"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:37.077Z",
+      "request_id": "req-8a81ada4-18",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 2
+    }
+  },
+  {
+    "id": "ce8dbb2d-49ea-af8f-d1c3f1c4d5f3",
+    "timestamp": "2026-03-20T09:47:37.136Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "8a81ada42834d15f287bb40010043605",
+    "span_id": "ab07a0a4241df0b5",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:37Z",
+    "payload": {
+      "message": "  → CACHE — /webhooks/stripe id=21390"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:37.077Z",
+      "request_id": "req-8a81ada4-18",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 23
+    }
+  },
+  {
+    "id": "a21c1149-4306-bea0-0896d91eec54",
+    "timestamp": "2026-03-20T09:47:37.146Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "8a81ada42834d15f287bb40010043605",
+    "span_id": "06cad0921f6e4e6f",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:37Z",
+    "payload": {
+      "message": "  → CACHE — /webhooks/stripe id=41875"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:37.077Z",
+      "request_id": "req-8a81ada4-18",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 4
+    }
+  },
+  {
+    "id": "e4862201-4780-bb2e-5ac457815793",
+    "timestamp": "2026-03-20T09:47:37.159Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "8a81ada42834d15f287bb40010043605",
+    "span_id": "55fb4e0a426992e9",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:37Z",
+    "payload": {
+      "order_id": "ord_274487",
+      "status": "cancelled",
+      "customer": {
+        "id": 1410,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-806",
+          "qty": 1,
+          "unit_price": 296.61
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:37.077Z",
+      "request_id": "req-8a81ada4-18",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 12
+    }
+  },
+  {
+    "id": "5cddb388-4ce1-b434-1bab3831d762",
+    "timestamp": "2026-03-20T09:47:37.173Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "8a81ada42834d15f287bb40010043605",
+    "span_id": "f2cdd5f3f97bedf9",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:37Z",
+    "payload": {
+      "message": "Completed POST /webhooks/stripe in 865ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:37.077Z",
+      "request_id": "req-8a81ada4-18",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 115
+    }
+  }
+]

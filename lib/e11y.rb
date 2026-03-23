@@ -92,25 +92,6 @@ module E11y
       E11y::Debug::PipelineInspector.trace_event(event_class, **payload)
     end
 
-    # Track an event
-    #
-    # Accepts either an event instance or an event class with an optional payload.
-    # Delegates to the event class's `.track` method.
-    #
-    # @param event_or_class [E11y::Event::Base, Class] event instance or event class
-    # @param payload [Hash] keyword arguments forwarded to EventClass.track (used with class form)
-    # @return [void]
-    #
-    # @example Pass an event instance
-    #   E11y.track(Events::UserSignup.new)
-    #
-    # @example Pass an event class with payload
-    #   E11y.track(Events::UserSignup, user_id: 123)
-    def track(event_or_class, **payload)
-      event_class = event_or_class.is_a?(Class) ? event_or_class : event_or_class.class
-      event_class.track(**payload)
-    end
-
     # Get logger instance.
     # Priority: config.logger > Rails.logger (when in Rails) > $stdout.
     # Set config.logger = Logger.new(nil) in tests to suppress output.
@@ -225,7 +206,7 @@ module E11y
   # Used when security_baggage_protection_allowed_keys is not set.
   BAGGAGE_PROTECTION_DEFAULT_ALLOWED_KEYS = %w[
     trace_id span_id environment version service_name deployment_id request_id
-    experiment experiment_id tenant feature_flag
+    user_id experiment experiment_id tenant feature_flag
   ].freeze
 end
 

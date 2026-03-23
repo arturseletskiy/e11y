@@ -1,0 +1,194 @@
+[
+  {
+    "id": "07fb9e23-42ee-bc93-bdd2985706e2",
+    "timestamp": "2026-03-20T09:47:39.138Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "34bc3c9c0097de28a7a6f99b90a8e7bc",
+    "span_id": "d76e7cf30d2a3dea",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:39Z",
+    "payload": {
+      "message": "Started GET \"/api/v1/orders\" for ::1 at 2026-03-20 09:47:39 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:39.126Z",
+      "request_id": "req-34bc3c9c-20",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 0
+    }
+  },
+  {
+    "id": "9f92b8c8-4099-9dc1-05f458298848",
+    "timestamp": "2026-03-20T09:47:39.154Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "34bc3c9c0097de28a7a6f99b90a8e7bc",
+    "span_id": "133c3ac859fe8927",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:39Z",
+    "payload": {
+      "endpoint": "GET /api/v1/orders",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:39.126Z",
+      "request_id": "req-34bc3c9c-20",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 17
+    }
+  },
+  {
+    "id": "99294667-4829-b018-342613705f22",
+    "timestamp": "2026-03-20T09:47:39.168Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "34bc3c9c0097de28a7a6f99b90a8e7bc",
+    "span_id": "d1b0b08213e86df1",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:39Z",
+    "payload": {
+      "message": "  → CACHE /api/v1/orders — 44.2ms"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:39.126Z",
+      "request_id": "req-34bc3c9c-20",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 6
+    }
+  },
+  {
+    "id": "50896664-4c2b-bfba-0ffaf64c1b30",
+    "timestamp": "2026-03-20T09:47:39.178Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "34bc3c9c0097de28a7a6f99b90a8e7bc",
+    "span_id": "23068bbcca3e5410",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:39Z",
+    "payload": {
+      "message": "  → SQL — /api/v1/orders id=36409"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:39.126Z",
+      "request_id": "req-34bc3c9c-20",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 23
+    }
+  },
+  {
+    "id": "8aba053d-4e4f-a0d7-0152bb731707",
+    "timestamp": "2026-03-20T09:47:39.189Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "34bc3c9c0097de28a7a6f99b90a8e7bc",
+    "span_id": "a3922fdece7aca94",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:39Z",
+    "payload": {
+      "message": "  → CACHE — /api/v1/orders id=1751"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:39.126Z",
+      "request_id": "req-34bc3c9c-20",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 5
+    }
+  },
+  {
+    "id": "fb0714c7-4e18-99d1-f458a58bd50b",
+    "timestamp": "2026-03-20T09:47:39.203Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "34bc3c9c0097de28a7a6f99b90a8e7bc",
+    "span_id": "38a12e8eb173ee3a",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:39Z",
+    "payload": {
+      "order_id": "ord_482616",
+      "status": "completed",
+      "customer": {
+        "id": 8681,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-976",
+          "qty": 1,
+          "unit_price": 335.94
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:39.126Z",
+      "request_id": "req-34bc3c9c-20",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 32
+    }
+  },
+  {
+    "id": "9164dbd4-4c55-b0f9-418608b0af0d",
+    "timestamp": "2026-03-20T09:47:39.214Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "34bc3c9c0097de28a7a6f99b90a8e7bc",
+    "span_id": "1eda914eb28a2274",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:39Z",
+    "payload": {
+      "message": "Completed GET /api/v1/orders in 530ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:39.126Z",
+      "request_id": "req-34bc3c9c-20",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 144
+    }
+  }
+]

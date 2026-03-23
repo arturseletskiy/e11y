@@ -79,6 +79,14 @@ RSpec.describe E11y::Instruments::ActiveJob, :integration do
         expect(job.e11y_parent_span_id).to be_nil
       end
 
+      it "injects e11y_baggage with user_id from Current.user_id" do
+        E11y::Current.user_id = 42
+        job.run_callbacks(:enqueue) {} # rubocop:todo Lint/EmptyBlock
+        expect(job.e11y_baggage).to eq("user_id" => "42")
+      ensure
+        E11y::Current.reset
+      end
+
       it "documents C17 behavior: propagate trace as parent (job will generate NEW trace)" do
         # C17 Hybrid Tracing: Job creates NEW trace_id, but preserves parent link
         E11y::Current.trace_id = "parent_trace_from_request"
@@ -134,6 +142,14 @@ RSpec.describe E11y::Instruments::ActiveJob, :integration do
 
         job.run_callbacks(:perform) do
           expect(E11y::Current.request_id).to eq("job123")
+        end
+      end
+
+      it "restores Current.user_id from e11y_baggage" do
+        job.e11y_baggage = { "user_id" => "77" }
+
+        job.run_callbacks(:perform) do
+          expect(E11y::Current.user_id).to eq("77")
         end
       end
     end

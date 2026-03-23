@@ -34,7 +34,47 @@ module E11y
           @query.stats
         end
 
+        # @return [Array<Hash>] JSON-ready rows, newest interaction first (matches TUI ordering).
+        def v1_interactions(source: nil, limit: 50, window_ms: 500)
+          src = normalize_v1_source(source)
+          lim = limit.to_i.clamp(1, 500)
+          wm = window_ms.to_i.clamp(50, 10_000)
+          list = @query.interactions(window_ms: wm, limit: lim, source: src)
+          list.reverse.map { |row| v1_interaction_hash(row) }
+        end
+
+        # @return [Array<Hash>] events for trace, chronological (same as DevLog::Query).
+        def v1_trace_events(trace_id)
+          return [] if trace_id.nil? || trace_id.to_s.empty?
+
+          @query.events_by_trace(trace_id.to_s)
+        end
+
+        # @return [Array<Hash>] newest-first flat list for badge / pulse.
+        def v1_recent_events(limit: 100)
+          lim = limit.to_i.clamp(1, 500)
+          @query.stored_events(limit: lim)
+        end
+
         private
+
+        def normalize_v1_source(source)
+          s = source.to_s
+          return "web" if s == "web"
+          return "job" if s == "job"
+
+          nil
+        end
+
+        def v1_interaction_hash(row)
+          {
+            "started_at" => row.started_at.iso8601(3),
+            "trace_ids" => row.trace_ids,
+            "has_error" => row.has_error?,
+            "source" => row.source,
+            "traces_count" => row.traces_count
+          }
+        end
 
         def resolve_query
           if defined?(E11y) && E11y.respond_to?(:configuration)

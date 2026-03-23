@@ -184,152 +184,17 @@ sequenceDiagram
 
 ## 3. Railtie & Initialization
 
-### 3.1. Railtie Implementation
+### 3.1. Railtie implementation
 
-```ruby
-# lib/e11y/railtie.rb
-module E11y
-  class Railtie < Rails::Railtie
-    # Run before framework initialization
-    config.before_initialize do
-      # Set up basic configuration
-      E11y.configure do |config|
-        config.environment = Rails.env
-        config.service_name = Rails.application.class.module_parent_name.underscore
-      end
-    end
-    
-    # Run after framework initialization
-    config.after_initialize do
-      next unless E11y.config.enabled
-      
-      # Setup instruments (each can be enabled/disabled separately)
-      E11y::Railtie.setup_rails_instrumentation if E11y.config.rails_instrumentation&.enabled
-      E11y::Railtie.setup_sidekiq if defined?(::Sidekiq) && E11y.config.sidekiq&.enabled
-      E11y::Railtie.setup_active_job if defined?(::ActiveJob) && E11y.config.active_job&.enabled
-      
-      # Setup logger bridge
-      E11y::Logger::Bridge.setup! if E11y.config.logger_bridge_enabled
-      
-      # Setup development tools
-      E11y::Console.setup! if Rails.env.development?
-    end
-    
-    # Middleware insertion
-    initializer 'e11y.middleware' do |app|
-      app.middleware.insert_before(
-        Rails::Rack::Logger,
-        E11y::Middleware::Request
-      )
-    end
-    
-    # ActiveSupport::Notifications subscribers
-    initializer 'e11y.notifications' do
-      ActiveSupport::Notifications.subscribe(/.*/) do |name, start, finish, id, payload|
-        E11y::Instruments::NotificationSubscriber.handle(
-          name: name,
-          started_at: start,
-          finished_at: finish,
-          transaction_id: id,
-          payload: payload
-        )
-      end
-    end
-    
-    # Sidekiq integration
-    initializer 'e11y.sidekiq' do
-      if defined?(Sidekiq)
-        require 'e11y/instruments/sidekiq'
-        
-        Sidekiq.configure_server do |config|
-          config.server_middleware do |chain|
-            chain.add E11y::Instruments::Sidekiq::ServerMiddleware
-          end
-        end
-        
-        Sidekiq.configure_client do |config|
-          config.client_middleware do |chain|
-            chain.add E11y::Instruments::Sidekiq::ClientMiddleware
-          end
-        end
-      end
-    end
-    
-    # ActiveJob integration
-    initializer 'e11y.active_job' do
-      ActiveSupport.on_load(:active_job) do
-        require 'e11y/instruments/active_job'
-        
-        include E11y::Instruments::ActiveJob::Callbacks
-      end
-    end
-    
-    # Console helpers
-    console do
-      E11y::Console.enable!
-      
-      puts "E11y loaded. Try: E11y.stats"
-    end
-    
-    # Rake task helpers
-    rake_tasks do
-      load 'e11y/tasks.rake'
-    end
-  end
-end
-```
+**Source of truth:** `lib/e11y/railtie.rb` (read the file in the repo; do not paste stale excerpts).
 
-### 3.2. Configuration Loading
+Shipped behavior in short: `before_initialize` sets `environment`, `service_name`, and default `enabled`; after `load_config_initializers`, `e11y.setup_instrumentation` wires Rails instrumentation, optional logger bridge, and optional Sidekiq / Active Job when the corresponding **boolean** flags are set; `e11y.middleware` inserts `E11y::Middleware::Request`; development/test may register the DevLog adapter and `DevLogSource` middleware; optional `e11y.http_tracing` patches Net::HTTP; console loads `E11y::Console`; Rake tasks load the `lib/e11y/tasks/*.rake` files.
 
-```ruby
-# lib/e11y/configuration/rails.rb
-module E11y
-  module Configuration
-    class Rails < Base
-      def initialize
-        super
-        
-        # Rails-specific defaults
-        @environment = ::Rails.env
-        @service_name = derive_service_name
-        @enabled = !::Rails.env.test?  # Disabled in tests by default
-        
-        # Auto-detect adapters
-        @adapters = auto_detect_adapters
-        
-        # Rails logger bridge
-        @logger_bridge = LoggerBridgeConfig.new
-      end
-      
-      private
-      
-      def derive_service_name
-        ::Rails.application.class.module_parent_name.underscore
-      rescue
-        'rails_app'
-      end
-      
-      def auto_detect_adapters
-        adapters = []
-        
-        # Always include stdout in development
-        adapters << :stdout if ::Rails.env.development?
-        
-        # Auto-detect file logging
-        adapters << :file if ::Rails.root.join('log').directory?
-        
-        # Auto-detect Sentry
-        adapters << :sentry if defined?(Sentry)
-        
-        # Auto-detect Loki
-        adapters << :loki if ENV['LOKI_URL'].present?
-        
-        adapters
-      end
-    end
-  end
-end
-```
+Older drafts of this ADR showed extra initializers (e.g. a global `ActiveSupport::Notifications.subscribe(/.*/)`, unconditional Sidekiq registration, `lib/e11y/configuration/rails.rb`, `LoggerBridgeConfig` as a nested type). **Those are not in the codebase.**
+
+### 3.2. Configuration
+
+All tunables live on **`E11y::Configuration`** in `lib/e11y/configuration.rb`. There is no separate `E11y::Configuration::Rails` class.
 
 ---
 
@@ -388,7 +253,7 @@ module E11y
       # ========================================
       
       def self.setup!
-        return unless E11y.config.rails_instrumentation&.enabled
+        return unless E11y.config.rails_instrumentation_enabled
         
         # Subscribe to Rails events
         event_mapping.each do |asn_pattern, e11y_event_class|
@@ -409,20 +274,20 @@ module E11y
       
       # Built-in event mappings (can be overridden in config!)
       DEFAULT_RAILS_EVENT_MAPPING = {
-        'sql.active_record' => Events::Rails::Database::Query,
-        'process_action.action_controller' => Events::Rails::Http::Request,
-        'render_template.action_view' => Events::Rails::View::Render,
-        'send_file.action_controller' => Events::Rails::Http::SendFile,
-        'redirect_to.action_controller' => Events::Rails::Http::Redirect,
-        'start_processing.action_controller' => Events::Rails::Http::StartProcessing,
-        'cache_read.active_support' => Events::Rails::Cache::Read,
-        'cache_write.active_support' => Events::Rails::Cache::Write,
-        'cache_delete.active_support' => Events::Rails::Cache::Delete,
-        'enqueue.active_job' => Events::Rails::Job::Enqueued,
-        'enqueue_at.active_job' => Events::Rails::Job::Scheduled,
-        'perform_start.active_job' => Events::Rails::Job::Started,
+        'sql.active_record' => E11y::Events::Rails::Database::Query,
+        'process_action.action_controller' => E11y::Events::Rails::Http::Request,
+        'render_template.action_view' => E11y::Events::Rails::View::Render,
+        'send_file.action_controller' => E11y::Events::Rails::Http::SendFile,
+        'redirect_to.action_controller' => E11y::Events::Rails::Http::Redirect,
+        'start_processing.action_controller' => E11y::Events::Rails::Http::StartProcessing,
+        'cache_read.active_support' => E11y::Events::Rails::Cache::Read,
+        'cache_write.active_support' => E11y::Events::Rails::Cache::Write,
+        'cache_delete.active_support' => E11y::Events::Rails::Cache::Delete,
+        'enqueue.active_job' => E11y::Events::Rails::Job::Enqueued,
+        'enqueue_at.active_job' => E11y::Events::Rails::Job::Scheduled,
+        'perform_start.active_job' => E11y::Events::Rails::Job::Started,
         # perform.active_job: Completed on success; Failed when payload has exception
-        'perform.active_job' => Events::Rails::Job::Completed
+        'perform.active_job' => E11y::Events::Rails::Job::Completed
       }.freeze
       
       # Get final event mapping (after config overrides)
@@ -431,7 +296,7 @@ module E11y
           mapping = DEFAULT_RAILS_EVENT_MAPPING.dup
           
           # Apply custom mappings from config (Devise-style overrides)
-          custom_mappings = E11y.config.rails_instrumentation&.custom_mappings || {}
+          custom_mappings = E11y.config.rails_instrumentation_custom_mappings || {}
           mapping.merge!(custom_mappings)
           
           mapping
@@ -439,7 +304,7 @@ module E11y
       end
       
       def self.ignored?(pattern)
-        ignore_list = E11y.config.rails_instrumentation&.ignore_events || []
+        ignore_list = E11y.config.rails_instrumentation_ignore_events || []
         ignore_list.include?(pattern)
       end
       
@@ -453,79 +318,32 @@ module E11y
 end
 ```
 
-### 4.2. Configuration: Overridable Event Classes (Devise-Style)
+### 4.2. Configuration (Rails integration)
 
-**Design Decision (Updated 2026-01-17):** Built-in event classes can be overridden in config (Devise-style pattern).
+**As implemented:** flags and hashes on `E11y::Configuration` (`lib/e11y/configuration.rb`). There is **no** nested `config.rails_instrumentation do`, `config.sidekiq do`, or `config.active_job do` DSL—those snippets were design sketches and must not be copied into apps.
 
-**Rationale:**
-- ✅ **Flexibility**: Custom schema, PII rules, adapters per event type
-- ✅ **Familiar pattern**: Developers know Devise controller overrides
-- ✅ **Opt-in**: Defaults work for 90% of cases, override only when needed
-- ✅ **No monkey-patching**: Clean override mechanism
+**Rails → E11y:** enable `rails_instrumentation_enabled`, optionally set `rails_instrumentation_custom_mappings` (String ASN pattern → event class) and `rails_instrumentation_ignore_events` (Array of patterns to skip). Instrumentation is wired in `E11y::Instruments::RailsInstrumentation` and invoked from `E11y::Railtie`.
+
+**Jobs:** `sidekiq_enabled` and `active_job_enabled` are booleans. **Logger bridge:** `logger_bridge_enabled`, `logger_bridge_track_severities`, `logger_bridge_ignore_patterns`.
 
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  # ========================================
-  # Rails Instrumentation (ActiveSupport::Notifications → E11y)
-  # ========================================
-  config.rails_instrumentation do
-    # Enable/disable entire ASN integration
-    enabled true  # Set to false to completely disable
-    
-    # Built-in event classes (auto-created by E11y)
-    # Located in Events::Rails namespace
-    use_built_in_events true  # If false, no auto-mapping
-    
-    # ========================================
-    # OVERRIDE EVENT CLASSES (Devise-style)
-    # ========================================
-    
-    # Override default event class for specific ASN pattern
-    event_class_for 'sql.active_record', MyApp::Events::CustomDatabaseQuery
-    event_class_for 'process_action.action_controller', MyApp::Events::CustomHttpRequest
-    
-    # Disable specific events (too noisy or not needed)
-    ignore_event 'cache_read.active_support'
-    ignore_event 'render_partial.action_view'
-    ignore_event 'SCHEMA'  # Schema queries
-    
-    # ========================================
-    # SELECTIVE INSTRUMENTATION
-    # ========================================
-    
-    # Which Rails events to track (glob patterns)
-    track_patterns [
-      'sql.active_record',
-      'process_action.action_controller',
-      'render_template.action_view',
-      'cache_*.active_support'
-    ]
-    
-    # Sampling for high-volume events
-    sample_patterns do
-      pattern 'sql.active_record', sample_rate: 0.1  # 10% of SQL queries
-      pattern 'cache_read.active_support', sample_rate: 0.01  # 1% of cache reads
-    end
-    
-    # Enrich with custom data
-    enrich do |asn_event|
-      {
-        controller: asn_event.payload[:controller],
-        action: asn_event.payload[:action],
-        format: asn_event.payload[:format],
-        user_id: Current.user&.id  # Add context
-      }
-    end
-  end
-  
-  # (Other integrations: config.sidekiq, config.active_job, config.logger_bridge)
+  config.rails_instrumentation_enabled = true
+
+  config.rails_instrumentation_custom_mappings["sql.active_record"] =
+    MyApp::Events::CustomDatabaseQuery
+  config.rails_instrumentation_ignore_events << "cache_read.active_support"
+
+  config.sidekiq_enabled = true
+  config.active_job_enabled = true
+  config.ephemeral_buffer_enabled = true
 end
 ```
 
 ### 4.2.1. Custom Event Class Example
 
-**Use Case:** Override default `Events::Rails::Database::Query` with custom schema and PII rules.
+**Use Case:** Override default `E11y::Events::Rails::Database::Query` with custom schema and PII rules.
 
 ```ruby
 # app/events/custom_database_query.rb
@@ -567,126 +385,11 @@ end
 
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.rails_instrumentation do
-    # Override default event class
-    event_class_for 'sql.active_record', MyApp::Events::CustomDatabaseQuery
-  end
+  config.rails_instrumentation_custom_mappings["sql.active_record"] =
+    MyApp::Events::CustomDatabaseQuery
 end
 
-# Now all sql.active_record events will use CustomDatabaseQuery!
-```
-
-### 4.2.2. Implementation (Configuration DSL)
-
-```ruby
-# lib/e11y/configuration/rails_instrumentation.rb
-module E11y
-  module Configuration
-    class RailsInstrumentation
-      attr_accessor :enabled, :use_built_in_events
-      
-      def initialize
-        @enabled = true
-        @use_built_in_events = true
-        @custom_event_classes = {}
-        @ignored_events = []
-        @track_patterns = []
-        @sample_patterns = {}
-        @enrich_block = nil
-      end
-      
-      # Override event class (Devise-style)
-      def event_class_for(asn_pattern, custom_event_class)
-        unless custom_event_class < E11y::Event::Base
-          raise ArgumentError, "#{custom_event_class} must inherit from E11y::Event::Base"
-        end
-        
-        @custom_event_classes[asn_pattern] = custom_event_class
-      end
-      
-      # Disable specific event
-      def ignore_event(asn_pattern)
-        @ignored_events << asn_pattern
-      end
-      
-      # Track only specific patterns
-      def track_patterns(*patterns)
-        @track_patterns = patterns.flatten
-      end
-      
-      # Sampling configuration
-      def sample_patterns(&block)
-        @sample_patterns_builder ||= SamplePatternsBuilder.new
-        @sample_patterns_builder.instance_eval(&block) if block_given?
-        @sample_patterns_builder
-      end
-      
-      # Enrich ASN events before conversion
-      def enrich(&block)
-        @enrich_block = block
-      end
-      
-      # Get final event mapping (after overrides)
-      def event_mapping
-        mapping = E11y::Instruments::RailsInstrumentation::DEFAULT_RAILS_EVENT_MAPPING.dup
-        mapping.merge!(@custom_event_classes)
-        mapping.except(*@ignored_events)
-      end
-      
-      # Check if event should be tracked
-      def track?(asn_pattern)
-        return false if @ignored_events.include?(asn_pattern)
-        return true if @track_patterns.empty?
-        
-        @track_patterns.any? do |pattern|
-          File.fnmatch(pattern, asn_pattern)
-        end
-      end
-    end
-  end
-end
-```
-    
-  # ========================================
-  # Sidekiq
-  # ========================================
-  config.sidekiq do
-    enabled true  # Set to false to disable Sidekiq integration
-    
-    # Server middleware (job execution)
-    server_middleware do
-      enabled true
-      track_start true
-      track_complete true
-      track_failure true
-    end
-    
-    # Client middleware (job enqueuing)
-    client_middleware do
-      enabled true
-      track_enqueue true
-    end
-    
-    # Trace propagation (C17 hybrid: job gets NEW trace_id, links via e11y_parent_trace_id)
-    propagate_trace_context true
-    trace_context_keys ['e11y_parent_trace_id', 'e11y_span_id', 'e11y_sampled']
-  end
-  
-  # ========================================
-  # ActiveJob
-  # ========================================
-  config.active_job do
-    enabled true  # Set to false to disable ActiveJob integration
-    
-    track_enqueue true
-    track_start true
-    track_complete true
-    track_failure true
-    
-    # Trace propagation
-    propagate_trace_context true
-  end
-end
+# Now sql.active_record uses CustomDatabaseQuery (see RailsInstrumentation.event_mapping).
 ```
 
 **Example: Disable specific instruments:**
@@ -713,7 +416,7 @@ end
 
 **Design Decision:** E11y provides built-in event classes for standard Rails events.
 
-**Location:** `Events::Rails` namespace (auto-loaded by gem)
+**Location:** `E11y::Events::Rails` namespace (auto-loaded by gem)
 
 ```ruby
 # app/events/rails/ (provided by E11y gem)
@@ -812,29 +515,13 @@ module Events
 end
 ```
 
-**User can override:**
-
-```ruby
-# config/initializers/e11y.rb
-E11y.configure do |config|
-  config.rails_instrumentation do
-    # Disable built-in events
-    use_built_in_events false
-    
-    # Use custom events instead
-    custom_mappings do
-      map 'sql.active_record', to: MyApp::Events::DatabaseQuery
-      map 'process_action.action_controller', to: MyApp::Events::HttpRequest
-    end
-  end
-end
-```
+**User can override** built-in ASN → event class mappings with `rails_instrumentation_custom_mappings` and skip patterns with `rails_instrumentation_ignore_events` (see §4.2).
 
 ---
 
 ## 5. Sidekiq Integration
 
-**Implementation Note:** Sidekiq middleware emits `Events::Rails::Job::Enqueued`, `Started`, `Completed`, `Failed` for **raw Sidekiq jobs only** (`include Sidekiq::Worker`). When Sidekiq is the queue adapter for ActiveJob, jobs use `ActiveJob::QueueAdapters::SidekiqAdapter::JobWrapper`; we skip event emission in Sidekiq middleware to avoid double emission — ActiveJob events come from RailsInstrumentation (ASN).
+**Implementation Note:** Sidekiq middleware emits `E11y::Events::Rails::Job::Enqueued`, `Started`, `Completed`, `Failed` for **raw Sidekiq jobs only** (`include Sidekiq::Worker`). When Sidekiq is the queue adapter for ActiveJob, jobs use `ActiveJob::QueueAdapters::SidekiqAdapter::JobWrapper`; we skip event emission in Sidekiq middleware to avoid double emission — ActiveJob events come from RailsInstrumentation (ASN).
 
 ### 5.1. Server Middleware (Job Execution)
 
@@ -863,11 +550,11 @@ module E11y
           if E11y.config.ephemeral_buffer_enabled
             limit = E11y.config.ephemeral_buffer_job_buffer_limit ||
                     E11y::Buffers::EphemeralBuffer::DEFAULT_BUFFER_LIMIT
-            E11y::EphemeralBuffer.initialize!(buffer_limit: limit)
+            E11y::Buffers::EphemeralBuffer.initialize!(buffer_limit: limit)
           end
           
           # Track job start
-          Events::Rails::Job::Started.track(
+          E11y::Events::Rails::Job::Started.track(
             job_class: worker.class.name,
             job_id: job['jid'],
             queue: queue,
@@ -881,7 +568,7 @@ module E11y
             result = yield
             
             # Track job success
-            Events::Rails::Job::Completed.track(
+            E11y::Events::Rails::Job::Completed.track(
               job_class: worker.class.name,
               job_id: job['jid'],
               duration: (Time.now - start_time) * 1000,
@@ -889,12 +576,12 @@ module E11y
             )
             
             # Discard buffer on success (same as HTTP)
-            E11y::EphemeralBuffer.discard if E11y.config.ephemeral_buffer_enabled
+            E11y::Buffers::EphemeralBuffer.discard if E11y.config.ephemeral_buffer_enabled
             
             result
           rescue => error
             # Track job failure
-            Events::Rails::Job::Failed.track(
+            E11y::Events::Rails::Job::Failed.track(
               job_class: worker.class.name,
               job_id: job['jid'],
               duration: (Time.now - start_time) * 1000,
@@ -905,7 +592,7 @@ module E11y
             )
             
             # Flush buffer on error (includes debug events)
-            E11y::EphemeralBuffer.flush_on_error if E11y.config.ephemeral_buffer_enabled
+            E11y::Buffers::EphemeralBuffer.flush_on_error if E11y.config.ephemeral_buffer_enabled
             
             raise
           ensure
@@ -944,7 +631,7 @@ module E11y
           job['e11y_sampled'] = E11y::Current.sampled  # Trace-consistent sampling
           
           # Track job enqueued
-          Events::Rails::Job::Enqueued.track(
+          E11y::Events::Rails::Job::Enqueued.track(
             job_class: worker_class.to_s,
             job_id: job['jid'],
             queue: queue,
@@ -1022,7 +709,7 @@ sequenceDiagram
 - Avoids duplicate emission when ActiveJob uses Sidekiq as adapter
 - Keeps callbacks focused on context/buffer/SLO
 
-**perform.active_job routing:** When payload contains `exception`, RailsInstrumentation routes to `Events::Rails::Job::Failed` (with `error_class`, `error_message`); otherwise to `Completed`.
+**perform.active_job routing:** When payload contains `exception`, RailsInstrumentation routes to `E11y::Events::Rails::Job::Failed` (with `error_class`, `error_message`); otherwise to `Completed`.
 
 ### 6.1. Callbacks Integration
 
@@ -1059,10 +746,10 @@ module E11y
           if E11y.config.ephemeral_buffer_enabled
             limit = E11y.config.ephemeral_buffer_job_buffer_limit ||
                     E11y::Buffers::EphemeralBuffer::DEFAULT_BUFFER_LIMIT
-            E11y::EphemeralBuffer.initialize!(buffer_limit: limit)
+            E11y::Buffers::EphemeralBuffer.initialize!(buffer_limit: limit)
           end
           
-          Events::Rails::Job::Started.track(
+          E11y::Events::Rails::Job::Started.track(
             job_class: self.class.name,
             job_id: job_id,
             queue_name: queue_name,
@@ -1074,16 +761,16 @@ module E11y
           begin
             yield
             
-            Events::Rails::Job::Completed.track(
+            E11y::Events::Rails::Job::Completed.track(
               job_class: self.class.name,
               job_id: job_id,
               duration: (Time.now - start_time) * 1000
             )
             
             # Discard buffer on success (same as HTTP)
-            E11y::EphemeralBuffer.discard if E11y.config.ephemeral_buffer_enabled
+            E11y::Buffers::EphemeralBuffer.discard if E11y.config.ephemeral_buffer_enabled
           rescue => error
-            Events::Rails::Job::Failed.track(
+            E11y::Events::Rails::Job::Failed.track(
               job_class: self.class.name,
               job_id: job_id,
               duration: (Time.now - start_time) * 1000,
@@ -1092,7 +779,7 @@ module E11y
             )
             
             # Flush buffer on error (includes debug events)
-            E11y::EphemeralBuffer.flush_on_error if E11y.config.ephemeral_buffer_enabled
+            E11y::Buffers::EphemeralBuffer.flush_on_error if E11y.config.ephemeral_buffer_enabled
             
             raise
           ensure
@@ -1106,7 +793,7 @@ module E11y
           job_metadata['e11y_span_id'] = E11y::TraceContext.generate_span_id
           job_metadata['e11y_sampled'] = E11y::Current.sampled
           
-          Events::Rails::Job::Enqueued.track(
+          E11y::Events::Rails::Job::Enqueued.track(
             job_class: self.class.name,
             job_id: job_id,
             queue_name: queue_name,
@@ -1310,111 +997,9 @@ end
 
 ---
 
-### 8.1. Request Middleware
+### 8.1. Request middleware
 
-```ruby
-# lib/e11y/middleware/request.rb
-module E11y
-  module Middleware
-    class Request
-      def initialize(app)
-        @app = app
-      end
-      
-      def call(env)
-        request = Rack::Request.new(env)
-        
-        # Extract or generate trace_id
-        trace_id = extract_trace_id(request) || TraceContext.generate_id
-        span_id = TraceContext.generate_span_id
-        
-        # Set context
-        Current.set(
-          trace_id: trace_id,
-          span_id: span_id,
-          request_id: request_id(env),
-          user_id: extract_user_id(env),
-          ip_address: request.ip,
-          user_agent: request.user_agent
-        )
-        
-        # Start request-scoped buffer (for debug events; shared with jobs)
-        E11y::EphemeralBuffer.initialize! if E11y.config.ephemeral_buffer&.enabled
-        
-        # Track request start
-        start_time = Time.now
-        
-        Events::Http::RequestStarted.track(
-          method: request.request_method,
-          path: request.path,
-          query: request.query_string,
-          format: request.format
-        )
-        
-        begin
-          status, headers, body = @app.call(env)
-          
-          # Track request completed
-          Events::Http::RequestCompleted.track(
-            method: request.request_method,
-            path: request.path,
-            status: status,
-            duration: (Time.now - start_time) * 1000
-          )
-          
-          # Add trace headers to response
-          headers['X-E11y-Trace-Id'] = trace_id
-          headers['X-E11y-Span-Id'] = span_id
-          
-          [status, headers, body]
-        rescue => error
-          # Track request failed
-          Events::Http::RequestFailed.track(
-            method: request.request_method,
-            path: request.path,
-            duration: (Time.now - start_time) * 1000,
-            error_class: error.class.name,
-            error_message: error.message
-          )
-          
-          # Flush buffer on error (includes debug events)
-          E11y::EphemeralBuffer.flush_on_error if E11y.config.ephemeral_buffer&.enabled
-          
-          raise
-        ensure
-          # Discard buffer on success (not on error; already flushed in rescue)
-          E11y::EphemeralBuffer.discard if !$ERROR_INFO && E11y.config.ephemeral_buffer&.enabled
-          
-          # Reset context
-          Current.reset
-        end
-      end
-      
-      private
-      
-      def extract_trace_id(request)
-        # W3C Trace Context
-        request.get_header('HTTP_TRACEPARENT')&.split('-')&.[](1) ||
-        # X-Request-ID
-        request.get_header('HTTP_X_REQUEST_ID') ||
-        # X-Trace-Id
-        request.get_header('HTTP_X_TRACE_ID')
-      end
-      
-      def request_id(env)
-        env['action_dispatch.request_id'] || SecureRandom.uuid
-      end
-      
-      def extract_user_id(env)
-        # Try to extract from Warden (Devise)
-        env['warden']&.user&.id ||
-        # Try to extract from session
-        env['rack.session']&.[]('user_id')
-      end
-    end
-  end
-end
-```
+**Source of truth:** `lib/e11y/middleware/request.rb`. Earlier ADR excerpts used `Current.set`, non-existent `Events::Http::*` events, and a simplified error path—the real middleware wires W3C / fallback trace IDs, `E11y::Current`, optional `E11y::Buffers::EphemeralBuffer`, response status–based buffer flush, optional HTTP SLO tracking, and response headers.
 
 ---
 
@@ -1700,34 +1285,30 @@ end
 
 ### Q2: Do you provide built-in event classes for Rails?
 
-**Yes!** E11y includes `Events::Rails` namespace with common Rails events:
+**Yes!** E11y includes the `E11y::Events::Rails` namespace with common Rails events:
 
-- `Events::Rails::Database::Query` (sql.active_record)
-- `Events::Rails::Http::Request` (process_action.action_controller)
-- `Events::Rails::Cache::Read/Write/Delete`
-- `Events::Rails::Job::Enqueued/Started/Completed/Failed`
+- `E11y::Events::Rails::Database::Query` (sql.active_record)
+- `E11y::Events::Rails::Http::Request` (process_action.action_controller)
+- `E11y::Events::Rails::Cache::Read/Write/Delete`
+- `E11y::Events::Rails::Job::Enqueued/Started/Completed/Failed`
 
 **You can:**
 - Use them as-is (default)
-- Override them with `custom_mappings`
-- Disable them with `use_built_in_events false`
+- Override selected patterns via `config.rails_instrumentation_custom_mappings`
+- Skip patterns via `config.rails_instrumentation_ignore_events`
+- Turn the whole subscriber off with `config.rails_instrumentation_enabled = false`
 
 ### Q3: Is ActiveSupport::Notifications integration always on?
 
-**No!** It's configurable:
+**No.** Toggle `rails_instrumentation_enabled`. Ignore individual ASN names by appending to `rails_instrumentation_ignore_events` (exact string match to the subscription key, e.g. `"render_template.action_view"`).
 
 ```ruby
-config.rails_instrumentation do
-  enabled false  # Completely disable ASN integration
+E11y.configure do |config|
+  config.rails_instrumentation_enabled = false
 end
-```
 
-You can also filter which ASN events to track:
-
-```ruby
-config.rails_instrumentation do
-  track_patterns ['sql.active_record', 'process_action.*']
-  ignore_events ['render_partial.*', 'SCHEMA']
+E11y.configure do |config|
+  config.rails_instrumentation_ignore_events << "render_template.action_view"
 end
 ```
 
@@ -1747,32 +1328,20 @@ config.ephemeral_buffer_job_buffer_limit = 500  # Optional: higher limit for job
 
 ### Q5: How do I customize built-in Rails events?
 
-**Option A: Override with custom event class:**
+**Override one mapping:**
 
 ```ruby
-config.rails_instrumentation do
-  custom_mappings do
-    map 'sql.active_record', to: MyApp::Events::CustomDatabaseQuery
-  end
+E11y.configure do |config|
+  config.rails_instrumentation_custom_mappings["sql.active_record"] =
+    MyApp::Events::CustomDatabaseQuery
 end
 ```
 
-**Option B: Disable built-in events entirely:**
-
-```ruby
-config.rails_instrumentation do
-  use_built_in_events false  # No automatic mapping
-  
-  # Manually handle ASN events
-  enrich do |asn_event|
-    MyCustomHandler.call(asn_event)
-  end
-end
-```
+**Disable automatic ASN → E11y conversion:** set `rails_instrumentation_enabled = false` and subscribe to `ActiveSupport::Notifications` yourself if you need a custom pipeline.
 
 ### Q6: Can I use E11y without Rails?
 
-**No.** E11y requires Rails 8.0+ and Ruby 3.3+. For non-Rails apps, consider other telemetry solutions.
+The supported path is **Rails 7.0+** (see gemspec). Non-Rails usage is not a supported integration surface today.
 
 ---
 

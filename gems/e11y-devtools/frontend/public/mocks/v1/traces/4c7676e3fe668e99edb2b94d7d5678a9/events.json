@@ -1,0 +1,222 @@
+[
+  {
+    "id": "b4cc4a79-44c1-8604-581c15b7eca4",
+    "timestamp": "2026-03-20T09:47:23.901Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "4c7676e3fe668e99edb2b94d7d5678a9",
+    "span_id": "3bb4d5a5fc946952",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:23Z",
+    "payload": {
+      "message": "Started POST \"/webhooks/stripe\" for ::1 at 2026-03-20 09:47:23 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:23.887Z",
+      "request_id": "req-4c7676e3-9",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 3
+    }
+  },
+  {
+    "id": "3c976690-41fe-9d46-90d89786052c",
+    "timestamp": "2026-03-20T09:47:23.917Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "4c7676e3fe668e99edb2b94d7d5678a9",
+    "span_id": "c0dd648359a7e723",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:23Z",
+    "payload": {
+      "endpoint": "POST /webhooks/stripe",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:23.887Z",
+      "request_id": "req-4c7676e3-9",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 70
+    }
+  },
+  {
+    "id": "8ef394b5-48a6-905a-62c9e806d759",
+    "timestamp": "2026-03-20T09:47:23.931Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "4c7676e3fe668e99edb2b94d7d5678a9",
+    "span_id": "548b6e121c777026",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:23Z",
+    "payload": {
+      "message": "  → SQL — /webhooks/stripe id=44483"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:23.887Z",
+      "request_id": "req-4c7676e3-9",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 13
+    }
+  },
+  {
+    "id": "924c0e7d-4439-b693-d9dbc466e1c7",
+    "timestamp": "2026-03-20T09:47:23.944Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "4c7676e3fe668e99edb2b94d7d5678a9",
+    "span_id": "1e16333cd2a2637e",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:23Z",
+    "payload": {
+      "message": "  → CACHE — /webhooks/stripe id=42919"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:23.887Z",
+      "request_id": "req-4c7676e3-9",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 1
+    }
+  },
+  {
+    "id": "f650f0bd-41f8-84be-85fb49246d70",
+    "timestamp": "2026-03-20T09:47:23.957Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "4c7676e3fe668e99edb2b94d7d5678a9",
+    "span_id": "15385d98de5c8337",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:23Z",
+    "payload": {
+      "message": "  → CACHE — /webhooks/stripe id=37798"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:23.887Z",
+      "request_id": "req-4c7676e3-9",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 21
+    }
+  },
+  {
+    "id": "fa57b2ac-4a9f-98ac-873c529b932e",
+    "timestamp": "2026-03-20T09:47:23.972Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "4c7676e3fe668e99edb2b94d7d5678a9",
+    "span_id": "e421f4940b1c504f",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:23Z",
+    "payload": {
+      "order_id": "ord_718217",
+      "status": "completed",
+      "customer": {
+        "id": 5349,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-775",
+          "qty": 1,
+          "unit_price": 278.6
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:23.887Z",
+      "request_id": "req-4c7676e3-9",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 20
+    }
+  },
+  {
+    "id": "3780cd30-460d-b48e-cd9efeeece00",
+    "timestamp": "2026-03-20T09:47:23.983Z",
+    "event_name": "Events::PaymentFailed",
+    "severity": "error",
+    "version": 1,
+    "trace_id": "4c7676e3fe668e99edb2b94d7d5678a9",
+    "span_id": "a0a7a574b269ae35",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:23Z",
+    "payload": {
+      "order_id": "ord_718217",
+      "amount": 296.31,
+      "gateway": "stripe",
+      "decline_code": "processing_error"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:23.887Z",
+      "request_id": "req-4c7676e3-9",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 57
+    }
+  },
+  {
+    "id": "f56d8549-4adf-ab0f-53c764ff6165",
+    "timestamp": "2026-03-20T09:47:23.999Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "4c7676e3fe668e99edb2b94d7d5678a9",
+    "span_id": "74a5ebcb1b545d97",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:23Z",
+    "payload": {
+      "message": "Completed POST /webhooks/stripe in 679ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:23.887Z",
+      "request_id": "req-4c7676e3-9",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 124
+    }
+  }
+]

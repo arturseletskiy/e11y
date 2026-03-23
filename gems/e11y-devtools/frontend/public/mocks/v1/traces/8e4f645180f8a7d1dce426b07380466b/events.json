@@ -1,0 +1,222 @@
+[
+  {
+    "id": "5eedf1f6-4996-ae3d-36d7aa79e324",
+    "timestamp": "2026-03-20T09:47:13.654Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "8e4f645180f8a7d1dce426b07380466b",
+    "span_id": "bac77862975f4aab",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "message": "Started POST \"/webhooks/stripe\" for ::1 at 2026-03-20 09:47:13 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.643Z",
+      "request_id": "req-8e4f6451-2",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 3
+    }
+  },
+  {
+    "id": "1e9dba64-4fae-b5cd-6a82c2c2cf00",
+    "timestamp": "2026-03-20T09:47:13.669Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "8e4f645180f8a7d1dce426b07380466b",
+    "span_id": "b8c344048fafdcd9",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "endpoint": "POST /webhooks/stripe",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.643Z",
+      "request_id": "req-8e4f6451-2",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 119
+    }
+  },
+  {
+    "id": "b5ee00ce-440e-9759-de2970785b7b",
+    "timestamp": "2026-03-20T09:47:13.680Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "8e4f645180f8a7d1dce426b07380466b",
+    "span_id": "1b9ec5cc33a3deb2",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "message": "  → Render — /webhooks/stripe id=41524"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.643Z",
+      "request_id": "req-8e4f6451-2",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 4
+    }
+  },
+  {
+    "id": "9abb18e6-4aec-868e-ccaa33fbd21c",
+    "timestamp": "2026-03-20T09:47:13.690Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "8e4f645180f8a7d1dce426b07380466b",
+    "span_id": "3a928423f15eda0c",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "message": "  → N+1 — /webhooks/stripe id=16199"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.643Z",
+      "request_id": "req-8e4f6451-2",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 19
+    }
+  },
+  {
+    "id": "9fd5aaa9-4a2c-a63d-bfb81b01abf4",
+    "timestamp": "2026-03-20T09:47:13.706Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "8e4f645180f8a7d1dce426b07380466b",
+    "span_id": "df180a8574df731b",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "message": "  → N+1 — /webhooks/stripe id=46700"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.643Z",
+      "request_id": "req-8e4f6451-2",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 12
+    }
+  },
+  {
+    "id": "8a12554a-467f-a5f9-27f6e5663d5b",
+    "timestamp": "2026-03-20T09:47:13.721Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "8e4f645180f8a7d1dce426b07380466b",
+    "span_id": "5b3655d85168ace6",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "order_id": "ord_375714",
+      "status": "completed",
+      "customer": {
+        "id": 7393,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-484",
+          "qty": 1,
+          "unit_price": 117.6
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.643Z",
+      "request_id": "req-8e4f6451-2",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 62
+    }
+  },
+  {
+    "id": "4e062502-4d66-a2c5-55c788ba159a",
+    "timestamp": "2026-03-20T09:47:13.733Z",
+    "event_name": "Events::PaymentFailed",
+    "severity": "error",
+    "version": 1,
+    "trace_id": "8e4f645180f8a7d1dce426b07380466b",
+    "span_id": "6adb72887c1dd13d",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "order_id": "ord_375714",
+      "amount": 118.83,
+      "gateway": "stripe",
+      "decline_code": "processing_error"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.643Z",
+      "request_id": "req-8e4f6451-2",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 106
+    }
+  },
+  {
+    "id": "f16287ce-4f3a-ad75-ee9f84cf765f",
+    "timestamp": "2026-03-20T09:47:13.745Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "8e4f645180f8a7d1dce426b07380466b",
+    "span_id": "8edfc5d7b3f90ce8",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "message": "Completed POST /webhooks/stripe in 703ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.643Z",
+      "request_id": "req-8e4f6451-2",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 120
+    }
+  }
+]

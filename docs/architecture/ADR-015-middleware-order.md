@@ -71,15 +71,17 @@
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.middleware.use E11y::Middleware::TraceContext      # 1
-  config.middleware.use E11y::Middleware::Validation        # 2
-  config.middleware.use E11y::Middleware::PIIFiltering      # 3
-  config.middleware.use E11y::Middleware::RateLimiting      # 4
-  config.middleware.use E11y::Middleware::Sampling          # 5
-  config.middleware.use E11y::Middleware::Versioning        # 6 ← LAST!
-  config.middleware.use E11y::Middleware::Routing           # 7
+  config.pipeline.use E11y::Middleware::TraceContext      # 1
+  config.pipeline.use E11y::Middleware::Validation        # 2
+  config.pipeline.use E11y::Middleware::PIIFilter      # 3
+  config.pipeline.use E11y::Middleware::RateLimiting      # 4
+  config.pipeline.use E11y::Middleware::Sampling          # 5
+  config.pipeline.use E11y::Middleware::Versioning        # 6 ← LAST!
+  config.pipeline.use E11y::Middleware::Routing           # 7
 end
 ```
+
+The default stack in `lib/e11y/configuration.rb` also includes `TrackLatency`, `BaggageProtection`, `AuditSigning`, `EventSlo`, and `SelfMonitoringEmit` after routing; the snippet is the ordering slice that matters for **versioning before routing**.
 
 ---
 
@@ -123,7 +125,7 @@ Adapters           → Receive normalized name
 |------------|----------------|------|
 | **TraceContext** | No | Just adds trace_id, doesn't care about class |
 | **Validation** | ✅ Yes | Schema is attached to specific class (V2 ≠ V1) |
-| **PIIFiltering** | ✅ Yes | PII rules may differ between V1 and V2 |
+| **PIIFilter** | ✅ Yes | PII rules may differ between V1 and V2 |
 | **RateLimiting** | ✅ Yes | Rate limits may differ between V1 and V2 |
 | **Sampling** | ✅ Yes | Sample rates may differ between V1 and V2 |
 | **Versioning** | No | Normalizes for adapters (cosmetic change) |
@@ -138,11 +140,11 @@ Adapters           → Receive normalized name
 
 ```ruby
 # ❌ WRONG ORDER!
-config.middleware.use E11y::Middleware::Versioning        # 1 ← Too early!
-config.middleware.use E11y::Middleware::Validation        # 2
-config.middleware.use E11y::Middleware::PIIFiltering      # 3
-config.middleware.use E11y::Middleware::RateLimiting      # 4
-config.middleware.use E11y::Middleware::Sampling          # 5
+config.pipeline.use E11y::Middleware::Versioning        # 1 ← Too early!
+config.pipeline.use E11y::Middleware::Validation        # 2
+config.pipeline.use E11y::Middleware::PIIFilter      # 3
+config.pipeline.use E11y::Middleware::RateLimiting      # 4
+config.pipeline.use E11y::Middleware::Sampling          # 5
 ```
 
 ### 4.2. What Breaks
@@ -285,7 +287,7 @@ Storage
 ```
 1. TraceContext    → Add trace_id, span_id, timestamp
 2. Validation      → Schema validation (original class)
-3. PIIFiltering    → Audit: skip (contains_pii false → :no_pii). Standard: filter PII ✅
+3. PIIFilter    → Audit: skip (contains_pii false → :no_pii). Standard: filter PII ✅
 4. RateLimiting    → Audit: can skip (event_data[:audit_event]). Standard: rate limit
 5. Sampling        → Audit: sample_rate 1.0 (preset). Standard: adaptive
 6. Versioning      → Normalize event_name (LAST)
@@ -348,7 +350,7 @@ E11y.configure do |config|
   # Single pipeline for all events (audit and standard)
   config.pipeline.use E11y::Middleware::TraceContext      # 1
   config.pipeline.use E11y::Middleware::Validation        # 2
-  config.pipeline.use E11y::Middleware::PIIFiltering      # 3  # Audit: skip (contains_pii false)
+  config.pipeline.use E11y::Middleware::PIIFilter      # 3  # Audit: skip (contains_pii false)
   config.pipeline.use E11y::Middleware::RateLimiting      # 4
   config.pipeline.use E11y::Middleware::Sampling          # 5
   config.pipeline.use E11y::Middleware::AuditSigning      # 6  # Pass-through for non-audit
@@ -666,7 +668,7 @@ class CustomEnrichmentMiddleware
 end
 
 # Pipeline execution:
-# 1. PIIFiltering → Removes :email field ✅
+# 1. PIIFilter → Removes :email field ✅
 # 2. CustomEnrichment → Adds :user_email field ❌ PII bypass!
 # 3. Adapters → Receive event with unfiltered PII!
 ```
@@ -755,7 +757,7 @@ E11y.configure do |config|
   
   # ZONE 2: Security (CRITICAL - PII handled here!)
   config.pipeline.zone(:security) do
-    use E11y::Middleware::PIIFiltering         # ← LAST PII touchpoint!
+    use E11y::Middleware::PIIFilter         # ← LAST PII touchpoint!
   end
   
   # ZONE 3: Routing (read-only decision making)
@@ -940,7 +942,7 @@ class UnsafeMiddleware < E11y::Middleware
   end
 end
 
-# If placed after PIIFiltering middleware:
+# If placed after PIIFilter middleware:
 # → PII bypass! Email not filtered!
 # → GDPR violation!
 ```
@@ -955,7 +957,7 @@ class SafeEnrichmentMiddleware < E11y::Middleware
     event_data[:payload][:request_path] = Current.request.path
     event_data[:payload][:user_agent] = Current.request.user_agent
     
-    # These fields will be filtered by PIIFiltering middleware if needed
+    # These fields will be filtered by PIIFilter middleware if needed
     @app.call(event_data)
   end
 end
@@ -998,7 +1000,7 @@ end
 
 2. **Security Zone (PII filtering):**
    - ❌ DO NOT add custom middleware here
-   - ⚠️ Only E11y::Middleware::PIIFiltering should run
+   - ⚠️ Only E11y::Middleware::PIIFilter should run
    - ⚠️ Treat this zone as read-only (no custom code)
 
 3. **Post-Processing Zone (after PII filtering):**

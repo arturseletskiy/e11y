@@ -39,7 +39,7 @@
 
 ```ruby
 # ❌ PROBLEM 2: No performance guarantees
-# E11y.track() should be <1ms p99
+# Event.track (per event class) should be <1ms p99
 # But how do we know if it's slow?
 # How do we detect regressions?
 ```
@@ -234,7 +234,7 @@ sequenceDiagram
 module E11y
   module SelfMonitoring
     class PerformanceMonitor
-      # Track E11y.track() latency
+      # Track Event.track pipeline latency
       def self.track_latency(duration_ms, event_class:, severity:)
         E11y::Metrics.histogram(
           :e11y_track_duration_seconds,
@@ -496,7 +496,7 @@ end
 
 | Operation | p50 | p95 | p99 | p99.9 | Critical? |
 |-----------|-----|-----|-----|-------|-----------|
-| **E11y.track()** | <0.1ms | <0.5ms | <1ms | <5ms | ✅ Yes |
+| **Event class `.track`** | <0.1ms | <0.5ms | <1ms | <5ms | ✅ Yes |
 | **Middleware (each)** | <0.01ms | <0.05ms | <0.1ms | <0.5ms | ✅ Yes |
 | **Validation** | <0.01ms | <0.05ms | <0.1ms | <0.5ms | ✅ Yes |
 | **PII Filtering** | <0.05ms | <0.1ms | <0.5ms | <1ms | ✅ Yes |
@@ -511,7 +511,7 @@ end
 module E11y
   module Instrumentation
     module Performance
-      # Instrument E11y.track()
+      # Instrument Event.track (class method)
       def self.instrument_track(event_class, &block)
         start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC, :float_millisecond)
         
@@ -528,7 +528,7 @@ module E11y
         
         # Alert if >1ms (p99 budget exceeded)
         if duration_ms > 1.0
-          E11y.logger.warn("E11y.track() slow: #{duration_ms.round(2)}ms for #{event_class.name}")
+          E11y.logger.warn("E11y event track slow: #{duration_ms.round(2)}ms for #{event_class.name}")
         end
         
         result
@@ -668,7 +668,7 @@ groups:
         annotations:
           summary: "E11y latency exceeds SLO"
           description: |
-            E11y.track() p99 latency is {{ $value | humanize }}s (target: 1ms).
+            Event `.track` p99 latency is {{ $value | humanize }}s (target: 1ms).
             This will slow down the entire application!
             
             Runbook: https://wiki/runbooks/e11y-latency-high
