@@ -860,7 +860,7 @@ E11y.config.adapters[:logs].healthy?
 | OTelLogs payload attributes | All payload attributes now included in OTel log records |
 | `config.slo_tracking = true` | Boolean coercion now accepted |
 | `retention` / `retention_period` | Both work as aliases on event class |
-| `config.slo do` | SLO configuration block DSL |
+| `add_slo_controller` / `add_slo_job` | Helpers on `E11y::Configuration` (stored config; see UC-004) |
 | `config.rate_limiting do` | Rate limiting block DSL |
 | `config.cardinality_protection do` | Cardinality DSL block |
 | `config.register_adapter` | Alias for `config.adapters[name] =` |
@@ -878,7 +878,7 @@ The following features are **documented in ADRs** but not yet implemented:
 |---------|--------|
 | `rails g e11y:grafana_dashboard` | ADR-003 |
 | `rails g e11y:prometheus_alerts` | ADR-003 |
-| `config.slo do controller ... job ... end` — per-controller SLO config | ADR-003 |
+| Wire `add_slo_controller` / `add_slo_job` into HTTP/job `Tracker` dimensions | UC-004, ADR-003 |
 | Per-event rate limiting (`rate_limit` DSL on event class) | UC-011 |
 | Tiered storage (archival) | UC-019 — filter by `retention_until` |
 | Cost Tracking / Budget Enforcement | ADR-009, UC-015 |

@@ -60,7 +60,7 @@ Add namespaced routes (legacy routes stay until removed):
 
 - Create: `gems/e11y-devtools/frontend/README.md` (how to run dev server)
 - Create: `gems/e11y-devtools/frontend/public/mocks/v1/interactions.json`
-- Create: `gems/e11y-devtools/frontend/public/mocks/v1/traces/sample-trace/events.json`
+- Create: `gems/e11y-devtools/frontend/public/mocks/v1/traces/<trace_id>/events.json` (hex `trace_id` dirs, e.g. checkout + payment traces)
 - Create: `gems/e11y-devtools/frontend/public/mocks/v1/events/recent.json`
 
 **Step 1:** Add mock JSON files with 5–10 realistic events (mix severities including `warn`, `error`, `info`) and 2–3 grouped interactions.

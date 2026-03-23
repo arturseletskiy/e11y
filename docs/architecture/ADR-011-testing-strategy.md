@@ -942,14 +942,14 @@ RSpec.describe 'Order flow integration', type: :integration do
     
     expect {
       SendOrderEmailJob.perform_later(order.id)
-    }.to have_tracked_event(Events::Rails::Job::Enqueued)
+    }.to have_tracked_event(E11y::Events::Rails::Job::Enqueued)
     
     # Execute job
     perform_enqueued_jobs
     
     # Verify job tracked event with same trace_id
-    enqueued_event = E11y.test_adapter.find_event(Events::Rails::Job::Enqueued)
-    completed_event = E11y.test_adapter.find_event(Events::Rails::Job::Completed)
+    enqueued_event = E11y.test_adapter.find_event(E11y::Events::Rails::Job::Enqueued)
+    completed_event = E11y.test_adapter.find_event(E11y::Events::Rails::Job::Completed)
     
     expect(completed_event[:trace_id]).to eq(enqueued_event[:trace_id])
   end

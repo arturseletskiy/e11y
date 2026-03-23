@@ -56,7 +56,7 @@ end
 
 # ✅ Enable versioning middleware (optional)
 E11y.configure do |config|
-  config.middleware.use E11y::Middleware::Versioning
+  config.pipeline.use E11y::Middleware::Versioning
 end
 
 # Result: Adds `v:` field to events (only if version > 1)
@@ -218,7 +218,7 @@ module E11y
     # 
     # Usage:
     #   E11y.configure do |config|
-    #     config.middleware.use E11y::Middleware::Versioning
+    #     config.pipeline.use E11y::Middleware::Versioning
     #   end
     class Versioning
       def call(event_data)
@@ -264,16 +264,16 @@ end
 # config/initializers/e11y.rb
 
 E11y.configure do |config|
-  # Default middleware stack (in order):
-  config.middleware.use E11y::Middleware::TraceContext      # 1. Add trace_id
-  config.middleware.use E11y::Middleware::SchemaValidation  # 2. Validate schema
-  config.middleware.use E11y::Middleware::PIIFiltering      # 3. Filter PII
-  config.middleware.use E11y::Middleware::RateLimiting      # 4. Check limits
-  config.middleware.use E11y::Middleware::AdaptiveSampling  # 5. Sample
-  
+  # Illustrative subset — default stack includes additional middleware; see lib/e11y/configuration.rb
+  config.pipeline.use E11y::Middleware::TraceContext      # 1. Add trace_id
+  config.pipeline.use E11y::Middleware::Validation        # 2. Validate schema
+  config.pipeline.use E11y::Middleware::PIIFilter       # 3. Filter PII
+  config.pipeline.use E11y::Middleware::RateLimiting    # 4. Check limits
+  config.pipeline.use E11y::Middleware::Sampling        # 5. Sample
+
   # ✅ Versioning LAST (normalize event_name before adapters)
-  config.middleware.use E11y::Middleware::Versioning        # 6. Normalize
-  
+  config.pipeline.use E11y::Middleware::Versioning      # 6. Normalize
+
   # Then: adapters receive normalized event_name
 end
 ```

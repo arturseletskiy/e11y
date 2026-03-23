@@ -247,6 +247,30 @@ RSpec.describe E11y::Tracing::Propagator do
     end
   end
 
+  describe ".baggage_for_propagation_from_current" do
+    it "includes user_id from Current.user_id" do
+      E11y::Current.user_id = 42
+      expect(described_class.baggage_for_propagation_from_current).to eq("user_id" => "42")
+    end
+
+    it "merges Current.baggage with user_id" do
+      E11y::Current.baggage = { "experiment" => "exp-1" }
+      E11y::Current.user_id = 7
+      expect(described_class.baggage_for_propagation_from_current).to eq(
+        "experiment" => "exp-1",
+        "user_id" => "7"
+      )
+    end
+  end
+
+  describe ".hydrate_current_from_job_baggage!" do
+    it "sets baggage and user_id on Current" do
+      described_class.hydrate_current_from_job_baggage!("user_id" => "12", "experiment" => "e")
+      expect(E11y::Current.baggage).to eq("user_id" => "12", "experiment" => "e")
+      expect(E11y::Current.user_id).to eq("12")
+    end
+  end
+
   describe ".filter_baggage_for_propagation" do
     it "filters to allowed keys only when baggage_protection enabled" do
       E11y::Current.baggage = { "experiment" => "exp-42", "user_email" => "user@example.com" }

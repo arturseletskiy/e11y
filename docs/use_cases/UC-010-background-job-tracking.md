@@ -76,31 +76,14 @@ end
 
 ### 1. Automatic Instrumentation
 
-**Zero-config for Sidekiq & ActiveJob:**
+**Enable Sidekiq and Active Job integration:**
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.background_jobs do
-    # Auto-instrument Sidekiq
-    sidekiq enabled: true,
-            track_enqueue: true,
-            track_execution: true,
-            track_retries: true
-    
-    # Auto-instrument ActiveJob
-    active_job enabled: true,
-               track_enqueue: true,
-               track_execution: true,
-               track_retries: true
-    
-    # Metrics
-    metrics enabled: true,
-            include_queue_size: true,
-            include_latency: true
-  end
+  config.rails_instrumentation_enabled = true # ActiveJob ASN events (when using Rails)
+  config.sidekiq_enabled = true
+  config.active_job_enabled = true
 end
-
-# That's it! All jobs automatically tracked ✨
 ```
 
 **What gets tracked automatically:**
@@ -720,77 +703,27 @@ config.error_handling_fail_on_error_in_jobs = false
 
 ## 🔧 Configuration
 
-### Full Configuration
+### Full configuration (shipped API)
+
+There is **no** `config.background_jobs` / `sidekiq do` / `active_job do` DSL in the gem. Use boolean flags and the standard error-handling attribute:
 
 ```ruby
 # config/initializers/e11y.rb
 E11y.configure do |config|
-  config.background_jobs do
-    # === SIDEKIQ ===
-    sidekiq do
-      enabled true
-      
-      # What to track
-      track_enqueue true       # When job added to queue
-      track_start true         # When worker picks up job
-      track_success true       # On successful completion
-      track_failure true       # On error
-      track_retry true         # On retry attempts
-      
-      # Trace propagation
-      propagate_trace_id true  # Preserve trace_id from request
-      
-      # Metrics
-      metrics do
-        enabled true
-        include_queue_size true
-        include_latency true
-        include_processing_time true
-      end
-      
-      # Custom job metadata
-      include_metadata [:queue, :retry_count, :scheduled_at, :enqueued_at]
-    end
-    
-    # === ACTIVEJOB ===
-    active_job do
-      enabled true
-      track_enqueue true
-      track_start true
-      track_success true
-      track_failure true
-      track_retry true
-      propagate_trace_id true
-      
-      # ActiveJob-specific
-      include_adapter_name true  # Sidekiq, Resque, etc.
-      include_executions true    # Execution count
-    end
-    
-    # === FILTERING ===
-    # Don't track these jobs (too noisy)
-    ignore_jobs ['HeartbeatJob', 'HealthCheckJob']
-    
-    # Sample high-volume jobs
-    sample_jobs 'FrequentJob' => 0.1  # 10% sampling
-    
-    # === ALERTING ===
-    alert_on do
-      # Alert on job failures
-      failure_rate threshold: 0.05,  # >5% failure rate
-                   window: 5.minutes
-      
-      # Alert on long queue
-      queue_size threshold: 1000,
-                 queue: 'critical'
-      
-      # Alert on high latency
-      queue_latency threshold: 60.seconds,
-                    queue: 'default'
-    end
-  end
+  config.rails_instrumentation_enabled = true # ActiveJob ASN events when using Rails adapter
+
+  config.sidekiq_enabled = true    # Sidekiq client + server middleware
+  config.active_job_enabled = true # ActiveJob::Base (+ ApplicationJob if defined) callbacks
+
+  config.ephemeral_buffer_enabled = true
+  # config.ephemeral_buffer_job_buffer_limit = 500 # optional
+
+  # Job must not fail because E11y could not ship an event (see error-handling docs)
+  # config.error_handling_fail_on_error = true # default; tune per app if needed
 end
 ```
+
+Details: [RAILS_INTEGRATION.md](../RAILS_INTEGRATION.md), `lib/e11y/instruments/sidekiq.rb`, `lib/e11y/instruments/active_job.rb`.
 
 ---
 

@@ -10,7 +10,7 @@
 
 [Quick Start](#quick-start) • [How it works](#the-e11y-solution) • [Docs](#documentation)
 
-> v0.2.0 · Actively developed · Production feedback welcome → [open an issue](https://github.com/arturseletskiy/e11y/issues)
+> v1.0.0 · Actively developed · Production feedback welcome → [open an issue](https://github.com/arturseletskiy/e11y/issues)
 
 </div>
 
@@ -93,7 +93,10 @@ end
 
 # 3. Track it
 OrderPaidEvent.track(order_id: "123", amount: 99.99, currency: "USD")
+
 ```
+
+**Public API:** define events as subclasses of `E11y::Event::Base` and call **`.track(...)`** on the event class (for example `OrderPaidEvent.track(...)`). That is the only supported tracking entry point in application code.
 
 → [Full Quick Start guide (5 min)](#quick-start)
 
@@ -221,11 +224,19 @@ gem "e11y"
 E11y.configure do |config|
   config.adapters[:logs] = E11y::Adapters::Loki.new(url: ENV["LOKI_URL"])
   config.adapters[:errors_tracker] = E11y::Adapters::Sentry.new(dsn: ENV["SENTRY_DSN"])
-end
 
-# Auto-instruments Rails (optional):
-config.rails_instrumentation_enabled = true
-# → HTTP requests, ActiveRecord, ActiveJob, Cache events
+  # ActiveSupport::Notifications → E11y (HTTP, DB, cache, job lifecycle, etc.)
+  config.rails_instrumentation_enabled = true
+
+  # Optional: Sidekiq client/server middleware (buffer + job events) — enable if you use Sidekiq
+  config.sidekiq_enabled = true
+
+  # Optional: ActiveJob callbacks (buffer + context) — enable if you use Active Job
+  config.active_job_enabled = true
+
+  # Optional: wrap Rails.logger and emit E11y::Events::Rails::Log::* — opt-in
+  # config.logger_bridge_enabled = true
+end
 ```
 
 **vs. Traditional Observability:**
@@ -322,8 +333,17 @@ E11y.configure do |config|
     dsn: ENV["SENTRY_DSN"]
   )
   
-  # Optional: Auto-instrument Rails
+  # ActiveSupport::Notifications → E11y (see docs/RAILS_INTEGRATION.md)
   config.rails_instrumentation_enabled = true
+
+  # Optional: Sidekiq / ActiveJob (ephemeral buffer + instrumentation at job boundaries)
+  config.sidekiq_enabled = true    # set if you use Sidekiq
+  config.active_job_enabled = true # set if you use Active Job (in addition or instead)
+
+  # Optional: send Rails.logger lines into E11y as structured events
+  # config.logger_bridge_enabled = true
+  # config.logger_bridge_track_severities = [:warn, :error, :fatal] # nil = all severities
+  # config.logger_bridge_ignore_patterns = [%r{\A\[ActiveJob\]}]
 end
 ```
 
@@ -529,6 +549,18 @@ E11y is optimized for:
 ## Performance
 
 p99 latency <70µs (`:always`), <10µs (`:sampled`), <50µs (`:never`). Full benchmarks → [docs/PERFORMANCE.md](docs/PERFORMANCE.md)
+
+---
+
+## Upgrading
+
+Breaking renames and migration steps are listed in [CHANGELOG.md](CHANGELOG.md). Common ones:
+
+- **`RequestScopedBuffer` → `E11y::Buffers::EphemeralBuffer`** — use `initialize!`, `flush_on_error`, and `discard` at request/job boundaries (middleware and instruments already do this).
+- **Sidekiq / Active Job** — enable with `config.sidekiq_enabled` and `config.active_job_enabled`; see [docs/RAILS_INTEGRATION.md](docs/RAILS_INTEGRATION.md).
+- **Logger bridge** — `config.logger_bridge_enabled` plus optional `logger_bridge_track_severities` and `logger_bridge_ignore_patterns` (same file).
+
+Known tradeoffs and unfinished pieces: [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
 ---
 

@@ -92,6 +92,34 @@ module E11y
         cfg.filter_baggage_for_propagation(baggage_hash)
       end
 
+      # Merge +E11y::Current.baggage+ with +Current.user_id+ (as +"user_id"+) then apply
+      # +filter_baggage_for_propagation+. Used when enqueueing background jobs so workers
+      # see the same user correlation without persisting the entire Current object.
+      #
+      # @return [Hash{String=>String}] filtered string-key baggage (possibly empty)
+      def self.baggage_for_propagation_from_current
+        merged = {}
+        if E11y::Current.respond_to?(:baggage) && E11y::Current.baggage.is_a?(Hash) && E11y::Current.baggage.any?
+          merged = E11y::Current.baggage.transform_keys(&:to_s).transform_values(&:to_s)
+        end
+        merged["user_id"] = E11y::Current.user_id.to_s if E11y::Current.respond_to?(:user_id) && !E11y::Current.user_id.nil?
+        filter_baggage_for_propagation(merged)
+      end
+
+      # Apply serialized job baggage to +E11y::Current+ (baggage + optional +user_id+ slot).
+      #
+      # @param baggage_hash [Hash, nil]
+      # @return [void]
+      def self.hydrate_current_from_job_baggage!(baggage_hash)
+        return unless baggage_hash.is_a?(Hash)
+
+        E11y::Current.baggage = baggage_hash if baggage_hash.any?
+        uid = baggage_hash["user_id"]
+        return if uid.nil? || (uid.respond_to?(:empty?) && uid.empty?)
+
+        E11y::Current.user_id = uid
+      end
+
       # Parse a W3C traceparent header string.
       #
       # @param traceparent [String, nil] Raw header value
