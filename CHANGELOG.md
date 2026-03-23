@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Deprecated
+
+### Removed
+
+### Security
+
+## [1.1.0] - 2026-03-23
+
+### Added
+
 - Sidekiq and Active Job: propagate **`user_id`** into **`e11y_baggage`** (and restore **`E11y::Current.user_id`** when the job runs). Key **`user_id`** is included in default baggage allowlist.
 
 ### Changed
