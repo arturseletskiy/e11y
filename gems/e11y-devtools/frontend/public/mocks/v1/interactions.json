@@ -1,23 +1,194 @@
 [
   {
-    "started_at": "2026-03-20T10:00:05.000Z",
-    "trace_ids": ["tr-ccc"],
+    "started_at": "2026-03-20T09:47:42.346Z",
+    "trace_ids": [
+      "98ff6146faf7bd9be8bd03a8275817ba"
+    ],
     "has_error": false,
     "source": "web",
     "traces_count": 1
   },
   {
-    "started_at": "2026-03-20T10:00:04.500Z",
-    "trace_ids": ["tr-job-1"],
+    "started_at": "2026-03-20T09:47:40.998Z",
+    "trace_ids": [
+      "93db346fa5d44a032605a13b627f4b80",
+      "8c0a98900edaae105469df8daedccf02"
+    ],
+    "has_error": true,
+    "source": "job",
+    "traces_count": 2
+  },
+  {
+    "started_at": "2026-03-20T09:47:39.126Z",
+    "trace_ids": [
+      "34bc3c9c0097de28a7a6f99b90a8e7bc"
+    ],
+    "has_error": false,
+    "source": "web",
+    "traces_count": 1
+  },
+  {
+    "started_at": "2026-03-20T09:47:38.019Z",
+    "trace_ids": [
+      "29f198f6588dacffb687777eb5f8f118"
+    ],
+    "has_error": true,
+    "source": "web",
+    "traces_count": 1
+  },
+  {
+    "started_at": "2026-03-20T09:47:37.077Z",
+    "trace_ids": [
+      "8a81ada42834d15f287bb40010043605"
+    ],
+    "has_error": false,
+    "source": "web",
+    "traces_count": 1
+  },
+  {
+    "started_at": "2026-03-20T09:47:34.807Z",
+    "trace_ids": [
+      "e67e724bab422d2b52eeb49635e512e1"
+    ],
+    "has_error": false,
+    "source": "web",
+    "traces_count": 1
+  },
+  {
+    "started_at": "2026-03-20T09:47:33.891Z",
+    "trace_ids": [
+      "6daf0d47974bedfc55d5de7004a3ea9f"
+    ],
+    "has_error": false,
+    "source": "web",
+    "traces_count": 1
+  },
+  {
+    "started_at": "2026-03-20T09:47:32.265Z",
+    "trace_ids": [
+      "99e35f8ef3baedd798cc4fd085980ad9"
+    ],
+    "has_error": false,
+    "source": "web",
+    "traces_count": 1
+  },
+  {
+    "started_at": "2026-03-20T09:47:29.920Z",
+    "trace_ids": [
+      "0a2e04027cfa22d014bc22e8b27cd913"
+    ],
     "has_error": true,
     "source": "job",
     "traces_count": 1
   },
   {
-    "started_at": "2026-03-20T10:00:02.000Z",
-    "trace_ids": ["tr-aaa", "tr-bbb"],
+    "started_at": "2026-03-20T09:47:28.725Z",
+    "trace_ids": [
+      "9997ddd0247bc7e25f2ca7a5c415c93d"
+    ],
     "has_error": true,
     "source": "web",
+    "traces_count": 1
+  },
+  {
+    "started_at": "2026-03-20T09:47:27.457Z",
+    "trace_ids": [
+      "c0b48033fa06746bcc5886745e053cff"
+    ],
+    "has_error": false,
+    "source": "web",
+    "traces_count": 1
+  },
+  {
+    "started_at": "2026-03-20T09:47:25.381Z",
+    "trace_ids": [
+      "0e1543af6a630fb3af6b52283154b3e0",
+      "435bfd8f17b9009146a79812d7c3726d"
+    ],
+    "has_error": false,
+    "source": "web",
     "traces_count": 2
+  },
+  {
+    "started_at": "2026-03-20T09:47:23.887Z",
+    "trace_ids": [
+      "4c7676e3fe668e99edb2b94d7d5678a9"
+    ],
+    "has_error": true,
+    "source": "web",
+    "traces_count": 1
+  },
+  {
+    "started_at": "2026-03-20T09:47:21.474Z",
+    "trace_ids": [
+      "b54b7fc32b7575a7110de809d11ccda0",
+      "b4f3095c1909924cbc98889a86c83d6d"
+    ],
+    "has_error": true,
+    "source": "job",
+    "traces_count": 2
+  },
+  {
+    "started_at": "2026-03-20T09:47:20.109Z",
+    "trace_ids": [
+      "d601ae3320057580a39dbdac2edfdf4a"
+    ],
+    "has_error": false,
+    "source": "web",
+    "traces_count": 1
+  },
+  {
+    "started_at": "2026-03-20T09:47:18.612Z",
+    "trace_ids": [
+      "3ba6c20d068ab9cee00e51b180e66444"
+    ],
+    "has_error": true,
+    "source": "web",
+    "traces_count": 1
+  },
+  {
+    "started_at": "2026-03-20T09:47:17.046Z",
+    "trace_ids": [
+      "c44649ac76701b4558927cd2305ab535"
+    ],
+    "has_error": false,
+    "source": "web",
+    "traces_count": 1
+  },
+  {
+    "started_at": "2026-03-20T09:47:15.513Z",
+    "trace_ids": [
+      "e6c72765a28f158a8485b35fa63f73da"
+    ],
+    "has_error": false,
+    "source": "web",
+    "traces_count": 1
+  },
+  {
+    "started_at": "2026-03-20T09:47:13.643Z",
+    "trace_ids": [
+      "8e4f645180f8a7d1dce426b07380466b"
+    ],
+    "has_error": true,
+    "source": "web",
+    "traces_count": 1
+  },
+  {
+    "started_at": "2026-03-20T09:47:13.094Z",
+    "trace_ids": [
+      "f541b87405c9a54819b18ebe529f6419"
+    ],
+    "has_error": false,
+    "source": "web",
+    "traces_count": 1
+  },
+  {
+    "started_at": "2026-03-20T09:47:12.181Z",
+    "trace_ids": [
+      "1838b691faa49564f97db8592ff3978d"
+    ],
+    "has_error": false,
+    "source": "job",
+    "traces_count": 1
   }
 ]

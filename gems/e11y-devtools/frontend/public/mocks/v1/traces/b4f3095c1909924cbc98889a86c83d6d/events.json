@@ -1,0 +1,131 @@
+[
+  {
+    "id": "3cfd0b62-4368-971d-b51088c9af70",
+    "timestamp": "2026-03-20T09:47:21.875Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "b4f3095c1909924cbc98889a86c83d6d",
+    "span_id": "8158383d7f1ea253",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:21Z",
+    "payload": {
+      "message": "Started GET \"/up\" for ::1 at 2026-03-20 09:47:21 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:21.861Z",
+      "request_id": "req-b4f3095c-8",
+      "path": "/up",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 3
+    }
+  },
+  {
+    "id": "63a2b8b0-4663-818b-f9bce7c71ce8",
+    "timestamp": "2026-03-20T09:47:21.887Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "b4f3095c1909924cbc98889a86c83d6d",
+    "span_id": "d8de5f92175e904b",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:21Z",
+    "payload": {
+      "endpoint": "GET /up",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:21.861Z",
+      "request_id": "req-b4f3095c-8",
+      "path": "/up",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 9
+    }
+  },
+  {
+    "id": "f35afd7f-4e33-9352-edf9a1c0156e",
+    "timestamp": "2026-03-20T09:47:21.903Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "b4f3095c1909924cbc98889a86c83d6d",
+    "span_id": "1552208f72cd5374",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:21Z",
+    "payload": {
+      "message": "  → CACHE /up — 35.8ms"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:21.861Z",
+      "request_id": "req-b4f3095c-8",
+      "path": "/up",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 4
+    }
+  },
+  {
+    "id": "ca246a38-4426-886c-5eb47e925429",
+    "timestamp": "2026-03-20T09:47:21.917Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "b4f3095c1909924cbc98889a86c83d6d",
+    "span_id": "f96854b90ebc2ba6",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:21Z",
+    "payload": {
+      "message": "  → SQL — /up id=37498"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:21.861Z",
+      "request_id": "req-b4f3095c-8",
+      "path": "/up",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 5
+    }
+  },
+  {
+    "id": "249b1a4b-4c08-9c49-43b99e4389eb",
+    "timestamp": "2026-03-20T09:47:21.928Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "b4f3095c1909924cbc98889a86c83d6d",
+    "span_id": "ddeb1b9019e32cfc",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:21Z",
+    "payload": {
+      "message": "Completed GET /up in 241ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:21.861Z",
+      "request_id": "req-b4f3095c-8",
+      "path": "/up",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 14
+    }
+  }
+]

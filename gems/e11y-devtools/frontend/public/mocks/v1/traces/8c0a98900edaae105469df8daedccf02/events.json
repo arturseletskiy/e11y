@@ -1,0 +1,198 @@
+[
+  {
+    "id": "77a1adac-448d-a177-7e9dda5287f1",
+    "timestamp": "2026-03-20T09:47:41.427Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "8c0a98900edaae105469df8daedccf02",
+    "span_id": "4bdad943b72e8091",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:41Z",
+    "payload": {
+      "message": "Started GET \"/api/v1/me\" for ::1 at 2026-03-20 09:47:41 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:41.417Z",
+      "request_id": "req-8c0a9890-22",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "CheckoutController",
+      "action": "show",
+      "duration_ms": 1
+    }
+  },
+  {
+    "id": "fcdb5fed-47ce-8a48-118e62633b30",
+    "timestamp": "2026-03-20T09:47:41.437Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "warn",
+    "version": 1,
+    "trace_id": "8c0a98900edaae105469df8daedccf02",
+    "span_id": "6441df78adfd5d57",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:41Z",
+    "payload": {
+      "endpoint": "GET /api/v1/me",
+      "status": "slow",
+      "http_status": 429
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:41.417Z",
+      "request_id": "req-8c0a9890-22",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "CheckoutController",
+      "action": "show",
+      "duration_ms": 68
+    }
+  },
+  {
+    "id": "c94de83c-4fe4-a3aa-7d7b6ae692c5",
+    "timestamp": "2026-03-20T09:47:41.452Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "8c0a98900edaae105469df8daedccf02",
+    "span_id": "fb7a0326e10de5b7",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:41Z",
+    "payload": {
+      "message": "  → Render /api/v1/me — 46.7ms"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:41.417Z",
+      "request_id": "req-8c0a9890-22",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "CheckoutController",
+      "action": "show",
+      "duration_ms": 3
+    }
+  },
+  {
+    "id": "be4c5ec6-4a33-b303-d63a66cdf647",
+    "timestamp": "2026-03-20T09:47:41.468Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "8c0a98900edaae105469df8daedccf02",
+    "span_id": "f156de93d67bbf5c",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:41Z",
+    "payload": {
+      "message": "  → Render — /api/v1/me id=38198"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:41.417Z",
+      "request_id": "req-8c0a9890-22",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "CheckoutController",
+      "action": "show",
+      "duration_ms": 21
+    }
+  },
+  {
+    "id": "3b0d2d49-4c6a-b0e1-c3383871c8d9",
+    "timestamp": "2026-03-20T09:47:41.481Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "8c0a98900edaae105469df8daedccf02",
+    "span_id": "096743a82fba6af0",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:41Z",
+    "payload": {
+      "order_id": "ord_032734",
+      "status": "completed",
+      "customer": {
+        "id": 6403,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-987",
+          "qty": 1,
+          "unit_price": 177.96
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:41.417Z",
+      "request_id": "req-8c0a9890-22",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "CheckoutController",
+      "action": "show",
+      "duration_ms": 5
+    }
+  },
+  {
+    "id": "98e6f413-4779-b6f0-663c429ea77a",
+    "timestamp": "2026-03-20T09:47:41.495Z",
+    "event_name": "Events::UserAction",
+    "severity": "warn",
+    "version": 1,
+    "trace_id": "8c0a98900edaae105469df8daedccf02",
+    "span_id": "65701de983e749a2",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:41Z",
+    "payload": {
+      "action": "checkout_step",
+      "step": "review",
+      "flags": [
+        "rate_limit_near"
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:41.417Z",
+      "request_id": "req-8c0a9890-22",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "CheckoutController",
+      "action": "show",
+      "duration_ms": 50
+    }
+  },
+  {
+    "id": "ff0fdc90-48d7-a002-709f76a01ee2",
+    "timestamp": "2026-03-20T09:47:41.508Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "8c0a98900edaae105469df8daedccf02",
+    "span_id": "3974efe59f78d30c",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:41Z",
+    "payload": {
+      "message": "Completed GET /api/v1/me in 131ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:41.417Z",
+      "request_id": "req-8c0a9890-22",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "CheckoutController",
+      "action": "show",
+      "duration_ms": 132
+    }
+  }
+]

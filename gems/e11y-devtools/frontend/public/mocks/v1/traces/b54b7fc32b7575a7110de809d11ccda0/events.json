@@ -1,0 +1,128 @@
+[
+  {
+    "id": "a2eb589f-4dda-8353-4697ad5ae78b",
+    "timestamp": "2026-03-20T09:47:21.550Z",
+    "event_name": "Events::BackgroundJobStarted",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "b54b7fc32b7575a7110de809d11ccda0",
+    "span_id": "635f1ab192c82ea2",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:21Z",
+    "payload": {
+      "job_class": "WebhookRetryJob",
+      "job_id": "af183fec-4203-ac0f-cb17f1a2e14f",
+      "queue": "default",
+      "arguments": [
+        {
+          "batch_id": 4001,
+          "shard": 12
+        }
+      ],
+      "enqueued_at": "2026-03-20T09:47:19.474Z"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:21.474Z",
+      "duration_ms": 897
+    }
+  },
+  {
+    "id": "62d79f42-4e40-95a0-b4a7e7c50f49",
+    "timestamp": "2026-03-20T09:47:22.090Z",
+    "event_name": "Events::ReportCreated",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "b54b7fc32b7575a7110de809d11ccda0",
+    "span_id": "34e9442a321f5e2b",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:22Z",
+    "payload": {
+      "title": "Export batch 5380",
+      "description": "Queued by WebhookRetryJob",
+      "employee_ids": [
+        141,
+        12
+      ],
+      "author": "system"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:21.474Z",
+      "duration_ms": 269
+    }
+  },
+  {
+    "id": "9e45e2f1-4822-aad6-6b50a7dd7059",
+    "timestamp": "2026-03-20T09:47:22.583Z",
+    "event_name": "Events::ReportExportCompleted",
+    "severity": "fatal",
+    "version": 1,
+    "trace_id": "b54b7fc32b7575a7110de809d11ccda0",
+    "span_id": "51a8630762a95a5c",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:22Z",
+    "payload": {
+      "report_id": 1417,
+      "error": "No space left on device",
+      "exception": {
+        "class": "Errno::ENOSPC",
+        "message": "No space left on device @ rb_sysopen",
+        "backtrace": [
+          "app/jobs/webhook_retry_job.rb:26:in `perform'",
+          "activejob (7.0.0) lib/active_job/execution.rb:68:in `perform_now'"
+        ]
+      }
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:21.474Z",
+      "duration_ms": 899
+    }
+  },
+  {
+    "id": "bc2d9da3-42d8-ad14-5bfc48336af8",
+    "timestamp": "2026-03-20T09:47:23.152Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "b54b7fc32b7575a7110de809d11ccda0",
+    "span_id": "8c47e2a32d6cad89",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:23Z",
+    "payload": {
+      "message": "Job WebhookRetryJob done shard=4",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:21.474Z",
+      "duration_ms": 76
+    }
+  },
+  {
+    "id": "bb4d4462-4fef-8623-93d1400113f0",
+    "timestamp": "2026-03-20T09:47:23.735Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "b54b7fc32b7575a7110de809d11ccda0",
+    "span_id": "c6c2ffe6949e885f",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:23Z",
+    "payload": {
+      "message": "Job WebhookRetryJob done shard=7",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:21.474Z",
+      "duration_ms": 193
+    }
+  }
+]

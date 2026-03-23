@@ -1,56 +1,4205 @@
 [
   {
-    "id": "evt-001",
-    "event_name": "Events::RequestStarted",
-    "severity": "info",
-    "timestamp": "2026-03-20T10:00:01.100Z",
-    "trace_id": "tr-aaa",
-    "metadata": { "source": "web", "started_at": "2026-03-20T10:00:01.100Z" },
-    "payload": { "path": "/orders" }
-  },
-  {
-    "id": "evt-002",
-    "event_name": "Events::CheckoutValidated",
-    "severity": "warn",
-    "timestamp": "2026-03-20T10:00:01.250Z",
-    "trace_id": "tr-aaa",
-    "metadata": { "source": "web", "duration_ms": 45 },
-    "payload": { "coupon": "stale" }
-  },
-  {
-    "id": "evt-003",
-    "event_name": "Events::PaymentFailed",
-    "severity": "error",
-    "timestamp": "2026-03-20T10:00:02.000Z",
-    "trace_id": "tr-bbb",
-    "metadata": { "source": "web", "started_at": "2026-03-20T10:00:01.900Z" },
-    "payload": { "reason": "insufficient_funds" }
-  },
-  {
-    "id": "evt-004",
-    "event_name": "Events::BackgroundJobStarted",
-    "severity": "info",
-    "timestamp": "2026-03-20T10:00:03.000Z",
-    "trace_id": "tr-job-1",
-    "metadata": { "source": "job" },
-    "payload": { "job_class": "ReportExportJob" }
-  },
-  {
-    "id": "evt-005",
+    "id": "7ad2f2eb-42b8-810f-4db7458d46eb",
+    "timestamp": "2026-03-20T09:47:43.259Z",
     "event_name": "Events::ReportExportCompleted",
     "severity": "fatal",
-    "timestamp": "2026-03-20T10:00:04.500Z",
-    "trace_id": "tr-job-1",
-    "metadata": { "source": "job" },
-    "payload": { "error": "disk full" }
+    "version": 1,
+    "trace_id": "93db346fa5d44a032605a13b627f4b80",
+    "span_id": "fbece4ee65f62978",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:43Z",
+    "payload": {
+      "report_id": 5361,
+      "error": "No space left on device",
+      "exception": {
+        "class": "Errno::ENOSPC",
+        "message": "No space left on device @ rb_sysopen",
+        "backtrace": [
+          "app/jobs/search_index_job.rb:49:in `perform'",
+          "activejob (6.2.0) lib/active_job/execution.rb:68:in `perform_now'"
+        ]
+      }
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:40.998Z",
+      "duration_ms": 478
+    }
   },
   {
-    "id": "evt-006",
-    "event_name": "Events::HealthCheck",
+    "id": "f066bd9f-465f-8ee2-777aff789c26",
+    "timestamp": "2026-03-20T09:47:42.648Z",
+    "event_name": "Events::LogInfo",
     "severity": "info",
-    "timestamp": "2026-03-20T10:00:05.000Z",
-    "trace_id": "tr-ccc",
-    "metadata": { "source": "web" },
-    "payload": {}
+    "version": 1,
+    "trace_id": "93db346fa5d44a032605a13b627f4b80",
+    "span_id": "026da32d59c83ff3",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:42Z",
+    "payload": {
+      "message": "Job SearchIndexJob done shard=12",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:40.998Z",
+      "duration_ms": 782
+    }
+  },
+  {
+    "id": "d506becd-424c-a7dc-660b01a28126",
+    "timestamp": "2026-03-20T09:47:42.455Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "98ff6146faf7bd9be8bd03a8275817ba",
+    "span_id": "317127c1497b54df",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:42Z",
+    "payload": {
+      "message": "Completed GET /api/v1/me in 536ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:42.346Z",
+      "request_id": "req-98ff6146-23",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 53
+    }
+  },
+  {
+    "id": "20fd9d89-4a9f-996a-2db4be568e9d",
+    "timestamp": "2026-03-20T09:47:42.440Z",
+    "event_name": "Events::UserAction",
+    "severity": "warn",
+    "version": 1,
+    "trace_id": "98ff6146faf7bd9be8bd03a8275817ba",
+    "span_id": "e8a0a62629278f9e",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:42Z",
+    "payload": {
+      "action": "checkout_step",
+      "step": "review",
+      "flags": [
+        "rate_limit_near"
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:42.346Z",
+      "request_id": "req-98ff6146-23",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 82
+    }
+  },
+  {
+    "id": "3d1aca2c-4d58-a6b4-b4a91b17f163",
+    "timestamp": "2026-03-20T09:47:42.425Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "98ff6146faf7bd9be8bd03a8275817ba",
+    "span_id": "9e5d50beb2f10e9a",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:42Z",
+    "payload": {
+      "order_id": "ord_673035",
+      "status": "completed",
+      "customer": {
+        "id": 4796,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-106",
+          "qty": 1,
+          "unit_price": 440.53
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:42.346Z",
+      "request_id": "req-98ff6146-23",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 45
+    }
+  },
+  {
+    "id": "bbe18520-4505-90d7-1c92de3fc94f",
+    "timestamp": "2026-03-20T09:47:42.413Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "98ff6146faf7bd9be8bd03a8275817ba",
+    "span_id": "a8904ca73ecb085b",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:42Z",
+    "payload": {
+      "message": "  → CACHE — /api/v1/me id=31291"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:42.346Z",
+      "request_id": "req-98ff6146-23",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 16
+    }
+  },
+  {
+    "id": "7b07b8df-413d-895c-4872d31e4ab9",
+    "timestamp": "2026-03-20T09:47:42.398Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "98ff6146faf7bd9be8bd03a8275817ba",
+    "span_id": "9241f542590a0637",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:42Z",
+    "payload": {
+      "message": "  → N+1 — /api/v1/me id=30562"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:42.346Z",
+      "request_id": "req-98ff6146-23",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 8
+    }
+  },
+  {
+    "id": "0c7d14af-4659-a391-71c5f64da024",
+    "timestamp": "2026-03-20T09:47:42.385Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "98ff6146faf7bd9be8bd03a8275817ba",
+    "span_id": "385ded3b1c0626af",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:42Z",
+    "payload": {
+      "message": "  → CACHE /api/v1/me — 28.4ms"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:42.346Z",
+      "request_id": "req-98ff6146-23",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 5
+    }
+  },
+  {
+    "id": "ee7ca618-4d04-a58a-c3ba48093ce1",
+    "timestamp": "2026-03-20T09:47:42.371Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "98ff6146faf7bd9be8bd03a8275817ba",
+    "span_id": "689063d740ad9c7b",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:42Z",
+    "payload": {
+      "endpoint": "GET /api/v1/me",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:42.346Z",
+      "request_id": "req-98ff6146-23",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 79
+    }
+  },
+  {
+    "id": "43fe5d42-4a7a-a3db-7e1ce384fe88",
+    "timestamp": "2026-03-20T09:47:42.361Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "98ff6146faf7bd9be8bd03a8275817ba",
+    "span_id": "0b5c44c2f4a59398",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:42Z",
+    "payload": {
+      "message": "Started GET \"/api/v1/me\" for ::1 at 2026-03-20 09:47:42 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:42.346Z",
+      "request_id": "req-98ff6146-23",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 1
+    }
+  },
+  {
+    "id": "e06d246b-4b7d-adc1-21367641e2e2",
+    "timestamp": "2026-03-20T09:47:42.148Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "93db346fa5d44a032605a13b627f4b80",
+    "span_id": "debecca9fd870221",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:42Z",
+    "payload": {
+      "message": "Job SearchIndexJob done shard=13",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:40.998Z",
+      "duration_ms": 17
+    }
+  },
+  {
+    "id": "678c5bd6-416b-a026-de0ecdd16f77",
+    "timestamp": "2026-03-20T09:47:41.590Z",
+    "event_name": "Events::ReportCreated",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "93db346fa5d44a032605a13b627f4b80",
+    "span_id": "8a1c19f089d4ae03",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:41Z",
+    "payload": {
+      "title": "Export batch 6468",
+      "description": "Queued by SearchIndexJob",
+      "employee_ids": [
+        153,
+        141
+      ],
+      "author": "system"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:40.998Z",
+      "duration_ms": 184
+    }
+  },
+  {
+    "id": "ff0fdc90-48d7-a002-709f76a01ee2",
+    "timestamp": "2026-03-20T09:47:41.508Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "8c0a98900edaae105469df8daedccf02",
+    "span_id": "3974efe59f78d30c",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:41Z",
+    "payload": {
+      "message": "Completed GET /api/v1/me in 131ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:41.417Z",
+      "request_id": "req-8c0a9890-22",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "CheckoutController",
+      "action": "show",
+      "duration_ms": 132
+    }
+  },
+  {
+    "id": "98e6f413-4779-b6f0-663c429ea77a",
+    "timestamp": "2026-03-20T09:47:41.495Z",
+    "event_name": "Events::UserAction",
+    "severity": "warn",
+    "version": 1,
+    "trace_id": "8c0a98900edaae105469df8daedccf02",
+    "span_id": "65701de983e749a2",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:41Z",
+    "payload": {
+      "action": "checkout_step",
+      "step": "review",
+      "flags": [
+        "rate_limit_near"
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:41.417Z",
+      "request_id": "req-8c0a9890-22",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "CheckoutController",
+      "action": "show",
+      "duration_ms": 50
+    }
+  },
+  {
+    "id": "3b0d2d49-4c6a-b0e1-c3383871c8d9",
+    "timestamp": "2026-03-20T09:47:41.481Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "8c0a98900edaae105469df8daedccf02",
+    "span_id": "096743a82fba6af0",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:41Z",
+    "payload": {
+      "order_id": "ord_032734",
+      "status": "completed",
+      "customer": {
+        "id": 6403,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-987",
+          "qty": 1,
+          "unit_price": 177.96
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:41.417Z",
+      "request_id": "req-8c0a9890-22",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "CheckoutController",
+      "action": "show",
+      "duration_ms": 5
+    }
+  },
+  {
+    "id": "be4c5ec6-4a33-b303-d63a66cdf647",
+    "timestamp": "2026-03-20T09:47:41.468Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "8c0a98900edaae105469df8daedccf02",
+    "span_id": "f156de93d67bbf5c",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:41Z",
+    "payload": {
+      "message": "  → Render — /api/v1/me id=38198"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:41.417Z",
+      "request_id": "req-8c0a9890-22",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "CheckoutController",
+      "action": "show",
+      "duration_ms": 21
+    }
+  },
+  {
+    "id": "c94de83c-4fe4-a3aa-7d7b6ae692c5",
+    "timestamp": "2026-03-20T09:47:41.452Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "8c0a98900edaae105469df8daedccf02",
+    "span_id": "fb7a0326e10de5b7",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:41Z",
+    "payload": {
+      "message": "  → Render /api/v1/me — 46.7ms"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:41.417Z",
+      "request_id": "req-8c0a9890-22",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "CheckoutController",
+      "action": "show",
+      "duration_ms": 3
+    }
+  },
+  {
+    "id": "fcdb5fed-47ce-8a48-118e62633b30",
+    "timestamp": "2026-03-20T09:47:41.437Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "warn",
+    "version": 1,
+    "trace_id": "8c0a98900edaae105469df8daedccf02",
+    "span_id": "6441df78adfd5d57",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:41Z",
+    "payload": {
+      "endpoint": "GET /api/v1/me",
+      "status": "slow",
+      "http_status": 429
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:41.417Z",
+      "request_id": "req-8c0a9890-22",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "CheckoutController",
+      "action": "show",
+      "duration_ms": 68
+    }
+  },
+  {
+    "id": "77a1adac-448d-a177-7e9dda5287f1",
+    "timestamp": "2026-03-20T09:47:41.427Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "8c0a98900edaae105469df8daedccf02",
+    "span_id": "4bdad943b72e8091",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:41Z",
+    "payload": {
+      "message": "Started GET \"/api/v1/me\" for ::1 at 2026-03-20 09:47:41 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:41.417Z",
+      "request_id": "req-8c0a9890-22",
+      "path": "/api/v1/me",
+      "method": "GET",
+      "controller": "CheckoutController",
+      "action": "show",
+      "duration_ms": 1
+    }
+  },
+  {
+    "id": "d433cde9-4266-9510-5e0d98a5249e",
+    "timestamp": "2026-03-20T09:47:41.034Z",
+    "event_name": "Events::BackgroundJobStarted",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "93db346fa5d44a032605a13b627f4b80",
+    "span_id": "5d5ccc973ae1dbe2",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:41Z",
+    "payload": {
+      "job_class": "SearchIndexJob",
+      "job_id": "f1bb72d6-45dc-9a51-8cdedcaed3dd",
+      "queue": "default",
+      "arguments": [
+        {
+          "batch_id": 78946,
+          "shard": 2
+        }
+      ],
+      "enqueued_at": "2026-03-20T09:47:40.998Z"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:40.998Z",
+      "duration_ms": 444
+    }
+  },
+  {
+    "id": "9164dbd4-4c55-b0f9-418608b0af0d",
+    "timestamp": "2026-03-20T09:47:39.214Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "34bc3c9c0097de28a7a6f99b90a8e7bc",
+    "span_id": "1eda914eb28a2274",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:39Z",
+    "payload": {
+      "message": "Completed GET /api/v1/orders in 530ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:39.126Z",
+      "request_id": "req-34bc3c9c-20",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 144
+    }
+  },
+  {
+    "id": "fb0714c7-4e18-99d1-f458a58bd50b",
+    "timestamp": "2026-03-20T09:47:39.203Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "34bc3c9c0097de28a7a6f99b90a8e7bc",
+    "span_id": "38a12e8eb173ee3a",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:39Z",
+    "payload": {
+      "order_id": "ord_482616",
+      "status": "completed",
+      "customer": {
+        "id": 8681,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-976",
+          "qty": 1,
+          "unit_price": 335.94
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:39.126Z",
+      "request_id": "req-34bc3c9c-20",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 32
+    }
+  },
+  {
+    "id": "8aba053d-4e4f-a0d7-0152bb731707",
+    "timestamp": "2026-03-20T09:47:39.189Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "34bc3c9c0097de28a7a6f99b90a8e7bc",
+    "span_id": "a3922fdece7aca94",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:39Z",
+    "payload": {
+      "message": "  → CACHE — /api/v1/orders id=1751"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:39.126Z",
+      "request_id": "req-34bc3c9c-20",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 5
+    }
+  },
+  {
+    "id": "50896664-4c2b-bfba-0ffaf64c1b30",
+    "timestamp": "2026-03-20T09:47:39.178Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "34bc3c9c0097de28a7a6f99b90a8e7bc",
+    "span_id": "23068bbcca3e5410",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:39Z",
+    "payload": {
+      "message": "  → SQL — /api/v1/orders id=36409"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:39.126Z",
+      "request_id": "req-34bc3c9c-20",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 23
+    }
+  },
+  {
+    "id": "99294667-4829-b018-342613705f22",
+    "timestamp": "2026-03-20T09:47:39.168Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "34bc3c9c0097de28a7a6f99b90a8e7bc",
+    "span_id": "d1b0b08213e86df1",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:39Z",
+    "payload": {
+      "message": "  → CACHE /api/v1/orders — 44.2ms"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:39.126Z",
+      "request_id": "req-34bc3c9c-20",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 6
+    }
+  },
+  {
+    "id": "9f92b8c8-4099-9dc1-05f458298848",
+    "timestamp": "2026-03-20T09:47:39.154Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "34bc3c9c0097de28a7a6f99b90a8e7bc",
+    "span_id": "133c3ac859fe8927",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:39Z",
+    "payload": {
+      "endpoint": "GET /api/v1/orders",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:39.126Z",
+      "request_id": "req-34bc3c9c-20",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 17
+    }
+  },
+  {
+    "id": "07fb9e23-42ee-bc93-bdd2985706e2",
+    "timestamp": "2026-03-20T09:47:39.138Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "34bc3c9c0097de28a7a6f99b90a8e7bc",
+    "span_id": "d76e7cf30d2a3dea",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:39Z",
+    "payload": {
+      "message": "Started GET \"/api/v1/orders\" for ::1 at 2026-03-20 09:47:39 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:39.126Z",
+      "request_id": "req-34bc3c9c-20",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 0
+    }
+  },
+  {
+    "id": "ea5f1aa3-4470-a0ba-2b269c437ae7",
+    "timestamp": "2026-03-20T09:47:38.109Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "29f198f6588dacffb687777eb5f8f118",
+    "span_id": "90ffe4e2f305c535",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:38Z",
+    "payload": {
+      "message": "Completed POST /graphql in 109ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:38.019Z",
+      "request_id": "req-29f198f6-19",
+      "path": "/graphql",
+      "method": "POST",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 62
+    }
+  },
+  {
+    "id": "bcefc56a-4ec0-8b32-52b49a682d23",
+    "timestamp": "2026-03-20T09:47:38.097Z",
+    "event_name": "Events::PaymentFailed",
+    "severity": "error",
+    "version": 1,
+    "trace_id": "29f198f6588dacffb687777eb5f8f118",
+    "span_id": "c55f55723ecf3319",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:38Z",
+    "payload": {
+      "order_id": "ord_543352",
+      "amount": 43.44,
+      "gateway": "stripe",
+      "decline_code": "processing_error"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:38.019Z",
+      "request_id": "req-29f198f6-19",
+      "path": "/graphql",
+      "method": "POST",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 40
+    }
+  },
+  {
+    "id": "99bb790b-46ec-97f8-bb342ce521c6",
+    "timestamp": "2026-03-20T09:47:38.086Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "29f198f6588dacffb687777eb5f8f118",
+    "span_id": "92c36b89ea16e6ac",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:38Z",
+    "payload": {
+      "order_id": "ord_543352",
+      "status": "pending_payment",
+      "customer": {
+        "id": 2970,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-575",
+          "qty": 1,
+          "unit_price": 385.83
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:38.019Z",
+      "request_id": "req-29f198f6-19",
+      "path": "/graphql",
+      "method": "POST",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 46
+    }
+  },
+  {
+    "id": "7f59dbe5-4579-b24b-06561b48be74",
+    "timestamp": "2026-03-20T09:47:38.072Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "29f198f6588dacffb687777eb5f8f118",
+    "span_id": "02d09f6923d84155",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:38Z",
+    "payload": {
+      "message": "  → CACHE — /graphql id=40761"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:38.019Z",
+      "request_id": "req-29f198f6-19",
+      "path": "/graphql",
+      "method": "POST",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 6
+    }
+  },
+  {
+    "id": "45b5eed6-4324-804a-db45ea0f7c91",
+    "timestamp": "2026-03-20T09:47:38.060Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "29f198f6588dacffb687777eb5f8f118",
+    "span_id": "8797e87f1e24ef54",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:38Z",
+    "payload": {
+      "message": "  → SQL /graphql — 36.8ms"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:38.019Z",
+      "request_id": "req-29f198f6-19",
+      "path": "/graphql",
+      "method": "POST",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 6
+    }
+  },
+  {
+    "id": "4204ed66-4cc8-96f5-4515d5bdfcea",
+    "timestamp": "2026-03-20T09:47:38.049Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "29f198f6588dacffb687777eb5f8f118",
+    "span_id": "6bf4c9edfc01c803",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:38Z",
+    "payload": {
+      "endpoint": "POST /graphql",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:38.019Z",
+      "request_id": "req-29f198f6-19",
+      "path": "/graphql",
+      "method": "POST",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 26
+    }
+  },
+  {
+    "id": "7897bed6-407f-92df-cad07c1a6f71",
+    "timestamp": "2026-03-20T09:47:38.035Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "29f198f6588dacffb687777eb5f8f118",
+    "span_id": "05c08c7283306cd0",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:38Z",
+    "payload": {
+      "message": "Started POST \"/graphql\" for ::1 at 2026-03-20 09:47:38 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:38.019Z",
+      "request_id": "req-29f198f6-19",
+      "path": "/graphql",
+      "method": "POST",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 1
+    }
+  },
+  {
+    "id": "5cddb388-4ce1-b434-1bab3831d762",
+    "timestamp": "2026-03-20T09:47:37.173Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "8a81ada42834d15f287bb40010043605",
+    "span_id": "f2cdd5f3f97bedf9",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:37Z",
+    "payload": {
+      "message": "Completed POST /webhooks/stripe in 865ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:37.077Z",
+      "request_id": "req-8a81ada4-18",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 115
+    }
+  },
+  {
+    "id": "e4862201-4780-bb2e-5ac457815793",
+    "timestamp": "2026-03-20T09:47:37.159Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "8a81ada42834d15f287bb40010043605",
+    "span_id": "55fb4e0a426992e9",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:37Z",
+    "payload": {
+      "order_id": "ord_274487",
+      "status": "cancelled",
+      "customer": {
+        "id": 1410,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-806",
+          "qty": 1,
+          "unit_price": 296.61
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:37.077Z",
+      "request_id": "req-8a81ada4-18",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 12
+    }
+  },
+  {
+    "id": "a21c1149-4306-bea0-0896d91eec54",
+    "timestamp": "2026-03-20T09:47:37.146Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "8a81ada42834d15f287bb40010043605",
+    "span_id": "06cad0921f6e4e6f",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:37Z",
+    "payload": {
+      "message": "  → CACHE — /webhooks/stripe id=41875"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:37.077Z",
+      "request_id": "req-8a81ada4-18",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 4
+    }
+  },
+  {
+    "id": "ce8dbb2d-49ea-af8f-d1c3f1c4d5f3",
+    "timestamp": "2026-03-20T09:47:37.136Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "8a81ada42834d15f287bb40010043605",
+    "span_id": "ab07a0a4241df0b5",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:37Z",
+    "payload": {
+      "message": "  → CACHE — /webhooks/stripe id=21390"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:37.077Z",
+      "request_id": "req-8a81ada4-18",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 23
+    }
+  },
+  {
+    "id": "98552147-4c35-baf8-4cee91c70ce4",
+    "timestamp": "2026-03-20T09:47:37.122Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "8a81ada42834d15f287bb40010043605",
+    "span_id": "2db51a42e3309c32",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:37Z",
+    "payload": {
+      "message": "  → CACHE /webhooks/stripe — 28.7ms"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:37.077Z",
+      "request_id": "req-8a81ada4-18",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 2
+    }
+  },
+  {
+    "id": "ddf34d86-4d5c-ac07-c3408d3db138",
+    "timestamp": "2026-03-20T09:47:37.109Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "8a81ada42834d15f287bb40010043605",
+    "span_id": "38d32af640fed742",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:37Z",
+    "payload": {
+      "endpoint": "POST /webhooks/stripe",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:37.077Z",
+      "request_id": "req-8a81ada4-18",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 88
+    }
+  },
+  {
+    "id": "5f91331f-4309-85c9-ffd2a4dd276d",
+    "timestamp": "2026-03-20T09:47:37.093Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "8a81ada42834d15f287bb40010043605",
+    "span_id": "86cdd8a168a2cd7b",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:37Z",
+    "payload": {
+      "message": "Started POST \"/webhooks/stripe\" for ::1 at 2026-03-20 09:47:37 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:37.077Z",
+      "request_id": "req-8a81ada4-18",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Api::V1::MeController",
+      "action": "show",
+      "duration_ms": 0
+    }
+  },
+  {
+    "id": "8713ebf1-40c1-99f5-d3db7b289470",
+    "timestamp": "2026-03-20T09:47:34.893Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "e67e724bab422d2b52eeb49635e512e1",
+    "span_id": "669868717f3c2cdd",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:34Z",
+    "payload": {
+      "message": "Completed GET /orders in 689ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:34.807Z",
+      "request_id": "req-e67e724b-17",
+      "path": "/orders",
+      "method": "GET",
+      "controller": "GraphqlController",
+      "action": "execute",
+      "duration_ms": 186
+    }
+  },
+  {
+    "id": "35bc5f7a-43b7-a2d2-6d3d3484081f",
+    "timestamp": "2026-03-20T09:47:34.878Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "e67e724bab422d2b52eeb49635e512e1",
+    "span_id": "77de0a9d30d0e91c",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:34Z",
+    "payload": {
+      "order_id": "ord_980879",
+      "status": "pending_payment",
+      "customer": {
+        "id": 4525,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-576",
+          "qty": 1,
+          "unit_price": 238.2
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:34.807Z",
+      "request_id": "req-e67e724b-17",
+      "path": "/orders",
+      "method": "GET",
+      "controller": "GraphqlController",
+      "action": "execute",
+      "duration_ms": 40
+    }
+  },
+  {
+    "id": "6a24ce75-4155-b9db-543eff3326bc",
+    "timestamp": "2026-03-20T09:47:34.864Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "e67e724bab422d2b52eeb49635e512e1",
+    "span_id": "2f38f567808fda30",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:34Z",
+    "payload": {
+      "message": "  → Render — /orders id=9985"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:34.807Z",
+      "request_id": "req-e67e724b-17",
+      "path": "/orders",
+      "method": "GET",
+      "controller": "GraphqlController",
+      "action": "execute",
+      "duration_ms": 13
+    }
+  },
+  {
+    "id": "94a1703e-43ea-9295-4a99035a289b",
+    "timestamp": "2026-03-20T09:47:34.853Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "e67e724bab422d2b52eeb49635e512e1",
+    "span_id": "36723f71a9dd95d4",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:34Z",
+    "payload": {
+      "message": "  → CACHE — /orders id=4945"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:34.807Z",
+      "request_id": "req-e67e724b-17",
+      "path": "/orders",
+      "method": "GET",
+      "controller": "GraphqlController",
+      "action": "execute",
+      "duration_ms": 20
+    }
+  },
+  {
+    "id": "e9a9f2fa-44b2-84b5-b29793dfb018",
+    "timestamp": "2026-03-20T09:47:34.841Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "e67e724bab422d2b52eeb49635e512e1",
+    "span_id": "7f9507c62a5f14b3",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:34Z",
+    "payload": {
+      "message": "  → SQL — /orders id=19957"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:34.807Z",
+      "request_id": "req-e67e724b-17",
+      "path": "/orders",
+      "method": "GET",
+      "controller": "GraphqlController",
+      "action": "execute",
+      "duration_ms": 24
+    }
+  },
+  {
+    "id": "dd0f8659-484a-9f25-218177381f86",
+    "timestamp": "2026-03-20T09:47:34.831Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "e67e724bab422d2b52eeb49635e512e1",
+    "span_id": "58d1ecd17b1821da",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:34Z",
+    "payload": {
+      "endpoint": "GET /orders",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:34.807Z",
+      "request_id": "req-e67e724b-17",
+      "path": "/orders",
+      "method": "GET",
+      "controller": "GraphqlController",
+      "action": "execute",
+      "duration_ms": 34
+    }
+  },
+  {
+    "id": "0e04dbc8-4534-bc88-e0c9cd87cdb3",
+    "timestamp": "2026-03-20T09:47:34.820Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "e67e724bab422d2b52eeb49635e512e1",
+    "span_id": "c9ac9938012f9074",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:34Z",
+    "payload": {
+      "message": "Started GET \"/orders\" for ::1 at 2026-03-20 09:47:34 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:34.807Z",
+      "request_id": "req-e67e724b-17",
+      "path": "/orders",
+      "method": "GET",
+      "controller": "GraphqlController",
+      "action": "execute",
+      "duration_ms": 1
+    }
+  },
+  {
+    "id": "3c645664-4d94-8d59-066d2fb2b9a3",
+    "timestamp": "2026-03-20T09:47:33.983Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "6daf0d47974bedfc55d5de7004a3ea9f",
+    "span_id": "1fe9e4b5d665cbd6",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:33Z",
+    "payload": {
+      "message": "Completed GET /orders/new in 836ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:33.891Z",
+      "request_id": "req-6daf0d47-16",
+      "path": "/orders/new",
+      "method": "GET",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 8
+    }
+  },
+  {
+    "id": "b50d9747-407e-8c69-6bf09387a25b",
+    "timestamp": "2026-03-20T09:47:33.972Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "6daf0d47974bedfc55d5de7004a3ea9f",
+    "span_id": "5fdaff1e9b51ad79",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:33Z",
+    "payload": {
+      "order_id": "ord_845634",
+      "status": "pending_payment",
+      "customer": {
+        "id": 5110,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-150",
+          "qty": 1,
+          "unit_price": 368.8
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:33.891Z",
+      "request_id": "req-6daf0d47-16",
+      "path": "/orders/new",
+      "method": "GET",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 40
+    }
+  },
+  {
+    "id": "418a3be0-4e6e-a667-833b97cc6aaa",
+    "timestamp": "2026-03-20T09:47:33.957Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "6daf0d47974bedfc55d5de7004a3ea9f",
+    "span_id": "ee9f4dcb1a2a9beb",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:33Z",
+    "payload": {
+      "message": "  → N+1 — /orders/new id=15344"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:33.891Z",
+      "request_id": "req-6daf0d47-16",
+      "path": "/orders/new",
+      "method": "GET",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 4
+    }
+  },
+  {
+    "id": "669e32c7-4816-832e-c159f281292d",
+    "timestamp": "2026-03-20T09:47:33.946Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "6daf0d47974bedfc55d5de7004a3ea9f",
+    "span_id": "9d6d616a2742098b",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:33Z",
+    "payload": {
+      "message": "  → SQL — /orders/new id=10381"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:33.891Z",
+      "request_id": "req-6daf0d47-16",
+      "path": "/orders/new",
+      "method": "GET",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 8
+    }
+  },
+  {
+    "id": "b1a69af2-47a3-bd23-83194075e72a",
+    "timestamp": "2026-03-20T09:47:33.933Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "6daf0d47974bedfc55d5de7004a3ea9f",
+    "span_id": "9959fd1a587f8844",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:33Z",
+    "payload": {
+      "message": "  → N+1 — /orders/new id=12299"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:33.891Z",
+      "request_id": "req-6daf0d47-16",
+      "path": "/orders/new",
+      "method": "GET",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 10
+    }
+  },
+  {
+    "id": "8095f80e-4c9c-8e87-fd047c81ec9c",
+    "timestamp": "2026-03-20T09:47:33.919Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "6daf0d47974bedfc55d5de7004a3ea9f",
+    "span_id": "3ab0382e68b14943",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:33Z",
+    "payload": {
+      "endpoint": "GET /orders/new",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:33.891Z",
+      "request_id": "req-6daf0d47-16",
+      "path": "/orders/new",
+      "method": "GET",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 76
+    }
+  },
+  {
+    "id": "e073b67a-4749-ab60-b475d23deb25",
+    "timestamp": "2026-03-20T09:47:33.906Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "6daf0d47974bedfc55d5de7004a3ea9f",
+    "span_id": "8956d78c1c525c9e",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:33Z",
+    "payload": {
+      "message": "Started GET \"/orders/new\" for ::1 at 2026-03-20 09:47:33 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:33.891Z",
+      "request_id": "req-6daf0d47-16",
+      "path": "/orders/new",
+      "method": "GET",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 2
+    }
+  },
+  {
+    "id": "92ba039a-41a3-889c-2a25c09d7db8",
+    "timestamp": "2026-03-20T09:47:32.364Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "99e35f8ef3baedd798cc4fd085980ad9",
+    "span_id": "4fcd0460b4fcabfc",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:32Z",
+    "payload": {
+      "message": "Completed POST /webhooks/stripe in 422ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:32.265Z",
+      "request_id": "req-99e35f8e-15",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 190
+    }
+  },
+  {
+    "id": "110df334-4e67-a867-0fb28af82c26",
+    "timestamp": "2026-03-20T09:47:32.350Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "99e35f8ef3baedd798cc4fd085980ad9",
+    "span_id": "1ded07b26e78a0c5",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:32Z",
+    "payload": {
+      "order_id": "ord_944119",
+      "status": "completed",
+      "customer": {
+        "id": 1203,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-653",
+          "qty": 1,
+          "unit_price": 73.8
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:32.265Z",
+      "request_id": "req-99e35f8e-15",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 15
+    }
+  },
+  {
+    "id": "4d2719a5-4760-9416-923e80b2488e",
+    "timestamp": "2026-03-20T09:47:32.337Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "99e35f8ef3baedd798cc4fd085980ad9",
+    "span_id": "93d623e03b724a98",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:32Z",
+    "payload": {
+      "message": "  → CACHE — /webhooks/stripe id=34017"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:32.265Z",
+      "request_id": "req-99e35f8e-15",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 15
+    }
+  },
+  {
+    "id": "50f24258-46ec-8429-4858aed7e991",
+    "timestamp": "2026-03-20T09:47:32.324Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "99e35f8ef3baedd798cc4fd085980ad9",
+    "span_id": "d10ca92773b2e747",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:32Z",
+    "payload": {
+      "message": "  → Render — /webhooks/stripe id=29288"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:32.265Z",
+      "request_id": "req-99e35f8e-15",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 14
+    }
+  },
+  {
+    "id": "339dd90d-473b-9b1d-e5222a0d52d4",
+    "timestamp": "2026-03-20T09:47:32.308Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "99e35f8ef3baedd798cc4fd085980ad9",
+    "span_id": "2fb83ca4d087f804",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:32Z",
+    "payload": {
+      "message": "  → Render — /webhooks/stripe id=23931"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:32.265Z",
+      "request_id": "req-99e35f8e-15",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 14
+    }
+  },
+  {
+    "id": "2e654a4b-4fe2-a622-ca00bdba1527",
+    "timestamp": "2026-03-20T09:47:32.294Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "99e35f8ef3baedd798cc4fd085980ad9",
+    "span_id": "b8ba8d3f9310ab95",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:32Z",
+    "payload": {
+      "endpoint": "POST /webhooks/stripe",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:32.265Z",
+      "request_id": "req-99e35f8e-15",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 60
+    }
+  },
+  {
+    "id": "1b50a45e-4f30-8644-793dbef82fbb",
+    "timestamp": "2026-03-20T09:47:32.279Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "99e35f8ef3baedd798cc4fd085980ad9",
+    "span_id": "f70c00eb6894a7b1",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:32Z",
+    "payload": {
+      "message": "Started POST \"/webhooks/stripe\" for ::1 at 2026-03-20 09:47:32 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:32.265Z",
+      "request_id": "req-99e35f8e-15",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 1
+    }
+  },
+  {
+    "id": "fd6e08ab-4b81-880c-14a7cf53ee81",
+    "timestamp": "2026-03-20T09:47:31.057Z",
+    "event_name": "Events::ReportExportCompleted",
+    "severity": "fatal",
+    "version": 1,
+    "trace_id": "0a2e04027cfa22d014bc22e8b27cd913",
+    "span_id": "167e865341302140",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:31Z",
+    "payload": {
+      "report_id": 2342,
+      "error": "No space left on device",
+      "exception": {
+        "class": "Errno::ENOSPC",
+        "message": "No space left on device @ rb_sysopen",
+        "backtrace": [
+          "app/jobs/search_index_job.rb:120:in `perform'",
+          "activejob (6.0.0) lib/active_job/execution.rb:68:in `perform_now'"
+        ]
+      }
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:29.920Z",
+      "duration_ms": 262
+    }
+  },
+  {
+    "id": "8190077d-408a-bdfe-ff6352159b4c",
+    "timestamp": "2026-03-20T09:47:30.494Z",
+    "event_name": "Events::ReportCreated",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "0a2e04027cfa22d014bc22e8b27cd913",
+    "span_id": "8857c7ea9808b902",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:30Z",
+    "payload": {
+      "title": "Export batch 4744",
+      "description": "Queued by SearchIndexJob",
+      "employee_ids": [
+        134,
+        178
+      ],
+      "author": "system"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:29.920Z",
+      "duration_ms": 806
+    }
+  },
+  {
+    "id": "b600fb43-4712-a2d3-c0e0bc7ab213",
+    "timestamp": "2026-03-20T09:47:29.935Z",
+    "event_name": "Events::BackgroundJobStarted",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "0a2e04027cfa22d014bc22e8b27cd913",
+    "span_id": "3e0e907087a3988b",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:29Z",
+    "payload": {
+      "job_class": "SearchIndexJob",
+      "job_id": "92553587-4c19-b5b2-58acc4fd7d2b",
+      "queue": "low",
+      "arguments": [
+        {
+          "batch_id": 67585,
+          "shard": 9
+        }
+      ],
+      "enqueued_at": "2026-03-20T09:47:28.920Z"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:29.920Z",
+      "duration_ms": 119
+    }
+  },
+  {
+    "id": "dd91e003-474e-a285-00754205eb70",
+    "timestamp": "2026-03-20T09:47:28.817Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "9997ddd0247bc7e25f2ca7a5c415c93d",
+    "span_id": "7da1b65d2bbf49f7",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:28Z",
+    "payload": {
+      "message": "Completed GET /sidekiq/busy in 585ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:28.725Z",
+      "request_id": "req-9997ddd0-13",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 192
+    }
+  },
+  {
+    "id": "0d37fb82-40f2-8a1e-c427b26c10e4",
+    "timestamp": "2026-03-20T09:47:28.801Z",
+    "event_name": "Events::PaymentFailed",
+    "severity": "error",
+    "version": 1,
+    "trace_id": "9997ddd0247bc7e25f2ca7a5c415c93d",
+    "span_id": "fb7d2a23ff4c2397",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:28Z",
+    "payload": {
+      "order_id": "ord_853500",
+      "amount": 64.9,
+      "gateway": "stripe",
+      "decline_code": "expired_card"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:28.725Z",
+      "request_id": "req-9997ddd0-13",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 84
+    }
+  },
+  {
+    "id": "3cbae520-45b4-aa95-69142721c6c5",
+    "timestamp": "2026-03-20T09:47:28.786Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "9997ddd0247bc7e25f2ca7a5c415c93d",
+    "span_id": "5d8806453ef715f6",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:28Z",
+    "payload": {
+      "order_id": "ord_853500",
+      "status": "completed",
+      "customer": {
+        "id": 6987,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-545",
+          "qty": 1,
+          "unit_price": 145.84
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:28.725Z",
+      "request_id": "req-9997ddd0-13",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 95
+    }
+  },
+  {
+    "id": "60f73e29-49a8-aa64-f605e64f4ab3",
+    "timestamp": "2026-03-20T09:47:28.772Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "9997ddd0247bc7e25f2ca7a5c415c93d",
+    "span_id": "a55ad5199b88bd3f",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:28Z",
+    "payload": {
+      "message": "  → SQL — /sidekiq/busy id=10168"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:28.725Z",
+      "request_id": "req-9997ddd0-13",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 13
+    }
+  },
+  {
+    "id": "5ae81d89-4042-80e8-e86c7ac5e491",
+    "timestamp": "2026-03-20T09:47:28.759Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "9997ddd0247bc7e25f2ca7a5c415c93d",
+    "span_id": "1640686e958e18e3",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:28Z",
+    "payload": {
+      "message": "  → Render /sidekiq/busy — 22.1ms"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:28.725Z",
+      "request_id": "req-9997ddd0-13",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 7
+    }
+  },
+  {
+    "id": "d738c510-44e6-9855-ddd9890bc07d",
+    "timestamp": "2026-03-20T09:47:28.746Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "9997ddd0247bc7e25f2ca7a5c415c93d",
+    "span_id": "1ea8bb2b3bb41218",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:28Z",
+    "payload": {
+      "endpoint": "GET /sidekiq/busy",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:28.725Z",
+      "request_id": "req-9997ddd0-13",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 17
+    }
+  },
+  {
+    "id": "72899df9-4b25-9ae2-87723e128c0e",
+    "timestamp": "2026-03-20T09:47:28.735Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "9997ddd0247bc7e25f2ca7a5c415c93d",
+    "span_id": "1ad8b4bf44ed1fd8",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:28Z",
+    "payload": {
+      "message": "Started GET \"/sidekiq/busy\" for ::1 at 2026-03-20 09:47:28 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:28.725Z",
+      "request_id": "req-9997ddd0-13",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 2
+    }
+  },
+  {
+    "id": "7668acd7-4d81-816c-9a990964120d",
+    "timestamp": "2026-03-20T09:47:27.532Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "c0b48033fa06746bcc5886745e053cff",
+    "span_id": "25d23aba409fb537",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:27Z",
+    "payload": {
+      "message": "Completed GET /sidekiq/busy in 18ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:27.457Z",
+      "request_id": "req-c0b48033-12",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "create",
+      "duration_ms": 10
+    }
+  },
+  {
+    "id": "14ee28ee-4437-995d-b06aebbe4b3e",
+    "timestamp": "2026-03-20T09:47:27.519Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "c0b48033fa06746bcc5886745e053cff",
+    "span_id": "6095d02f0fa2ce3c",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:27Z",
+    "payload": {
+      "order_id": "ord_667376",
+      "status": "pending_payment",
+      "customer": {
+        "id": 1277,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-791",
+          "qty": 1,
+          "unit_price": 108.42
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:27.457Z",
+      "request_id": "req-c0b48033-12",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "create",
+      "duration_ms": 56
+    }
+  },
+  {
+    "id": "e4eb6c2d-4a21-a7b0-f44d548166d9",
+    "timestamp": "2026-03-20T09:47:27.506Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "c0b48033fa06746bcc5886745e053cff",
+    "span_id": "b0bdb72c52533f9a",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:27Z",
+    "payload": {
+      "message": "  → CACHE — /sidekiq/busy id=23322"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:27.457Z",
+      "request_id": "req-c0b48033-12",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "create",
+      "duration_ms": 25
+    }
+  },
+  {
+    "id": "0a765d92-4f14-9404-55d14751b25b",
+    "timestamp": "2026-03-20T09:47:27.494Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "c0b48033fa06746bcc5886745e053cff",
+    "span_id": "58fd92a92d508f3c",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:27Z",
+    "payload": {
+      "message": "  → SQL /sidekiq/busy — 21.5ms"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:27.457Z",
+      "request_id": "req-c0b48033-12",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "create",
+      "duration_ms": 1
+    }
+  },
+  {
+    "id": "587da6b7-4118-acc2-475f79558cc2",
+    "timestamp": "2026-03-20T09:47:27.482Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "c0b48033fa06746bcc5886745e053cff",
+    "span_id": "83e6829aaae5105c",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:27Z",
+    "payload": {
+      "endpoint": "GET /sidekiq/busy",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:27.457Z",
+      "request_id": "req-c0b48033-12",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "create",
+      "duration_ms": 32
+    }
+  },
+  {
+    "id": "898a186e-42f8-9e96-9cb695b33b4f",
+    "timestamp": "2026-03-20T09:47:27.469Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "c0b48033fa06746bcc5886745e053cff",
+    "span_id": "26e3185e667a17ca",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:27Z",
+    "payload": {
+      "message": "Started GET \"/sidekiq/busy\" for ::1 at 2026-03-20 09:47:27 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:27.457Z",
+      "request_id": "req-c0b48033-12",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "create",
+      "duration_ms": 1
+    }
+  },
+  {
+    "id": "25a69b83-4089-98b7-4d907dfb5549",
+    "timestamp": "2026-03-20T09:47:25.701Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "435bfd8f17b9009146a79812d7c3726d",
+    "span_id": "c4d7cb10421c4dfb",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:25Z",
+    "payload": {
+      "message": "Completed GET /orders/new in 863ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:25.634Z",
+      "request_id": "req-435bfd8f-11",
+      "path": "/orders/new",
+      "method": "GET",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 76
+    }
+  },
+  {
+    "id": "a2fb1f51-4b1d-a54e-5b5a174be9b2",
+    "timestamp": "2026-03-20T09:47:25.685Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "435bfd8f17b9009146a79812d7c3726d",
+    "span_id": "e776f1beb9f527e1",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:25Z",
+    "payload": {
+      "order_id": "ord_201153",
+      "status": "pending_payment",
+      "customer": {
+        "id": 4262,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-580",
+          "qty": 1,
+          "unit_price": 392.12
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:25.634Z",
+      "request_id": "req-435bfd8f-11",
+      "path": "/orders/new",
+      "method": "GET",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 30
+    }
+  },
+  {
+    "id": "075e4d2e-4b96-acce-04e49ecc9b54",
+    "timestamp": "2026-03-20T09:47:25.671Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "435bfd8f17b9009146a79812d7c3726d",
+    "span_id": "a3ad2f8db43e9241",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:25Z",
+    "payload": {
+      "message": "  → Render — /orders/new id=15782"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:25.634Z",
+      "request_id": "req-435bfd8f-11",
+      "path": "/orders/new",
+      "method": "GET",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 2
+    }
+  },
+  {
+    "id": "4eca7d31-410b-a7c0-c435f7cd20eb",
+    "timestamp": "2026-03-20T09:47:25.660Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "435bfd8f17b9009146a79812d7c3726d",
+    "span_id": "8f99a18416a1ebdd",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:25Z",
+    "payload": {
+      "endpoint": "GET /orders/new",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:25.634Z",
+      "request_id": "req-435bfd8f-11",
+      "path": "/orders/new",
+      "method": "GET",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 94
+    }
+  },
+  {
+    "id": "9e3da71f-4821-8d5b-b85e1d121c47",
+    "timestamp": "2026-03-20T09:47:25.648Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "435bfd8f17b9009146a79812d7c3726d",
+    "span_id": "05ade626abec3899",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:25Z",
+    "payload": {
+      "message": "Started GET \"/orders/new\" for ::1 at 2026-03-20 09:47:25 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:25.634Z",
+      "request_id": "req-435bfd8f-11",
+      "path": "/orders/new",
+      "method": "GET",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 1
+    }
+  },
+  {
+    "id": "c1d012c9-4dc9-9052-34903db7bc54",
+    "timestamp": "2026-03-20T09:47:25.459Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "0e1543af6a630fb3af6b52283154b3e0",
+    "span_id": "7356dc4d347dd9c8",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:25Z",
+    "payload": {
+      "message": "Completed GET /orders/new in 889ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:25.381Z",
+      "request_id": "req-0e1543af-10",
+      "path": "/orders/new",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 8
+    }
+  },
+  {
+    "id": "096d2868-4c62-a1fe-018003800194",
+    "timestamp": "2026-03-20T09:47:25.445Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "0e1543af6a630fb3af6b52283154b3e0",
+    "span_id": "0e6e9fef134abb36",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:25Z",
+    "payload": {
+      "order_id": "ord_364168",
+      "status": "completed",
+      "customer": {
+        "id": 2001,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-808",
+          "qty": 1,
+          "unit_price": 498.86
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:25.381Z",
+      "request_id": "req-0e1543af-10",
+      "path": "/orders/new",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 102
+    }
+  },
+  {
+    "id": "7af98891-40df-b4ee-b8b06071f70a",
+    "timestamp": "2026-03-20T09:47:25.434Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "0e1543af6a630fb3af6b52283154b3e0",
+    "span_id": "9818f354bfe45d19",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:25Z",
+    "payload": {
+      "message": "  → Render — /orders/new id=20310"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:25.381Z",
+      "request_id": "req-0e1543af-10",
+      "path": "/orders/new",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 17
+    }
+  },
+  {
+    "id": "6aa8db72-40ff-92c4-c72eeb4f2798",
+    "timestamp": "2026-03-20T09:47:25.419Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "0e1543af6a630fb3af6b52283154b3e0",
+    "span_id": "6b11f9c1152f0009",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:25Z",
+    "payload": {
+      "message": "  → SQL /orders/new — 45.4ms"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:25.381Z",
+      "request_id": "req-0e1543af-10",
+      "path": "/orders/new",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 7
+    }
+  },
+  {
+    "id": "6944d7f4-4ed3-a9cc-8adb455d7aef",
+    "timestamp": "2026-03-20T09:47:25.404Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "0e1543af6a630fb3af6b52283154b3e0",
+    "span_id": "29a1439c22186b8c",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:25Z",
+    "payload": {
+      "endpoint": "GET /orders/new",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:25.381Z",
+      "request_id": "req-0e1543af-10",
+      "path": "/orders/new",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 46
+    }
+  },
+  {
+    "id": "956a7cb1-421b-aadb-9364f971f028",
+    "timestamp": "2026-03-20T09:47:25.394Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "0e1543af6a630fb3af6b52283154b3e0",
+    "span_id": "428c12e3fc784ebf",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:25Z",
+    "payload": {
+      "message": "Started GET \"/orders/new\" for ::1 at 2026-03-20 09:47:25 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:25.381Z",
+      "request_id": "req-0e1543af-10",
+      "path": "/orders/new",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 2
+    }
+  },
+  {
+    "id": "f56d8549-4adf-ab0f-53c764ff6165",
+    "timestamp": "2026-03-20T09:47:23.999Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "4c7676e3fe668e99edb2b94d7d5678a9",
+    "span_id": "74a5ebcb1b545d97",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:23Z",
+    "payload": {
+      "message": "Completed POST /webhooks/stripe in 679ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:23.887Z",
+      "request_id": "req-4c7676e3-9",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 124
+    }
+  },
+  {
+    "id": "3780cd30-460d-b48e-cd9efeeece00",
+    "timestamp": "2026-03-20T09:47:23.983Z",
+    "event_name": "Events::PaymentFailed",
+    "severity": "error",
+    "version": 1,
+    "trace_id": "4c7676e3fe668e99edb2b94d7d5678a9",
+    "span_id": "a0a7a574b269ae35",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:23Z",
+    "payload": {
+      "order_id": "ord_718217",
+      "amount": 296.31,
+      "gateway": "stripe",
+      "decline_code": "processing_error"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:23.887Z",
+      "request_id": "req-4c7676e3-9",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 57
+    }
+  },
+  {
+    "id": "fa57b2ac-4a9f-98ac-873c529b932e",
+    "timestamp": "2026-03-20T09:47:23.972Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "4c7676e3fe668e99edb2b94d7d5678a9",
+    "span_id": "e421f4940b1c504f",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:23Z",
+    "payload": {
+      "order_id": "ord_718217",
+      "status": "completed",
+      "customer": {
+        "id": 5349,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-775",
+          "qty": 1,
+          "unit_price": 278.6
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:23.887Z",
+      "request_id": "req-4c7676e3-9",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 20
+    }
+  },
+  {
+    "id": "f650f0bd-41f8-84be-85fb49246d70",
+    "timestamp": "2026-03-20T09:47:23.957Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "4c7676e3fe668e99edb2b94d7d5678a9",
+    "span_id": "15385d98de5c8337",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:23Z",
+    "payload": {
+      "message": "  → CACHE — /webhooks/stripe id=37798"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:23.887Z",
+      "request_id": "req-4c7676e3-9",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 21
+    }
+  },
+  {
+    "id": "924c0e7d-4439-b693-d9dbc466e1c7",
+    "timestamp": "2026-03-20T09:47:23.944Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "4c7676e3fe668e99edb2b94d7d5678a9",
+    "span_id": "1e16333cd2a2637e",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:23Z",
+    "payload": {
+      "message": "  → CACHE — /webhooks/stripe id=42919"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:23.887Z",
+      "request_id": "req-4c7676e3-9",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 1
+    }
+  },
+  {
+    "id": "8ef394b5-48a6-905a-62c9e806d759",
+    "timestamp": "2026-03-20T09:47:23.931Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "4c7676e3fe668e99edb2b94d7d5678a9",
+    "span_id": "548b6e121c777026",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:23Z",
+    "payload": {
+      "message": "  → SQL — /webhooks/stripe id=44483"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:23.887Z",
+      "request_id": "req-4c7676e3-9",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 13
+    }
+  },
+  {
+    "id": "3c976690-41fe-9d46-90d89786052c",
+    "timestamp": "2026-03-20T09:47:23.917Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "4c7676e3fe668e99edb2b94d7d5678a9",
+    "span_id": "c0dd648359a7e723",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:23Z",
+    "payload": {
+      "endpoint": "POST /webhooks/stripe",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:23.887Z",
+      "request_id": "req-4c7676e3-9",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 70
+    }
+  },
+  {
+    "id": "b4cc4a79-44c1-8604-581c15b7eca4",
+    "timestamp": "2026-03-20T09:47:23.901Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "4c7676e3fe668e99edb2b94d7d5678a9",
+    "span_id": "3bb4d5a5fc946952",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:23Z",
+    "payload": {
+      "message": "Started POST \"/webhooks/stripe\" for ::1 at 2026-03-20 09:47:23 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:23.887Z",
+      "request_id": "req-4c7676e3-9",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 3
+    }
+  },
+  {
+    "id": "bb4d4462-4fef-8623-93d1400113f0",
+    "timestamp": "2026-03-20T09:47:23.735Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "b54b7fc32b7575a7110de809d11ccda0",
+    "span_id": "c6c2ffe6949e885f",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:23Z",
+    "payload": {
+      "message": "Job WebhookRetryJob done shard=7",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:21.474Z",
+      "duration_ms": 193
+    }
+  },
+  {
+    "id": "bc2d9da3-42d8-ad14-5bfc48336af8",
+    "timestamp": "2026-03-20T09:47:23.152Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "b54b7fc32b7575a7110de809d11ccda0",
+    "span_id": "8c47e2a32d6cad89",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:23Z",
+    "payload": {
+      "message": "Job WebhookRetryJob done shard=4",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:21.474Z",
+      "duration_ms": 76
+    }
+  },
+  {
+    "id": "9e45e2f1-4822-aad6-6b50a7dd7059",
+    "timestamp": "2026-03-20T09:47:22.583Z",
+    "event_name": "Events::ReportExportCompleted",
+    "severity": "fatal",
+    "version": 1,
+    "trace_id": "b54b7fc32b7575a7110de809d11ccda0",
+    "span_id": "51a8630762a95a5c",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:22Z",
+    "payload": {
+      "report_id": 1417,
+      "error": "No space left on device",
+      "exception": {
+        "class": "Errno::ENOSPC",
+        "message": "No space left on device @ rb_sysopen",
+        "backtrace": [
+          "app/jobs/webhook_retry_job.rb:26:in `perform'",
+          "activejob (7.0.0) lib/active_job/execution.rb:68:in `perform_now'"
+        ]
+      }
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:21.474Z",
+      "duration_ms": 899
+    }
+  },
+  {
+    "id": "62d79f42-4e40-95a0-b4a7e7c50f49",
+    "timestamp": "2026-03-20T09:47:22.090Z",
+    "event_name": "Events::ReportCreated",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "b54b7fc32b7575a7110de809d11ccda0",
+    "span_id": "34e9442a321f5e2b",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:22Z",
+    "payload": {
+      "title": "Export batch 5380",
+      "description": "Queued by WebhookRetryJob",
+      "employee_ids": [
+        141,
+        12
+      ],
+      "author": "system"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:21.474Z",
+      "duration_ms": 269
+    }
+  },
+  {
+    "id": "249b1a4b-4c08-9c49-43b99e4389eb",
+    "timestamp": "2026-03-20T09:47:21.928Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "b4f3095c1909924cbc98889a86c83d6d",
+    "span_id": "ddeb1b9019e32cfc",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:21Z",
+    "payload": {
+      "message": "Completed GET /up in 241ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:21.861Z",
+      "request_id": "req-b4f3095c-8",
+      "path": "/up",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 14
+    }
+  },
+  {
+    "id": "ca246a38-4426-886c-5eb47e925429",
+    "timestamp": "2026-03-20T09:47:21.917Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "b4f3095c1909924cbc98889a86c83d6d",
+    "span_id": "f96854b90ebc2ba6",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:21Z",
+    "payload": {
+      "message": "  → SQL — /up id=37498"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:21.861Z",
+      "request_id": "req-b4f3095c-8",
+      "path": "/up",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 5
+    }
+  },
+  {
+    "id": "f35afd7f-4e33-9352-edf9a1c0156e",
+    "timestamp": "2026-03-20T09:47:21.903Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "b4f3095c1909924cbc98889a86c83d6d",
+    "span_id": "1552208f72cd5374",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:21Z",
+    "payload": {
+      "message": "  → CACHE /up — 35.8ms"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:21.861Z",
+      "request_id": "req-b4f3095c-8",
+      "path": "/up",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 4
+    }
+  },
+  {
+    "id": "63a2b8b0-4663-818b-f9bce7c71ce8",
+    "timestamp": "2026-03-20T09:47:21.887Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "b4f3095c1909924cbc98889a86c83d6d",
+    "span_id": "d8de5f92175e904b",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:21Z",
+    "payload": {
+      "endpoint": "GET /up",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:21.861Z",
+      "request_id": "req-b4f3095c-8",
+      "path": "/up",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 9
+    }
+  },
+  {
+    "id": "3cfd0b62-4368-971d-b51088c9af70",
+    "timestamp": "2026-03-20T09:47:21.875Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "b4f3095c1909924cbc98889a86c83d6d",
+    "span_id": "8158383d7f1ea253",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:21Z",
+    "payload": {
+      "message": "Started GET \"/up\" for ::1 at 2026-03-20 09:47:21 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:21.861Z",
+      "request_id": "req-b4f3095c-8",
+      "path": "/up",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 3
+    }
+  },
+  {
+    "id": "a2eb589f-4dda-8353-4697ad5ae78b",
+    "timestamp": "2026-03-20T09:47:21.550Z",
+    "event_name": "Events::BackgroundJobStarted",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "b54b7fc32b7575a7110de809d11ccda0",
+    "span_id": "635f1ab192c82ea2",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:21Z",
+    "payload": {
+      "job_class": "WebhookRetryJob",
+      "job_id": "af183fec-4203-ac0f-cb17f1a2e14f",
+      "queue": "default",
+      "arguments": [
+        {
+          "batch_id": 4001,
+          "shard": 12
+        }
+      ],
+      "enqueued_at": "2026-03-20T09:47:19.474Z"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:21.474Z",
+      "duration_ms": 897
+    }
+  },
+  {
+    "id": "e2fd7c63-4b21-acb3-9cde03eaff89",
+    "timestamp": "2026-03-20T09:47:20.224Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "d601ae3320057580a39dbdac2edfdf4a",
+    "span_id": "a0385af9eef5ae92",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:20Z",
+    "payload": {
+      "message": "Completed GET /api/v1/orders in 453ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:20.109Z",
+      "request_id": "req-d601ae33-6",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 103
+    }
+  },
+  {
+    "id": "79357226-4663-b520-dcfd6f10e6dd",
+    "timestamp": "2026-03-20T09:47:20.209Z",
+    "event_name": "Events::UserAction",
+    "severity": "warn",
+    "version": 1,
+    "trace_id": "d601ae3320057580a39dbdac2edfdf4a",
+    "span_id": "a657916466046816",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:20Z",
+    "payload": {
+      "action": "checkout_step",
+      "step": "review",
+      "flags": [
+        "rate_limit_near"
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:20.109Z",
+      "request_id": "req-d601ae33-6",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 10
+    }
+  },
+  {
+    "id": "c20233e4-4c55-8ab8-6d1c1db6efcd",
+    "timestamp": "2026-03-20T09:47:20.196Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "d601ae3320057580a39dbdac2edfdf4a",
+    "span_id": "178024db0bc6d444",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:20Z",
+    "payload": {
+      "order_id": "ord_227898",
+      "status": "cancelled",
+      "customer": {
+        "id": 2142,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-849",
+          "qty": 1,
+          "unit_price": 488.88
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:20.109Z",
+      "request_id": "req-d601ae33-6",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 69
+    }
+  },
+  {
+    "id": "f4720d0f-44bc-8fe6-72bf8dea25be",
+    "timestamp": "2026-03-20T09:47:20.184Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "d601ae3320057580a39dbdac2edfdf4a",
+    "span_id": "6f8842449c99bb15",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:20Z",
+    "payload": {
+      "message": "  → CACHE — /api/v1/orders id=8131"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:20.109Z",
+      "request_id": "req-d601ae33-6",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 12
+    }
+  },
+  {
+    "id": "ea4b7279-4200-beee-eb213d62b45f",
+    "timestamp": "2026-03-20T09:47:20.172Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "d601ae3320057580a39dbdac2edfdf4a",
+    "span_id": "8c9a1e7d18081475",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:20Z",
+    "payload": {
+      "message": "  → N+1 — /api/v1/orders id=20057"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:20.109Z",
+      "request_id": "req-d601ae33-6",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 8
+    }
+  },
+  {
+    "id": "1415b7b6-4559-a2e4-7dd9f6702074",
+    "timestamp": "2026-03-20T09:47:20.161Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "d601ae3320057580a39dbdac2edfdf4a",
+    "span_id": "14b4173dd602cb16",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:20Z",
+    "payload": {
+      "message": "  → Render — /api/v1/orders id=23945"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:20.109Z",
+      "request_id": "req-d601ae33-6",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 12
+    }
+  },
+  {
+    "id": "236b1ba7-4f33-9a8f-710cf8339171",
+    "timestamp": "2026-03-20T09:47:20.149Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "d601ae3320057580a39dbdac2edfdf4a",
+    "span_id": "842c427bb6efb469",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:20Z",
+    "payload": {
+      "message": "  → SQL /api/v1/orders — 19.0ms"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:20.109Z",
+      "request_id": "req-d601ae33-6",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 8
+    }
+  },
+  {
+    "id": "f71abe6b-4004-9466-54c3d78ed305",
+    "timestamp": "2026-03-20T09:47:20.135Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "d601ae3320057580a39dbdac2edfdf4a",
+    "span_id": "0d3b036c31c2e3df",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:20Z",
+    "payload": {
+      "endpoint": "GET /api/v1/orders",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:20.109Z",
+      "request_id": "req-d601ae33-6",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 116
+    }
+  },
+  {
+    "id": "098fa6b3-42a9-b345-cf0e5c357435",
+    "timestamp": "2026-03-20T09:47:20.120Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "d601ae3320057580a39dbdac2edfdf4a",
+    "span_id": "897e3bea208709bb",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:20Z",
+    "payload": {
+      "message": "Started GET \"/api/v1/orders\" for ::1 at 2026-03-20 09:47:20 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:20.109Z",
+      "request_id": "req-d601ae33-6",
+      "path": "/api/v1/orders",
+      "method": "GET",
+      "controller": "OrdersController",
+      "action": "index",
+      "duration_ms": 0
+    }
+  },
+  {
+    "id": "94307d61-4341-971f-2ad6ac09e7be",
+    "timestamp": "2026-03-20T09:47:18.699Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "3ba6c20d068ab9cee00e51b180e66444",
+    "span_id": "093383555401d032",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:18Z",
+    "payload": {
+      "message": "Completed GET /up in 676ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:18.612Z",
+      "request_id": "req-3ba6c20d-5",
+      "path": "/up",
+      "method": "GET",
+      "controller": "GraphqlController",
+      "action": "execute",
+      "duration_ms": 193
+    }
+  },
+  {
+    "id": "a0bdb023-42ac-b013-094012292f07",
+    "timestamp": "2026-03-20T09:47:18.689Z",
+    "event_name": "Events::PaymentFailed",
+    "severity": "error",
+    "version": 1,
+    "trace_id": "3ba6c20d068ab9cee00e51b180e66444",
+    "span_id": "b3b419ff65939fed",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:18Z",
+    "payload": {
+      "order_id": "ord_466961",
+      "amount": 399.94,
+      "gateway": "stripe",
+      "decline_code": "processing_error"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:18.612Z",
+      "request_id": "req-3ba6c20d-5",
+      "path": "/up",
+      "method": "GET",
+      "controller": "GraphqlController",
+      "action": "execute",
+      "duration_ms": 87
+    }
+  },
+  {
+    "id": "b57b30f5-4caf-9c26-d5dc4be816a9",
+    "timestamp": "2026-03-20T09:47:18.679Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "3ba6c20d068ab9cee00e51b180e66444",
+    "span_id": "cf324af66b76c219",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:18Z",
+    "payload": {
+      "message": "  → Render — /up id=29593"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:18.612Z",
+      "request_id": "req-3ba6c20d-5",
+      "path": "/up",
+      "method": "GET",
+      "controller": "GraphqlController",
+      "action": "execute",
+      "duration_ms": 24
+    }
+  },
+  {
+    "id": "fd742b55-4696-8bc1-de7e84b1409a",
+    "timestamp": "2026-03-20T09:47:18.668Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "3ba6c20d068ab9cee00e51b180e66444",
+    "span_id": "4b9829e9e09b8581",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:18Z",
+    "payload": {
+      "message": "  → SQL — /up id=785"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:18.612Z",
+      "request_id": "req-3ba6c20d-5",
+      "path": "/up",
+      "method": "GET",
+      "controller": "GraphqlController",
+      "action": "execute",
+      "duration_ms": 8
+    }
+  },
+  {
+    "id": "7c3b4d42-407f-a811-8718650a7fe9",
+    "timestamp": "2026-03-20T09:47:18.655Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "3ba6c20d068ab9cee00e51b180e66444",
+    "span_id": "efa7d6ded81e5a35",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:18Z",
+    "payload": {
+      "message": "  → SQL /up — 3.7ms"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:18.612Z",
+      "request_id": "req-3ba6c20d-5",
+      "path": "/up",
+      "method": "GET",
+      "controller": "GraphqlController",
+      "action": "execute",
+      "duration_ms": 6
+    }
+  },
+  {
+    "id": "f776b0b4-425e-8c62-02bbda5ed3e0",
+    "timestamp": "2026-03-20T09:47:18.643Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "3ba6c20d068ab9cee00e51b180e66444",
+    "span_id": "1349e4734b6100be",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:18Z",
+    "payload": {
+      "endpoint": "GET /up",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:18.612Z",
+      "request_id": "req-3ba6c20d-5",
+      "path": "/up",
+      "method": "GET",
+      "controller": "GraphqlController",
+      "action": "execute",
+      "duration_ms": 85
+    }
+  },
+  {
+    "id": "784e489d-49dc-842d-8d74e22caa05",
+    "timestamp": "2026-03-20T09:47:18.627Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "3ba6c20d068ab9cee00e51b180e66444",
+    "span_id": "5ec2b862bf6a7f7b",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:18Z",
+    "payload": {
+      "message": "Started GET \"/up\" for ::1 at 2026-03-20 09:47:18 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:18.612Z",
+      "request_id": "req-3ba6c20d-5",
+      "path": "/up",
+      "method": "GET",
+      "controller": "GraphqlController",
+      "action": "execute",
+      "duration_ms": 0
+    }
+  },
+  {
+    "id": "ab3e9b6e-43bf-95e0-71c43aed6bfb",
+    "timestamp": "2026-03-20T09:47:17.123Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "c44649ac76701b4558927cd2305ab535",
+    "span_id": "b8f29f3c7fcb232f",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:17Z",
+    "payload": {
+      "message": "Completed GET /sidekiq/busy in 670ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:17.046Z",
+      "request_id": "req-c44649ac-4",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 11
+    }
+  },
+  {
+    "id": "5e229f72-41d5-8d76-44153e761aed",
+    "timestamp": "2026-03-20T09:47:17.110Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "c44649ac76701b4558927cd2305ab535",
+    "span_id": "9701c69df9173825",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:17Z",
+    "payload": {
+      "order_id": "ord_698377",
+      "status": "completed",
+      "customer": {
+        "id": 3437,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-662",
+          "qty": 1,
+          "unit_price": 445.67
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:17.046Z",
+      "request_id": "req-c44649ac-4",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 27
+    }
+  },
+  {
+    "id": "2dc7532f-4f93-a5f7-577fbe81f587",
+    "timestamp": "2026-03-20T09:47:17.099Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "c44649ac76701b4558927cd2305ab535",
+    "span_id": "d966b486b88f84c2",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:17Z",
+    "payload": {
+      "message": "  → CACHE — /sidekiq/busy id=4736"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:17.046Z",
+      "request_id": "req-c44649ac-4",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 1
+    }
+  },
+  {
+    "id": "014bb75c-4b91-b77f-536d8c79d151",
+    "timestamp": "2026-03-20T09:47:17.086Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "c44649ac76701b4558927cd2305ab535",
+    "span_id": "7c512ec1b1200b35",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:17Z",
+    "payload": {
+      "message": "  → Render /sidekiq/busy — 16.8ms"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:17.046Z",
+      "request_id": "req-c44649ac-4",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 4
+    }
+  },
+  {
+    "id": "29607fc7-45a3-a5a5-d0679b3eef53",
+    "timestamp": "2026-03-20T09:47:17.072Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "c44649ac76701b4558927cd2305ab535",
+    "span_id": "94a7e0fd025abce2",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:17Z",
+    "payload": {
+      "endpoint": "GET /sidekiq/busy",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:17.046Z",
+      "request_id": "req-c44649ac-4",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 112
+    }
+  },
+  {
+    "id": "b34aa692-4b2f-88cf-0482db381193",
+    "timestamp": "2026-03-20T09:47:17.058Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "c44649ac76701b4558927cd2305ab535",
+    "span_id": "e3181897678dd835",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:17Z",
+    "payload": {
+      "message": "Started GET \"/sidekiq/busy\" for ::1 at 2026-03-20 09:47:17 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:17.046Z",
+      "request_id": "req-c44649ac-4",
+      "path": "/sidekiq/busy",
+      "method": "GET",
+      "controller": "Webhooks::StripeController",
+      "action": "create",
+      "duration_ms": 3
+    }
+  },
+  {
+    "id": "8e21a3f8-4ff3-ae3b-b3703dea0801",
+    "timestamp": "2026-03-20T09:47:15.613Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "e6c72765a28f158a8485b35fa63f73da",
+    "span_id": "ff0a7b8017d5952f",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:15Z",
+    "payload": {
+      "message": "Completed POST /graphql in 265ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:15.513Z",
+      "request_id": "req-e6c72765-3",
+      "path": "/graphql",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 147
+    }
+  },
+  {
+    "id": "65c747a7-467f-9a26-8951d6742b67",
+    "timestamp": "2026-03-20T09:47:15.598Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "e6c72765a28f158a8485b35fa63f73da",
+    "span_id": "23349280acfa070a",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:15Z",
+    "payload": {
+      "order_id": "ord_214284",
+      "status": "pending_payment",
+      "customer": {
+        "id": 6617,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-250",
+          "qty": 1,
+          "unit_price": 272.48
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:15.513Z",
+      "request_id": "req-e6c72765-3",
+      "path": "/graphql",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 42
+    }
+  },
+  {
+    "id": "53720afb-4bba-b7a3-1992b60de559",
+    "timestamp": "2026-03-20T09:47:15.583Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "e6c72765a28f158a8485b35fa63f73da",
+    "span_id": "831887c2cf3b75fe",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:15Z",
+    "payload": {
+      "message": "  → Render — /graphql id=11412"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:15.513Z",
+      "request_id": "req-e6c72765-3",
+      "path": "/graphql",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 7
+    }
+  },
+  {
+    "id": "8928878a-4dfe-baef-588fd5d66260",
+    "timestamp": "2026-03-20T09:47:15.567Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "e6c72765a28f158a8485b35fa63f73da",
+    "span_id": "26956cc8521ea47b",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:15Z",
+    "payload": {
+      "message": "  → Render — /graphql id=44358"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:15.513Z",
+      "request_id": "req-e6c72765-3",
+      "path": "/graphql",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 16
+    }
+  },
+  {
+    "id": "8d8a66c5-459f-b8f6-134314b2cdb6",
+    "timestamp": "2026-03-20T09:47:15.554Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "e6c72765a28f158a8485b35fa63f73da",
+    "span_id": "c2f980ca5ea1acb7",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:15Z",
+    "payload": {
+      "message": "  → Render /graphql — 17.5ms"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:15.513Z",
+      "request_id": "req-e6c72765-3",
+      "path": "/graphql",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 8
+    }
+  },
+  {
+    "id": "08760356-4fe4-96df-1ce0a264d980",
+    "timestamp": "2026-03-20T09:47:15.541Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "e6c72765a28f158a8485b35fa63f73da",
+    "span_id": "3d53ed92ae42b67d",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:15Z",
+    "payload": {
+      "endpoint": "POST /graphql",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:15.513Z",
+      "request_id": "req-e6c72765-3",
+      "path": "/graphql",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 2
+    }
+  },
+  {
+    "id": "7f4bad81-4d82-9c70-066448eb4e70",
+    "timestamp": "2026-03-20T09:47:15.525Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "e6c72765a28f158a8485b35fa63f73da",
+    "span_id": "ff6bebb709716c50",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:15Z",
+    "payload": {
+      "message": "Started POST \"/graphql\" for ::1 at 2026-03-20 09:47:15 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:15.513Z",
+      "request_id": "req-e6c72765-3",
+      "path": "/graphql",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 2
+    }
+  },
+  {
+    "id": "f16287ce-4f3a-ad75-ee9f84cf765f",
+    "timestamp": "2026-03-20T09:47:13.745Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "8e4f645180f8a7d1dce426b07380466b",
+    "span_id": "8edfc5d7b3f90ce8",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "message": "Completed POST /webhooks/stripe in 703ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.643Z",
+      "request_id": "req-8e4f6451-2",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 120
+    }
+  },
+  {
+    "id": "4e062502-4d66-a2c5-55c788ba159a",
+    "timestamp": "2026-03-20T09:47:13.733Z",
+    "event_name": "Events::PaymentFailed",
+    "severity": "error",
+    "version": 1,
+    "trace_id": "8e4f645180f8a7d1dce426b07380466b",
+    "span_id": "6adb72887c1dd13d",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "order_id": "ord_375714",
+      "amount": 118.83,
+      "gateway": "stripe",
+      "decline_code": "processing_error"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.643Z",
+      "request_id": "req-8e4f6451-2",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 106
+    }
+  },
+  {
+    "id": "8a12554a-467f-a5f9-27f6e5663d5b",
+    "timestamp": "2026-03-20T09:47:13.721Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "8e4f645180f8a7d1dce426b07380466b",
+    "span_id": "5b3655d85168ace6",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "order_id": "ord_375714",
+      "status": "completed",
+      "customer": {
+        "id": 7393,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-484",
+          "qty": 1,
+          "unit_price": 117.6
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.643Z",
+      "request_id": "req-8e4f6451-2",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 62
+    }
+  },
+  {
+    "id": "9fd5aaa9-4a2c-a63d-bfb81b01abf4",
+    "timestamp": "2026-03-20T09:47:13.706Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "8e4f645180f8a7d1dce426b07380466b",
+    "span_id": "df180a8574df731b",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "message": "  → N+1 — /webhooks/stripe id=46700"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.643Z",
+      "request_id": "req-8e4f6451-2",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 12
+    }
+  },
+  {
+    "id": "9abb18e6-4aec-868e-ccaa33fbd21c",
+    "timestamp": "2026-03-20T09:47:13.690Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "8e4f645180f8a7d1dce426b07380466b",
+    "span_id": "3a928423f15eda0c",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "message": "  → N+1 — /webhooks/stripe id=16199"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.643Z",
+      "request_id": "req-8e4f6451-2",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 19
+    }
+  },
+  {
+    "id": "b5ee00ce-440e-9759-de2970785b7b",
+    "timestamp": "2026-03-20T09:47:13.680Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "8e4f645180f8a7d1dce426b07380466b",
+    "span_id": "1b9ec5cc33a3deb2",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "message": "  → Render — /webhooks/stripe id=41524"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.643Z",
+      "request_id": "req-8e4f6451-2",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 4
+    }
+  },
+  {
+    "id": "1e9dba64-4fae-b5cd-6a82c2c2cf00",
+    "timestamp": "2026-03-20T09:47:13.669Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "8e4f645180f8a7d1dce426b07380466b",
+    "span_id": "b8c344048fafdcd9",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "endpoint": "POST /webhooks/stripe",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.643Z",
+      "request_id": "req-8e4f6451-2",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 119
+    }
+  },
+  {
+    "id": "5eedf1f6-4996-ae3d-36d7aa79e324",
+    "timestamp": "2026-03-20T09:47:13.654Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "8e4f645180f8a7d1dce426b07380466b",
+    "span_id": "bac77862975f4aab",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "message": "Started POST \"/webhooks/stripe\" for ::1 at 2026-03-20 09:47:13 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.643Z",
+      "request_id": "req-8e4f6451-2",
+      "path": "/webhooks/stripe",
+      "method": "POST",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 3
+    }
+  },
+  {
+    "id": "0bf247ff-4ddb-8abb-e3cf3b96e70e",
+    "timestamp": "2026-03-20T09:47:13.305Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "1838b691faa49564f97db8592ff3978d",
+    "span_id": "74c100bd1731fbbd",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "message": "Job BillingSyncJob done shard=14",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:12.181Z",
+      "duration_ms": 60
+    }
+  },
+  {
+    "id": "32e755f2-4a50-8187-36a2ca48f1a2",
+    "timestamp": "2026-03-20T09:47:13.179Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "f541b87405c9a54819b18ebe529f6419",
+    "span_id": "c571f9209b20317a",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "message": "Completed GET /admin/users in 784ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.094Z",
+      "request_id": "req-f541b874-1",
+      "path": "/admin/users",
+      "method": "GET",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 48
+    }
+  },
+  {
+    "id": "f71af8d8-42fb-98bb-217b46a7e1ec",
+    "timestamp": "2026-03-20T09:47:13.169Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "f541b87405c9a54819b18ebe529f6419",
+    "span_id": "24139c284bd8949c",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "order_id": "ord_555840",
+      "status": "cancelled",
+      "customer": {
+        "id": 65,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-956",
+          "qty": 1,
+          "unit_price": 492.52
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.094Z",
+      "request_id": "req-f541b874-1",
+      "path": "/admin/users",
+      "method": "GET",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 88
+    }
+  },
+  {
+    "id": "322beed6-44fb-83f8-5ebd5348d927",
+    "timestamp": "2026-03-20T09:47:13.156Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "f541b87405c9a54819b18ebe529f6419",
+    "span_id": "d8335ed463805acf",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "message": "  → CACHE — /admin/users id=8530"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.094Z",
+      "request_id": "req-f541b874-1",
+      "path": "/admin/users",
+      "method": "GET",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 15
+    }
+  },
+  {
+    "id": "d79ff991-4ad9-962b-00a1652890c9",
+    "timestamp": "2026-03-20T09:47:13.145Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "f541b87405c9a54819b18ebe529f6419",
+    "span_id": "e51367bded3983e3",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "message": "  → SQL — /admin/users id=32607"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.094Z",
+      "request_id": "req-f541b874-1",
+      "path": "/admin/users",
+      "method": "GET",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 16
+    }
+  },
+  {
+    "id": "08cdafae-4022-b8cd-8c50423f67a3",
+    "timestamp": "2026-03-20T09:47:13.135Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "f541b87405c9a54819b18ebe529f6419",
+    "span_id": "2ea70631a99b0f67",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "message": "  → SQL /admin/users — 6.5ms"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.094Z",
+      "request_id": "req-f541b874-1",
+      "path": "/admin/users",
+      "method": "GET",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 2
+    }
+  },
+  {
+    "id": "4dfb2b08-4d59-8a34-db81af29e553",
+    "timestamp": "2026-03-20T09:47:13.122Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "f541b87405c9a54819b18ebe529f6419",
+    "span_id": "3db3d85b70add56e",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "endpoint": "GET /admin/users",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.094Z",
+      "request_id": "req-f541b874-1",
+      "path": "/admin/users",
+      "method": "GET",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 60
+    }
+  },
+  {
+    "id": "dc250de4-4f32-a286-78147353eb48",
+    "timestamp": "2026-03-20T09:47:13.106Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "f541b87405c9a54819b18ebe529f6419",
+    "span_id": "10a738a603655511",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:13Z",
+    "payload": {
+      "message": "Started GET \"/admin/users\" for ::1 at 2026-03-20 09:47:13 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:13.094Z",
+      "request_id": "req-f541b874-1",
+      "path": "/admin/users",
+      "method": "GET",
+      "controller": "Orders::PaymentsController",
+      "action": "create",
+      "duration_ms": 3
+    }
+  },
+  {
+    "id": "365bdb25-4981-94bf-93bb2ef39914",
+    "timestamp": "2026-03-20T09:47:12.789Z",
+    "event_name": "Events::ReportCreated",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "1838b691faa49564f97db8592ff3978d",
+    "span_id": "9e1344a04de2d1cb",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:12Z",
+    "payload": {
+      "title": "Export batch 4385",
+      "description": "Queued by BillingSyncJob",
+      "employee_ids": [
+        22,
+        89
+      ],
+      "author": "system"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:12.181Z",
+      "duration_ms": 415
+    }
+  },
+  {
+    "id": "1997f4d6-414a-95ca-b857556ded74",
+    "timestamp": "2026-03-20T09:47:12.194Z",
+    "event_name": "Events::BackgroundJobStarted",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "1838b691faa49564f97db8592ff3978d",
+    "span_id": "99e2ac632492eb67",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:12Z",
+    "payload": {
+      "job_class": "BillingSyncJob",
+      "job_id": "f362035c-450e-b46a-d4479941aebc",
+      "queue": "low",
+      "arguments": [
+        {
+          "batch_id": 67222,
+          "shard": 4
+        }
+      ],
+      "enqueued_at": "2026-03-20T09:47:11.181Z"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:12.181Z",
+      "duration_ms": 468
+    }
   }
 ]

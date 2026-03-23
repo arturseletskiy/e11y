@@ -1,9 +1,14 @@
 <script lang="ts">
   import Fab from "./components/Fab.svelte"
+  import FilterBar from "./components/FilterBar.svelte"
   import FullscreenPanel from "./components/FullscreenPanel.svelte"
+  import InteractionsTimeline, { type TimelineTimeRange } from "./components/InteractionsTimeline.svelte"
+  import RecentHistogram from "./components/RecentHistogram.svelte"
   import { fetchInteractions, fetchRecent, fetchTraceEvents } from "./lib/api"
-  import { formatInteractionStarted, summarizeTraceIds } from "./lib/format"
   import { eventKey } from "./lib/eventIdentity"
+  import { formatInteractionStarted, summarizeTraceIds } from "./lib/format"
+  import { filterEventList, type ListSeverityFilter } from "./lib/listFilter"
+  import { buildRecentVolumeBuckets, eventTimestampMs, type HistogramTimeRange } from "./lib/recentVolume"
   import type { OverlayRoute, SourceFilter } from "./lib/router"
   import type { CircleOrigin } from "./lib/transitions"
   import { originFallbackFabCorner, originFromFabButton } from "./lib/viewportOrigin"
@@ -22,6 +27,20 @@
   let splitSelectedKey = $state<string | null>(null)
   let layoutWide = $state(false)
 
+  /** Global text search and severity filter across all lists. */
+  let globalSearch = $state("")
+  let globalSeverity = $state<ListSeverityFilter>("all")
+
+  let rowExpanded = $state<Record<string, boolean>>({})
+  /** Index in the current filtered trace list; neighbors ±2 highlighted after returning from detail. */
+  let contextAnchorIndex = $state<number | null>(null)
+
+  /** Problems-tab histogram: filter errors to [startMs, endMs] (UTC, inclusive). */
+  let histogramTimeRange = $state<HistogramTimeRange | null>(null)
+
+  /** Interactions-tab timeline: filter interactions to [startMs, endMs] (UTC, inclusive). */
+  let interactionsTimeRange = $state<TimelineTimeRange | null>(null)
+
   let prevRecentKeys = $state<Set<string>>(new Set())
   let firstRecentPoll = $state(true)
   let pulseKind = $state<"none" | "error" | "warn">("none")
@@ -33,6 +52,96 @@
   let problemEvents = $derived.by(() =>
     recentEvents.filter((e) => e.severity === "error" || e.severity === "fatal")
   )
+
+  let filteredInteractions = $derived.by(() => {
+    let rows = interactions
+
+    if (interactionsTimeRange) {
+      const { startMs, endMs } = interactionsTimeRange
+      rows = rows.filter((i) => {
+        const t = new Date(String(i.started_at || "")).getTime()
+        if (isNaN(t)) return false
+        return t >= startMs && t <= endMs
+      })
+    }
+
+    if (globalSeverity !== "all") {
+      rows = rows.filter((i) => {
+        const s = Number(i.status) || 200
+        const hasErr = !!i.has_error
+        if (globalSeverity === "error") return s >= 500 || hasErr
+        if (globalSeverity === "warn") return s >= 400 && s < 500
+        if (globalSeverity === "rest") return s < 400 && !hasErr
+        return true
+      })
+    }
+
+    const q = globalSearch.trim().toLowerCase()
+    if (q) {
+      rows = rows.filter((i) => {
+        const path = String(i.path || "").toLowerCase()
+        const method = String(i.method || "").toLowerCase()
+        const traceIds = ((i.trace_ids as string[]) || []).join(" ").toLowerCase()
+        return path.includes(q) || method.includes(q) || traceIds.includes(q)
+      })
+    }
+
+    return rows
+  })
+
+  let filteredProblemEvents = $derived.by(() => {
+    let rows = filterEventList(problemEvents, globalSeverity, globalSearch)
+    const r = histogramTimeRange
+    if (r) {
+      const buckets = buildRecentVolumeBuckets(recentEvents, 32)
+      const n = buckets.length
+      if (n === 0) {
+        rows = []
+      } else {
+        const tMin = buckets[0].t0
+        const tMax = buckets[n - 1].t1
+        const w = (tMax - tMin) / n
+        
+        // If lo/hi are missing (e.g. old state), fallback to time-based filter
+        if (r.lo == null || r.hi == null) {
+          rows = rows.filter((ev) => {
+            const t = eventTimestampMs(ev)
+            if (t == null) return false
+            return t >= r.startMs && t <= r.endMs
+          })
+        } else {
+          const lo = Math.max(0, Math.min(r.lo, n - 1))
+          const hi = Math.max(0, Math.min(r.hi, n - 1))
+          const i0 = Math.min(lo, hi)
+          const i1 = Math.max(lo, hi)
+          rows = rows.filter((ev) => {
+            const t = eventTimestampMs(ev)
+            if (t == null) return false
+            const idx = Math.min(n - 1, Math.max(0, Math.floor((t - tMin) / w)))
+            return idx >= i0 && idx <= i1
+          })
+        }
+      }
+    }
+    return rows
+  })
+
+  let filteredTraceEvents = $derived.by(() =>
+    filterEventList(events, globalSeverity, globalSearch)
+  )
+
+  let activeTraceId = $derived.by(() => {
+    if (route.screen === "events") return route.traceId
+    return String((events[0] as Record<string, unknown> | undefined)?.trace_id ?? "")
+  })
+
+  const CONTEXT_RADIUS = 2
+
+  $effect(() => {
+    globalSearch
+    globalSeverity
+    contextAnchorIndex = null
+  })
 
   $effect(() => {
     const mq = window.matchMedia(`(min-width: ${SPLIT_MIN_PX}px)`)
@@ -130,11 +239,14 @@
 
   function goTabProblems(): void {
     splitSelectedKey = null
+    contextAnchorIndex = null
     route = { screen: "problems" }
   }
 
   function goTabInteractions(): void {
     splitSelectedKey = null
+    contextAnchorIndex = null
+    histogramTimeRange = null
     events = []
     route = { screen: "interactions" }
     void loadInteractionsList()
@@ -146,6 +258,7 @@
     if (!tid) return
     const key = interactionRowKey(row)
     try {
+      contextAnchorIndex = null
       events = await fetchTraceEvents(tid)
       if (layoutWide) {
         splitSelectedKey = key
@@ -164,8 +277,9 @@
     route = { screen: "detail", traceId: tid, event: ev, detailFrom: "problems" }
   }
 
-  function selectEvent(ev: Record<string, unknown>): void {
+  function selectEvent(ev: Record<string, unknown>, indexInFiltered: number): void {
     const tid = String(ev.trace_id ?? "")
+    contextAnchorIndex = indexInFiltered
     if (route.screen === "events") {
       route = { screen: "detail", traceId: route.traceId, event: ev, detailFrom: "events" }
       return
@@ -210,19 +324,64 @@
     if (err > 0) {
       route = { screen: "problems" }
     } else {
+      histogramTimeRange = null
       route = { screen: "interactions" }
     }
     void loadInteractionsList()
   }
 
-  async function copyDetailJson(): Promise<void> {
-    if (route.screen !== "detail") return
-    const text = JSON.stringify(route.event, null, 2)
+  async function copyText(text: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(text)
     } catch {
       /* ignore */
     }
+  }
+
+  async function copyDetailJson(): Promise<void> {
+    if (route.screen !== "detail") return
+    await copyText(JSON.stringify(route.event, null, 2))
+  }
+
+  async function copyDetailTraceId(): Promise<void> {
+    if (route.screen !== "detail") return
+    const tid = String(route.event.trace_id ?? "")
+    if (tid) await copyText(tid)
+  }
+
+  async function copyDetailRequestId(): Promise<void> {
+    if (route.screen !== "detail") return
+    const m = route.event.metadata as Record<string, unknown> | undefined
+    const rid = m && typeof m.request_id === "string" ? m.request_id : ""
+    if (rid) await copyText(rid)
+  }
+
+  function toggleRowExpand(key: string, e: MouseEvent): void {
+    e.stopPropagation()
+    rowExpanded = { ...rowExpanded, [key]: !rowExpanded[key] }
+  }
+
+  function payloadSummary(ev: Record<string, unknown>): string {
+    const p = ev.payload
+    if (p && typeof p === "object" && !Array.isArray(p)) {
+      const o = p as Record<string, unknown>
+      const msg = o.message
+      if (typeof msg === "string" && msg.length > 0) {
+        return msg.length > 140 ? `${msg.slice(0, 137)}…` : msg
+      }
+    }
+    try {
+      const s = JSON.stringify(p)
+      return s.length > 120 ? `${s.slice(0, 117)}…` : s
+    } catch {
+      return ""
+    }
+  }
+
+  function isContextNeighbor(indexInFiltered: number): boolean {
+    if (contextAnchorIndex === null) return false
+    if (!activeTraceId) return false
+    return Math.abs(indexInFiltered - contextAnchorIndex) <= CONTEXT_RADIUS
   }
 
   let panelTitle = $derived.by(() => {
@@ -265,8 +424,10 @@
       (route.screen === "detail" && route.detailFrom === "events")
   )
 
-  let showEventsToolbar = $derived.by(
-    () => route.screen === "events" || route.screen === "detail"
+  let showTraceFilters = $derived.by(
+    () =>
+      route.screen === "events" ||
+      (route.screen === "interactions" && layoutWide && !!splitSelectedKey)
   )
 
   let errCount = $derived.by(() => countsFromRecent(recentEvents).err)
@@ -313,48 +474,83 @@
   <FullscreenPanel
     open={panelOpen}
     onclose={() => (panelOpen = false)}
-    title={panelTitle}
     origin={panelCircleOrigin}
   >
-    {#snippet headerExtra()}
-      <div class="e11y-header-nav">
-        <div class="e11y-tab-row" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            class="e11y-tab"
-            class:e11y-tab--active={tabProblemsActive}
-            aria-selected={tabProblemsActive}
-            onclick={goTabProblems}
-          >
-            Problems{#if errCount > 0}&nbsp;<span class="e11y-tab-badge">{errCount}</span>{/if}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            class="e11y-tab"
-            class:e11y-tab--active={tabInteractionsActive}
-            aria-selected={tabInteractionsActive}
-            onclick={goTabInteractions}
-          >
-            Interactions
-          </button>
-        </div>
-        {#if tabInteractionsActive && route.screen === "interactions"}
-          <div class="e11y-chip-row e11y-chip-row--header">
-            {#each ["web", "job", "all"] as s (s)}
-              <button
-                type="button"
-                class="e11y-chip"
-                class:e11y-chip--active={source === s}
-                onclick={() => (source = s as SourceFilter)}
-              >
-                {s}
-              </button>
-            {/each}
-          </div>
-        {/if}
+    {#snippet headerTopLeft()}
+      {#if route.screen === "events" || route.screen === "detail"}
+        <button type="button" class="e11y-icon-btn" onclick={back} aria-label="Back" title="Go back" style="margin-right: -4px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </button>
+      {/if}
+
+      <div class="e11y-tab-row" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          class="e11y-tab"
+          class:e11y-tab--active={tabProblemsActive}
+          aria-selected={tabProblemsActive}
+          onclick={goTabProblems}
+        >
+          Problems{#if errCount > 0}&nbsp;<span class="e11y-tab-badge">{errCount}</span>{/if}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="e11y-tab"
+          class:e11y-tab--active={tabInteractionsActive}
+          aria-selected={tabInteractionsActive}
+          onclick={goTabInteractions}
+        >
+          Interactions
+        </button>
       </div>
+
+      {#if route.screen === "events" || route.screen === "detail"}
+        <span class="e11y-breadcrumb-sep">/</span>
+        <span class="e11y-panel-title e11y-panel-title--sub" title={activeTraceId || undefined}>
+          {#if route.screen === "detail"}
+            Event Details
+          {:else}
+            Trace: {activeTraceId ? activeTraceId.slice(0, 8) + "…" : "Unknown"}
+          {/if}
+        </span>
+      {/if}
+    {/snippet}
+
+    {#snippet headerTopRight()}
+      {#if route.screen === "detail"}
+        <button type="button" class="e11y-btn" onclick={() => void copyDetailJson()}>Copy JSON</button>
+        <button type="button" class="e11y-btn" onclick={() => void copyDetailTraceId()}>Copy trace_id</button>
+        <button type="button" class="e11y-btn" onclick={() => void copyDetailRequestId()}>Copy request_id</button>
+      {:else if tabInteractionsActive && route.screen === "interactions"}
+        <div class="e11y-chip-row e11y-chip-row--header">
+          {#each ["web", "job", "all"] as s (s)}
+            <button
+              type="button"
+              class="e11y-chip"
+              class:e11y-chip--active={source === s}
+              onclick={() => (source = s as SourceFilter)}
+            >
+              {s}
+            </button>
+          {/each}
+        </div>
+      {/if}
+    {/snippet}
+
+    {#snippet headerBottom()}
+      <FilterBar
+        bind:search={globalSearch}
+        bind:severity={globalSeverity}
+        placeholder={
+          route.screen === "interactions"
+            ? "Search paths, methods, traces…"
+            : route.screen === "problems"
+              ? "Search problems, traces…"
+              : "Filter name, trace, payload…"
+        }
+      />
     {/snippet}
 
     {#snippet children()}
@@ -362,23 +558,35 @@
         <p class="e11y-err-msg">{loadError}</p>
       {/if}
 
-      {#if showEventsToolbar}
-        <div class="e11y-toolbar">
-          <button type="button" class="e11y-btn" onclick={back}>← Back</button>
-          {#if route.screen === "detail"}
-            <button type="button" class="e11y-btn" onclick={() => void copyDetailJson()}>Copy JSON</button>
-          {/if}
-        </div>
+      {#if showTraceFilters}
+        {#if contextAnchorIndex !== null}
+          <p class="e11y-context-hint">
+            Context: ±{CONTEXT_RADIUS} rows around last opened event (change filter to clear).
+          </p>
+        {/if}
       {/if}
 
       {#if route.screen === "problems"}
+        <RecentHistogram bind:timeRange={histogramTimeRange} recent={recentEvents} />
         <p class="e11y-problems-hint">Recent error / fatal events from the dev log (newest first).</p>
         {#if problemEvents.length === 0}
           <p class="e11y-muted e11y-empty">No errors in the recent buffer.</p>
           <button type="button" class="e11y-btn" onclick={goTabInteractions}>Open interactions</button>
+        {:else if filteredProblemEvents.length === 0}
+          <p class="e11y-muted e11y-empty">
+            {#if histogramTimeRange && !globalSearch.trim()}
+              No errors in the selected time range. Widen the selection or clear it.
+            {:else if globalSearch.trim()}
+              No matches for this search (and current time range, if any).
+            {:else}
+              No matching errors.
+            {/if}
+          </p>
         {:else}
-          {#each problemEvents as ev, i (eventKey(ev, i))}
+          {#each filteredProblemEvents as ev, i (eventKey(ev, i))}
             {@const tr = String(ev.trace_id ?? "")}
+            {@const ek = eventKey(ev, i)}
+            {@const sum = payloadSummary(ev)}
             <div
               class="e11y-row e11y-row--problem"
               role="button"
@@ -386,20 +594,40 @@
               onclick={() => openProblemDetail(ev)}
               onkeydown={(e) => e.key === "Enter" && openProblemDetail(ev)}
             >
+              <button
+                type="button"
+                class="e11y-row-expand"
+                class:e11y-row-expand--open={rowExpanded[ek]}
+                aria-expanded={!!rowExpanded[ek]}
+                aria-label={rowExpanded[ek] ? "Collapse row" : "Expand row"}
+                onclick={(e) => toggleRowExpand(ek, e)}>▸</button
+              >
               <span class="e11y-sev {sevClass(ev.severity)}">{String(ev.severity ?? "?")}</span>
               <span class="e11y-row-title">{String(ev.event_name ?? "")}</span>
               <span class="e11y-row-meta e11y-mono" title={tr || undefined}
                 >{tr.length > 14 ? `${tr.slice(0, 12)}…` : tr || "—"}</span
               >
               <span class="e11y-row-meta">{String(ev.timestamp ?? "")}</span>
+              {#if rowExpanded[ek]}
+                <div class="e11y-row-body">
+                  {#if sum}<p class="e11y-row-sum">{sum}</p>{/if}
+                  <pre class="e11y-row-pre">{JSON.stringify(ev.payload, null, 2)}</pre>
+                </div>
+              {/if}
             </div>
           {/each}
         {/if}
       {:else if route.screen === "interactions"}
+        <InteractionsTimeline bind:timeRange={interactionsTimeRange} {interactions} />
         {#if layoutWide}
           <div class="e11y-split">
             <div class="e11y-split-primary">
-              {#each interactions as row (interactionRowKey(row))}
+              {#if interactions.length === 0}
+                <p class="e11y-muted e11y-empty">No interactions recorded yet.</p>
+              {:else if filteredInteractions.length === 0}
+                <p class="e11y-muted e11y-empty">No interactions in the selected time range.</p>
+              {:else}
+                {#each filteredInteractions as row (interactionRowKey(row))}
                 {@const ids = (row.trace_ids as string[] | undefined) ?? []}
                 {@const tc = Number(row.traces_count ?? ids.length)}
                 {@const { absolute, relative } = formatInteractionStarted(String(row.started_at ?? ""))}
@@ -440,29 +668,54 @@
                   </div>
                 </div>
               {/each}
+              {/if}
             </div>
             <div class="e11y-split-secondary">
               {#if !splitSelectedKey}
                 <p class="e11y-split-placeholder">Select an interaction to see events.</p>
+              {:else if filteredTraceEvents.length === 0}
+                <p class="e11y-muted e11y-split-placeholder">No events match the current filter.</p>
               {:else}
-                {#each events as ev, j (eventKey(ev, j))}
+                {#each filteredTraceEvents as ev, j (eventKey(ev, j))}
+                  {@const ek = eventKey(ev, j)}
+                  {@const sum = payloadSummary(ev)}
                   <div
                     class="e11y-row"
+                    class:e11y-row--context={isContextNeighbor(j)}
                     role="button"
                     tabindex="0"
-                    onclick={() => selectEvent(ev)}
-                    onkeydown={(e) => e.key === "Enter" && selectEvent(ev)}
+                    onclick={() => selectEvent(ev, j)}
+                    onkeydown={(e) => e.key === "Enter" && selectEvent(ev, j)}
                   >
+                    <button
+                      type="button"
+                      class="e11y-row-expand"
+                      class:e11y-row-expand--open={rowExpanded[ek]}
+                      aria-expanded={!!rowExpanded[ek]}
+                      aria-label={rowExpanded[ek] ? "Collapse row" : "Expand row"}
+                      onclick={(e) => toggleRowExpand(ek, e)}>▸</button
+                    >
                     <span class="e11y-sev {sevClass(ev.severity)}">{String(ev.severity ?? "?")}</span>
                     <span class="e11y-row-title">{String(ev.event_name ?? "")}</span>
                     <span class="e11y-row-meta">{String(ev.timestamp ?? "")}</span>
+                    {#if rowExpanded[ek]}
+                      <div class="e11y-row-body">
+                        {#if sum}<p class="e11y-row-sum">{sum}</p>{/if}
+                        <pre class="e11y-row-pre">{JSON.stringify(ev.payload, null, 2)}</pre>
+                      </div>
+                    {/if}
                   </div>
                 {/each}
               {/if}
             </div>
           </div>
         {:else}
-          {#each interactions as row (interactionRowKey(row))}
+          {#if interactions.length === 0}
+            <p class="e11y-muted e11y-empty">No interactions recorded yet.</p>
+          {:else if filteredInteractions.length === 0}
+            <p class="e11y-muted e11y-empty">No interactions in the selected time range.</p>
+          {:else}
+            {#each filteredInteractions as row (interactionRowKey(row))}
             {@const ids = (row.trace_ids as string[] | undefined) ?? []}
             {@const tc = Number(row.traces_count ?? ids.length)}
             {@const { absolute, relative } = formatInteractionStarted(String(row.started_at ?? ""))}
@@ -504,23 +757,70 @@
               </div>
             </div>
           {/each}
+          {/if}
         {/if}
       {:else if route.screen === "events"}
-        {#each events as ev, i (eventKey(ev, i))}
-          <div
-            class="e11y-row"
-            role="button"
-            tabindex="0"
-            onclick={() => selectEvent(ev)}
-            onkeydown={(e) => e.key === "Enter" && selectEvent(ev)}
-          >
-            <span class="e11y-sev {sevClass(ev.severity)}">{String(ev.severity ?? "?")}</span>
-            <span class="e11y-row-title">{String(ev.event_name ?? "")}</span>
-            <span class="e11y-row-meta">{String(ev.timestamp ?? "")}</span>
-          </div>
-        {/each}
+        {#if filteredTraceEvents.length === 0}
+          <p class="e11y-muted e11y-empty">No events match the current filter.</p>
+        {:else}
+          {#each filteredTraceEvents as ev, i (eventKey(ev, i))}
+            {@const ek = eventKey(ev, i)}
+            {@const sum = payloadSummary(ev)}
+            <div
+              class="e11y-row"
+              class:e11y-row--context={isContextNeighbor(i)}
+              role="button"
+              tabindex="0"
+              onclick={() => selectEvent(ev, i)}
+              onkeydown={(e) => e.key === "Enter" && selectEvent(ev, i)}
+            >
+              <button
+                type="button"
+                class="e11y-row-expand"
+                class:e11y-row-expand--open={rowExpanded[ek]}
+                aria-expanded={!!rowExpanded[ek]}
+                aria-label={rowExpanded[ek] ? "Collapse row" : "Expand row"}
+                onclick={(e) => toggleRowExpand(ek, e)}>▸</button
+              >
+              <span class="e11y-sev {sevClass(ev.severity)}">{String(ev.severity ?? "?")}</span>
+              <span class="e11y-row-title">{String(ev.event_name ?? "")}</span>
+              <span class="e11y-row-meta">{String(ev.timestamp ?? "")}</span>
+              {#if rowExpanded[ek]}
+                <div class="e11y-row-body">
+                  {#if sum}<p class="e11y-row-sum">{sum}</p>{/if}
+                  <pre class="e11y-row-pre">{JSON.stringify(ev.payload, null, 2)}</pre>
+                </div>
+              {/if}
+            </div>
+          {/each}
+        {/if}
       {:else if route.screen === "detail"}
-        <pre class="e11y-detail-pre">{JSON.stringify(route.event, null, 2)}</pre>
+        {@const d = route.event}
+        {@const meta = d.metadata as Record<string, unknown> | undefined}
+        <div class="e11y-detail">
+          <dl class="e11y-detail-dl">
+            <dt>trace_id</dt>
+            <dd class="e11y-mono">{String(d.trace_id ?? "—")}</dd>
+            <dt>span_id</dt>
+            <dd class="e11y-mono">{String(d.span_id ?? "—")}</dd>
+            <dt>request_id</dt>
+            <dd class="e11y-mono">{String(meta?.request_id ?? "—")}</dd>
+            <dt>timestamp</dt>
+            <dd>{String(d.timestamp ?? "—")}</dd>
+          </dl>
+          <details class="e11y-details">
+            <summary>payload</summary>
+            <pre class="e11y-detail-pre">{JSON.stringify(d.payload, null, 2)}</pre>
+          </details>
+          <details class="e11y-details">
+            <summary>metadata</summary>
+            <pre class="e11y-detail-pre">{JSON.stringify(d.metadata ?? {}, null, 2)}</pre>
+          </details>
+          <details class="e11y-details">
+            <summary>full JSON</summary>
+            <pre class="e11y-detail-pre">{JSON.stringify(d, null, 2)}</pre>
+          </details>
+        </div>
       {/if}
     {/snippet}
   </FullscreenPanel>

@@ -1,0 +1,197 @@
+[
+  {
+    "id": "7897bed6-407f-92df-cad07c1a6f71",
+    "timestamp": "2026-03-20T09:47:38.035Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "29f198f6588dacffb687777eb5f8f118",
+    "span_id": "05c08c7283306cd0",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:38Z",
+    "payload": {
+      "message": "Started POST \"/graphql\" for ::1 at 2026-03-20 09:47:38 +0000",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:38.019Z",
+      "request_id": "req-29f198f6-19",
+      "path": "/graphql",
+      "method": "POST",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 1
+    }
+  },
+  {
+    "id": "4204ed66-4cc8-96f5-4515d5bdfcea",
+    "timestamp": "2026-03-20T09:47:38.049Z",
+    "event_name": "Events::ApiRequest",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "29f198f6588dacffb687777eb5f8f118",
+    "span_id": "6bf4c9edfc01c803",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:38Z",
+    "payload": {
+      "endpoint": "POST /graphql",
+      "status": "ok",
+      "http_status": 200
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:38.019Z",
+      "request_id": "req-29f198f6-19",
+      "path": "/graphql",
+      "method": "POST",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 26
+    }
+  },
+  {
+    "id": "45b5eed6-4324-804a-db45ea0f7c91",
+    "timestamp": "2026-03-20T09:47:38.060Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "29f198f6588dacffb687777eb5f8f118",
+    "span_id": "8797e87f1e24ef54",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:38Z",
+    "payload": {
+      "message": "  → SQL /graphql — 36.8ms"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:38.019Z",
+      "request_id": "req-29f198f6-19",
+      "path": "/graphql",
+      "method": "POST",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 6
+    }
+  },
+  {
+    "id": "7f59dbe5-4579-b24b-06561b48be74",
+    "timestamp": "2026-03-20T09:47:38.072Z",
+    "event_name": "Events::PostDebug",
+    "severity": "debug",
+    "version": 1,
+    "trace_id": "29f198f6588dacffb687777eb5f8f118",
+    "span_id": "02d09f6923d84155",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:38Z",
+    "payload": {
+      "message": "  → CACHE — /graphql id=40761"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:38.019Z",
+      "request_id": "req-29f198f6-19",
+      "path": "/graphql",
+      "method": "POST",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 6
+    }
+  },
+  {
+    "id": "99bb790b-46ec-97f8-bb342ce521c6",
+    "timestamp": "2026-03-20T09:47:38.086Z",
+    "event_name": "Events::OrderCreated",
+    "severity": "success",
+    "version": 1,
+    "trace_id": "29f198f6588dacffb687777eb5f8f118",
+    "span_id": "92c36b89ea16e6ac",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:38Z",
+    "payload": {
+      "order_id": "ord_543352",
+      "status": "pending_payment",
+      "customer": {
+        "id": 2970,
+        "email": "[FILTERED]",
+        "locale": "en"
+      },
+      "items": [
+        {
+          "sku": "SKU-575",
+          "qty": 1,
+          "unit_price": 385.83
+        }
+      ]
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:38.019Z",
+      "request_id": "req-29f198f6-19",
+      "path": "/graphql",
+      "method": "POST",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 46
+    }
+  },
+  {
+    "id": "bcefc56a-4ec0-8b32-52b49a682d23",
+    "timestamp": "2026-03-20T09:47:38.097Z",
+    "event_name": "Events::PaymentFailed",
+    "severity": "error",
+    "version": 1,
+    "trace_id": "29f198f6588dacffb687777eb5f8f118",
+    "span_id": "c55f55723ecf3319",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:38Z",
+    "payload": {
+      "order_id": "ord_543352",
+      "amount": 43.44,
+      "gateway": "stripe",
+      "decline_code": "processing_error"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:38.019Z",
+      "request_id": "req-29f198f6-19",
+      "path": "/graphql",
+      "method": "POST",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 40
+    }
+  },
+  {
+    "id": "ea5f1aa3-4470-a0ba-2b269c437ae7",
+    "timestamp": "2026-03-20T09:47:38.109Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "29f198f6588dacffb687777eb5f8f118",
+    "span_id": "90ffe4e2f305c535",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:38Z",
+    "payload": {
+      "message": "Completed POST /graphql in 109ms",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "web",
+      "started_at": "2026-03-20T09:47:38.019Z",
+      "request_id": "req-29f198f6-19",
+      "path": "/graphql",
+      "method": "POST",
+      "controller": "Admin::UsersController",
+      "action": "index",
+      "duration_ms": 62
+    }
+  }
+]

@@ -1,0 +1,128 @@
+[
+  {
+    "id": "d433cde9-4266-9510-5e0d98a5249e",
+    "timestamp": "2026-03-20T09:47:41.034Z",
+    "event_name": "Events::BackgroundJobStarted",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "93db346fa5d44a032605a13b627f4b80",
+    "span_id": "5d5ccc973ae1dbe2",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:41Z",
+    "payload": {
+      "job_class": "SearchIndexJob",
+      "job_id": "f1bb72d6-45dc-9a51-8cdedcaed3dd",
+      "queue": "default",
+      "arguments": [
+        {
+          "batch_id": 78946,
+          "shard": 2
+        }
+      ],
+      "enqueued_at": "2026-03-20T09:47:40.998Z"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:40.998Z",
+      "duration_ms": 444
+    }
+  },
+  {
+    "id": "678c5bd6-416b-a026-de0ecdd16f77",
+    "timestamp": "2026-03-20T09:47:41.590Z",
+    "event_name": "Events::ReportCreated",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "93db346fa5d44a032605a13b627f4b80",
+    "span_id": "8a1c19f089d4ae03",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:41Z",
+    "payload": {
+      "title": "Export batch 6468",
+      "description": "Queued by SearchIndexJob",
+      "employee_ids": [
+        153,
+        141
+      ],
+      "author": "system"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:40.998Z",
+      "duration_ms": 184
+    }
+  },
+  {
+    "id": "e06d246b-4b7d-adc1-21367641e2e2",
+    "timestamp": "2026-03-20T09:47:42.148Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "93db346fa5d44a032605a13b627f4b80",
+    "span_id": "debecca9fd870221",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:42Z",
+    "payload": {
+      "message": "Job SearchIndexJob done shard=13",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:40.998Z",
+      "duration_ms": 17
+    }
+  },
+  {
+    "id": "f066bd9f-465f-8ee2-777aff789c26",
+    "timestamp": "2026-03-20T09:47:42.648Z",
+    "event_name": "Events::LogInfo",
+    "severity": "info",
+    "version": 1,
+    "trace_id": "93db346fa5d44a032605a13b627f4b80",
+    "span_id": "026da32d59c83ff3",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:42Z",
+    "payload": {
+      "message": "Job SearchIndexJob done shard=12",
+      "level": "info"
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:40.998Z",
+      "duration_ms": 782
+    }
+  },
+  {
+    "id": "7ad2f2eb-42b8-810f-4db7458d46eb",
+    "timestamp": "2026-03-20T09:47:43.259Z",
+    "event_name": "Events::ReportExportCompleted",
+    "severity": "fatal",
+    "version": 1,
+    "trace_id": "93db346fa5d44a032605a13b627f4b80",
+    "span_id": "fbece4ee65f62978",
+    "service_name": "dummy",
+    "environment": "development",
+    "retention_until": "2027-03-20T09:47:43Z",
+    "payload": {
+      "report_id": 5361,
+      "error": "No space left on device",
+      "exception": {
+        "class": "Errno::ENOSPC",
+        "message": "No space left on device @ rb_sysopen",
+        "backtrace": [
+          "app/jobs/search_index_job.rb:49:in `perform'",
+          "activejob (6.2.0) lib/active_job/execution.rb:68:in `perform_now'"
+        ]
+      }
+    },
+    "metadata": {
+      "source": "job",
+      "started_at": "2026-03-20T09:47:40.998Z",
+      "duration_ms": 478
+    }
+  }
+]
