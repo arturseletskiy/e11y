@@ -24,8 +24,8 @@ E11y.configure do |config|
   # config.environment = Rails.env.to_s
 
   # Master switch. When false, E11y does not process events (adapters not called).
-  # Default: nil (Railtie sets !Rails.env.test?)
-  # config.enabled = !Rails.env.test?
+  # Default: nil until Railtie runs — then !Rails.env.test? only if still nil (explicit true/false here or in application.rb is kept).
+  # config.enabled = true   # e.g. enable in test after gem defaults
 
   # Default retention period for events routed to adapters. Used by retention-based routing.
   # Default: 30.days

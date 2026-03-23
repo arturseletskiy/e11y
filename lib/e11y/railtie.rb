@@ -54,8 +54,9 @@ module E11y
       E11y.configure do |config|
         config.environment ||= Rails.env.to_s
         config.service_name ||= E11y::Railtie.derive_service_name
-        # Enable in dev/prod; disable in test by default (user can override in config/initializers/e11y.rb)
-        config.enabled = !Rails.env.test?
+        # Enable in dev/prod; disable in test by default — only when still unset (nil).
+        # Respects explicit true/false from earlier E11y.configure (e.g. config/application.rb).
+        config.enabled = !Rails.env.test? if config.enabled.nil?
       end
     end
 

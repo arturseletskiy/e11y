@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Rails Railtie:** `config.enabled` is defaulted with `!Rails.env.test?` **only when still `nil`**, so an explicit `true`/`false` from `E11y.configure` in `config/application.rb` (or any code that runs before `before_initialize`) is no longer overwritten.
+
 ### Deprecated
 
 ### Removed

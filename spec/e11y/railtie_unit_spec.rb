@@ -93,6 +93,8 @@ RSpec.describe "E11y::Railtie Logic" do # rubocop:todo RSpec/DescribeClass
     let(:rails_app) { double("RailsApp", class: app_class) }
 
     before do
+      E11y.reset!
+
       # Mock Rails
       stub_const("Rails", Module.new)
 
@@ -126,37 +128,63 @@ RSpec.describe "E11y::Railtie Logic" do # rubocop:todo RSpec/DescribeClass
       expect(E11y.config.service_name).to eq("test_app")
     end
 
-    it "disables E11y in test environment" do
+    it "disables E11y in test environment when enabled was unset (nil)" do
       rails_env = double("RailsEnv")
       allow(rails_env).to receive_messages(to_s: "test", test?: true, production?: false)
       allow(Rails).to receive(:env).and_return(rails_env)
 
       E11y.configure do |config|
-        config.enabled = !Rails.env.test?
+        config.enabled = !Rails.env.test? if config.enabled.nil?
       end
 
       expect(E11y.config.enabled).to be(false)
     end
 
-    it "enables E11y in development environment" do
+    it "does not overwrite explicit enabled=true when applying Railtie test default" do
       rails_env = double("RailsEnv")
-      allow(rails_env).to receive_messages(to_s: "development", test?: false, production?: false)
+      allow(rails_env).to receive_messages(to_s: "test", test?: true, production?: false)
       allow(Rails).to receive(:env).and_return(rails_env)
 
+      E11y.configure { |config| config.enabled = true }
       E11y.configure do |config|
-        config.enabled = !Rails.env.test?
+        config.enabled = !Rails.env.test? if config.enabled.nil?
       end
 
       expect(E11y.config.enabled).to be(true)
     end
 
-    it "enables E11y in production environment" do
+    it "does not overwrite explicit enabled=false when applying Railtie dev default" do
+      rails_env = double("RailsEnv")
+      allow(rails_env).to receive_messages(to_s: "development", test?: false, production?: false)
+      allow(Rails).to receive(:env).and_return(rails_env)
+
+      E11y.configure { |config| config.enabled = false }
+      E11y.configure do |config|
+        config.enabled = !Rails.env.test? if config.enabled.nil?
+      end
+
+      expect(E11y.config.enabled).to be(false)
+    end
+
+    it "enables E11y in development environment when enabled was unset" do
+      rails_env = double("RailsEnv")
+      allow(rails_env).to receive_messages(to_s: "development", test?: false, production?: false)
+      allow(Rails).to receive(:env).and_return(rails_env)
+
+      E11y.configure do |config|
+        config.enabled = !Rails.env.test? if config.enabled.nil?
+      end
+
+      expect(E11y.config.enabled).to be(true)
+    end
+
+    it "enables E11y in production environment when enabled was unset" do
       rails_env = double("RailsEnv")
       allow(rails_env).to receive_messages(to_s: "production", test?: false, production?: true)
       allow(Rails).to receive(:env).and_return(rails_env)
 
       E11y.configure do |config|
-        config.enabled = !Rails.env.test?
+        config.enabled = !Rails.env.test? if config.enabled.nil?
       end
 
       expect(E11y.config.enabled).to be(true)
