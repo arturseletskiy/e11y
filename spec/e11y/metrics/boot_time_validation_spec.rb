@@ -256,9 +256,7 @@ RSpec.describe "E11y::Metrics Boot-Time Validation" do
     it "catches conflicts when defining event classes" do
       # First event
       Class.new(E11y::Event::Base) do
-        def self.name
-          "Events::OrderCreated"
-        end
+        define_singleton_method(:name) { "Events::OrderCreated" }
 
         metrics do
           counter :orders_total, tags: %i[currency status]
@@ -268,9 +266,7 @@ RSpec.describe "E11y::Metrics Boot-Time Validation" do
       # Second event with conflicting metric
       expect do
         Class.new(E11y::Event::Base) do
-          def self.name
-            "Events::OrderPaid"
-          end
+          define_singleton_method(:name) { "Events::OrderPaid" }
 
           metrics do
             counter :orders_total, tags: [:currency] # Different labels!
@@ -282,9 +278,7 @@ RSpec.describe "E11y::Metrics Boot-Time Validation" do
     it "allows same metric with same configuration" do
       # First event
       Class.new(E11y::Event::Base) do
-        def self.name
-          "Events::OrderCreated"
-        end
+        define_singleton_method(:name) { "Events::OrderCreated" }
 
         metrics do
           counter :orders_total, tags: %i[currency status]
@@ -294,9 +288,7 @@ RSpec.describe "E11y::Metrics Boot-Time Validation" do
       # Second event with same metric config
       expect do
         Class.new(E11y::Event::Base) do
-          def self.name
-            "Events::OrderPaid"
-          end
+          define_singleton_method(:name) { "Events::OrderPaid" }
 
           metrics do
             counter :orders_total, tags: %i[currency status] # Same - OK

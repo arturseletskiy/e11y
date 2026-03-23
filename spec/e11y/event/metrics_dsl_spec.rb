@@ -15,9 +15,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
   describe "metrics DSL" do
     it "defines counter metrics" do
       event_class = Class.new(E11y::Event::Base) do
-        def self.name
-          "TestEvent"
-        end
+        define_singleton_method(:name) { "TestEvent" }
 
         metrics do
           counter :test_counter, tags: [:status]
@@ -32,9 +30,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
 
     it "defines histogram metrics" do
       event_class = Class.new(E11y::Event::Base) do
-        def self.name
-          "TestEvent"
-        end
+        define_singleton_method(:name) { "TestEvent" }
 
         metrics do
           histogram :test_histogram,
@@ -54,9 +50,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
 
     it "defines gauge metrics" do
       event_class = Class.new(E11y::Event::Base) do
-        def self.name
-          "TestEvent"
-        end
+        define_singleton_method(:name) { "TestEvent" }
 
         metrics do
           gauge :test_gauge, value: :size, tags: [:queue_name]
@@ -72,9 +66,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
 
     it "defines multiple metrics" do
       event_class = Class.new(E11y::Event::Base) do
-        def self.name
-          "TestEvent"
-        end
+        define_singleton_method(:name) { "TestEvent" }
 
         metrics do
           counter :test_counter, tags: [:status]
@@ -89,9 +81,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
 
     it "supports Proc value extractors" do
       event_class = Class.new(E11y::Event::Base) do
-        def self.name
-          "TestEvent"
-        end
+        define_singleton_method(:name) { "TestEvent" }
 
         metrics do
           histogram :test_histogram,
@@ -108,9 +98,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
   describe "registry integration" do
     it "registers metrics in global registry" do
       Class.new(E11y::Event::Base) do
-        def self.name
-          "OrderCreated"
-        end
+        define_singleton_method(:name) { "OrderCreated" }
 
         metrics do
           counter :orders_total, tags: [:status]
@@ -125,9 +113,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
 
     it "includes source information" do
       Class.new(E11y::Event::Base) do
-        def self.name
-          "OrderCreated"
-        end
+        define_singleton_method(:name) { "OrderCreated" }
 
         metrics do
           counter :orders_total, tags: [:status]
@@ -140,9 +126,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
 
     it "uses event name as pattern" do
       Class.new(E11y::Event::Base) do
-        def self.name
-          "OrderCreated"
-        end
+        define_singleton_method(:name) { "OrderCreated" }
 
         metrics do
           counter :orders_total, tags: [:status]
@@ -158,9 +142,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
     # Integration test for inheritance requires full class hierarchy setup
     it "inherits metrics from base class" do
       base_class = Class.new(E11y::Event::Base) do
-        def self.name
-          "BaseOrderEvent"
-        end
+        define_singleton_method(:name) { "BaseOrderEvent" }
 
         metrics do
           counter :orders_total, tags: %i[currency status]
@@ -168,9 +150,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
       end
 
       child_class = Class.new(base_class) do
-        def self.name
-          "OrderCreated"
-        end
+        define_singleton_method(:name) { "OrderCreated" }
 
         metrics do
           histogram :order_amount, value: :amount, tags: [:currency]
@@ -193,9 +173,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
   describe "validation on registration" do
     it "detects label conflicts at boot time" do
       Class.new(E11y::Event::Base) do
-        def self.name
-          "OrderCreated"
-        end
+        define_singleton_method(:name) { "OrderCreated" }
 
         metrics do
           counter :orders_total, tags: %i[currency status]
@@ -204,9 +182,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
 
       expect do
         Class.new(E11y::Event::Base) do
-          def self.name
-            "OrderPaid"
-          end
+          define_singleton_method(:name) { "OrderPaid" }
 
           metrics do
             counter :orders_total, tags: [:currency] # Different labels!
@@ -217,9 +193,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
 
     it "detects type conflicts at boot time" do
       Class.new(E11y::Event::Base) do
-        def self.name
-          "OrderCreated"
-        end
+        define_singleton_method(:name) { "OrderCreated" }
 
         metrics do
           counter :orders_total, tags: [:currency]
@@ -228,9 +202,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
 
       expect do
         Class.new(E11y::Event::Base) do
-          def self.name
-            "OrderPaid"
-          end
+          define_singleton_method(:name) { "OrderPaid" }
 
           metrics do
             histogram :orders_total, value: :amount, tags: [:currency] # Different type!
@@ -241,9 +213,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
 
     it "allows same metric with same configuration" do
       Class.new(E11y::Event::Base) do
-        def self.name
-          "OrderCreated"
-        end
+        define_singleton_method(:name) { "OrderCreated" }
 
         metrics do
           counter :orders_total, tags: %i[currency status]
@@ -252,9 +222,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
 
       expect do
         Class.new(E11y::Event::Base) do
-          def self.name
-            "OrderPaid"
-          end
+          define_singleton_method(:name) { "OrderPaid" }
 
           metrics do
             counter :orders_total, tags: %i[currency status] # Same config - OK!
@@ -267,9 +235,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
   describe "metrics_config getter" do
     it "returns empty array when no metrics defined" do
       event_class = Class.new(E11y::Event::Base) do
-        def self.name
-          "TestEvent"
-        end
+        define_singleton_method(:name) { "TestEvent" }
       end
 
       expect(event_class.metrics_config).to eq([])
@@ -277,9 +243,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
 
     it "returns metrics configuration" do
       event_class = Class.new(E11y::Event::Base) do
-        def self.name
-          "TestEvent"
-        end
+        define_singleton_method(:name) { "TestEvent" }
 
         metrics do
           counter :test_counter, tags: [:status]
@@ -296,9 +260,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
       before do
         # Base order event with shared metric
         @base_order_event = Class.new(E11y::Event::Base) do
-          def self.name
-            "BaseOrderEvent"
-          end
+          define_singleton_method(:name) { "BaseOrderEvent" }
 
           schema do
             required(:order_id).filled(:string)
@@ -313,15 +275,11 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
 
         # Specific order events
         @order_created = Class.new(@base_order_event) do
-          def self.name
-            "OrderCreated"
-          end
+          define_singleton_method(:name) { "OrderCreated" }
         end
 
         @order_paid = Class.new(@base_order_event) do
-          def self.name
-            "OrderPaid"
-          end
+          define_singleton_method(:name) { "OrderPaid" }
 
           metrics do
             histogram :order_amount, value: :amount, tags: [:currency]
@@ -352,9 +310,7 @@ RSpec.describe "E11y::Event::Base Metrics DSL" do
     context "when testing queue monitoring" do
       before do
         @queue_event = Class.new(E11y::Event::Base) do
-          def self.name
-            "QueueUpdated"
-          end
+          define_singleton_method(:name) { "QueueUpdated" }
 
           metrics do
             gauge :queue_depth, value: :size, tags: [:queue_name]
