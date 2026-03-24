@@ -98,6 +98,7 @@ module E11y
         data = event_data.is_a?(::Hash) ? event_data.transform_keys(&:to_s) : {}
         enrich_ids!(data)
         enrich_metadata!(data)
+        normalize_json_event_identity!(data)
         ::JSON.generate(data)
       end
 
@@ -112,6 +113,40 @@ module E11y
         meta["source"]     ||= source
         meta["started_at"] ||= data["timestamp"]
         data["metadata"] = meta
+      end
+
+      # Avoid +#<Class:0x…>+ in JSON; keep top-level +event_name+ when only nested carries it.
+      def normalize_json_event_identity!(data)
+        coerce_event_class_for_json!(data)
+        promote_payload_event_name!(data)
+      end
+
+      def coerce_event_class_for_json!(data)
+        ec = data["event_class"]
+        return if ec.nil?
+
+        return unless ec.is_a?(::Module)
+
+        name = ec.name
+        if name && !name.empty?
+          data["event_class"] = name
+        else
+          data.delete("event_class")
+        end
+      end
+
+      def promote_payload_event_name!(data)
+        top = data["event_name"]
+        return if top.is_a?(::String) && !top.strip.empty?
+
+        pl = data["payload"]
+        return unless pl.is_a?(::Hash)
+
+        nested = pl["event_name"] || pl[:event_name]
+        nested = nested&.to_s&.strip
+        return if nested.nil? || nested.empty?
+
+        data["event_name"] = nested
       end
     end
   end

@@ -205,6 +205,45 @@ RSpec.describe E11y::Configuration do
   end
 
   # ---------------------------------------------------------------------------
+  # register_dev_log_adapter! (Rails railtie — issue #17)
+  # ---------------------------------------------------------------------------
+  describe "#register_dev_log_adapter!" do
+    let(:dev_log) { Object.new }
+
+    it "registers :dev_log and aliases :logs to the same instance when :logs is unset" do
+      config.register_dev_log_adapter!(dev_log)
+      expect(config.adapters[:dev_log]).to equal(dev_log)
+      expect(config.adapters[:logs]).to equal(dev_log)
+    end
+
+    it "does not overwrite an existing :logs adapter" do
+      logs = E11y::Adapters::Null.new
+      config.register_adapter(:logs, logs)
+      config.register_dev_log_adapter!(dev_log)
+      expect(config.adapters[:dev_log]).to equal(dev_log)
+      expect(config.adapters[:logs]).to equal(logs)
+    end
+
+    it "retargets default fallback_adapters from [:stdout] to [:logs] when :stdout is missing" do
+      expect(config.fallback_adapters).to eq(%i[stdout])
+      config.register_dev_log_adapter!(dev_log)
+      expect(config.fallback_adapters).to eq(%i[logs])
+    end
+
+    it "leaves fallback_adapters unchanged when :stdout is registered" do
+      config.register_adapter(:stdout, E11y::Adapters::Null.new)
+      config.register_dev_log_adapter!(dev_log)
+      expect(config.fallback_adapters).to eq(%i[stdout])
+    end
+
+    it "leaves fallback_adapters unchanged when the user customized it away from [:stdout]" do
+      config.fallback_adapters = %i[loki]
+      config.register_dev_log_adapter!(dev_log)
+      expect(config.fallback_adapters).to eq(%i[loki])
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # default_adapters
   # ---------------------------------------------------------------------------
   describe "#default_adapters" do

@@ -104,6 +104,26 @@ RSpec.describe E11y::Middleware::Versioning do
         result = middleware.call(event_data)
         expect(result[:event_name]).to eq("custom.order.paid")
       end
+
+      it "falls back to payload event_name when event_class is anonymous (Rails ASN-style)" do
+        anon = Class.new
+        event_data = {
+          event_class: anon,
+          payload: { event_name: "sql.active_record" }
+        }
+        result = middleware.call(event_data)
+        expect(result[:event_name]).to eq("sql.active_record")
+      end
+
+      it "reads payload event_name when the nested key is a string" do
+        anon = Class.new
+        event_data = {
+          event_class: anon,
+          payload: { "event_name" => "render.template" }
+        }
+        result = middleware.call(event_data)
+        expect(result[:event_name]).to eq("render.template")
+      end
     end
   end
 

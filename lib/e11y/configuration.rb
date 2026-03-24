@@ -126,6 +126,23 @@ module E11y
       @adapters[name.to_sym] = instance
     end
 
+    # Register +:dev_log+ from the Rails railtie and wire the public +:logs+ slot to the same
+    # instance when the app has not configured +:logs+ yet. If +:stdout+ is not registered but
+    # +fallback_adapters+ is still the default +[:stdout]+, retarget fallback to +[:logs]+ so
+    # rule-less events are not silently dropped in development/test.
+    #
+    # @param instance [E11y::Adapters::DevLog]
+    # @return [void]
+    def register_dev_log_adapter!(instance)
+      register_adapter(:dev_log, instance)
+      register_adapter(:logs, instance) unless @adapters.key?(:logs)
+
+      return if @adapters.key?(:stdout)
+      return unless Array(@fallback_adapters).map(&:to_sym) == %i[stdout]
+
+      @fallback_adapters = [:logs]
+    end
+
     # Set the default adapter(s) used when no severity-specific mapping matches.
     def default_adapters=(names)
       @adapter_mapping[:default] = Array(names).map(&:to_sym)
