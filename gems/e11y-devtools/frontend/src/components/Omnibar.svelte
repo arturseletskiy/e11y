@@ -5,7 +5,7 @@
   let {
     search = $bindable(""),
     severity = $bindable<ListSeverityFilter>("all"),
-    placeholder = "Search (e.g. is:error source:web)...",
+    placeholder = "Search (text, trace id, payload)...",
   } = $props()
 
   const severities = [
