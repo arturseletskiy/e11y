@@ -589,7 +589,7 @@
             {@const ek = eventKey(ev, i)}
             {@const sum = payloadSummary(ev)}
             <div
-              class="flex flex-wrap gap-3 items-baseline p-2.5 rounded-md cursor-pointer border border-transparent hover:bg-e11y-hover hover:border-e11y-border-hover transition-colors"
+              class="flex flex-wrap gap-3 items-baseline p-2.5 rounded-md cursor-pointer border border-transparent hover:bg-e11y-hover hover:border-e11y-border-hover transition-colors focus-visible:outline-2 focus-visible:outline-e11y-accent focus-visible:outline-offset-2"
               role="button"
               tabindex="0"
               onclick={() => openProblemDetail(ev)}
@@ -635,7 +635,7 @@
                 {@const { primary, extra, preview } = summarizeTraceIds(ids)}
                 {@const ikey = interactionRowKey(row)}
                 <div
-                  class="flex flex-wrap items-start justify-between gap-3 p-3 mb-2 rounded-lg border cursor-pointer text-left transition-all {!!row.has_error
+                  class="flex flex-wrap items-start justify-between gap-3 p-3 mb-2 rounded-lg border cursor-pointer text-left transition-all focus-visible:outline-2 focus-visible:outline-e11y-accent focus-visible:outline-offset-2 {!!row.has_error
                     ? 'border-[color:var(--e11y-err-border)] bg-gradient-to-br from-[#3a1c1c] to-e11y-bg hover:border-e11y-err'
                     : 'border-e11y-border bg-gradient-to-br from-[#1f1f35] to-e11y-bg hover:border-[color:var(--e11y-accent-border)] hover:shadow-lg'} {splitSelectedKey === ikey
                     ? 'border-e11y-accent ring-1 ring-e11y-accent bg-e11y-accent-bg'
@@ -683,7 +683,7 @@
                   {@const ek = eventKey(ev, j)}
                   {@const sum = payloadSummary(ev)}
                   <div
-                    class="flex flex-wrap gap-3 items-baseline p-2.5 rounded-md cursor-pointer border border-transparent hover:bg-e11y-hover hover:border-e11y-border-hover transition-colors {isContextNeighbor(j)
+                    class="flex flex-wrap gap-3 items-baseline p-2.5 rounded-md cursor-pointer border border-transparent hover:bg-e11y-hover hover:border-e11y-border-hover transition-colors focus-visible:outline-2 focus-visible:outline-e11y-accent focus-visible:outline-offset-2 {isContextNeighbor(j)
                       ? 'border-[color:var(--e11y-accent-border)] shadow-[inset_3px_0_0_var(--e11y-accent)] bg-e11y-accent-bg'
                       : ''}"
                     role="button"
@@ -726,7 +726,7 @@
             {@const { primary, extra, preview } = summarizeTraceIds(ids)}
             {@const ikey = interactionRowKey(row)}
             <div
-              class="flex flex-wrap items-start justify-between gap-3 p-3 mb-2 rounded-lg border cursor-pointer text-left transition-all {!!row.has_error
+              class="flex flex-wrap items-start justify-between gap-3 p-3 mb-2 rounded-lg border cursor-pointer text-left transition-all focus-visible:outline-2 focus-visible:outline-e11y-accent focus-visible:outline-offset-2 {!!row.has_error
                 ? 'border-[color:var(--e11y-err-border)] bg-gradient-to-br from-[#3a1c1c] to-e11y-bg hover:border-e11y-err'
                 : 'border-e11y-border bg-gradient-to-br from-[#1f1f35] to-e11y-bg hover:border-[color:var(--e11y-accent-border)] hover:shadow-lg'} {splitSelectedKey === ikey
                 ? 'border-e11y-accent ring-1 ring-e11y-accent bg-e11y-accent-bg'
@@ -775,7 +775,7 @@
             {@const ek = eventKey(ev, i)}
             {@const sum = payloadSummary(ev)}
             <div
-              class="flex flex-wrap gap-3 items-baseline p-2.5 rounded-md cursor-pointer border border-transparent hover:bg-e11y-hover hover:border-e11y-border-hover transition-colors {isContextNeighbor(i)
+              class="flex flex-wrap gap-3 items-baseline p-2.5 rounded-md cursor-pointer border border-transparent hover:bg-e11y-hover hover:border-e11y-border-hover transition-colors focus-visible:outline-2 focus-visible:outline-e11y-accent focus-visible:outline-offset-2 {isContextNeighbor(i)
                 ? 'border-[color:var(--e11y-accent-border)] shadow-[inset_3px_0_0_var(--e11y-accent)] bg-e11y-accent-bg'
                 : ''}"
               role="button"
