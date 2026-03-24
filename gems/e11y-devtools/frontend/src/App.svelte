@@ -1,6 +1,6 @@
 <script lang="ts">
   import Fab from "./components/Fab.svelte"
-  import FilterBar from "./components/FilterBar.svelte"
+  import Omnibar from "./components/Omnibar.svelte"
   import FullscreenPanel from "./components/FullscreenPanel.svelte"
   import InteractionsTimeline, { type TimelineTimeRange } from "./components/InteractionsTimeline.svelte"
   import RecentHistogram from "./components/RecentHistogram.svelte"
@@ -540,15 +540,15 @@
     {/snippet}
 
     {#snippet headerBottom()}
-      <FilterBar
+      <Omnibar
         bind:search={globalSearch}
         bind:severity={globalSeverity}
         placeholder={
           route.screen === "interactions"
-            ? "Search paths, methods, traces…"
+            ? "Search paths, methods, traces..."
             : route.screen === "problems"
-              ? "Search problems, traces…"
-              : "Filter name, trace, payload…"
+              ? "Search problems, traces..."
+              : "Filter name, trace, payload..."
         }
       />
     {/snippet}
