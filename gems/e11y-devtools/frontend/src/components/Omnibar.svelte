@@ -24,26 +24,28 @@
   <Search size={16} class="text-e11y-muted flex-shrink-0" />
 
   <input
-    type="text"
+    type="search"
     class="flex-1 bg-transparent border-none outline-none text-sm text-e11y-text placeholder:text-e11y-muted/50"
     {placeholder}
+    aria-label="Search"
     bind:value={search}
   />
 
   {#if search}
-    <button type="button" onclick={clearSearch} class="text-e11y-muted hover:text-e11y-text">
+    <button type="button" onclick={clearSearch} class="text-e11y-muted hover:text-e11y-text" aria-label="Clear search">
       <XCircle size={14} />
     </button>
   {/if}
 
   <div class="w-px h-4 bg-e11y-border mx-1"></div>
 
-  <div class="flex items-center gap-1">
+  <div class="flex items-center gap-1" role="group" aria-label="Severity filter">
     {#each severities as s (s.id)}
       <button
         type="button"
         class="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium transition-colors border {severity === s.id ? 'border-e11y-accent bg-e11y-accent-bg text-e11y-text' : 'border-transparent text-e11y-muted hover:bg-e11y-hover'}"
         onclick={() => (severity = s.id)}
+        aria-pressed={severity === s.id}
       >
         <span class="w-2 h-2 rounded-full {s.color}"></span>
         {s.label}
