@@ -19,27 +19,13 @@
   }
 </script>
 
-<div class="flex flex-col h-full bg-e11y-bg text-e11y-text rounded-lg border border-e11y-border overflow-hidden">
-  <!-- Header -->
-  <div class="flex items-center justify-between px-4 py-3 border-b border-e11y-border bg-e11y-bg2">
-    <div class="flex items-center gap-3">
-      <span
-        class="px-2 py-1 text-xs font-bold uppercase rounded {event.severity === 'error' || event.severity === 'fatal'
-          ? 'bg-e11y-err-bg text-e11y-err'
-          : 'bg-e11y-accent-bg text-e11y-accent'}"
-      >
-        {event.severity || "info"}
-      </span>
-      <h2 class="text-sm font-semibold truncate">{event.event_name}</h2>
-    </div>
-  </div>
-
+<div class="flex flex-col h-full bg-e11y-bg text-e11y-text overflow-hidden">
   <!-- Tabs -->
-  <div class="flex border-b border-e11y-border px-2 bg-e11y-bg2">
+  <div class="flex border-b border-e11y-border bg-e11y-bg2">
     <button
       class="px-4 py-2.5 text-xs font-medium border-b-2 {activeTab === 'overview'
         ? 'border-e11y-accent text-e11y-accent bg-e11y-bg'
-        : 'border-transparent text-e11y-muted hover:text-e11y-text hover:border-e11y-border-hover'} transition-colors"
+        : 'border-transparent text-e11y-muted hover:text-e11y-text hover:border-e11y-border-hover hover:bg-e11y-hover'} transition-colors"
       onclick={() => (activeTab = "overview")}
     >
       <div class="flex items-center gap-1.5"><TerminalSquare size={14} /> Overview</div>
@@ -47,7 +33,7 @@
     <button
       class="px-4 py-2.5 text-xs font-medium border-b-2 {activeTab === 'raw'
         ? 'border-e11y-accent text-e11y-accent bg-e11y-bg'
-        : 'border-transparent text-e11y-muted hover:text-e11y-text hover:border-e11y-border-hover'} transition-colors"
+        : 'border-transparent text-e11y-muted hover:text-e11y-text hover:border-e11y-border-hover hover:bg-e11y-hover'} transition-colors"
       onclick={() => (activeTab = "raw")}
     >
       <div class="flex items-center gap-1.5"><FileJson size={14} /> Raw JSON</div>
@@ -63,7 +49,7 @@
           <div class="flex flex-col gap-1">
             <span class="text-e11y-muted">Trace ID</span>
             <button
-              class="font-mono text-e11y-accent hover:underline flex items-center gap-1 w-fit bg-e11y-input px-2 py-1 rounded border border-e11y-border hover:border-e11y-accent-border transition-colors"
+              class="font-mono text-e11y-accent hover:text-e11y-text flex items-center gap-1.5 w-fit bg-e11y-bg px-2 py-1 rounded border border-e11y-border hover:border-e11y-accent hover:bg-e11y-hover transition-colors"
               onclick={() => copyText(String(event.trace_id ?? ""))}
             >
               {event.trace_id || "—"} <Copy size={12} />
@@ -73,7 +59,7 @@
             <div class="flex flex-col gap-1">
               <span class="text-e11y-muted">Span ID</span>
               <button
-                class="font-mono text-e11y-accent hover:underline flex items-center gap-1 w-fit bg-e11y-input px-2 py-1 rounded border border-e11y-border hover:border-e11y-accent-border transition-colors"
+                class="font-mono text-e11y-accent hover:text-e11y-text flex items-center gap-1.5 w-fit bg-e11y-bg px-2 py-1 rounded border border-e11y-border hover:border-e11y-accent hover:bg-e11y-hover transition-colors"
                 onclick={() => copyText(String(event.span_id ?? ""))}
               >
                 {event.span_id} <Copy size={12} />
@@ -82,12 +68,12 @@
           {/if}
           <div class="flex flex-col gap-1">
             <span class="text-e11y-muted">Timestamp</span>
-            <span class="bg-e11y-input px-2 py-1 rounded border border-e11y-border font-mono">{event.timestamp || "—"}</span>
+            <span class="bg-e11y-bg px-2 py-1 rounded border border-e11y-border font-mono">{event.timestamp || "—"}</span>
           </div>
           {#if metadata.request_id}
             <div class="flex flex-col gap-1">
               <span class="text-e11y-muted">Request ID</span>
-              <span class="bg-e11y-input px-2 py-1 rounded border border-e11y-border font-mono">{metadata.request_id}</span>
+              <span class="bg-e11y-bg px-2 py-1 rounded border border-e11y-border font-mono">{metadata.request_id}</span>
             </div>
           {/if}
         </div>
