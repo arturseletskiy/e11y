@@ -9,6 +9,8 @@ loader = Zeitwerk::Loader.for_gem
 loader.inflector.inflect(
   "documentation" => "Documentation",
   "debug" => "Debug",
+  # Directory lib/e11y/opentelemetry/ must map to E11y::OpenTelemetry (issue #15)
+  "opentelemetry" => "OpenTelemetry",
   "opentelemetry_collector" => "OpenTelemetryCollector",
   "otel_span" => "OtelSpan",
   "pii" => "PII",
@@ -23,6 +25,12 @@ loader.inflector.inflect(
 )
 # Don't autoload railtie - it will be required manually when Rails is available
 loader.do_not_eager_load("#{__dir__}/e11y/railtie.rb")
+# Adapters below require optional gems — skip Rails eager_load_all (issue #15 and same pattern)
+loader.do_not_eager_load("#{__dir__}/e11y/adapters/otel_logs.rb")
+loader.do_not_eager_load("#{__dir__}/e11y/adapters/loki.rb")
+loader.do_not_eager_load("#{__dir__}/e11y/adapters/sentry.rb")
+loader.do_not_eager_load("#{__dir__}/e11y/adapters/yabeda.rb")
+loader.do_not_eager_load("#{__dir__}/e11y/adapters/opentelemetry_collector.rb")
 # Generators live under lib/generators/ — not part of the autoloaded tree
 loader.ignore("#{__dir__}/generators")
 # Optional HTTP tracing files require external gems (faraday, net/http) — loaded on demand only
