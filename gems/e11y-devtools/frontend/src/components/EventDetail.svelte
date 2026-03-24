@@ -11,7 +11,6 @@
   // Extract common Sentry-like fields
   const exception = $derived(payload.exception || payload.error)
   const stacktrace = $derived(payload.stacktrace || exception?.backtrace)
-  const request = $derived(payload.request || metadata.request)
 
   async function copyText(text: string) {
     try {
@@ -70,6 +69,17 @@
               {event.trace_id || "—"} <Copy size={12} />
             </button>
           </div>
+          {#if event.span_id}
+            <div class="flex flex-col gap-1">
+              <span class="text-e11y-muted">Span ID</span>
+              <button
+                class="font-mono text-e11y-accent hover:underline flex items-center gap-1"
+                onclick={() => copyText(String(event.span_id ?? ""))}
+              >
+                {event.span_id} <Copy size={12} />
+              </button>
+            </div>
+          {/if}
           <div class="flex flex-col gap-1">
             <span class="text-e11y-muted">Timestamp</span>
             <span>{event.timestamp || "—"}</span>
@@ -103,7 +113,9 @@
             <div class="p-3 bg-e11y-input border border-e11y-border rounded-md text-xs font-mono overflow-x-auto">
               {#if Array.isArray(stacktrace)}
                 {#each stacktrace as frame}
-                  <div class="py-0.5 border-b border-e11y-border/50 last:border-0">{frame}</div>
+                  <div class="py-0.5 border-b border-e11y-border/50 last:border-0">
+                    {typeof frame === "string" ? frame : JSON.stringify(frame)}
+                  </div>
                 {/each}
               {:else}
                 <pre>{stacktrace}</pre>
