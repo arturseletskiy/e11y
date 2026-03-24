@@ -12,6 +12,27 @@
   box-sizing: border-box;
 }
 
+/* Scoped reset for buttons and inputs since Tailwind preflight is disabled */
+#e11y-devtools-root button,
+#app.e11y-demo-host .e11y-dt button,
+#e11y-devtools-root input,
+#app.e11y-demo-host .e11y-dt input {
+  background: transparent;
+  border: 0 solid currentColor;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+}
+#e11y-devtools-root button,
+#app.e11y-demo-host .e11y-dt button {
+  cursor: pointer;
+}
+#e11y-devtools-root input:focus,
+#app.e11y-demo-host .e11y-dt input:focus {
+  outline: none;
+}
+
 #e11y-devtools-root,
 #app.e11y-demo-host .e11y-dt {
   /* Dark theme (default) */
