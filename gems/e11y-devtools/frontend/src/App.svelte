@@ -620,8 +620,8 @@
       {:else if route.screen === "interactions"}
         <InteractionsTimeline bind:timeRange={interactionsTimeRange} {interactions} />
         {#if layoutWide}
-          <div class="e11y-split">
-            <div class="e11y-split-primary">
+          <div class="grid grid-cols-1 md:grid-cols-[1fr_1.15fr] gap-4 items-start min-h-[min(60vh,520px)]">
+            <div class="min-h-[120px] max-h-[min(65vh,560px)] overflow-y-auto pr-1">
               {#if interactions.length === 0}
                 <p class="e11y-muted e11y-empty">No interactions recorded yet.</p>
               {:else if filteredInteractions.length === 0}
@@ -670,7 +670,7 @@
               {/each}
               {/if}
             </div>
-            <div class="e11y-split-secondary">
+            <div class="min-h-[120px] max-h-[min(65vh,560px)] overflow-y-auto md:border-l md:border-e11y-border md:pl-4">
               {#if !splitSelectedKey}
                 <p class="e11y-split-placeholder">Select an interaction to see events.</p>
               {:else if filteredTraceEvents.length === 0}
