@@ -1,3 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Keep existing custom CSS below for backward compatibility during transition */
+
 /* Scoped to e11y devtools roots only — demo #app and embedded #e11y-devtools-root */
 #e11y-devtools-root,
 #e11y-devtools-root *,
