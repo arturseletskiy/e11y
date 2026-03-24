@@ -1,5 +1,6 @@
 <script lang="ts">
   import Fab from "./components/Fab.svelte"
+  import EventDetail from "./components/EventDetail.svelte"
   import Omnibar from "./components/Omnibar.svelte"
   import FullscreenPanel from "./components/FullscreenPanel.svelte"
   import InteractionsTimeline, { type TimelineTimeRange } from "./components/InteractionsTimeline.svelte"
@@ -795,32 +796,7 @@
           {/each}
         {/if}
       {:else if route.screen === "detail"}
-        {@const d = route.event}
-        {@const meta = d.metadata as Record<string, unknown> | undefined}
-        <div class="e11y-detail">
-          <dl class="e11y-detail-dl">
-            <dt>trace_id</dt>
-            <dd class="e11y-mono">{String(d.trace_id ?? "—")}</dd>
-            <dt>span_id</dt>
-            <dd class="e11y-mono">{String(d.span_id ?? "—")}</dd>
-            <dt>request_id</dt>
-            <dd class="e11y-mono">{String(meta?.request_id ?? "—")}</dd>
-            <dt>timestamp</dt>
-            <dd>{String(d.timestamp ?? "—")}</dd>
-          </dl>
-          <details class="e11y-details">
-            <summary>payload</summary>
-            <pre class="e11y-detail-pre">{JSON.stringify(d.payload, null, 2)}</pre>
-          </details>
-          <details class="e11y-details">
-            <summary>metadata</summary>
-            <pre class="e11y-detail-pre">{JSON.stringify(d.metadata ?? {}, null, 2)}</pre>
-          </details>
-          <details class="e11y-details">
-            <summary>full JSON</summary>
-            <pre class="e11y-detail-pre">{JSON.stringify(d, null, 2)}</pre>
-          </details>
-        </div>
+        <EventDetail event={route.event} />
       {/if}
     {/snippet}
   </FullscreenPanel>
