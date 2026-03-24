@@ -67,6 +67,34 @@ RSpec.describe E11y::Adapters::DevLog do
       line = JSON.parse(File.readlines(path).last)
       expect(line.dig("metadata", "source")).to eq("web")
     end
+
+    it "stores event_class as a constant path string, not #<Class:0x…>" do
+      stub_const("E11yDevLogProbeEventClass", Class.new)
+      adapter.write(
+        event_data.merge(event_class: E11yDevLogProbeEventClass)
+      )
+      line = JSON.parse(File.readlines(path).last)
+      expect(line["event_class"]).to eq("E11yDevLogProbeEventClass")
+    end
+
+    it "omits event_class when the class is anonymous" do
+      anon = Class.new
+      adapter.write(event_data.merge(event_class: anon, event_name: nil))
+      line = JSON.parse(File.readlines(path).last)
+      expect(line).not_to have_key("event_class")
+    end
+
+    it "promotes payload event_name to top level when top-level event_name is blank" do
+      adapter.write(
+        event_name: nil,
+        severity: "info",
+        trace_id: "abc123",
+        payload: { event_name: "sql.active_record", sql: "SELECT 1" },
+        metadata: {}
+      )
+      line = JSON.parse(File.readlines(path).last)
+      expect(line["event_name"]).to eq("sql.active_record")
+    end
   end
 
   describe "read API delegation" do

@@ -77,12 +77,33 @@ module E11y
         incoming = klass.event_name if incoming.nil? && klass.respond_to?(:event_name)
         incoming = incoming.to_s
         # Custom uses dot notation ("order.paid"); default from Base uses "::"
-        event_data[:event_name] = incoming != "" && !incoming.include?("::") ? incoming : normalized_for(klass)
+        chosen = if incoming != "" && !incoming.include?("::")
+                   incoming
+                 else
+                   normalized_for(klass)
+                 end
+        chosen = fallback_payload_event_name(event_data) if event_name_blank?(chosen)
+        event_data[:event_name] = chosen
 
         @app&.call(event_data) || event_data
       end
 
       private
+
+      def event_name_blank?(name)
+        name.nil? || name.to_s.strip.empty?
+      end
+
+      # ASN / instrumented events often carry the stable name only under +payload[:event_name]+
+      # while +event_class+ is an anonymous class (+klass.name+ nil → +normalized_for+ yields nil).
+      def fallback_payload_event_name(event_data)
+        p = event_data[:payload] || event_data["payload"]
+        return unless p.is_a?(Hash)
+
+        val = p[:event_name] || p["event_name"]
+        s = val&.to_s&.strip
+        s&.empty? ? nil : s
+      end
 
       def normalized_for(klass)
         return unless klass

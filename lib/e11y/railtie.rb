@@ -85,12 +85,14 @@ module E11y
       next if E11y.configuration.adapters.key?(:dev_log)
 
       E11y.configure do |config|
-        config.register_adapter :dev_log, E11y::Adapters::DevLog.new(
-          path: Rails.root.join("log", "e11y_dev.jsonl"),
-          max_lines: ENV.fetch("E11Y_MAX_EVENTS", "10000").to_i,
-          max_size: ENV.fetch("E11Y_MAX_SIZE", "50").to_i * 1024 * 1024,
-          keep_rotated: ENV.fetch("E11Y_KEEP_ROTATED", "5").to_i,
-          enable_watcher: !Rails.env.test?
+        config.register_dev_log_adapter!(
+          E11y::Adapters::DevLog.new(
+            path: Rails.root.join("log", "e11y_dev.jsonl"),
+            max_lines: ENV.fetch("E11Y_MAX_EVENTS", "10000").to_i,
+            max_size: ENV.fetch("E11Y_MAX_SIZE", "50").to_i * 1024 * 1024,
+            keep_rotated: ENV.fetch("E11Y_KEEP_ROTATED", "5").to_i,
+            enable_watcher: !Rails.env.test?
+          )
         )
       end
 
