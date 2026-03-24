@@ -20,6 +20,20 @@
 </script>
 
 <div class="flex flex-col h-full bg-e11y-bg text-e11y-text overflow-hidden">
+  <!-- Header -->
+  <div class="flex items-center justify-between px-4 py-3 border-b border-e11y-border bg-e11y-bg2">
+    <div class="flex items-center gap-3">
+      <span
+        class="px-2 py-1 text-xs font-bold uppercase rounded {event.severity === 'error' || event.severity === 'fatal'
+          ? 'bg-e11y-err-bg text-e11y-err'
+          : 'bg-e11y-accent-bg text-e11y-accent'}"
+      >
+        {event.severity || "info"}
+      </span>
+      <h2 class="text-sm font-semibold truncate">{event.event_name}</h2>
+    </div>
+  </div>
+
   <!-- Tabs -->
   <div class="flex border-b border-e11y-border bg-e11y-bg2">
     <button

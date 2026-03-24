@@ -43,7 +43,7 @@
     {#each severities as s (s.id)}
       <button
         type="button"
-        class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors border {severity === s.id ? 'border-e11y-accent bg-e11y-accent-bg text-e11y-text' : 'border-e11y-border bg-e11y-bg2 text-e11y-muted hover:text-e11y-text hover:border-e11y-border-hover'}"
+        class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors border {severity === s.id ? 'border-e11y-accent bg-e11y-accent-bg text-e11y-text' : 'border-e11y-border bg-transparent text-e11y-muted hover:text-e11y-text hover:border-e11y-border-hover hover:bg-e11y-hover'}"
         onclick={() => (severity = s.id)}
         aria-pressed={severity === s.id}
       >
