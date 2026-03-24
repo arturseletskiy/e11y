@@ -478,53 +478,59 @@
     origin={panelCircleOrigin}
   >
     {#snippet headerTopLeft()}
-      {#if route.screen === "events" || route.screen === "detail"}
-        <button type="button" class="e11y-icon-btn" onclick={back} aria-label="Back" title="Go back" style="margin-right: -4px;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-        </button>
-      {/if}
+      <button type="button" class="e11y-icon-btn" onclick={back} aria-label="Back" title="Go back" style="margin-right: -4px; visibility: {route.screen === 'events' || route.screen === 'detail' ? 'visible' : 'hidden'};">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      </button>
 
-      <div class="e11y-tab-row" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          class="e11y-tab"
-          class:e11y-tab--active={tabProblemsActive}
-          aria-selected={tabProblemsActive}
-          onclick={goTabProblems}
+      {#if route.screen === "detail"}
+        <span
+          class="px-2 py-1 text-xs font-bold uppercase rounded {route.event.severity === 'error' || route.event.severity === 'fatal'
+            ? 'bg-e11y-err-bg text-e11y-err'
+            : 'bg-e11y-accent-bg text-e11y-accent'}"
         >
-          Problems{#if errCount > 0}&nbsp;<span class="e11y-tab-badge">{errCount}</span>{/if}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          class="e11y-tab"
-          class:e11y-tab--active={tabInteractionsActive}
-          aria-selected={tabInteractionsActive}
-          onclick={goTabInteractions}
-        >
-          Interactions
-        </button>
-      </div>
-
-      {#if route.screen === "events" || route.screen === "detail"}
-        <span class="e11y-breadcrumb-sep">/</span>
-        <span class="e11y-panel-title e11y-panel-title--sub" title={activeTraceId || undefined}>
-          {#if route.screen === "detail"}
-            Event Details
-          {:else}
-            Trace: {activeTraceId ? activeTraceId.slice(0, 8) + "…" : "Unknown"}
-          {/if}
+          {route.event.severity || "info"}
         </span>
+        <h2 class="text-sm font-semibold truncate">{route.event.event_name}</h2>
+      {:else}
+        <div class="e11y-tab-row" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            class="e11y-tab"
+            class:e11y-tab--active={tabProblemsActive}
+            aria-selected={tabProblemsActive}
+            onclick={goTabProblems}
+          >
+            Problems{#if errCount > 0}&nbsp;<span class="e11y-tab-badge">{errCount}</span>{/if}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="e11y-tab"
+            class:e11y-tab--active={tabInteractionsActive}
+            aria-selected={tabInteractionsActive}
+            onclick={goTabInteractions}
+          >
+            Interactions
+          </button>
+        </div>
+
+        {#if route.screen === "events"}
+          <span class="e11y-breadcrumb-sep">/</span>
+          <span class="e11y-panel-title e11y-panel-title--sub" title={activeTraceId || undefined}>
+            Trace: {activeTraceId ? activeTraceId.slice(0, 8) + "…" : "Unknown"}
+          </span>
+        {:else}
+          <span class="e11y-breadcrumb-sep">/</span>
+          <span class="e11y-panel-title e11y-panel-title--sub">
+            e11y devtools
+          </span>
+        {/if}
       {/if}
     {/snippet}
 
     {#snippet headerTopRight()}
-      {#if route.screen === "detail"}
-        <button type="button" class="e11y-btn" onclick={() => void copyDetailJson()}>Copy JSON</button>
-        <button type="button" class="e11y-btn" onclick={() => void copyDetailTraceId()}>Copy trace_id</button>
-        <button type="button" class="e11y-btn" onclick={() => void copyDetailRequestId()}>Copy request_id</button>
-      {:else if tabInteractionsActive && route.screen === "interactions"}
+      {#if tabInteractionsActive && route.screen === "interactions"}
         <div class="e11y-chip-row e11y-chip-row--header">
           {#each ["web", "job", "all"] as s (s)}
             <button
