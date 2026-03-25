@@ -39,7 +39,9 @@
 }
 
 #e11y-devtools-root,
-#app.e11y-demo-host .e11y-dt {
+#app.e11y-demo-host .e11y-dt,
+#e11y-devtools-root .e11y-dt.e11y-theme-dark,
+#app.e11y-demo-host .e11y-dt.e11y-theme-dark {
   /* Dark theme (default) */
   --e11y-bg: #1a1a2e;
   --e11y-bg2: #16213e;
@@ -97,9 +99,62 @@
   color: var(--e11y-text);
 }
 
+#e11y-devtools-root .e11y-dt.e11y-theme-light,
+#app.e11y-demo-host .e11y-dt.e11y-theme-light {
+  --e11y-bg: #ffffff;
+  --e11y-bg2: #f7fafc;
+  --e11y-bg-hover: #edf2f7;
+  --e11y-bg-input: #ffffff;
+  --e11y-border: #e2e8f0;
+  --e11y-border-hover: #cbd5e0;
+  --e11y-text: #2d3748;
+  --e11y-muted: #718096;
+  --e11y-muted-dark: #a0aec0;
+  
+  --e11y-accent: #3182ce;
+  --e11y-accent-bg: rgba(49, 130, 206, 0.1);
+  --e11y-accent-border: rgba(49, 130, 206, 0.45);
+  
+  --e11y-job: #805ad5;
+  --e11y-job-border: rgba(128, 90, 213, 0.45);
+  
+  --e11y-ok: #38a169;
+  --e11y-ok-bg: rgba(56, 161, 105, 0.1);
+  --e11y-ok-border: rgba(56, 161, 105, 0.35);
+  
+  --e11y-warn: #dd6b20;
+  --e11y-warn-bg: rgba(221, 107, 32, 0.1);
+  --e11y-warn-dark: #c05621;
+  
+  --e11y-err: #e53e3e;
+  --e11y-err-dark: #c53030;
+  --e11y-err-bg: rgba(229, 62, 62, 0.1);
+  --e11y-err-border: rgba(229, 62, 62, 0.55);
+
+  --e11y-ix-bg: linear-gradient(145deg, #ffffff 0%, #f7fafc 100%);
+  --e11y-ix-bg-err: linear-gradient(145deg, #fff5f5 0%, #f7fafc 100%);
+  --e11y-ix-bg-warn: linear-gradient(145deg, #fffff0 0%, #f7fafc 100%);
+
+  --e11y-syntax-str: #2f855a;
+  --e11y-syntax-num: #c53030;
+  --e11y-syntax-bool: #b7791f;
+  --e11y-syntax-null: #a0aec0;
+  --e11y-syntax-key: #2b6cb0;
+
+  --e11y-histo-bg: rgba(226, 232, 240, 0.6);
+  --e11y-histo-err: rgba(229, 62, 62, 0.85);
+  --e11y-histo-warn: rgba(221, 107, 32, 0.85);
+  --e11y-histo-ok: rgba(56, 161, 105, 0.55);
+
+  --e11y-sel-bg: rgba(49, 130, 206, 0.2);
+  --e11y-sel-border: rgba(49, 130, 206, 0.5);
+  --e11y-backdrop: rgba(0, 0, 0, 0.25);
+  --e11y-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
 @media (prefers-color-scheme: light) {
-  #e11y-devtools-root,
-  #app.e11y-demo-host .e11y-dt {
+  #e11y-devtools-root .e11y-dt:not(.e11y-theme-dark),
+  #app.e11y-demo-host .e11y-dt:not(.e11y-theme-dark) {
     --e11y-bg: #ffffff;
     --e11y-bg2: #f7fafc;
     --e11y-bg-hover: #edf2f7;
@@ -283,6 +338,7 @@
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
+  min-height: 52px;
 }
 
 .e11y-panel-header-left {

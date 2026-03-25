@@ -13,6 +13,7 @@
   import type { OverlayRoute, SourceFilter } from "./lib/router"
   import type { CircleOrigin } from "./lib/transitions"
   import { originFallbackFabCorner, originFromFabButton } from "./lib/viewportOrigin"
+  import { Sun, Moon, Monitor } from "lucide-svelte"
 
   const SPLIT_MIN_PX = 900
 
@@ -46,6 +47,9 @@
   let firstRecentPoll = $state(true)
   let pulseKind = $state<"none" | "error" | "warn">("none")
   let pulseTimer: ReturnType<typeof setTimeout> | null = null
+
+  let savedTheme = $state("system")
+  let systemTheme = $state("dark")
 
   const POLL_MS = 2000
   const PULSE_MS = 3000
@@ -467,9 +471,27 @@
     source
     if (panelOpen) void loadInteractionsList()
   })
+
+  $effect(() => {
+    savedTheme = localStorage.getItem("e11y-theme") || "system"
+    const mq = window.matchMedia("(prefers-color-scheme: light)")
+    systemTheme = mq.matches ? "light" : "dark"
+    const handler = (e: MediaQueryListEvent) => (systemTheme = e.matches ? "light" : "dark")
+    mq.addEventListener("change", handler)
+    return () => mq.removeEventListener("change", handler)
+  })
+
+  function cycleTheme() {
+    if (savedTheme === "system") savedTheme = "light"
+    else if (savedTheme === "light") savedTheme = "dark"
+    else savedTheme = "system"
+    localStorage.setItem("e11y-theme", savedTheme)
+  }
+
+  let effectiveTheme = $derived(savedTheme === "system" ? systemTheme : savedTheme)
 </script>
 
-<div class="e11y-dt">
+<div class="e11y-dt" class:e11y-theme-light={effectiveTheme === "light"} class:e11y-theme-dark={effectiveTheme === "dark"}>
   <Fab label={badgeLabel} onclick={fabClick} stateClass={fabStateClass} pulseClass={fabPulseClass} />
 
   <FullscreenPanel
@@ -530,20 +552,31 @@
     {/snippet}
 
     {#snippet headerTopRight()}
-      {#if tabInteractionsActive && route.screen === "interactions"}
-        <div class="e11y-chip-row e11y-chip-row--header">
-          {#each ["web", "job", "all"] as s (s)}
-            <button
-              type="button"
-              class="e11y-chip"
-              class:e11y-chip--active={source === s}
-              onclick={() => (source = s as SourceFilter)}
-            >
-              {s}
-            </button>
-          {/each}
-        </div>
-      {/if}
+      <div class="flex items-center gap-2">
+        <button type="button" class="e11y-icon-btn" onclick={cycleTheme} title="Theme: {savedTheme}">
+          {#if savedTheme === 'light'}
+            <Sun size={16} />
+          {:else if savedTheme === 'dark'}
+            <Moon size={16} />
+          {:else}
+            <Monitor size={16} />
+          {/if}
+        </button>
+        {#if tabInteractionsActive && route.screen === "interactions"}
+          <div class="e11y-chip-row e11y-chip-row--header">
+            {#each ["web", "job", "all"] as s (s)}
+              <button
+                type="button"
+                class="e11y-chip"
+                class:e11y-chip--active={source === s}
+                onclick={() => (source = s as SourceFilter)}
+              >
+                {s}
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
     {/snippet}
 
     {#snippet headerBottom()}
