@@ -56,14 +56,19 @@ module E11y
       # @option config [Symbol] :severity_threshold (:warn) Minimum severity to send to Sentry
       # @option config [Boolean] :breadcrumbs (true) Enable breadcrumb tracking
       def initialize(config = {})
+        @required = config.fetch(:required, false)
         @dsn = config[:dsn]
+        @active = false
         @environment = config.fetch(:environment, "production")
         @severity_threshold = config.fetch(:severity_threshold, DEFAULT_SEVERITY_THRESHOLD)
         @send_breadcrumbs = config.fetch(:breadcrumbs, true)
 
         super
 
-        initialize_sentry!
+        if @dsn && !@dsn.strip.empty?
+          initialize_sentry!
+          @active = true
+        end
       end
 
       # Write event to Sentry
@@ -71,6 +76,8 @@ module E11y
       # @param event_data [Hash] Event payload
       # @return [Boolean] Success status
       def write(event_data)
+        return true unless @active
+
         severity = event_data[:severity]
 
         # Only send events above threshold
@@ -104,14 +111,22 @@ module E11y
       #
       # @return [Boolean] True if Sentry is configured
       def healthy?
-        ::Sentry.initialized?
+        @active && ::Sentry.initialized?
       end
 
       private
 
       # Validate configuration
       def validate_config!
-        raise ArgumentError, "Sentry adapter requires :dsn" unless @dsn
+        if @dsn.nil? || @dsn.strip.empty?
+          if @required
+            raise ArgumentError, "Sentry adapter requires :dsn (required: true is set)"
+          else
+            warn "[E11y] Sentry adapter: no DSN configured — adapter inactive. " \
+                 "Pass required: true to enforce DSN in production."
+          end
+          return
+        end
 
         return if SEVERITY_LEVELS.include?(@severity_threshold)
 
