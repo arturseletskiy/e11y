@@ -46,7 +46,8 @@ module E11y
       #
       # @param config [Hash] Configuration options
       def initialize(config = {})
-        @encryption_key = config[:encryption_key] || default_encryption_key
+        raw_key = config[:encryption_key]
+        @encryption_key = (raw_key ? normalize_key(raw_key) : nil) || default_encryption_key
         @storage_path = config[:storage_path] || default_storage_path
 
         super
@@ -236,12 +237,14 @@ module E11y
       #
       # @return [String] Encryption key bytes
       def encryption_key_bytes
-        @encryption_key_bytes ||= if encryption_key.bytesize == 32
-                                    encryption_key
-                                  else
-                                    # Hex-decode if provided as hex string
-                                    [encryption_key].pack("H*")
-                                  end
+        encryption_key
+      end
+
+      def normalize_key(key)
+        return key if key.bytesize == 32
+        return [key].pack("H*") if key.length == 64 && key.match?(/\A[0-9a-fA-F]+\z/)
+
+        key
       end
 
       # Default encryption key (development only)
@@ -250,9 +253,7 @@ module E11y
       def default_encryption_key
         # Use ENV var if provided (required in production)
         env_key = ENV.fetch("E11Y_AUDIT_ENCRYPTION_KEY", nil)
-        if env_key
-          return env_key.bytesize == 32 ? env_key : [env_key].pack("H*")
-        end
+        return normalize_key(env_key) if env_key
 
         # In production without ENV var, raise a clear error
         if defined?(::Rails) && ::Rails.env.production?
