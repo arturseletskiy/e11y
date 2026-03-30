@@ -328,6 +328,25 @@ end
 # at_exit { E11y.stop!(timeout: 5) }  # graceful shutdown
 ```
 
+### Enforcing Sentry in production
+
+By default, the adapter starts inactive (with a warning to stderr) if `SENTRY_DSN` is
+absent — this allows Docker builds and CI pipelines to load the app without secrets.
+
+To make a missing DSN a hard error at boot (recommended for production):
+
+```ruby
+config.adapters[:sentry] = E11y::Adapters::Sentry.new(
+  dsn: ENV["SENTRY_DSN"],
+  required: Rails.env.production?  # raises ArgumentError at boot if DSN missing in prod
+)
+```
+
+If you see no events in Sentry, check:
+1. `SENTRY_DSN` is set in the running environment (not just build-time)
+2. Adapter is healthy: `E11y.configuration.adapters[:sentry].healthy?`
+3. Boot logs for `[E11y] Sentry adapter: no DSN configured` warning
+
 ### Buffer flush — manual trigger
 
 `EphemeralBuffer.flush_on_error` is a public method — you can call it directly in custom
