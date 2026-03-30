@@ -195,11 +195,11 @@ RSpec.describe E11y::Adapters::AuditEncrypted do
     end
 
     it "raises for a 64-char non-hex string passed as explicit encryption_key" do
-      non_hex_64 = "z" * 64
+      non_hex_string = "z" * 64
       expect do
         described_class.new(
           storage_path: temp_dir,
-          encryption_key: non_hex_64
+          encryption_key: non_hex_string
         )
       end.to raise_error(E11y::Error, /must be 32 bytes/)
     end
