@@ -76,8 +76,10 @@ RSpec.describe "E11y Railtie Integration", :integration, type: :integration do
     end
 
     after do
+      # rubocop:disable RSpec/InstanceVariable
       E11y.configuration.adapters = @saved_adapters
       E11y.configuration.fallback_adapters = @saved_fallback
+      # rubocop:enable RSpec/InstanceVariable
       tmp_file.close
       tmp_file.unlink
     end

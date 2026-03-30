@@ -366,7 +366,7 @@ RSpec.describe "E11y::Railtie Logic" do # rubocop:todo RSpec/DescribeClass
   end
 
   describe ".setup_development_adapters" do
-    let(:dev_log) { instance_double("E11y::Adapters::DevLog") }
+    let(:dev_log) { instance_double(E11y::Adapters::DevLog) }
 
     before { E11y.reset! }
 

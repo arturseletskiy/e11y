@@ -40,6 +40,7 @@ module E11y
       require "generators/e11y/grafana_dashboard/grafana_dashboard_generator"
       require "generators/e11y/prometheus_alerts/prometheus_alerts_generator"
     end
+
     # Derive service name from Rails application class
     # @return [String] Service name (e.g., "my_app")
     def self.derive_service_name
