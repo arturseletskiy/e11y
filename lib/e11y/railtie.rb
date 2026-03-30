@@ -178,5 +178,20 @@ module E11y
       # Also include into ActiveJob::Base as fallback
       ::ActiveJob::Base.include(E11y::Instruments::ActiveJob::Callbacks)
     end
+
+    # Setup development adapter slots — aliases :logs and :errors_tracker to
+    # the DevLog instance unless the user has already configured those slots.
+    # Also updates fallback_adapters when still at the default [:stdout].
+    #
+    # @param dev_log [E11y::Adapters::DevLog] The DevLog instance to alias
+    # @return [void]
+    def self.setup_development_adapters(dev_log)
+      E11y.configure do |config|
+        config.register_adapter :dev_log, dev_log
+        config.adapters[:logs]           ||= dev_log
+        config.adapters[:errors_tracker] ||= dev_log
+        config.fallback_adapters = [:dev_log] if config.fallback_adapters == [:stdout]
+      end
+    end
   end
 end
