@@ -49,6 +49,7 @@ Metrics/ClassLength:
     - 'lib/e11y/adapters/opentelemetry_collector.rb'
     - 'lib/e11y/opentelemetry/span_creator.rb'
     - 'lib/e11y/configuration.rb'
+    - 'lib/e11y/railtie.rb'
 
 Metrics/CyclomaticComplexity:
   Max: 15

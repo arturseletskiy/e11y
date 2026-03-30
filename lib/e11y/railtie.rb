@@ -40,6 +40,7 @@ module E11y
       require "generators/e11y/grafana_dashboard/grafana_dashboard_generator"
       require "generators/e11y/prometheus_alerts/prometheus_alerts_generator"
     end
+
     # Derive service name from Rails application class
     # @return [String] Service name (e.g., "my_app")
     def self.derive_service_name
@@ -78,23 +79,28 @@ module E11y
       E11y::Tracing.patch_net_http!
     end
 
-    # Auto-register DevLog adapter in development and test environments.
-    # Skipped if the user has already registered :dev_log in their initializer.
-    initializer "e11y.setup_development", after: :load_config_initializers do |app|
-      next unless Rails.env.development? || Rails.env.test?
+    # Auto-register DevLog adapter and alias standard adapter slots in development.
+    # Only runs in development. Skipped if user already registered :dev_log.
+    # Slot aliasing (:logs, :errors_tracker) respects user-set values via ||=.
+    initializer "e11y.dev_log_adapter", after: :load_config_initializers do
+      next unless Rails.env.development?
       next if E11y.configuration.adapters.key?(:dev_log)
 
-      E11y.configure do |config|
-        config.register_dev_log_adapter!(
-          E11y::Adapters::DevLog.new(
-            path: Rails.root.join("log", "e11y_dev.jsonl"),
-            max_lines: ENV.fetch("E11Y_MAX_EVENTS", "10000").to_i,
-            max_size: ENV.fetch("E11Y_MAX_SIZE", "50").to_i * 1024 * 1024,
-            keep_rotated: ENV.fetch("E11Y_KEEP_ROTATED", "5").to_i,
-            enable_watcher: !Rails.env.test?
-          )
-        )
-      end
+      dev_log = E11y::Adapters::DevLog.new(
+        path: Rails.root.join("log", "e11y_dev.jsonl"),
+        max_lines: ENV.fetch("E11Y_MAX_EVENTS", "10000").to_i,
+        max_size: ENV.fetch("E11Y_MAX_SIZE", "50").to_i * 1024 * 1024,
+        keep_rotated: ENV.fetch("E11Y_KEEP_ROTATED", "5").to_i,
+        enable_watcher: true
+      )
+      E11y::Railtie.setup_development_adapters(dev_log)
+    end
+
+    # Insert DevLogSource middleware in development.
+    # Always runs — even if user provided a custom :dev_log adapter —
+    # because the middleware is needed for overlay/TUI source tagging.
+    initializer "e11y.dev_log_middleware", after: :load_config_initializers do |app|
+      next unless Rails.env.development?
 
       require "e11y/middleware/dev_log_source"
       app.middleware.use E11y::Middleware::DevLogSource
@@ -177,6 +183,21 @@ module E11y
 
       # Also include into ActiveJob::Base as fallback
       ::ActiveJob::Base.include(E11y::Instruments::ActiveJob::Callbacks)
+    end
+
+    # Setup development adapter slots — aliases :logs and :errors_tracker to
+    # the DevLog instance unless the user has already configured those slots.
+    # Also updates fallback_adapters when still at the default [:stdout].
+    #
+    # @param dev_log [E11y::Adapters::DevLog] The DevLog instance to alias
+    # @return [void]
+    def self.setup_development_adapters(dev_log)
+      E11y.configure do |config|
+        config.register_adapter :dev_log, dev_log
+        config.adapters[:logs]           ||= dev_log
+        config.adapters[:errors_tracker] ||= dev_log
+        config.fallback_adapters = [:dev_log] if config.fallback_adapters == [:stdout]
+      end
     end
   end
 end

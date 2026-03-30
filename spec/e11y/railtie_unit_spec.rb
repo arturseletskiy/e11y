@@ -364,4 +364,51 @@ RSpec.describe "E11y::Railtie Logic" do # rubocop:todo RSpec/DescribeClass
       expect(result).to eq("rails_app")
     end
   end
+
+  describe ".setup_development_adapters" do
+    let(:dev_log) { instance_double(E11y::Adapters::DevLog) }
+
+    before { E11y.reset! }
+
+    it "registers :dev_log adapter" do
+      E11y::Railtie.setup_development_adapters(dev_log)
+      expect(E11y.config.adapters[:dev_log]).to eq(dev_log)
+    end
+
+    it "aliases :logs slot to dev_log when unset" do
+      E11y::Railtie.setup_development_adapters(dev_log)
+      expect(E11y.config.adapters[:logs]).to eq(dev_log)
+    end
+
+    it "aliases :errors_tracker slot to dev_log when unset" do
+      E11y::Railtie.setup_development_adapters(dev_log)
+      expect(E11y.config.adapters[:errors_tracker]).to eq(dev_log)
+    end
+
+    it "does not overwrite :logs if already set by user" do
+      custom = double("custom_logs_adapter")
+      E11y.configure { |c| c.adapters[:logs] = custom }
+      E11y::Railtie.setup_development_adapters(dev_log)
+      expect(E11y.config.adapters[:logs]).to eq(custom)
+    end
+
+    it "does not overwrite :errors_tracker if already set by user" do
+      custom = double("custom_errors_adapter")
+      E11y.configure { |c| c.adapters[:errors_tracker] = custom }
+      E11y::Railtie.setup_development_adapters(dev_log)
+      expect(E11y.config.adapters[:errors_tracker]).to eq(custom)
+    end
+
+    it "sets fallback_adapters to [:dev_log] when still at default [:stdout]" do
+      expect(E11y.config.fallback_adapters).to eq([:stdout])
+      E11y::Railtie.setup_development_adapters(dev_log)
+      expect(E11y.config.fallback_adapters).to eq([:dev_log])
+    end
+
+    it "does not overwrite fallback_adapters when user changed it" do
+      E11y.configure { |c| c.fallback_adapters = [:loki] }
+      E11y::Railtie.setup_development_adapters(dev_log)
+      expect(E11y.config.fallback_adapters).to eq([:loki])
+    end
+  end
 end

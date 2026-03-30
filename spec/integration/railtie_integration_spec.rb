@@ -54,4 +54,66 @@ RSpec.describe "E11y Railtie Integration", :integration, type: :integration do
       expect(ActiveJob::Base.included_modules.map(&:name)).to include("E11y::Instruments::ActiveJob::Callbacks")
     end
   end
+
+  describe "development DevLog slot aliasing" do
+    # Simulate what the railtie does in development: alias :logs/:errors_tracker
+    # to the DevLog instance. Integration tests run in test env, so we invoke
+    # the class method directly rather than relying on the railtie initializer.
+    let(:tmp_file) { Tempfile.new(["e11y_test", ".jsonl"]) }
+    let(:tmp_path) { tmp_file.path }
+    let(:dev_log) do
+      E11y::Adapters::DevLog.new(path: tmp_path, enable_watcher: false)
+    end
+
+    before do
+      @saved_adapters = E11y.configuration.adapters.dup
+      @saved_fallback = E11y.configuration.fallback_adapters.dup
+      E11y.configuration.adapters.delete(:dev_log)
+      E11y.configuration.adapters.delete(:logs)
+      E11y.configuration.adapters.delete(:errors_tracker)
+      E11y.configuration.fallback_adapters = [:stdout]
+      E11y::Railtie.setup_development_adapters(dev_log)
+    end
+
+    after do
+      # rubocop:disable RSpec/InstanceVariable
+      E11y.configuration.adapters = @saved_adapters
+      E11y.configuration.fallback_adapters = @saved_fallback
+      # rubocop:enable RSpec/InstanceVariable
+      tmp_file.close
+      tmp_file.unlink
+    end
+
+    it "routes events with adapters: [:logs] to DevLog" do
+      E11y::Event::Base.track(
+        event_name: "test.routing",
+        adapters: [:logs],
+        severity: :info,
+        payload: { msg: "hello" }
+      )
+      content = File.read(tmp_path)
+      expect(content).to include("test.routing")
+    end
+
+    it "routes events with adapters: [:logs, :errors_tracker] to DevLog" do
+      E11y::Event::Base.track(
+        event_name: "test.error_routing",
+        adapters: %i[logs errors_tracker],
+        severity: :error,
+        payload: { msg: "boom" }
+      )
+      content = File.read(tmp_path)
+      expect(content).to include("test.error_routing")
+    end
+
+    it "routes unrouted events to DevLog via fallback" do
+      E11y::Event::Base.track(
+        event_name: "test.fallback",
+        severity: :info,
+        payload: { msg: "fallback" }
+      )
+      content = File.read(tmp_path)
+      expect(content).to include("test.fallback")
+    end
+  end
 end
