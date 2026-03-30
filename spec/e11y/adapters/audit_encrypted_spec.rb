@@ -166,6 +166,44 @@ RSpec.describe E11y::Adapters::AuditEncrypted do
       end.to raise_error(E11y::Error, /must be 32 bytes/)
     end
 
+    it "accepts 64-char hex string as explicit encryption_key (openssl rand -hex 32 format)" do
+      key_hex = encryption_key.unpack1("H*")
+      expect do
+        described_class.new(
+          storage_path: temp_dir,
+          encryption_key: key_hex
+        )
+      end.not_to raise_error
+    end
+
+    it "encrypts and decrypts correctly when explicit encryption_key is a 64-char hex string" do
+      key_hex = encryption_key.unpack1("H*")
+      adapter_hex = described_class.new(storage_path: temp_dir, encryption_key: key_hex)
+      adapter_raw = described_class.new(storage_path: temp_dir, encryption_key: encryption_key)
+
+      event_data = {
+        event_name: "Events::Test",
+        payload: { data: "hex_key_roundtrip" },
+        timestamp: Time.now.utc.iso8601(6),
+        version: 1
+      }
+
+      adapter_hex.write(event_data)
+      event_id = File.basename(Dir.glob(File.join(temp_dir, "*.enc")).first)
+      decrypted = adapter_raw.read(event_id)
+      expect(decrypted[:payload][:data]).to eq("hex_key_roundtrip")
+    end
+
+    it "raises for a 64-char non-hex string passed as explicit encryption_key" do
+      non_hex_string = "z" * 64
+      expect do
+        described_class.new(
+          storage_path: temp_dir,
+          encryption_key: non_hex_string
+        )
+      end.to raise_error(E11y::Error, /must be 32 bytes/)
+    end
+
     it "creates storage directory if not exists" do
       new_dir = File.join(temp_dir, "new_audit_dir")
       expect(Dir.exist?(new_dir)).to be false
