@@ -244,6 +244,16 @@ RSpec.describe E11y::Adapters::AuditEncrypted do
       end
     end
 
+    it "does not raise in production when SECRET_KEY_BASE_DUMMY is set (build mode)" do
+      ClimateControl.modify(E11Y_AUDIT_ENCRYPTION_KEY: nil, SECRET_KEY_BASE_DUMMY: "1") do
+        stub_const("Rails", double(root: temp_dir, env: double(production?: true)))
+
+        expect do
+          described_class.new(storage_path: temp_dir, encryption_key: nil)
+        end.not_to raise_error
+      end
+    end
+
     it "raises error in production without encryption key" do
       ClimateControl.modify E11Y_AUDIT_ENCRYPTION_KEY: nil do
         stub_const("Rails", double(root: temp_dir, env: double(production?: true)))

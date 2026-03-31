@@ -347,6 +347,57 @@ If you see no events in Sentry, check:
 2. Adapter is healthy: `E11y.configuration.adapters[:sentry].healthy?`
 3. Boot logs for `[E11y] Sentry adapter: no DSN configured` warning
 
+
+### Docker / Kamal / CI — building images without secrets
+
+Rails/Kamal Docker builds typically run:
+
+```
+SECRET_KEY_BASE_DUMMY=1 RAILS_ENV=production rails assets:precompile
+```
+
+In this mode `Rails.application.credentials` is unavailable. E11y detects this automatically
+via `E11y.build_mode?` and skips all instrumentation setup (middleware, Sidekiq hooks, etc.),
+so the build succeeds with zero configuration.
+
+**`AuditEncrypted` adapter** also skips the missing-key error during builds and falls back to
+a development key — it will raise normally when the app boots for real without `E11Y_AUDIT_ENCRYPTION_KEY`.
+
+If your initializer reads credentials directly, wrap it:
+
+```ruby
+# config/initializers/e11y.rb
+unless E11y.build_mode?
+  E11y.configure do |config|
+    config.adapters[:errors_tracker] = E11y::Adapters::Sentry.new(
+      dsn: Rails.application.credentials.sentry_dsn!,
+      required: true
+    )
+    config.adapters[:audit] = E11y::Adapters::AuditEncrypted.new(
+      encryption_key: Rails.application.credentials.e11y_audit_key!,
+      storage_path: Rails.root.join("log", "audit")
+    )
+  end
+end
+```
+
+Adapters that read secrets from **`ENV`** (not credentials) work without any guard:
+
+```ruby
+E11y.configure do |config|
+  config.adapters[:errors_tracker] = E11y::Adapters::Sentry.new(dsn: ENV["SENTRY_DSN"])
+end
+```
+
+| Adapter | Secret source | Needs `build_mode?` guard? |
+|---------|--------------|---------------------------|
+| `Sentry` | `ENV["SENTRY_DSN"]` | No — inactive with warning if DSN absent |
+| `Sentry` | `credentials.sentry_dsn` | **Yes** — credentials unavailable at build time |
+| `AuditEncrypted` | `ENV["E11Y_AUDIT_ENCRYPTION_KEY"]` | No — handled automatically |
+| `AuditEncrypted` | `credentials.e11y_audit_key` | **Yes** |
+| `Loki`, `OTelLogs`, others | `ENV[...]` | No |
+| `Loki`, `OTelLogs`, others | `credentials.*` | **Yes** |
+
 ### Buffer flush — manual trigger
 
 `EphemeralBuffer.flush_on_error` is a public method — you can call it directly in custom

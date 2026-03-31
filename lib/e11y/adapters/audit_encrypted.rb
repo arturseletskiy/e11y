@@ -255,8 +255,10 @@ module E11y
         env_key = ENV.fetch("E11Y_AUDIT_ENCRYPTION_KEY", nil)
         return normalize_key(env_key) if env_key
 
-        # In production without ENV var, raise a clear error
-        if defined?(::Rails) && ::Rails.env.production?
+        # In production without ENV var, raise a clear error.
+        # Exception: asset precompile / image build (SECRET_KEY_BASE_DUMMY=1) —
+        # secrets are unavailable by design; skip and use dev key.
+        if defined?(::Rails) && ::Rails.env.production? && !E11y.build_mode?
           raise E11y::Error,
                 "E11Y_AUDIT_ENCRYPTION_KEY must be set in production. " \
                 "Generate with: openssl rand -hex 32"

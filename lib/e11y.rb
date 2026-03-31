@@ -199,6 +199,31 @@ module E11y
       Registry.instance
     end
 
+    # Returns true when Rails is booting in asset-precompile / image-build mode.
+    #
+    # During `RAILS_ENV=production SECRET_KEY_BASE_DUMMY=1 rails assets:precompile`
+    # (the standard Kamal / Docker build pattern) encrypted credentials and most
+    # runtime secrets are unavailable. E11y detects this automatically and skips
+    # adapter instrumentation so the build succeeds without secrets.
+    #
+    # Use this predicate to guard initializer code that accesses credentials:
+    #
+    # @example
+    #   # config/initializers/e11y.rb
+    #   unless E11y.build_mode?
+    #     E11y.configure do |config|
+    #       config.adapters[:errors_tracker] = E11y::Adapters::Sentry.new(
+    #         dsn: Rails.application.credentials.sentry_dsn,
+    #         required: true
+    #       )
+    #     end
+    #   end
+    #
+    # @return [Boolean]
+    def build_mode?
+      !ENV["SECRET_KEY_BASE_DUMMY"].to_s.strip.empty?
+    end
+
     # Reset configuration (primarily for testing)
     #
     # @return [void]
