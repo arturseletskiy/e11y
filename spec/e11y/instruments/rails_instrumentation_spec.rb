@@ -257,12 +257,12 @@ RSpec.describe E11y::Instruments::RailsInstrumentation do
       finish_time = start_time + 0.001
       payload = { key: "users/1", hit: true, super_operation: :fetch }
 
-      expect {
+      expect do
         described_class.track_rails_event(
           "cache_read.active_support", start_time, finish_time, payload,
           "E11y::Events::Rails::Cache::Read"
         )
-      }.not_to output(/Validation failed.*super_operation/).to_stderr
+      end.not_to output(/Validation failed.*super_operation/).to_stderr
     end
   end
 
