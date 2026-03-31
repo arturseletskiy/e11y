@@ -63,6 +63,7 @@ module E11y
 
     # Setup instrumentation after Rails initialization
     initializer "e11y.setup_instrumentation", after: :load_config_initializers do
+      next if E11y.build_mode?
       next unless E11y.config.enabled
 
       # Setup instruments (each can be enabled/disabled separately)
@@ -74,6 +75,7 @@ module E11y
 
     # Outgoing HTTP trace propagation (UC-009)
     initializer "e11y.http_tracing", after: :load_config_initializers do
+      next if E11y.build_mode?
       next unless E11y.configuration.enable_http_tracing
 
       E11y::Tracing.patch_net_http!
@@ -108,6 +110,7 @@ module E11y
 
     # Middleware insertion
     initializer "e11y.middleware" do |app|
+      next if E11y.build_mode?
       next unless E11y.config.enabled
 
       # Insert E11y request middleware before Rails logger

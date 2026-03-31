@@ -266,4 +266,39 @@ RSpec.describe E11y, "module API" do
       described_class.trace(event_class, id: "1")
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # .build_mode?
+  # ---------------------------------------------------------------------------
+  describe ".build_mode?" do
+    context "when SECRET_KEY_BASE_DUMMY is set" do
+      it "returns true for value '1'" do
+        ClimateControl.modify(SECRET_KEY_BASE_DUMMY: "1") do
+          expect(described_class.build_mode?).to be(true)
+        end
+      end
+
+      it "returns true for any non-empty value" do
+        ClimateControl.modify(SECRET_KEY_BASE_DUMMY: "true") do
+          expect(described_class.build_mode?).to be(true)
+        end
+      end
+    end
+
+    context "when SECRET_KEY_BASE_DUMMY is absent" do
+      it "returns false" do
+        ClimateControl.modify(SECRET_KEY_BASE_DUMMY: nil) do
+          expect(described_class.build_mode?).to be(false)
+        end
+      end
+    end
+
+    context "when SECRET_KEY_BASE_DUMMY is blank string" do
+      it "returns false" do
+        ClimateControl.modify(SECRET_KEY_BASE_DUMMY: " ") do
+          expect(described_class.build_mode?).to be(false)
+        end
+      end
+    end
+  end
 end
