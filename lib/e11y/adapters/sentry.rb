@@ -65,10 +65,10 @@ module E11y
 
         super
 
-        if @dsn && !@dsn.strip.empty?
-          initialize_sentry!
-          @active = true
-        end
+        return unless @dsn && !@dsn.strip.empty?
+
+        initialize_sentry!
+        @active = true
       end
 
       # Write event to Sentry
@@ -119,12 +119,11 @@ module E11y
       # Validate configuration
       def validate_config!
         if @dsn.nil? || @dsn.strip.empty?
-          if @required
-            raise ArgumentError, "Sentry adapter requires :dsn (required: true is set)"
-          else
-            warn "[E11y] Sentry adapter: no DSN configured — adapter inactive. " \
-                 "Pass required: true to enforce DSN in production."
-          end
+          raise ArgumentError, "Sentry adapter requires :dsn (required: true is set)" if @required
+
+          warn "[E11y] Sentry adapter: no DSN configured — adapter inactive. " \
+               "Pass required: true to enforce DSN in production."
+
           return
         end
 
