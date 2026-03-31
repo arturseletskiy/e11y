@@ -89,7 +89,7 @@ module E11y
 
       def self.track_rails_event(name, start, finish, payload, e11y_event_class_name)
         duration = (finish - start) * 1000
-        extracted_payload = extract_job_info_from_object(payload)
+        extracted_payload = coerce_symbol_values(extract_job_info_from_object(payload))
 
         # perform.active_job: route to Failed when job raised exception
         if name == "perform.active_job" && job_failed?(payload)
@@ -173,6 +173,18 @@ module E11y
         result[:queue] ||= job.queue_name
 
         result
+      end
+
+      # Coerce Symbol values in ASN payload to String
+      #
+      # Rails ActiveSupport::Notifications payloads sometimes pass values as Symbols
+      # (e.g., super_operation: :fetch for cache events), but E11y schemas declare
+      # these fields as :string. dry-schema does not coerce Symbol → String automatically.
+      #
+      # @param payload [Hash] Raw ASN payload
+      # @return [Hash] Payload with Symbol values converted to String
+      def self.coerce_symbol_values(payload)
+        payload.transform_values { |v| v.is_a?(Symbol) ? v.to_s : v }
       end
 
       # Resolve event class from string name

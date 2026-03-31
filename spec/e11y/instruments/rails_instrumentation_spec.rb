@@ -231,6 +231,36 @@ RSpec.describe E11y::Instruments::RailsInstrumentation do
     end
   end
 
+  describe ".coerce_symbol_values" do
+    it "converts Symbol values to String" do
+      payload = { super_operation: :fetch, key: "users/1" }
+      result = described_class.coerce_symbol_values(payload)
+      expect(result[:super_operation]).to eq("fetch")
+      expect(result[:key]).to eq("users/1")
+    end
+
+    it "leaves non-Symbol values unchanged" do
+      payload = { count: 42, hit: true, key: nil }
+      result = described_class.coerce_symbol_values(payload)
+      expect(result).to eq(payload)
+    end
+  end
+
+  describe "cache_read.active_support with Symbol super_operation (regression BUG-005)" do
+    it "does not raise validation error when Rails passes super_operation as Symbol" do
+      start_time = Time.now
+      finish_time = start_time + 0.001
+      payload = { key: "users/1", hit: true, super_operation: :fetch }
+
+      expect {
+        described_class.track_rails_event(
+          "cache_read.active_support", start_time, finish_time, payload,
+          "E11y::Events::Rails::Cache::Read"
+        )
+      }.not_to output(/Validation failed.*super_operation/).to_stderr
+    end
+  end
+
   describe ".resolve_event_class" do
     it "resolves existing constant" do
       stub_const("TestEventClass", Class.new)
