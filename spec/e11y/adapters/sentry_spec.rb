@@ -173,8 +173,47 @@ RSpec.describe E11y::Adapters::Sentry do
   end
 
   describe "Configuration" do
-    it "requires :dsn parameter" do
-      expect { described_class.new({}) }.to raise_error(ArgumentError, /requires :dsn/)
+    describe "when DSN is absent" do
+      before do
+        allow(Sentry).to receive(:initialized?).and_return(false)
+      end
+
+      it "raises ArgumentError when required: true" do
+        expect { described_class.new(required: true) }
+          .to raise_error(ArgumentError, /requires :dsn/)
+      end
+
+      it "does not raise when required: false (default)" do
+        expect { described_class.new({}) }.not_to raise_error
+      end
+
+      it "emits a warning to stderr when DSN is absent" do
+        expect { described_class.new({}) }
+          .to output(/Sentry adapter: no DSN configured/).to_stderr
+      end
+
+      it "write is a no-op returning true" do
+        adapter = described_class.new({})
+        expect(Sentry).not_to receive(:capture_message)
+        expect(Sentry).not_to receive(:capture_exception)
+        expect(Sentry).not_to receive(:add_breadcrumb)
+        expect(adapter.write(error_event)).to be true
+      end
+
+      it "healthy? returns false" do
+        adapter = described_class.new({})
+        expect(adapter.healthy?).to be false
+      end
+
+      it "treats empty string DSN as absent" do
+        expect { described_class.new(dsn: "") }
+          .to output(/Sentry adapter: no DSN configured/).to_stderr
+      end
+
+      it "treats whitespace-only DSN as absent" do
+        expect { described_class.new(dsn: "   ") }
+          .to output(/Sentry adapter: no DSN configured/).to_stderr
+      end
     end
 
     it "validates severity_threshold" do
