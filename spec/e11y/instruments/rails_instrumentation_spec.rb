@@ -27,6 +27,11 @@ RSpec.describe E11y::Instruments::RailsInstrumentation do
         .to eq("E11y::Events::Rails::Http::Request")
     end
 
+    it "includes start_processing mapping" do
+      expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["start_processing.action_controller"])
+        .to eq("E11y::Events::Rails::Http::StartProcessing")
+    end
+
     it "includes view rendering mapping" do
       expect(described_class::DEFAULT_RAILS_EVENT_MAPPING["render_template.action_view"]).to eq("E11y::Events::Rails::View::Render")
     end

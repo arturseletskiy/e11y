@@ -30,6 +30,7 @@ module E11y
       # @return [Hash<String, Class>] Event mappings
       DEFAULT_RAILS_EVENT_MAPPING = {
         "sql.active_record" => "E11y::Events::Rails::Database::Query",
+        "start_processing.action_controller" => "E11y::Events::Rails::Http::StartProcessing",
         "process_action.action_controller" => "E11y::Events::Rails::Http::Request",
         "render_template.action_view" => "E11y::Events::Rails::View::Render",
         "send_file.action_controller" => "E11y::Events::Rails::Http::SendFile",

@@ -90,5 +90,20 @@ RSpec.describe "E11y::Events::Rails::Http" do
       expect(result).to be_a(Hash)
       expect(result[:payload][:controller]).to eq("HomeController")
     end
+
+    it "accepts Symbol format as passed by Rails (regression)" do
+      # Rails passes format as Symbol (request.format.ref => :html)
+      # coerce_symbol_values in RailsInstrumentation converts it before schema validation
+      result = described_class.track(
+        event_name: "start_processing.action_controller",
+        duration: 0.5,
+        controller: "HomeController",
+        action: "index",
+        method: "GET",
+        path: "/",
+        format: :html
+      )
+      expect(result).to be_a(Hash)
+    end
   end
 end
