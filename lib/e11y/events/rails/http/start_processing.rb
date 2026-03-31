@@ -11,11 +11,13 @@ module E11y
         # @see https://guides.rubyonrails.org/active_support_instrumentation.html#start-processing-action-controller
         class StartProcessing < E11y::Event::Base
           schema do
+            required(:event_name).filled(:string)
+            required(:duration).filled(:float)
             required(:controller).filled(:string)
             required(:action).filled(:string)
             required(:method).filled(:string)
             required(:path).filled(:string)
-            required(:format).filled(:string)
+            optional(:format) # Rails passes Symbol (e.g., :html, :json) — coerced by RailsInstrumentation
           end
 
           severity :debug
