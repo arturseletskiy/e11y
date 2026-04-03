@@ -54,5 +54,46 @@ RSpec.describe E11y::Middleware::DevLogSource do
       expect(status).to eq(200)
       expect(body).to eq(["OK"])
     end
+
+    it "sets http_method on Thread.current before calling inner app" do
+      seen_method = nil
+      app_with_spy = lambda do |_e|
+        seen_method = Thread.current[:e11y_http_method]
+        [200, {}, []]
+      end
+      described_class.new(app_with_spy).call(Rack::MockRequest.env_for("/users?page=2", method: "GET"))
+      expect(seen_method).to eq("GET")
+    end
+
+    it "sets http_path from PATH_INFO before calling inner app" do
+      seen_path = nil
+      app_with_spy = lambda do |_e|
+        seen_path = Thread.current[:e11y_http_path]
+        [200, {}, []]
+      end
+      described_class.new(app_with_spy).call(Rack::MockRequest.env_for("/users?page=2", method: "GET"))
+      expect(seen_path).to eq("/users")
+    end
+
+    it "clears all http Thread.current keys after call" do
+      middleware.call(env_for)
+      expect(Thread.current[:e11y_http_method]).to be_nil
+      expect(Thread.current[:e11y_http_path]).to be_nil
+      expect(Thread.current[:e11y_http_status]).to be_nil
+      expect(Thread.current[:e11y_http_duration_ms]).to be_nil
+      expect(Thread.current[:e11y_source]).to be_nil
+    end
+
+    it "clears Thread.current keys even when app raises" do
+      raising_app = ->(_e) { raise "boom" }
+      expect { described_class.new(raising_app).call(env_for) }.to raise_error("boom")
+      expect(Thread.current[:e11y_http_method]).to be_nil
+      expect(Thread.current[:e11y_http_status]).to be_nil
+      expect(Thread.current[:e11y_http_duration_ms]).to be_nil
+    end
+
+    it "does not raise when inner app responds normally" do
+      expect { middleware.call(env_for) }.not_to raise_error
+    end
   end
 end

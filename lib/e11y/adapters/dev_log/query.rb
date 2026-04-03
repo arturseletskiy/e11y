@@ -18,7 +18,8 @@ module E11y
       # rubocop:disable Metrics/ClassLength
       class Query
         # Value object returned by #interactions
-        Interaction = Struct.new(:started_at, :trace_ids, :has_error?, :source) do
+        Interaction = Struct.new(:started_at, :trace_ids, :has_error?, :source,
+                                 :http_method, :http_path, :http_status, :duration_ms) do
           def traces_count = trace_ids.size
         end
 
@@ -112,6 +113,7 @@ module E11y
           trace_map
         end
 
+        # rubocop:disable Metrics/AbcSize -- trace rollup + optional HTTP fields from metadata
         def merge_trace_entry(trace_map, event)
           tid = event["trace_id"]
           return unless tid
@@ -119,11 +121,23 @@ module E11y
           started = parse_started_at(event)
           return unless started
 
-          entry = trace_map[tid] ||= { started_at: started, has_error: false,
-                                       source: event.dig("metadata", "source") }
+          entry = trace_map[tid] ||= {
+            started_at: started,
+            has_error: false,
+            source: event.dig("metadata", "source"),
+            http_method: event.dig("metadata", "http_method"),
+            http_path: event.dig("metadata", "http_path"),
+            http_status: event.dig("metadata", "http_status"),
+            duration_ms: event.dig("metadata", "duration_ms")
+          }
           entry[:has_error] = true if ERROR_SEVERITIES.include?(event["severity"])
           entry[:started_at] = started if started < entry[:started_at]
+          entry[:http_method] ||= event.dig("metadata", "http_method")
+          entry[:http_path]   ||= event.dig("metadata", "http_path")
+          entry[:http_status] ||= event.dig("metadata", "http_status")
+          entry[:duration_ms] ||= event.dig("metadata", "duration_ms")
         end
+        # rubocop:enable Metrics/AbcSize
 
         def build_interaction_groups(trace_map, window_ms:, limit:)
           sorted = trace_map.sort_by { |_, v| v[:started_at] }
@@ -137,24 +151,42 @@ module E11y
           groups.last(limit).map { |grp| interaction_struct(grp) }
         end
 
+        # rubocop:disable Metrics/AbcSize, Metrics/MethodLength -- window grouping + HTTP carry-over
         def append_to_groups(groups, current, trace_id, meta, window_ms)
           if current.nil? || new_window?(current, meta, window_ms)
-            current = { started_at: meta[:started_at], last_started_at: meta[:started_at],
-                        trace_ids: [], has_error: false, source: meta[:source] }
+            current = {
+              started_at: meta[:started_at],
+              last_started_at: meta[:started_at],
+              trace_ids: [],
+              has_error: false,
+              source: meta[:source],
+              http_method: meta[:http_method],
+              http_path: meta[:http_path],
+              http_status: meta[:http_status],
+              duration_ms: meta[:duration_ms]
+            }
             groups << current
           end
           current[:trace_ids] << trace_id
           current[:has_error] ||= meta[:has_error]
           current[:last_started_at] = meta[:started_at]
+          current[:http_method] ||= meta[:http_method]
+          current[:http_path]   ||= meta[:http_path]
+          current[:http_status] ||= meta[:http_status]
+          current[:duration_ms] ||= meta[:duration_ms]
           current
         end
+        # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
         def new_window?(current, meta, window_ms)
           (meta[:started_at] - current[:last_started_at]) * 1000 > window_ms
         end
 
         def interaction_struct(grp)
-          Interaction.new(grp[:started_at], grp[:trace_ids], grp[:has_error], grp[:source])
+          Interaction.new(
+            grp[:started_at], grp[:trace_ids], grp[:has_error], grp[:source],
+            grp[:http_method], grp[:http_path], grp[:http_status], grp[:duration_ms]
+          )
         end
 
         # --- cache helpers ---
