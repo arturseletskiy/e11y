@@ -7,7 +7,8 @@
   import RecentHistogram from "./components/RecentHistogram.svelte"
   import { fetchInteractions, fetchRecent, fetchTraceEvents } from "./lib/api"
   import { eventKey } from "./lib/eventIdentity"
-  import { formatInteractionStarted, summarizeTraceIds } from "./lib/format"
+  import { formatInteractionStarted, summarizeTraceIds, formatDeltaMs } from "./lib/format"
+  import { onMount } from "svelte"
   import { filterEventList, type ListSeverityFilter } from "./lib/listFilter"
   import { buildRecentVolumeBuckets, eventTimestampMs, type HistogramTimeRange } from "./lib/recentVolume"
   import type { OverlayRoute, SourceFilter } from "./lib/router"
@@ -51,8 +52,52 @@
   let savedTheme = $state("system")
   let systemTheme = $state("dark")
 
-  const POLL_MS = 2000
+  const SESSION_KEY = "e11y_panel_state"
+
+  interface PersistedState {
+    route: OverlayRoute
+    globalSearch: string
+    globalSeverity: ListSeverityFilter
+    source: SourceFilter
+  }
+
+  function saveState(): void {
+    try {
+      const s: PersistedState = {
+        route,
+        globalSearch,
+        globalSeverity,
+        source
+      }
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(s))
+    } catch {
+      /* ignore quota/security errors */
+    }
+  }
+
+  function loadState(): Partial<PersistedState> {
+    try {
+      const raw = sessionStorage.getItem(SESSION_KEY)
+      if (!raw) return {}
+      return JSON.parse(raw) as Partial<PersistedState>
+    } catch {
+      return {}
+    }
+  }
+
+  onMount(() => {
+    const s = loadState()
+    if (s.globalSearch) globalSearch = s.globalSearch
+    if (s.globalSeverity) globalSeverity = s.globalSeverity
+    if (s.source) source = s.source
+    if (s.route && s.route.screen !== "events" && s.route.screen !== "detail") {
+      route = s.route
+    }
+  })
+
   const PULSE_MS = 3000
+
+  let pollMs = $state(5000)
 
   let problemEvents = $derived.by(() =>
     recentEvents.filter((e) => e.severity === "error" || e.severity === "fatal")
@@ -312,6 +357,12 @@
   }
 
   function fabClick(e: MouseEvent): void {
+    if (e.shiftKey) {
+      const tid = (window as unknown as Record<string, unknown>).__E11Y_TRACE_ID__ as string | undefined
+      if (tid) void copyText(tid)
+      return
+    }
+
     const el = e.currentTarget
     if (panelOpen) {
       if (el instanceof HTMLButtonElement) panelCircleOrigin = originFromFabButton(el)
@@ -325,6 +376,15 @@
     }
     panelOpen = true
     splitSelectedKey = null
+
+    const currentTraceId = (window as unknown as Record<string, unknown>).__E11Y_TRACE_ID__ as
+      | string
+      | undefined
+    if (currentTraceId) {
+      void openCurrentTrace(currentTraceId)
+      return
+    }
+
     const { err } = countsFromRecent(recentEvents)
     if (err > 0) {
       route = { screen: "problems" }
@@ -333,6 +393,17 @@
       route = { screen: "interactions" }
     }
     void loadInteractionsList()
+  }
+
+  async function openCurrentTrace(traceId: string): Promise<void> {
+    try {
+      events = await fetchTraceEvents(traceId)
+      route = { screen: "events", traceId }
+    } catch {
+      histogramTimeRange = null
+      route = { screen: "interactions" }
+      void loadInteractionsList()
+    }
   }
 
   async function copyText(text: string): Promise<void> {
@@ -391,7 +462,7 @@
 
   let panelTitle = $derived.by(() => {
     if (route.screen === "problems") return "e11y — problems"
-    if (route.screen === "interactions") return "e11y — interactions"
+    if (route.screen === "interactions") return "e11y — requests"
     if (route.screen === "events") return `e11y — trace ${route.traceId}`
     if (route.screen === "detail") return `e11y — ${String(route.event.event_name ?? "event")}`
     return "e11y"
@@ -456,10 +527,62 @@
     return "e11y-pill"
   }
 
+  function httpSummary(row: Record<string, unknown>): string {
+    const method = row.method ? String(row.method) : null
+    const path = row.path ? String(row.path) : null
+    const status = row.status ? Number(row.status) : null
+    const dur = row.duration_ms != null ? `${row.duration_ms}ms` : null
+
+    const parts: string[] = []
+    if (method && path) parts.push(`${method} ${path}`)
+    else if (path) parts.push(path)
+    if (status) parts.push(String(status))
+    if (dur) parts.push(dur)
+    return parts.join(" · ")
+  }
+
+  function statusClass(row: Record<string, unknown>): string {
+    const s = Number(row.status) || 0
+    if (s >= 500) return "e11y-http-status--5xx"
+    if (s >= 400) return "e11y-http-status--4xx"
+    if (s >= 200) return "e11y-http-status--2xx"
+    return ""
+  }
+
   $effect(() => {
-    const id = setInterval(() => void pollRecent(), POLL_MS)
+    pollMs = panelOpen ? 500 : 5000
+  })
+
+  $effect(() => {
+    const ms = pollMs
+    let id: ReturnType<typeof setInterval> | undefined
+
+    function schedule(): void {
+      clearInterval(id)
+      id = setInterval(() => void pollRecent(), ms)
+    }
+
+    function onVisibilityChange(): void {
+      clearInterval(id)
+      if (document.hidden) return
+      schedule()
+    }
+
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    if (!document.hidden) schedule()
     void pollRecent()
-    return () => clearInterval(id)
+
+    return () => {
+      clearInterval(id)
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+    }
+  })
+
+  $effect(() => {
+    globalSearch
+    globalSeverity
+    source
+    if (panelOpen) saveState()
   })
 
   $effect(() => {
@@ -496,7 +619,10 @@
 
   <FullscreenPanel
     open={panelOpen}
-    onclose={() => (panelOpen = false)}
+    onclose={() => {
+      saveState()
+      panelOpen = false
+    }}
     origin={panelCircleOrigin}
   >
     {#snippet headerTopLeft()}
@@ -533,7 +659,7 @@
             aria-selected={tabInteractionsActive}
             onclick={goTabInteractions}
           >
-            Interactions
+            Requests
           </button>
         </div>
 
@@ -611,7 +737,7 @@
         <p class="e11y-problems-hint">Recent error / fatal events from the dev log (newest first).</p>
         {#if problemEvents.length === 0}
           <p class="e11y-muted e11y-empty">No errors in the recent buffer.</p>
-          <button type="button" class="e11y-btn" onclick={goTabInteractions}>Open interactions</button>
+          <button type="button" class="e11y-btn" onclick={goTabInteractions}>Open requests</button>
         {:else if filteredProblemEvents.length === 0}
           <p class="e11y-muted e11y-empty">
             {#if histogramTimeRange && !globalSearch.trim()}
@@ -663,9 +789,9 @@
           <div class="grid grid-cols-1 md:grid-cols-[1fr_1.15fr] gap-4 items-start min-h-[min(60vh,520px)]">
             <div class="min-h-[120px] max-h-[min(65vh,560px)] overflow-y-auto pr-1">
               {#if interactions.length === 0}
-                <p class="e11y-muted e11y-empty">No interactions recorded yet.</p>
+                <p class="e11y-muted e11y-empty">No requests recorded yet.</p>
               {:else if filteredInteractions.length === 0}
-                <p class="e11y-muted e11y-empty">No interactions in the selected time range.</p>
+                <p class="e11y-muted e11y-empty">No requests in the selected time range.</p>
               {:else}
                 {#each filteredInteractions as row (interactionRowKey(row))}
                 {@const ids = (row.trace_ids as string[] | undefined) ?? []}
@@ -691,6 +817,9 @@
                         <span class="e11y-ix-time-rel">{relative}</span>
                       {/if}
                     </div>
+                    {#if httpSummary(row)}
+                      <div class="e11y-ix-http {statusClass(row)}">{httpSummary(row)}</div>
+                    {/if}
                     <div class="e11y-ix-trace-line">
                       <code class="e11y-ix-trace-primary">{primary}</code>
                       {#if extra > 0}
@@ -718,9 +847,14 @@
               {:else if filteredTraceEvents.length === 0}
                 <p class="e11y-muted e11y-split-placeholder">No events match the current filter.</p>
               {:else}
+                {@const baselineTsSplit = filteredTraceEvents[0]
+                  ? String(filteredTraceEvents[0].timestamp ?? "")
+                  : ""}
                 {#each filteredTraceEvents as ev, j (eventKey(ev, j))}
                   {@const ek = eventKey(ev, j)}
                   {@const sum = payloadSummary(ev)}
+                  {@const deltaSplit =
+                    j > 0 ? formatDeltaMs(String(ev.timestamp ?? ""), baselineTsSplit) : null}
                   <div
                     class="flex flex-wrap gap-3 items-baseline p-2.5 rounded-md cursor-pointer border border-transparent hover:bg-e11y-hover hover:border-e11y-border-hover transition-colors focus-visible:outline-2 focus-visible:outline-e11y-accent focus-visible:outline-offset-2 {isContextNeighbor(j)
                       ? 'border-[color:var(--e11y-accent-border)] shadow-[inset_3px_0_0_var(--e11y-accent)] bg-e11y-accent-bg'
@@ -740,6 +874,9 @@
                     >
                     <span class="e11y-sev {sevClass(ev.severity)}">{String(ev.severity ?? "?")}</span>
                     <span class="e11y-row-title">{String(ev.event_name ?? "")}</span>
+                    {#if deltaSplit}
+                      <span class="e11y-row-delta">{deltaSplit}</span>
+                    {/if}
                     <span class="e11y-row-meta">{String(ev.timestamp ?? "")}</span>
                     {#if rowExpanded[ek]}
                       <div class="e11y-row-body">
@@ -754,9 +891,9 @@
           </div>
         {:else}
           {#if interactions.length === 0}
-            <p class="e11y-muted e11y-empty">No interactions recorded yet.</p>
+            <p class="e11y-muted e11y-empty">No requests recorded yet.</p>
           {:else if filteredInteractions.length === 0}
-            <p class="e11y-muted e11y-empty">No interactions in the selected time range.</p>
+            <p class="e11y-muted e11y-empty">No requests in the selected time range.</p>
           {:else}
             {#each filteredInteractions as row (interactionRowKey(row))}
             {@const ids = (row.trace_ids as string[] | undefined) ?? []}
@@ -782,6 +919,9 @@
                     <span class="e11y-ix-time-rel">{relative}</span>
                   {/if}
                 </div>
+                {#if httpSummary(row)}
+                  <div class="e11y-ix-http {statusClass(row)}">{httpSummary(row)}</div>
+                {/if}
                 <div class="e11y-ix-trace-line">
                   <code class="e11y-ix-trace-primary" title="First trace_id">{primary}</code>
                   {#if extra > 0}
@@ -810,9 +950,14 @@
         {#if filteredTraceEvents.length === 0}
           <p class="e11y-muted e11y-empty">No events match the current filter.</p>
         {:else}
+          {@const baselineTsEvents = filteredTraceEvents[0]
+            ? String(filteredTraceEvents[0].timestamp ?? "")
+            : ""}
           {#each filteredTraceEvents as ev, i (eventKey(ev, i))}
             {@const ek = eventKey(ev, i)}
             {@const sum = payloadSummary(ev)}
+            {@const deltaEv =
+              i > 0 ? formatDeltaMs(String(ev.timestamp ?? ""), baselineTsEvents) : null}
             <div
               class="flex flex-wrap gap-3 items-baseline p-2.5 rounded-md cursor-pointer border border-transparent hover:bg-e11y-hover hover:border-e11y-border-hover transition-colors focus-visible:outline-2 focus-visible:outline-e11y-accent focus-visible:outline-offset-2 {isContextNeighbor(i)
                 ? 'border-[color:var(--e11y-accent-border)] shadow-[inset_3px_0_0_var(--e11y-accent)] bg-e11y-accent-bg'
@@ -832,6 +977,9 @@
               >
               <span class="e11y-sev {sevClass(ev.severity)}">{String(ev.severity ?? "?")}</span>
               <span class="e11y-row-title">{String(ev.event_name ?? "")}</span>
+              {#if deltaEv}
+                <span class="e11y-row-delta">{deltaEv}</span>
+              {/if}
               <span class="e11y-row-meta">{String(ev.timestamp ?? "")}</span>
               {#if rowExpanded[ek]}
                 <div class="e11y-row-body">

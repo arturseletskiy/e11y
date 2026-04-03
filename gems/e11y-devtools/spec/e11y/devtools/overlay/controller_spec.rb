@@ -68,6 +68,33 @@ RSpec.describe E11y::Devtools::Overlay::Controller do
     end
   end
 
+  describe "#v1_interactions — HTTP fields" do
+    let(:controller) { described_class.new(fake_query) }
+
+    let(:fake_query) do
+      double("query").tap do |q|
+        allow(q).to receive(:interactions).and_return([
+                                                        E11y::Adapters::DevLog::Query::Interaction.new(
+                                                          Time.parse("2026-04-03T10:00:00Z"),
+                                                          ["trace-1"],
+                                                          false,
+                                                          "web",
+                                                          "GET", "/orders", 200, 45
+                                                        )
+                                                      ])
+      end
+    end
+
+    it "includes method, path, status, duration_ms in the response hash" do
+      result = controller.v1_interactions
+      row = result.first
+      expect(row["method"]).to eq("GET")
+      expect(row["path"]).to eq("/orders")
+      expect(row["status"]).to eq(200)
+      expect(row["duration_ms"]).to eq(45)
+    end
+  end
+
   describe "#v1_trace_events" do
     it "returns events for trace in order" do
       write_event(name: "first", trace_id: "tx")

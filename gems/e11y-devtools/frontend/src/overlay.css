@@ -489,6 +489,37 @@
   color: var(--e11y-muted);
 }
 
+.e11y-ix-http {
+  font-family: var(--e11y-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 2px;
+  color: var(--e11y-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.e11y-ix-http.e11y-http-status--5xx {
+  color: var(--e11y-err);
+}
+
+.e11y-ix-http.e11y-http-status--4xx {
+  color: var(--e11y-warn);
+}
+
+.e11y-ix-http.e11y-http-status--2xx {
+  color: var(--e11y-ok);
+}
+
+.e11y-row-delta {
+  font-family: var(--e11y-mono);
+  font-size: 0.72rem;
+  color: var(--e11y-muted);
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
 .e11y-ix-trace-line {
   display: flex;
   flex-wrap: wrap;
