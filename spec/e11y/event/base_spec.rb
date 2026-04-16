@@ -1087,4 +1087,97 @@ RSpec.describe E11y::Event::Base do
     end
   end
 end
+
+RSpec.describe "E11y::Event::Base notify DSL" do
+  let(:event_class) do
+    Class.new(E11y::Event::Base) do
+      schema { required(:message).filled(:string) }
+      contains_pii false
+    end
+  end
+
+  describe ".notify" do
+    context "with alert config" do
+      before do
+        event_class.notify do
+          alert throttle_window: 30 * 60, fingerprint: [:event_name]
+        end
+      end
+
+      it "stores alert config" do
+        cfg = event_class.notify_config
+        expect(cfg[:alert]).to eq(throttle_window: 1800, fingerprint: [:event_name])
+      end
+    end
+
+    context "with digest config" do
+      before do
+        event_class.notify do
+          digest interval: 3600
+        end
+      end
+
+      it "stores digest config" do
+        expect(event_class.notify_config[:digest]).to eq(interval: 3600)
+      end
+    end
+
+    context "with both alert and digest" do
+      before do
+        event_class.notify do
+          alert throttle_window: 1800, fingerprint: [:event_name]
+          digest interval: 3600
+        end
+      end
+
+      it "stores both" do
+        cfg = event_class.notify_config
+        expect(cfg[:alert]).to be_a(Hash)
+        expect(cfg[:digest]).to be_a(Hash)
+      end
+    end
+  end
+
+  describe ".notify_config inheritance" do
+    let(:parent) do
+      Class.new(E11y::Event::Base) do
+        notify { alert throttle_window: 1800, fingerprint: [:event_name] }
+      end
+    end
+
+    let(:child) { Class.new(parent) }
+
+    it "child inherits parent notify_config" do
+      expect(child.notify_config).to eq(parent.notify_config)
+    end
+  end
+
+  describe "event_data[:notify] in track" do
+    before do
+      event_class.notify { alert throttle_window: 1800, fingerprint: [:event_name] }
+      allow(E11y.config.built_pipeline).to receive(:call) do |data|
+        @captured = data
+      end
+    end
+
+    it "merges notify_config into event_data" do
+      event_class.track(message: "test")
+      expect(@captured[:notify]).to eq(event_class.notify_config)
+    end
+  end
+
+  describe "event without notify block" do
+    it "returns nil notify_config" do
+      expect(event_class.notify_config).to be_nil
+    end
+
+    it "event_data has no :notify key" do
+      allow(E11y.config.built_pipeline).to receive(:call) do |data|
+        @captured = data
+      end
+      event_class.track(message: "test")
+      expect(@captured).not_to have_key(:notify)
+    end
+  end
+end
 # rubocop:enable RSpec/RepeatedExampleGroupDescription
