@@ -46,6 +46,13 @@ RSpec.describe E11y::Adapters::NotificationBase do
       adapter = concrete_class.new(store: store)
       expect(adapter.write(event_name: "foo", severity: :info)).to be(true)
     end
+
+    it "delivers alert when notify: { alert: ... } present" do
+      adapter = concrete_class.new(store: store)
+      notify_cfg = { alert: { throttle_window: 300, fingerprint: [:event_name] } }
+      result = adapter.write(event_name: "test.event", severity: :error, notify: notify_cfg)
+      expect(result).to be(true)
+    end
   end
 
   describe "capabilities" do
@@ -54,6 +61,8 @@ RSpec.describe E11y::Adapters::NotificationBase do
       caps = adapter.capabilities
       expect(caps[:batching]).to be(false)
       expect(caps[:async]).to be(false)
+      expect(caps[:compression]).to be(false)
+      expect(caps[:streaming]).to be(false)
     end
   end
 end
