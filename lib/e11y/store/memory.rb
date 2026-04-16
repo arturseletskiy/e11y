@@ -15,13 +15,21 @@ module E11y
     # For multi-process / multi-pod deployments use Store::RailsCache
     # backed by Redis or Memcached.
     class Memory < Base
+      # Sentinel returned by read_entry when the key is absent or expired.
+      # Allows storing nil/false as real values.
+      MISSING = Object.new.freeze
+
       def initialize
+        super
         @data = {}
         @mutex = Mutex.new
       end
 
       def get(key)
-        @mutex.synchronize { read_entry(key) }
+        @mutex.synchronize do
+          result = read_entry(key)
+          result.equal?(MISSING) ? nil : result
+        end
       end
 
       def set(key, value, ttl: nil)
@@ -33,16 +41,23 @@ module E11y
 
       def increment(key, by: 1, ttl: nil)
         @mutex.synchronize do
-          current = read_entry(key).to_i
+          existing = read_entry(key)
+          current = existing.equal?(MISSING) ? 0 : existing.to_i
           new_value = current + by
-          @data[key] = build_entry(new_value, ttl)
+          if existing.equal?(MISSING)
+            @data[key] = build_entry(new_value, ttl)
+          else
+            # Preserve existing expires_at — TTL only applied on initialisation
+            existing_entry = @data[key]
+            @data[key] = { value: new_value, expires_at: existing_entry[:expires_at] }
+          end
           new_value
         end
       end
 
       def set_if_absent(key, value, ttl:)
         @mutex.synchronize do
-          return false unless read_entry(key).nil?
+          return false unless read_entry(key).equal?(MISSING)
 
           @data[key] = build_entry(value, ttl)
           true
@@ -56,7 +71,7 @@ module E11y
       def fetch(key, ttl: nil)
         @mutex.synchronize do
           existing = read_entry(key)
-          return existing unless existing.nil?
+          return existing unless existing.equal?(MISSING)
 
           new_value = yield
           @data[key] = build_entry(new_value, ttl)
@@ -66,11 +81,12 @@ module E11y
 
       private
 
-      # Must be called inside @mutex.synchronize
+      # Must be called inside @mutex.synchronize.
+      # Returns MISSING when the key is absent or expired.
       def read_entry(key)
         entry = @data[key]
-        return nil unless entry
-        return nil if entry[:expires_at] && Time.now > entry[:expires_at]
+        return MISSING unless entry
+        return MISSING if entry[:expires_at] && Time.now > entry[:expires_at]
 
         entry[:value]
       end

@@ -45,10 +45,11 @@ RSpec.describe E11y::Store::Memory do
       expect(store.increment("counter", by: 5)).to eq(5)
     end
 
-    it "resets expiry on increment when ttl given" do
-      store.increment("counter", ttl: 0.01)
-      sleep(0.02)
-      expect(store.get("counter")).to be_nil
+    it "sets TTL only on first increment, preserves on subsequent" do
+      store.increment("counter", by: 1, ttl: 0.05)
+      store.increment("counter", by: 1) # no ttl — should preserve first TTL
+      sleep(0.06)
+      expect(store.get("counter")).to be_nil # expired based on first TTL
     end
   end
 
@@ -70,6 +71,11 @@ RSpec.describe E11y::Store::Memory do
       expect(store.set_if_absent("key", "v2", ttl: 60)).to be(true)
       expect(store.get("key")).to eq("v2")
     end
+
+    it "can store false as a value" do
+      store.set_if_absent("key", false, ttl: 60)
+      expect(store.get("key")).to be(false)
+    end
   end
 
   describe "#fetch" do
@@ -82,8 +88,22 @@ RSpec.describe E11y::Store::Memory do
     it "returns existing value without calling block" do
       store.set("key", "existing")
       calls = 0
-      result = store.fetch("key", ttl: 60) { calls += 1; "computed" }
+      result = store.fetch("key", ttl: 60) do
+        calls += 1
+        "computed"
+      end
       expect(result).to eq("existing")
+      expect(calls).to eq(0)
+    end
+
+    it "can store false without re-calling block" do
+      store.fetch("key", ttl: 60) { false }
+      calls = 0
+      result = store.fetch("key", ttl: 60) do
+        calls += 1
+        "other"
+      end
+      expect(result).to be(false)
       expect(calls).to eq(0)
     end
   end
@@ -98,7 +118,7 @@ RSpec.describe E11y::Store::Memory do
 
   describe "thread safety" do
     it "handles concurrent increments correctly" do
-      threads = 10.times.map { Thread.new { 100.times { store.increment("counter") } } }
+      threads = Array.new(10) { Thread.new { 100.times { store.increment("counter") } } }
       threads.each(&:join)
       expect(store.get("counter")).to eq(1000)
     end
