@@ -73,6 +73,12 @@ RSpec.describe E11y::Store::RailsCache do
     it "increments by custom amount" do
       expect(store.increment("counter", by: 5)).to eq(5)
     end
+
+    it "expires counter after TTL and resets on next increment" do
+      store.increment("ctr", ttl: 0.01)
+      sleep(0.05)
+      expect(store.increment("ctr")).to eq(1)
+    end
   end
 
   describe "#set_if_absent" do
@@ -107,6 +113,20 @@ RSpec.describe E11y::Store::RailsCache do
       # Raw cache stores under namespaced key, not bare key
       expect(cache.read("mykey")).to be_nil
       expect(cache.read("e11y:mykey")).to eq("val")
+    end
+  end
+
+  describe "#delete" do
+    it "removes the key" do
+      store.set("key", "value")
+      store.delete("key")
+      expect(store.get("key")).to be_nil
+    end
+
+    it "deletes the namespaced key, not the bare key" do
+      store.set("mykey", "val")
+      store.delete("mykey")
+      expect(cache.read("e11y:mykey")).to be_nil
     end
   end
 end

@@ -53,7 +53,9 @@ module E11y
         ns_key = ns(key)
         opts = ttl ? { expires_in: ttl.to_f } : {}
         # Initialise to 0 if absent so cache.increment has something to work with.
-        # unless_exist: true is atomic on Redis/Memcached; harmless on MemoryStore.
+        # write with unless_exist: true maps to SET NX on Redis (atomic per-command).
+        # write + increment together are not a single atomic transaction, but correct:
+        # only one process wins the NX init; all subsequent INCRs are atomic on Redis.
         @cache.write(ns_key, 0, unless_exist: true, **opts)
         @cache.increment(ns_key, by) || by
       end
