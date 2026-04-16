@@ -36,13 +36,14 @@ module E11y
         false
       end
 
-      # @api private — exposed for test helpers
+      # Test helper: seeds the store so that `maybe_flush_digest` will trigger on the
+      # next `write` call after time has advanced past `current_window`.
       #
-      # Marks +current_window+ as a completed window so that when time advances
-      # past it, +maybe_flush_digest+ will pick it up as the previous window.
-      # Copies accumulated state from +current_window+ into a stable snapshot
-      # keyed under +previous_window+ as a secondary record (used by flush).
-      # In tests this simulates a natural window rollover without sleeping.
+      # Copies the accumulated state from `current_window` keys into `previous_window`
+      # keys with the same TTL so that `maybe_flush_digest` finds an `__index__` entry
+      # for the previous window and acquires the flush lock.
+      #
+      # @api private — exposed only for specs
       def copy_window_to_previous!(current_window, previous_window, digest_cfg)
         interval = digest_cfg[:digest] ? digest_cfg[:digest][:interval] : digest_cfg[:interval]
         ttl      = interval * 2
@@ -117,6 +118,11 @@ module E11y
             return
           end
         end
+
+        # Only increment count for event types that made it into __index__.
+        # Overflow types (seen_key exists but name not in index) are not counted here.
+        index = @store.get(digest_key(window, "__index__")) || []
+        return unless index.include?(name)
 
         @store.increment(digest_key(window, "#{name}:count"), ttl: ttl)
         update_max_severity(window, name, event_data[:severity], ttl)

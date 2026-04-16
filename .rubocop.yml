@@ -72,6 +72,7 @@ Metrics/ModuleLength:
 Metrics/AbcSize:
   Max: 20
   Exclude:
+    # record_for_digest has nested branching for seen/overflow/count that exceeds AbcSize
     - 'lib/e11y/notifications/throttleable.rb'
     - 'lib/e11y/middleware/event_slo.rb'
     - 'lib/e11y/middleware/routing.rb'

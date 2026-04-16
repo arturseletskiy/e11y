@@ -145,6 +145,21 @@ RSpec.describe E11y::Notifications::Throttleable do
       5.times { adapter.write(event(notify: notify_cfg)) }
       expect(adapter.delivered_digests.size).to eq(1)
     end
+
+    it "copy_window_to_previous! accepts inner digest_cfg format { interval: N }" do
+      now = Time.now.to_i
+      current_window  = (now / interval) * interval
+      previous_window = current_window - interval
+
+      adapter.write(event(name: "inner.format", notify: notify_cfg))
+      # Pass inner hash directly (not the full notify hash)
+      inner_cfg = { interval: interval }
+      adapter.send(:copy_window_to_previous!, current_window, previous_window, inner_cfg)
+
+      allow(Time).to receive(:now).and_return(Time.at(current_window + interval + 1))
+      adapter.write(event(notify: notify_cfg))
+      expect(adapter.delivered_digests.size).to eq(1)
+    end
   end
 
   describe "max_event_types cap" do
