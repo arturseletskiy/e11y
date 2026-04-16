@@ -1097,6 +1097,14 @@ RSpec.describe "E11y::Event::Base notify DSL" do
   end
 
   describe ".notify" do
+    context "with empty block" do
+      it "raises ArgumentError" do
+        expect do
+          event_class.notify { }
+        end.to raise_error(ArgumentError, /empty config/)
+      end
+    end
+
     context "with alert config" do
       before do
         event_class.notify do

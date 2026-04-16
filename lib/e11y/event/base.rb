@@ -379,7 +379,10 @@ module E11y
         def notify(&)
           config = NotifyConfig.new
           config.instance_eval(&)
-          @notify_config = config.to_h
+          result = config.to_h
+          raise ArgumentError, "notify block must call alert or digest (got empty config)" if result.empty?
+
+          @notify_config = result
         end
 
         # @return [Hash, nil]
