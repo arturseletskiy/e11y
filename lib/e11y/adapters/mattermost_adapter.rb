@@ -110,8 +110,8 @@ module E11y
         lines.join("\n")
       end
 
-      # @raise [RuntimeError] on non-2xx HTTP response
-      # @raise [StandardError] on network error
+      # Raises internally on non-2xx response or network error;
+      # all exceptions are rescued by Throttleable#write which returns false.
       def call_webhook(text)
         payload = { text: text, username: @username }
         payload[:channel] = @channel if @channel
