@@ -28,6 +28,13 @@ RSpec.describe E11y::Store::Memory do
       store.set("key", "value", ttl: 60)
       expect(store.get("key")).to eq("value")
     end
+
+    it "can store nil and distinguishes it from absent key" do
+      store.set("key", nil)
+      expect(store.get("key")).to be_nil
+      # key exists — set_if_absent must refuse
+      expect(store.set_if_absent("key", "other", ttl: 60)).to be(false)
+    end
   end
 
   describe "#increment" do

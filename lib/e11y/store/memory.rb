@@ -41,15 +41,14 @@ module E11y
 
       def increment(key, by: 1, ttl: nil)
         @mutex.synchronize do
-          existing = read_entry(key)
-          current = existing.equal?(MISSING) ? 0 : existing.to_i
-          new_value = current + by
-          if existing.equal?(MISSING)
+          entry   = @data[key]
+          expired = entry && entry[:expires_at] && Time.now > entry[:expires_at]
+          if entry.nil? || expired
+            new_value = by
             @data[key] = build_entry(new_value, ttl)
           else
-            # Preserve existing expires_at — TTL only applied on initialisation
-            existing_entry = @data[key]
-            @data[key] = { value: new_value, expires_at: existing_entry[:expires_at] }
+            new_value = entry[:value].to_i + by
+            @data[key] = { value: new_value, expires_at: entry[:expires_at] }
           end
           new_value
         end
@@ -68,7 +67,7 @@ module E11y
         @mutex.synchronize { @data.delete(key) }
       end
 
-      def fetch(key, ttl: nil)
+      def fetch(key, ttl: nil, &_block)
         @mutex.synchronize do
           existing = read_entry(key)
           return existing unless existing.equal?(MISSING)
