@@ -1,17 +1,20 @@
 <script lang="ts">
   import Fab from "./components/Fab.svelte"
-  import FilterBar from "./components/FilterBar.svelte"
+  import EventDetail from "./components/EventDetail.svelte"
+  import Omnibar from "./components/Omnibar.svelte"
   import FullscreenPanel from "./components/FullscreenPanel.svelte"
   import InteractionsTimeline, { type TimelineTimeRange } from "./components/InteractionsTimeline.svelte"
   import RecentHistogram from "./components/RecentHistogram.svelte"
   import { fetchInteractions, fetchRecent, fetchTraceEvents } from "./lib/api"
   import { eventKey } from "./lib/eventIdentity"
-  import { formatInteractionStarted, summarizeTraceIds } from "./lib/format"
+  import { formatInteractionStarted, summarizeTraceIds, formatDeltaMs } from "./lib/format"
+  import { onMount } from "svelte"
   import { filterEventList, type ListSeverityFilter } from "./lib/listFilter"
   import { buildRecentVolumeBuckets, eventTimestampMs, type HistogramTimeRange } from "./lib/recentVolume"
   import type { OverlayRoute, SourceFilter } from "./lib/router"
   import type { CircleOrigin } from "./lib/transitions"
   import { originFallbackFabCorner, originFromFabButton } from "./lib/viewportOrigin"
+  import { Sun, Moon, Monitor } from "lucide-svelte"
 
   const SPLIT_MIN_PX = 900
 
@@ -46,8 +49,55 @@
   let pulseKind = $state<"none" | "error" | "warn">("none")
   let pulseTimer: ReturnType<typeof setTimeout> | null = null
 
-  const POLL_MS = 2000
+  let savedTheme = $state("system")
+  let systemTheme = $state("dark")
+
+  const SESSION_KEY = "e11y_panel_state"
+
+  interface PersistedState {
+    route: OverlayRoute
+    globalSearch: string
+    globalSeverity: ListSeverityFilter
+    source: SourceFilter
+  }
+
+  function saveState(): void {
+    try {
+      const s: PersistedState = {
+        route,
+        globalSearch,
+        globalSeverity,
+        source
+      }
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(s))
+    } catch {
+      /* ignore quota/security errors */
+    }
+  }
+
+  function loadState(): Partial<PersistedState> {
+    try {
+      const raw = sessionStorage.getItem(SESSION_KEY)
+      if (!raw) return {}
+      return JSON.parse(raw) as Partial<PersistedState>
+    } catch {
+      return {}
+    }
+  }
+
+  onMount(() => {
+    const s = loadState()
+    if (s.globalSearch) globalSearch = s.globalSearch
+    if (s.globalSeverity) globalSeverity = s.globalSeverity
+    if (s.source) source = s.source
+    if (s.route && s.route.screen !== "events" && s.route.screen !== "detail") {
+      route = s.route
+    }
+  })
+
   const PULSE_MS = 3000
+
+  let pollMs = $state(5000)
 
   let problemEvents = $derived.by(() =>
     recentEvents.filter((e) => e.severity === "error" || e.severity === "fatal")
@@ -307,6 +357,12 @@
   }
 
   function fabClick(e: MouseEvent): void {
+    if (e.shiftKey) {
+      const tid = (window as unknown as Record<string, unknown>).__E11Y_TRACE_ID__ as string | undefined
+      if (tid) void copyText(tid)
+      return
+    }
+
     const el = e.currentTarget
     if (panelOpen) {
       if (el instanceof HTMLButtonElement) panelCircleOrigin = originFromFabButton(el)
@@ -320,6 +376,15 @@
     }
     panelOpen = true
     splitSelectedKey = null
+
+    const currentTraceId = (window as unknown as Record<string, unknown>).__E11Y_TRACE_ID__ as
+      | string
+      | undefined
+    if (currentTraceId) {
+      void openCurrentTrace(currentTraceId)
+      return
+    }
+
     const { err } = countsFromRecent(recentEvents)
     if (err > 0) {
       route = { screen: "problems" }
@@ -328,6 +393,17 @@
       route = { screen: "interactions" }
     }
     void loadInteractionsList()
+  }
+
+  async function openCurrentTrace(traceId: string): Promise<void> {
+    try {
+      events = await fetchTraceEvents(traceId)
+      route = { screen: "events", traceId }
+    } catch {
+      histogramTimeRange = null
+      route = { screen: "interactions" }
+      void loadInteractionsList()
+    }
   }
 
   async function copyText(text: string): Promise<void> {
@@ -386,7 +462,7 @@
 
   let panelTitle = $derived.by(() => {
     if (route.screen === "problems") return "e11y — problems"
-    if (route.screen === "interactions") return "e11y — interactions"
+    if (route.screen === "interactions") return "e11y — requests"
     if (route.screen === "events") return `e11y — trace ${route.traceId}`
     if (route.screen === "detail") return `e11y — ${String(route.event.event_name ?? "event")}`
     return "e11y"
@@ -451,10 +527,62 @@
     return "e11y-pill"
   }
 
+  function httpSummary(row: Record<string, unknown>): string {
+    const method = row.method ? String(row.method) : null
+    const path = row.path ? String(row.path) : null
+    const status = row.status ? Number(row.status) : null
+    const dur = row.duration_ms != null ? `${row.duration_ms}ms` : null
+
+    const parts: string[] = []
+    if (method && path) parts.push(`${method} ${path}`)
+    else if (path) parts.push(path)
+    if (status) parts.push(String(status))
+    if (dur) parts.push(dur)
+    return parts.join(" · ")
+  }
+
+  function statusClass(row: Record<string, unknown>): string {
+    const s = Number(row.status) || 0
+    if (s >= 500) return "e11y-http-status--5xx"
+    if (s >= 400) return "e11y-http-status--4xx"
+    if (s >= 200) return "e11y-http-status--2xx"
+    return ""
+  }
+
   $effect(() => {
-    const id = setInterval(() => void pollRecent(), POLL_MS)
+    pollMs = panelOpen ? 500 : 5000
+  })
+
+  $effect(() => {
+    const ms = pollMs
+    let id: ReturnType<typeof setInterval> | undefined
+
+    function schedule(): void {
+      clearInterval(id)
+      id = setInterval(() => void pollRecent(), ms)
+    }
+
+    function onVisibilityChange(): void {
+      clearInterval(id)
+      if (document.hidden) return
+      schedule()
+    }
+
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    if (!document.hidden) schedule()
     void pollRecent()
-    return () => clearInterval(id)
+
+    return () => {
+      clearInterval(id)
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+    }
+  })
+
+  $effect(() => {
+    globalSearch
+    globalSeverity
+    source
+    if (panelOpen) saveState()
   })
 
   $effect(() => {
@@ -466,89 +594,127 @@
     source
     if (panelOpen) void loadInteractionsList()
   })
+
+  $effect(() => {
+    savedTheme = localStorage.getItem("e11y-theme") || "system"
+    const mq = window.matchMedia("(prefers-color-scheme: light)")
+    systemTheme = mq.matches ? "light" : "dark"
+    const handler = (e: MediaQueryListEvent) => (systemTheme = e.matches ? "light" : "dark")
+    mq.addEventListener("change", handler)
+    return () => mq.removeEventListener("change", handler)
+  })
+
+  function cycleTheme() {
+    if (savedTheme === "system") savedTheme = "light"
+    else if (savedTheme === "light") savedTheme = "dark"
+    else savedTheme = "system"
+    localStorage.setItem("e11y-theme", savedTheme)
+  }
+
+  let effectiveTheme = $derived(savedTheme === "system" ? systemTheme : savedTheme)
 </script>
 
-<div class="e11y-dt">
+<div class="e11y-dt" class:e11y-theme-light={effectiveTheme === "light"} class:e11y-theme-dark={effectiveTheme === "dark"}>
   <Fab label={badgeLabel} onclick={fabClick} stateClass={fabStateClass} pulseClass={fabPulseClass} />
 
   <FullscreenPanel
     open={panelOpen}
-    onclose={() => (panelOpen = false)}
+    onclose={() => {
+      saveState()
+      panelOpen = false
+    }}
     origin={panelCircleOrigin}
   >
     {#snippet headerTopLeft()}
-      {#if route.screen === "events" || route.screen === "detail"}
-        <button type="button" class="e11y-icon-btn" onclick={back} aria-label="Back" title="Go back" style="margin-right: -4px;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-        </button>
-      {/if}
+      <button type="button" class="e11y-icon-btn" onclick={back} aria-label="Back" title="Go back" style="margin-right: -4px; visibility: {route.screen === 'events' || route.screen === 'detail' ? 'visible' : 'hidden'};">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      </button>
 
-      <div class="e11y-tab-row" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          class="e11y-tab"
-          class:e11y-tab--active={tabProblemsActive}
-          aria-selected={tabProblemsActive}
-          onclick={goTabProblems}
+      {#if route.screen === "detail"}
+        <span
+          class="px-2 py-1 text-xs font-bold uppercase rounded {route.event.severity === 'error' || route.event.severity === 'fatal'
+            ? 'bg-e11y-err-bg text-e11y-err'
+            : 'bg-e11y-accent-bg text-e11y-accent'}"
         >
-          Problems{#if errCount > 0}&nbsp;<span class="e11y-tab-badge">{errCount}</span>{/if}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          class="e11y-tab"
-          class:e11y-tab--active={tabInteractionsActive}
-          aria-selected={tabInteractionsActive}
-          onclick={goTabInteractions}
-        >
-          Interactions
-        </button>
-      </div>
-
-      {#if route.screen === "events" || route.screen === "detail"}
-        <span class="e11y-breadcrumb-sep">/</span>
-        <span class="e11y-panel-title e11y-panel-title--sub" title={activeTraceId || undefined}>
-          {#if route.screen === "detail"}
-            Event Details
-          {:else}
-            Trace: {activeTraceId ? activeTraceId.slice(0, 8) + "…" : "Unknown"}
-          {/if}
+          {route.event.severity || "info"}
         </span>
+        <h2 class="text-sm font-semibold truncate">{route.event.event_name}</h2>
+      {:else}
+        <div class="e11y-tab-row" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            class="e11y-tab"
+            class:e11y-tab--active={tabProblemsActive}
+            aria-selected={tabProblemsActive}
+            onclick={goTabProblems}
+          >
+            Problems{#if errCount > 0}&nbsp;<span class="e11y-tab-badge">{errCount}</span>{/if}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="e11y-tab"
+            class:e11y-tab--active={tabInteractionsActive}
+            aria-selected={tabInteractionsActive}
+            onclick={goTabInteractions}
+          >
+            Requests
+          </button>
+        </div>
+
+        {#if route.screen === "events"}
+          <span class="e11y-breadcrumb-sep">/</span>
+          <span class="e11y-panel-title e11y-panel-title--sub" title={activeTraceId || undefined}>
+            Trace: {activeTraceId ? activeTraceId.slice(0, 8) + "…" : "Unknown"}
+          </span>
+        {:else}
+          <span class="e11y-breadcrumb-sep">/</span>
+          <span class="e11y-panel-title e11y-panel-title--sub">
+            e11y devtools
+          </span>
+        {/if}
       {/if}
     {/snippet}
 
     {#snippet headerTopRight()}
-      {#if route.screen === "detail"}
-        <button type="button" class="e11y-btn" onclick={() => void copyDetailJson()}>Copy JSON</button>
-        <button type="button" class="e11y-btn" onclick={() => void copyDetailTraceId()}>Copy trace_id</button>
-        <button type="button" class="e11y-btn" onclick={() => void copyDetailRequestId()}>Copy request_id</button>
-      {:else if tabInteractionsActive && route.screen === "interactions"}
-        <div class="e11y-chip-row e11y-chip-row--header">
-          {#each ["web", "job", "all"] as s (s)}
-            <button
-              type="button"
-              class="e11y-chip"
-              class:e11y-chip--active={source === s}
-              onclick={() => (source = s as SourceFilter)}
-            >
-              {s}
-            </button>
-          {/each}
-        </div>
-      {/if}
+      <div class="flex items-center gap-2">
+        <button type="button" class="e11y-icon-btn" onclick={cycleTheme} title="Theme: {savedTheme}">
+          {#if savedTheme === 'light'}
+            <Sun size={16} />
+          {:else if savedTheme === 'dark'}
+            <Moon size={16} />
+          {:else}
+            <Monitor size={16} />
+          {/if}
+        </button>
+        {#if tabInteractionsActive && route.screen === "interactions"}
+          <div class="e11y-chip-row e11y-chip-row--header">
+            {#each ["web", "job", "all"] as s (s)}
+              <button
+                type="button"
+                class="e11y-chip"
+                class:e11y-chip--active={source === s}
+                onclick={() => (source = s as SourceFilter)}
+              >
+                {s}
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
     {/snippet}
 
     {#snippet headerBottom()}
-      <FilterBar
+      <Omnibar
         bind:search={globalSearch}
         bind:severity={globalSeverity}
         placeholder={
           route.screen === "interactions"
-            ? "Search paths, methods, traces…"
+            ? "Search paths, methods, traces..."
             : route.screen === "problems"
-              ? "Search problems, traces…"
-              : "Filter name, trace, payload…"
+              ? "Search problems, traces..."
+              : "Filter name, trace, payload..."
         }
       />
     {/snippet}
@@ -571,7 +737,7 @@
         <p class="e11y-problems-hint">Recent error / fatal events from the dev log (newest first).</p>
         {#if problemEvents.length === 0}
           <p class="e11y-muted e11y-empty">No errors in the recent buffer.</p>
-          <button type="button" class="e11y-btn" onclick={goTabInteractions}>Open interactions</button>
+          <button type="button" class="e11y-btn" onclick={goTabInteractions}>Open requests</button>
         {:else if filteredProblemEvents.length === 0}
           <p class="e11y-muted e11y-empty">
             {#if histogramTimeRange && !globalSearch.trim()}
@@ -588,7 +754,7 @@
             {@const ek = eventKey(ev, i)}
             {@const sum = payloadSummary(ev)}
             <div
-              class="e11y-row e11y-row--problem"
+              class="flex flex-wrap gap-3 items-baseline p-2.5 rounded-md cursor-pointer border border-transparent hover:bg-e11y-hover hover:border-e11y-border-hover transition-colors focus-visible:outline-2 focus-visible:outline-e11y-accent focus-visible:outline-offset-2"
               role="button"
               tabindex="0"
               onclick={() => openProblemDetail(ev)}
@@ -620,12 +786,12 @@
       {:else if route.screen === "interactions"}
         <InteractionsTimeline bind:timeRange={interactionsTimeRange} {interactions} />
         {#if layoutWide}
-          <div class="e11y-split">
-            <div class="e11y-split-primary">
+          <div class="grid grid-cols-1 md:grid-cols-[1fr_1.15fr] gap-4 items-start min-h-[min(60vh,520px)]">
+            <div class="min-h-[120px] max-h-[min(65vh,560px)] overflow-y-auto pr-1">
               {#if interactions.length === 0}
-                <p class="e11y-muted e11y-empty">No interactions recorded yet.</p>
+                <p class="e11y-muted e11y-empty">No requests recorded yet.</p>
               {:else if filteredInteractions.length === 0}
-                <p class="e11y-muted e11y-empty">No interactions in the selected time range.</p>
+                <p class="e11y-muted e11y-empty">No requests in the selected time range.</p>
               {:else}
                 {#each filteredInteractions as row (interactionRowKey(row))}
                 {@const ids = (row.trace_ids as string[] | undefined) ?? []}
@@ -634,9 +800,11 @@
                 {@const { primary, extra, preview } = summarizeTraceIds(ids)}
                 {@const ikey = interactionRowKey(row)}
                 <div
-                  class="e11y-ix"
-                  class:e11y-ix--error={!!row.has_error}
-                  class:e11y-ix--selected={splitSelectedKey === ikey}
+                  class="flex flex-wrap items-start justify-between gap-3 p-3 mb-2 rounded-lg border cursor-pointer text-left transition-all focus-visible:outline-2 focus-visible:outline-e11y-accent focus-visible:outline-offset-2 {!!row.has_error
+                    ? 'border-[color:var(--e11y-err-border)] bg-gradient-to-br from-[#3a1c1c] to-e11y-bg hover:border-e11y-err'
+                    : 'border-e11y-border bg-gradient-to-br from-[#1f1f35] to-e11y-bg hover:border-[color:var(--e11y-accent-border)] hover:shadow-lg'} {splitSelectedKey === ikey
+                    ? 'border-e11y-accent ring-1 ring-e11y-accent bg-e11y-accent-bg'
+                    : ''}"
                   role="button"
                   tabindex="0"
                   onclick={() => void onInteractionRowClick(row)}
@@ -649,6 +817,9 @@
                         <span class="e11y-ix-time-rel">{relative}</span>
                       {/if}
                     </div>
+                    {#if httpSummary(row)}
+                      <div class="e11y-ix-http {statusClass(row)}">{httpSummary(row)}</div>
+                    {/if}
                     <div class="e11y-ix-trace-line">
                       <code class="e11y-ix-trace-primary">{primary}</code>
                       {#if extra > 0}
@@ -670,18 +841,24 @@
               {/each}
               {/if}
             </div>
-            <div class="e11y-split-secondary">
+            <div class="min-h-[120px] max-h-[min(65vh,560px)] overflow-y-auto md:border-l md:border-e11y-border md:pl-4">
               {#if !splitSelectedKey}
                 <p class="e11y-split-placeholder">Select an interaction to see events.</p>
               {:else if filteredTraceEvents.length === 0}
                 <p class="e11y-muted e11y-split-placeholder">No events match the current filter.</p>
               {:else}
+                {@const baselineTsSplit = filteredTraceEvents[0]
+                  ? String(filteredTraceEvents[0].timestamp ?? "")
+                  : ""}
                 {#each filteredTraceEvents as ev, j (eventKey(ev, j))}
                   {@const ek = eventKey(ev, j)}
                   {@const sum = payloadSummary(ev)}
+                  {@const deltaSplit =
+                    j > 0 ? formatDeltaMs(String(ev.timestamp ?? ""), baselineTsSplit) : null}
                   <div
-                    class="e11y-row"
-                    class:e11y-row--context={isContextNeighbor(j)}
+                    class="flex flex-wrap gap-3 items-baseline p-2.5 rounded-md cursor-pointer border border-transparent hover:bg-e11y-hover hover:border-e11y-border-hover transition-colors focus-visible:outline-2 focus-visible:outline-e11y-accent focus-visible:outline-offset-2 {isContextNeighbor(j)
+                      ? 'border-[color:var(--e11y-accent-border)] shadow-[inset_3px_0_0_var(--e11y-accent)] bg-e11y-accent-bg'
+                      : ''}"
                     role="button"
                     tabindex="0"
                     onclick={() => selectEvent(ev, j)}
@@ -697,6 +874,9 @@
                     >
                     <span class="e11y-sev {sevClass(ev.severity)}">{String(ev.severity ?? "?")}</span>
                     <span class="e11y-row-title">{String(ev.event_name ?? "")}</span>
+                    {#if deltaSplit}
+                      <span class="e11y-row-delta">{deltaSplit}</span>
+                    {/if}
                     <span class="e11y-row-meta">{String(ev.timestamp ?? "")}</span>
                     {#if rowExpanded[ek]}
                       <div class="e11y-row-body">
@@ -711,18 +891,22 @@
           </div>
         {:else}
           {#if interactions.length === 0}
-            <p class="e11y-muted e11y-empty">No interactions recorded yet.</p>
+            <p class="e11y-muted e11y-empty">No requests recorded yet.</p>
           {:else if filteredInteractions.length === 0}
-            <p class="e11y-muted e11y-empty">No interactions in the selected time range.</p>
+            <p class="e11y-muted e11y-empty">No requests in the selected time range.</p>
           {:else}
             {#each filteredInteractions as row (interactionRowKey(row))}
             {@const ids = (row.trace_ids as string[] | undefined) ?? []}
             {@const tc = Number(row.traces_count ?? ids.length)}
             {@const { absolute, relative } = formatInteractionStarted(String(row.started_at ?? ""))}
             {@const { primary, extra, preview } = summarizeTraceIds(ids)}
+            {@const ikey = interactionRowKey(row)}
             <div
-              class="e11y-ix"
-              class:e11y-ix--error={!!row.has_error}
+              class="flex flex-wrap items-start justify-between gap-3 p-3 mb-2 rounded-lg border cursor-pointer text-left transition-all focus-visible:outline-2 focus-visible:outline-e11y-accent focus-visible:outline-offset-2 {!!row.has_error
+                ? 'border-[color:var(--e11y-err-border)] bg-gradient-to-br from-[#3a1c1c] to-e11y-bg hover:border-e11y-err'
+                : 'border-e11y-border bg-gradient-to-br from-[#1f1f35] to-e11y-bg hover:border-[color:var(--e11y-accent-border)] hover:shadow-lg'} {splitSelectedKey === ikey
+                ? 'border-e11y-accent ring-1 ring-e11y-accent bg-e11y-accent-bg'
+                : ''}"
               role="button"
               tabindex="0"
               onclick={() => void onInteractionRowClick(row)}
@@ -735,6 +919,9 @@
                     <span class="e11y-ix-time-rel">{relative}</span>
                   {/if}
                 </div>
+                {#if httpSummary(row)}
+                  <div class="e11y-ix-http {statusClass(row)}">{httpSummary(row)}</div>
+                {/if}
                 <div class="e11y-ix-trace-line">
                   <code class="e11y-ix-trace-primary" title="First trace_id">{primary}</code>
                   {#if extra > 0}
@@ -763,12 +950,18 @@
         {#if filteredTraceEvents.length === 0}
           <p class="e11y-muted e11y-empty">No events match the current filter.</p>
         {:else}
+          {@const baselineTsEvents = filteredTraceEvents[0]
+            ? String(filteredTraceEvents[0].timestamp ?? "")
+            : ""}
           {#each filteredTraceEvents as ev, i (eventKey(ev, i))}
             {@const ek = eventKey(ev, i)}
             {@const sum = payloadSummary(ev)}
+            {@const deltaEv =
+              i > 0 ? formatDeltaMs(String(ev.timestamp ?? ""), baselineTsEvents) : null}
             <div
-              class="e11y-row"
-              class:e11y-row--context={isContextNeighbor(i)}
+              class="flex flex-wrap gap-3 items-baseline p-2.5 rounded-md cursor-pointer border border-transparent hover:bg-e11y-hover hover:border-e11y-border-hover transition-colors focus-visible:outline-2 focus-visible:outline-e11y-accent focus-visible:outline-offset-2 {isContextNeighbor(i)
+                ? 'border-[color:var(--e11y-accent-border)] shadow-[inset_3px_0_0_var(--e11y-accent)] bg-e11y-accent-bg'
+                : ''}"
               role="button"
               tabindex="0"
               onclick={() => selectEvent(ev, i)}
@@ -784,6 +977,9 @@
               >
               <span class="e11y-sev {sevClass(ev.severity)}">{String(ev.severity ?? "?")}</span>
               <span class="e11y-row-title">{String(ev.event_name ?? "")}</span>
+              {#if deltaEv}
+                <span class="e11y-row-delta">{deltaEv}</span>
+              {/if}
               <span class="e11y-row-meta">{String(ev.timestamp ?? "")}</span>
               {#if rowExpanded[ek]}
                 <div class="e11y-row-body">
@@ -795,32 +991,7 @@
           {/each}
         {/if}
       {:else if route.screen === "detail"}
-        {@const d = route.event}
-        {@const meta = d.metadata as Record<string, unknown> | undefined}
-        <div class="e11y-detail">
-          <dl class="e11y-detail-dl">
-            <dt>trace_id</dt>
-            <dd class="e11y-mono">{String(d.trace_id ?? "—")}</dd>
-            <dt>span_id</dt>
-            <dd class="e11y-mono">{String(d.span_id ?? "—")}</dd>
-            <dt>request_id</dt>
-            <dd class="e11y-mono">{String(meta?.request_id ?? "—")}</dd>
-            <dt>timestamp</dt>
-            <dd>{String(d.timestamp ?? "—")}</dd>
-          </dl>
-          <details class="e11y-details">
-            <summary>payload</summary>
-            <pre class="e11y-detail-pre">{JSON.stringify(d.payload, null, 2)}</pre>
-          </details>
-          <details class="e11y-details">
-            <summary>metadata</summary>
-            <pre class="e11y-detail-pre">{JSON.stringify(d.metadata ?? {}, null, 2)}</pre>
-          </details>
-          <details class="e11y-details">
-            <summary>full JSON</summary>
-            <pre class="e11y-detail-pre">{JSON.stringify(d, null, 2)}</pre>
-          </details>
-        </div>
+        <EventDetail event={route.event} />
       {/if}
     {/snippet}
   </FullscreenPanel>

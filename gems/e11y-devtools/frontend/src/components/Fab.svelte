@@ -13,7 +13,8 @@
   type="button"
   class="e11y-fab {stateClass} {pulseClass}"
   onclick={onclick}
-  aria-label="Open e11y devtools"
+  aria-label="Open e11y devtools (Shift+click to copy trace_id)"
+  title={"Open e11y devtools\nShift+click → copy current trace_id"}
 >
   {label}
 </button>

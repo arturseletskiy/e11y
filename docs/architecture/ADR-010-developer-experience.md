@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** March 18, 2026
+**Last updated:** April 3, 2026 — Browser Overlay (Svelte, v1 API, DevLog HTTP metadata), MCP tool naming, polling notes
 **Covers:** UC-017 (Local Development)
 **Depends On:** ADR-001 (Core), ADR-004 (Adapter Architecture), ADR-008 (Rails Integration)
 
@@ -70,8 +71,8 @@ Before e11y-devtools, the only option was configuring a `StdoutAdapter` and scan
    ┌──────────────────┐              ┌───────────────────────────┐
    │   TUI Viewer      │              │   Browser Overlay          │
    │  bundle exec e11y │              │   Rails Engine /_e11y/     │
-   │  (ratatui_ruby)   │              │   + injected JS <e11y-     │
-   └──────────────────┘              │   overlay> custom element  │
+   │  (ratatui_ruby)   │              │   + loader + Svelte bundle │
+   └──────────────────┘              │     (overlay.js, see §5)   │
                                      └───────────────────────────┘
                                                     │
                                      ┌──────────────┘
@@ -129,13 +130,16 @@ query.updated_since?(time)   # → Boolean (used by polling viewers)
 query.clear!                 # → truncates the JSONL file
 ```
 
-`Interaction` is a plain Struct:
+`Interaction` is a plain Struct (newest-first grouping shares the same shape as the overlay JSON API):
+
 ```ruby
-Interaction = Struct.new(:started_at, :trace_ids, :has_error?,
-                         :source, keyword_init: true) do
+Interaction = Struct.new(:started_at, :trace_ids, :has_error?, :source,
+                         :http_method, :http_path, :http_status, :duration_ms) do
   def traces_count = trace_ids.size
 end
 ```
+
+HTTP-oriented fields are filled when events carry corresponding `metadata` (typically stamped via `DevLogSource` + `DevLog#enrich_metadata!` for web requests). Older JSONL lines without HTTP metadata surface `nil` for those members — viewers treat that as a graceful degradation.
 
 ### 3.3. DevLog Adapter Facade
 
@@ -159,9 +163,18 @@ adapter.capabilities                 # → { dev_log: true, readable: true }
 `E11y::Middleware::DevLogSource` is a Rack middleware that stamps request metadata before events are tracked:
 
 ```ruby
-Thread.current[:e11y_source] = "web"           # sets thread-local; downstream code (including DevLog#serialize) reads this
-env["e11y.trace_id"] ||= Thread.current[:e11y_trace_id]  # exposes trace ID to the Browser Overlay JS
+Thread.current[:e11y_source] = "web"
+Thread.current[:e11y_http_method] = env["REQUEST_METHOD"]
+Thread.current[:e11y_http_path]   = env["PATH_INFO"]
+env["e11y.trace_id"] ||= Thread.current[:e11y_trace_id]  # Browser Overlay reads this as window.__E11Y_TRACE_ID__
+
+# After the inner app returns:
+# Thread.current[:e11y_http_status], [:e11y_http_duration_ms] — for DevLog metadata enrichment
 ```
+
+All `Thread.current` keys above are cleared in `ensure` (including when the app raises). `E11y::Adapters::DevLog#enrich_metadata!` maps these thread locals into optional `metadata` keys (`http_method`, `http_path`, `http_status`, `duration_ms`) so interactions and the overlay can show HTTP context.
+
+**Timing note:** `http_status` and `duration_ms` are set only after `@app.call` returns. Events written earlier in the same request may omit them unless a later write or separate metadata supplies them — an accepted limitation of the thread-local approach.
 
 ### 3.5. Railtie Auto-Registration
 
@@ -251,34 +264,54 @@ mount E11y::Devtools::Overlay::Engine => "/_e11y"
 
 All controller actions return `404 Not Found` outside the `development` environment, making accidental production mount harmless.
 
-### 5.2. Controller Endpoints
+### 5.2. HTTP Endpoints
+
+Routes are defined on the engine (`gems/e11y-devtools/config/routes.rb`). **Legacy** paths remain for backward compatibility; the **Svelte UI** uses the **v1** JSON API.
+
+**Legacy (still mounted):**
 
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/_e11y/events?trace_id=` | Events for a specific trace |
 | `GET` | `/_e11y/events/recent?limit=` | Most recent N events |
+| `GET` | `/_e11y/stats` | Aggregate stats |
 | `DELETE` | `/_e11y/events` | Clear log; returns 204 No Content |
 
-### 5.3. Rack Middleware — Script Injection
+**v1 (preferred for the overlay):**
 
-`E11y::Devtools::Overlay::Middleware` sits in the Rack stack and injects the overlay script into HTML responses:
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/_e11y/v1/interactions` | Grouped interactions (`source`, `limit`, `window_ms`); JSON includes HTTP context when present (`method`, `path`, `status`, `duration_ms`) |
+| `GET` | `/_e11y/v1/traces/:trace_id/events` | Chronological events for one trace |
+| `GET` | `/_e11y/v1/events/recent` | Recent events for the FAB / pulse |
 
-- Skips: XHR requests, asset paths (`/assets/`, `.js`, `.css`, etc.), non-HTML content types.
-- Injects `<script>` tag before `</body>`.
-- Injects `window.__E11Y_TRACE_ID__` with the current request's trace ID.
-- Recalculates and updates `Content-Length` header.
+`GET /_e11y/overlay.js` serves the compiled bundle (see §5.4).
 
-### 5.4. Custom Element
+The plain Ruby `E11y::Devtools::Overlay::Controller` (used by the Rails controller) centralizes JSON shaping so tests do not require Rails.
 
-The injected script registers a vanilla JS Custom Element `<e11y-overlay>` using Shadow DOM:
+### 5.3. Rack Middleware — Loader + trace id
 
-- **Badge**: floating, bottom-right corner. Shows event count and error count.
-- **Error indicator**: red border around the badge when any event in the current trace has severity `error` or `fatal`.
-- **Panel**: click the badge to open a slide-in panel showing the current trace's events.
-- **Polling**: queries `/_e11y/events?trace_id=...` every 2 seconds.
-- **Footer actions**: `[clear log]` (DELETE) and `[copy trace_id]`.
+`E11y::Devtools::Overlay::Middleware` sits in the Rack stack and injects a small **loader** into HTML responses:
 
-No npm build step, no React, no webpack — the script is a single file of vanilla JS shipped with the gem.
+- **Skips:** XHR (`X-Requested-With`), paths under `/assets/`, `/packs/`, `/_e11y/`, non-HTML `Content-Type`.
+- Injects **`window.__E11Y_TRACE_ID__`** when `env["e11y.trace_id"]` is set (see §3.4 — same value the overlay uses to jump to the current page’s trace).
+- Injects a deferred `<script src="/_e11y/overlay.js">` before `</body>`.
+- Updates `Content-Length` after rewriting the body.
+
+### 5.4. Front-end: Svelte bundle + UX
+
+The UI is a **Svelte 5 + TypeScript** app built with **Vite**; output is a single **`overlay.js`** committed under `gems/e11y-devtools/lib/e11y/devtools/overlay/assets/`. Developers run `npm run build` in `gems/e11y-devtools/frontend/` after UI changes (see `gems/e11y-devtools/README.md`).
+
+At a high level:
+
+- **FAB** (bottom-right): recent event total, warn/error counts; **pulse** when **new** `warn` or `error`/`fatal` rows appear (keyed by stable event identity).
+- **Fullscreen panel:** **Problems** (errors/fatals from the recent buffer) and **Requests** (grouped interactions, same semantics as TUI). Wide viewports use a **split layout** (list + trace events); narrow screens stack views.
+- **Navigation:** can open the current page’s trace when `__E11Y_TRACE_ID__` is present; **Shift+click** FAB copies that trace id.
+- **Polling:** **adaptive** — faster interval while the panel is open, slower when closed, **paused** when the document is hidden (`visibilitychange`), reducing noise in DevTools Network.
+- **Client state:** `sessionStorage` may persist filter/search preferences for the tab session.
+- **Styling:** Tailwind-oriented utilities plus `overlay.css` tokens; Lucide icons where needed.
+
+This replaces the original MVP of a single vanilla **Custom Element** + Shadow DOM: the trade-off is a **build step** and a larger bundle in exchange for a maintainable component model and richer UX (see §10.5).
 
 ---
 
@@ -293,18 +326,20 @@ bundle exec e11y mcp --port 3099  # StreamableHTTP transport (WEBrick)
 
 ### 6.2. Tools
 
-The MCP server exposes 8 tools backed by `DevLog::Query`:
+The MCP server exposes **8 tools** (Ruby classes under `E11y::Devtools::Mcp::Tools::*`), registered with **snake_case** names for the MCP protocol. Each handler receives `server_context[:store]` — an `E11y::Adapters::DevLog::Query` for the resolved `log/e11y_dev.jsonl` path.
 
-| Tool | Description |
+| Tool name | Role |
 |---|---|
-| `RecentEvents` | Most recent N events (default 50) |
-| `EventsByTrace` | All events for a given `trace_id` |
-| `Search` | Full-text search across event JSON |
-| `Stats` | Summary: total count, error rate, top event types |
-| `Interactions` | Grouped interaction list (same grouping as TUI) |
-| `EventDetail` | Full data for a single event by ID |
-| `Errors` | All events with severity `error` or `fatal` |
-| `Clear` | Truncate the log file |
+| `recent_events` | Latest N events (optional `severity` filter) |
+| `events_by_trace` | All events for a `trace_id` |
+| `search` | Full-text search across event names and serialized payload |
+| `stats` | Totals, by-severity counts, oldest/newest timestamps |
+| `interactions` | Time-window–grouped interactions (same idea as TUI / overlay) |
+| `event_detail` | One event by `id` |
+| `errors` | Events with severity `error` or `fatal` |
+| `clear` | Truncate the JSONL file via `Query#clear!` |
+
+Tool **definitions** live in `gems/e11y-devtools/lib/e11y/devtools/mcp/tools/`; **transport** (`stdio` vs HTTP) is implemented in `mcp/server.rb` using the `mcp` gem (see §10.2).
 
 ### 6.3 AI Tool Setup
 
@@ -387,7 +422,8 @@ e11y/                              ← root
             └── e11y/
                 └── devtools/
                     ├── tui/       ← TUI viewer
-                    ├── overlay/   ← Rails Engine + Rack middleware + JS
+                    ├── overlay/   ← Rails Engine + Rack middleware + compiled overlay.js
+                    ├── frontend/  ← Svelte/Vite sources (build → overlay/assets)
                     └── mcp/       ← MCP server tools
 ```
 
@@ -448,7 +484,7 @@ Debug-level events accumulate in the request-scoped buffer (see ADR-001). They a
 | Viewer | Default filter |
 |---|---|
 | TUI | `:web` source filter — shows only web request interactions, not background jobs |
-| Browser Overlay | Current trace only — the panel shows only events from the active request |
+| Browser Overlay | Defaults to useful context: e.g. open current page trace when `__E11Y_TRACE_ID__` is set; **Requests** tab lists grouped interactions (with HTTP summary when metadata exists) |
 | MCP `recent_events` | `limit: 50` — bounded by default |
 
 ### Layer 3: Interaction Grouping
@@ -496,9 +532,12 @@ The three layers are independent. Any one layer alone would reduce noise meaning
 
 | Approach | Chosen? | Rationale |
 |---|---|---|
-| Vanilla JS Custom Element | **Yes** | No npm build; zero-config; ships as a single `.js` file in the gem |
-| React SPA | No | Requires npm build step; breaks zero-config install; 100 KB+ overhead |
-| Separate dev server | No | Port management; firewall issues; second process to manage |
+| **Svelte 5 + Vite + TypeScript** (single `overlay.js` output) | **Yes (current)** | Component model, typed `lib/`, testable UI; build is dev-time only — production serves precompiled `overlay.js` from the gem |
+| Vanilla JS Custom Element (MVP) | Superseded | Zero build step was ideal for the first ship; maintenance cost grew with feature set |
+| React SPA | No | Heavier runtime; team chose Svelte for smaller output and simpler mental model |
+| Separate dev server for daily use | No | Optional `npm run dev` + mocks for UI work only; Rails app loads the built bundle |
+
+Rebuild after front-end edits: `cd gems/e11y-devtools/frontend && npm run build` (documented in `gems/e11y-devtools/README.md`).
 
 ---
 
@@ -506,7 +545,7 @@ The three layers are independent. Any one layer alone would reduce noise meaning
 
 ### 11.1. Accepted Trade-offs
 
-**Polling instead of push**: The 250 ms poll interval means the TUI and overlay lag by up to 250 ms. This is imperceptible in practice for a developer tool and eliminates all platform-specific file-watch dependencies.
+**Polling instead of push:** The TUI polls the JSONL file’s `mtime` every **250 ms**. The **browser overlay** polls the **HTTP recent-events endpoint** on an **adaptive** interval (faster while the panel is open, slower when closed, paused when the tab is hidden). End-to-end lag is still small for a dev tool and avoids push/WebSocket complexity in v1.
 
 **JSONL over SQLite**: A flat JSONL file is simpler to rotate, inspect with standard tools (`tail`, `jq`), and ship without native dependencies. Random-access query performance at 10 000 events (the default limit) is acceptable with the mtime-cached in-memory parse.
 

@@ -2,6 +2,7 @@
 
 require "spec_helper"
 require "tmpdir"
+require "tempfile"
 
 RSpec.describe E11y::Adapters::DevLog do
   subject(:adapter) { described_class.new(path: path) }
@@ -94,6 +95,55 @@ RSpec.describe E11y::Adapters::DevLog do
       )
       line = JSON.parse(File.readlines(path).last)
       expect(line["event_name"]).to eq("sql.active_record")
+    end
+
+    describe "HTTP enrichment" do
+      let(:adapter) { described_class.new(path: tmp_path) }
+      let(:tmp_path) { Tempfile.new(["e11y_test", ".jsonl"]).path }
+
+      after { FileUtils.rm_f(tmp_path) }
+
+      it "stores http_method from Thread.current in metadata" do
+        Thread.current[:e11y_http_method] = "POST"
+        Thread.current[:e11y_http_path]   = "/orders"
+        Thread.current[:e11y_http_status]      = 201
+        Thread.current[:e11y_http_duration_ms] = 42
+        Thread.current[:e11y_source]           = "web"
+
+        adapter.write({ event_name: "orders.created", severity: "info" })
+
+        event = adapter.stored_events(limit: 1).first
+        expect(event.dig("metadata", "http_method")).to eq("POST")
+        expect(event.dig("metadata", "http_path")).to   eq("/orders")
+        expect(event.dig("metadata", "http_status")).to  eq(201)
+        expect(event.dig("metadata", "duration_ms")).to  eq(42)
+      ensure
+        Thread.current[:e11y_http_method]      = nil
+        Thread.current[:e11y_http_path]        = nil
+        Thread.current[:e11y_http_status]      = nil
+        Thread.current[:e11y_http_duration_ms] = nil
+        Thread.current[:e11y_source]           = nil
+      end
+
+      it "leaves http fields absent when Thread.current has no HTTP context" do
+        adapter.write({ event_name: "bg.job", severity: "info" })
+        event = adapter.stored_events(limit: 1).first
+        expect(event.dig("metadata", "http_method")).to be_nil
+        expect(event.dig("metadata", "http_path")).to be_nil
+      end
+
+      it "does not overwrite http fields already present in event_data" do
+        Thread.current[:e11y_http_method] = "DELETE"
+        adapter.write({
+                        event_name: "test",
+                        severity: "info",
+                        metadata: { "http_method" => "GET", "http_path" => "/existing" }
+                      })
+        event = adapter.stored_events(limit: 1).first
+        expect(event.dig("metadata", "http_method")).to eq("GET")
+      ensure
+        Thread.current[:e11y_http_method] = nil
+      end
     end
   end
 

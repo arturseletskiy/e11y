@@ -35,3 +35,17 @@ export function summarizeTraceIds(ids: string[] | undefined): {
     list.length <= 2 ? list.join(", ") : `${list[0]}, ${list[1]} +${list.length - 2}`
   return { primary, extra, preview }
 }
+
+/**
+ * Returns "+Xms" relative to a baseline timestamp.
+ * Returns null if either timestamp is unparseable.
+ */
+export function formatDeltaMs(eventTs: string, baselineTs: string): string | null {
+  const t0 = Date.parse(baselineTs)
+  const t1 = Date.parse(eventTs)
+  if (isNaN(t0) || isNaN(t1)) return null
+  const delta = t1 - t0
+  if (delta < 0) return null
+  if (delta < 1000) return `+${delta}ms`
+  return `+${(delta / 1000).toFixed(1)}s`
+}

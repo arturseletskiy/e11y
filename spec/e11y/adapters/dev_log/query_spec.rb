@@ -3,6 +3,7 @@
 
 require "spec_helper"
 require "tmpdir"
+require "tempfile"
 require "json"
 require "time"
 
@@ -160,6 +161,55 @@ RSpec.describe E11y::Adapters::DevLog::Query do
       write_events(build_event)
       query.clear!
       expect(File.exist?(path)).to be false
+    end
+  end
+
+  describe "#interactions HTTP fields" do
+    let(:tmp) { Tempfile.new(["q_http", ".jsonl"]) }
+    let(:query) { described_class.new(tmp.path) }
+
+    after do
+      tmp.close
+      tmp.unlink
+    end
+
+    def write_event(data)
+      tmp.puts(JSON.generate(data))
+      tmp.flush
+    end
+
+    it "exposes http_method, http_path, http_status, duration_ms on Interaction" do
+      write_event({
+                    "trace_id" => "abc",
+                    "severity" => "info",
+                    "timestamp" => "2026-04-03T10:00:00.000Z",
+                    "metadata" => {
+                      "source" => "web",
+                      "started_at" => "2026-04-03T10:00:00.000Z",
+                      "http_method" => "GET",
+                      "http_path" => "/dashboard",
+                      "http_status" => 200,
+                      "duration_ms" => 55
+                    }
+                  })
+
+      ix = query.interactions.first
+      expect(ix.http_method).to eq("GET")
+      expect(ix.http_path).to eq("/dashboard")
+      expect(ix.http_status).to eq(200)
+      expect(ix.duration_ms).to eq(55)
+    end
+
+    it "returns nil HTTP fields when metadata has no HTTP context" do
+      write_event({
+                    "trace_id" => "xyz",
+                    "severity" => "info",
+                    "timestamp" => "2026-04-03T10:00:00.000Z",
+                    "metadata" => { "source" => "job", "started_at" => "2026-04-03T10:00:00.000Z" }
+                  })
+      ix = query.interactions.first
+      expect(ix.http_method).to be_nil
+      expect(ix.http_path).to be_nil
     end
   end
 
