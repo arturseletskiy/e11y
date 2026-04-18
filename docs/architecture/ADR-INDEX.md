@@ -24,6 +24,7 @@ This document provides an index of all architectural decisions made for the E11y
 | [ADR-016](ADR-016-self-monitoring-slo.md) | Self-Monitoring SLO | ✅ Accepted | 4 |
 | [ADR-017](ADR-017-multi-rails-compatibility.md) | Multi-Rails Compatibility | ✅ Accepted | 2 |
 | [ADR-018](ADR-018-memory-optimization.md) | Memory Optimization (Zero-Allocation) | ✅ Accepted | 0 |
+| [ADR-019](ADR-019-notification-adapters.md) | Notification Adapters (Mattermost, ActionMailer) | ✅ Implemented | 5 |
 
 ## 🎯 Key Decisions by Topic
 

@@ -31,6 +31,7 @@ loader.do_not_eager_load("#{__dir__}/e11y/adapters/loki.rb")
 loader.do_not_eager_load("#{__dir__}/e11y/adapters/sentry.rb")
 loader.do_not_eager_load("#{__dir__}/e11y/adapters/yabeda.rb")
 loader.do_not_eager_load("#{__dir__}/e11y/adapters/opentelemetry_collector.rb")
+loader.do_not_eager_load("#{__dir__}/e11y/adapters/action_mailer_adapter.rb")
 # Generators live under lib/generators/ — not part of the autoloaded tree
 loader.ignore("#{__dir__}/generators")
 # Optional HTTP tracing files require external gems (faraday, net/http) — loaded on demand only
