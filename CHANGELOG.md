@@ -9,7 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **DevLog / DevLogSource:** HTTP request context (`http_method`, `http_path`, `http_status`, `duration_ms`) in event metadata when available (thread-locals cleared after each request).
+- **Browser overlay:** `Interaction` / v1 API expose `method`, `path`, `status`, `duration_ms`; Requests list shows HTTP summary; adaptive polling (fast while panel open, slow when closed, paused when tab hidden); `sessionStorage` persistence for filters; Shift+click FAB copies current `trace_id`; trace time deltas in event lists; tab label **Requests**.
+
 ### Changed
+
+- **ADR-010 / ADR-INDEX:** Documented Svelte `overlay.js`, v1 routes under `/_e11y/v1/`, MCP tool names (snake_case), and DevLog HTTP metadata flow.
 
 ### Fixed
 

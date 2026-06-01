@@ -56,7 +56,7 @@ This document provides an index of all architectural decisions made for the E11y
 - **ADR-005**: Trace context propagation
 
 ### Developer Experience
-- **ADR-010**: Hub-and-Spoke devtools — JSONL DevLog adapter + TUI (ratatui_ruby) + Browser Overlay (Rails Engine + Shadow DOM badge) + MCP Server (8 tools, stdio/HTTP transport, AI integration)
+- **ADR-010**: Hub-and-Spoke devtools — JSONL DevLog adapter + TUI (ratatui_ruby) + Browser Overlay (Rails Engine + Svelte `overlay.js`, v1 JSON API) + MCP Server (8 snake_case tools, stdio/HTTP transport, AI integration)
 - **ADR-011**: Testing strategy (RSpec, integration tests, benchmarks)
 - **ADR-015**: Middleware execution order guarantees
 

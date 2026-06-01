@@ -72,7 +72,11 @@ module E11y
             "trace_ids" => row.trace_ids,
             "has_error" => row.has_error?,
             "source" => row.source,
-            "traces_count" => row.traces_count
+            "traces_count" => row.traces_count,
+            "method" => row.http_method,
+            "path" => row.http_path,
+            "status" => row.http_status,
+            "duration_ms" => row.duration_ms
           }
         end
 

@@ -107,13 +107,19 @@ module E11y
         data["timestamp"] ||= ::Time.now.utc.iso8601(3)
       end
 
+      # rubocop:disable Metrics/AbcSize -- parallel metadata keys from Thread + compact
       def enrich_metadata!(data)
         source = ::Thread.current[:e11y_source] || "web"
         meta   = (data["metadata"] || {}).dup
-        meta["source"]     ||= source
-        meta["started_at"] ||= data["timestamp"]
-        data["metadata"] = meta
+        meta["source"]      ||= source
+        meta["started_at"]  ||= data["timestamp"]
+        meta["http_method"] ||= ::Thread.current[:e11y_http_method]
+        meta["http_path"]   ||= ::Thread.current[:e11y_http_path]
+        meta["http_status"] ||= ::Thread.current[:e11y_http_status]
+        meta["duration_ms"] ||= ::Thread.current[:e11y_http_duration_ms]
+        data["metadata"] = meta.compact
       end
+      # rubocop:enable Metrics/AbcSize
 
       # Avoid +#<Class:0x…>+ in JSON; keep top-level +event_name+ when only nested carries it.
       def normalize_json_event_identity!(data)
