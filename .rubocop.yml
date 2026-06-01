@@ -64,9 +64,16 @@ Metrics/CyclomaticComplexity:
     - 'spec/support/loki_helpers.rb'
     - 'spec/support/matchers/pii_matchers.rb'
 
+Metrics/ModuleLength:
+  Max: 100
+  Exclude:
+    - 'lib/e11y/notifications/throttleable.rb'
+
 Metrics/AbcSize:
   Max: 20
   Exclude:
+    # record_for_digest has nested branching for seen/overflow/count that exceeds AbcSize
+    - 'lib/e11y/notifications/throttleable.rb'
     - 'lib/e11y/middleware/event_slo.rb'
     - 'lib/e11y/middleware/routing.rb'
     - 'lib/e11y/adapters/yabeda.rb'

@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `E11y::Adapters::MattermostAdapter` — delivers alerts and digests to Mattermost via Incoming Webhook with Markdown formatting, severity emoji, and payload/trace fields
+- `E11y::Adapters::ActionMailerAdapter` — delegates alert/digest delivery to the user's ActionMailer class; gem does not build email templates
+- `E11y::Adapters::NotificationBase` — abstract base class for notification adapters; includes `Throttleable` concern and validates `:store` at init
+- `E11y::Notifications::Throttleable` — shared concern providing alert deduplication (`throttle_window`) and periodic digest accumulation (`interval`) with distributed lock flush; `max_event_types` cap with overflow tracking
+- `E11y::Store::Base` — abstract interface for cross-process shared state (get/set/increment/set_if_absent/fetch/delete with TTL)
+- `E11y::Store::Memory` — in-process Mutex+Hash+TTL store for tests and single-process deployments
+- `E11y::Store::RailsCache` — `Rails.cache`-backed store; raises `ArgumentError` at init if `MemoryStore`/`NullStore` configured in `production`/`staging`
+- `notify` DSL block on `E11y::Event::Base` — declare `alert throttle_window:, fingerprint:` and `digest interval:` per event class; config is inherited and merged into `event_data[:notify]` by the pipeline
+
 ### Changed
 
 ### Fixed

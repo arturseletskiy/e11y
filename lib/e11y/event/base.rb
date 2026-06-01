@@ -120,6 +120,9 @@ module E11y
             context: build_context
           }
 
+          notify_cfg = notify_config
+          event_data[:notify] = notify_cfg if notify_cfg
+
           # Pass through middleware pipeline (ADR-001 §3.2)
           # Pipeline handles: validation, PII filtering, rate limiting, sampling, routing
           # Routing middleware is the LAST middleware and it writes to adapters directly
@@ -351,6 +354,43 @@ module E11y
           # No explicit adapters: inherit from parent or resolve from severity
           # (audit events and regular events both use severity-based mapping)
           resolved_adapters
+        end
+
+        # Declare notification behaviour for this event.
+        #
+        # Events routed to MattermostAdapter or ActionMailerAdapter MUST have a
+        # notify block — events without one are silently dropped by notification adapters.
+        #
+        # @example Alert with deduplication
+        #   notify do
+        #     alert throttle_window: 30.minutes, fingerprint: [:event_name]
+        #   end
+        #
+        # @example Digest accumulation
+        #   notify do
+        #     digest interval: 1.hour
+        #   end
+        #
+        # @example Both
+        #   notify do
+        #     alert throttle_window: 30.minutes, fingerprint: [:event_name]
+        #     digest interval: 1.hour
+        #   end
+        def notify(&)
+          config = NotifyConfig.new
+          config.instance_eval(&)
+          result = config.to_h
+          raise ArgumentError, "notify block must call alert or digest (got empty config)" if result.empty?
+
+          @notify_config = result
+        end
+
+        # @return [Hash, nil]
+        def notify_config
+          return @notify_config if defined?(@notify_config)
+          return superclass.notify_config if superclass.respond_to?(:notify_config)
+
+          nil
         end
 
         # Get or set event name (normalized)
@@ -1045,6 +1085,27 @@ module E11y
               tags: tags
             }
           end
+        end
+      end
+
+      # @api private
+      class NotifyConfig
+        def alert(throttle_window:, fingerprint: [:event_name])
+          @alert = {
+            throttle_window: throttle_window.to_i,
+            fingerprint: Array(fingerprint)
+          }
+        end
+
+        def digest(interval:)
+          @digest = { interval: interval.to_i }
+        end
+
+        def to_h
+          h = {}
+          h[:alert] = @alert if defined?(@alert)
+          h[:digest] = @digest if defined?(@digest)
+          h
         end
       end
     end
